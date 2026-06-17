@@ -66,213 +66,213 @@ def base-url-completer [] { ["http://glue.us-east-1.amazonaws.com" "http://glue.
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSGlue.BatchCreatePartition"] }
-def X-Amz-Target-completer-1 [] { ["AWSGlue.BatchDeleteConnection"] }
-def X-Amz-Target-completer-2 [] { ["AWSGlue.BatchDeletePartition"] }
-def X-Amz-Target-completer-3 [] { ["AWSGlue.BatchDeleteTable"] }
-def X-Amz-Target-completer-4 [] { ["AWSGlue.BatchDeleteTableVersion"] }
-def X-Amz-Target-completer-5 [] { ["AWSGlue.BatchGetBlueprints"] }
-def X-Amz-Target-completer-6 [] { ["AWSGlue.BatchGetCrawlers"] }
-def X-Amz-Target-completer-7 [] { ["AWSGlue.BatchGetCustomEntityTypes"] }
-def X-Amz-Target-completer-8 [] { ["AWSGlue.BatchGetDataQualityResult"] }
-def X-Amz-Target-completer-9 [] { ["AWSGlue.BatchGetDevEndpoints"] }
-def X-Amz-Target-completer-10 [] { ["AWSGlue.BatchGetJobs"] }
-def X-Amz-Target-completer-11 [] { ["AWSGlue.BatchGetPartition"] }
-def X-Amz-Target-completer-12 [] { ["AWSGlue.BatchGetTriggers"] }
-def X-Amz-Target-completer-13 [] { ["AWSGlue.BatchGetWorkflows"] }
-def X-Amz-Target-completer-14 [] { ["AWSGlue.BatchStopJobRun"] }
-def X-Amz-Target-completer-15 [] { ["AWSGlue.BatchUpdatePartition"] }
-def X-Amz-Target-completer-16 [] { ["AWSGlue.CancelDataQualityRuleRecommendationRun"] }
-def X-Amz-Target-completer-17 [] { ["AWSGlue.CancelDataQualityRulesetEvaluationRun"] }
-def X-Amz-Target-completer-18 [] { ["AWSGlue.CancelMLTaskRun"] }
-def X-Amz-Target-completer-19 [] { ["AWSGlue.CancelStatement"] }
-def X-Amz-Target-completer-20 [] { ["AWSGlue.CheckSchemaVersionValidity"] }
-def X-Amz-Target-completer-21 [] { ["AWSGlue.CreateBlueprint"] }
-def X-Amz-Target-completer-22 [] { ["AWSGlue.CreateClassifier"] }
-def X-Amz-Target-completer-23 [] { ["AWSGlue.CreateConnection"] }
-def X-Amz-Target-completer-24 [] { ["AWSGlue.CreateCrawler"] }
-def X-Amz-Target-completer-25 [] { ["AWSGlue.CreateCustomEntityType"] }
-def X-Amz-Target-completer-26 [] { ["AWSGlue.CreateDataQualityRuleset"] }
-def X-Amz-Target-completer-27 [] { ["AWSGlue.CreateDatabase"] }
-def X-Amz-Target-completer-28 [] { ["AWSGlue.CreateDevEndpoint"] }
-def X-Amz-Target-completer-29 [] { ["AWSGlue.CreateJob"] }
-def X-Amz-Target-completer-30 [] { ["AWSGlue.CreateMLTransform"] }
-def X-Amz-Target-completer-31 [] { ["AWSGlue.CreatePartition"] }
-def X-Amz-Target-completer-32 [] { ["AWSGlue.CreatePartitionIndex"] }
-def X-Amz-Target-completer-33 [] { ["AWSGlue.CreateRegistry"] }
-def X-Amz-Target-completer-34 [] { ["AWSGlue.CreateSchema"] }
-def X-Amz-Target-completer-35 [] { ["AWSGlue.CreateScript"] }
-def X-Amz-Target-completer-36 [] { ["AWSGlue.CreateSecurityConfiguration"] }
-def X-Amz-Target-completer-37 [] { ["AWSGlue.CreateSession"] }
-def X-Amz-Target-completer-38 [] { ["AWSGlue.CreateTable"] }
-def X-Amz-Target-completer-39 [] { ["AWSGlue.CreateTrigger"] }
-def X-Amz-Target-completer-40 [] { ["AWSGlue.CreateUserDefinedFunction"] }
-def X-Amz-Target-completer-41 [] { ["AWSGlue.CreateWorkflow"] }
-def X-Amz-Target-completer-42 [] { ["AWSGlue.DeleteBlueprint"] }
-def X-Amz-Target-completer-43 [] { ["AWSGlue.DeleteClassifier"] }
-def X-Amz-Target-completer-44 [] { ["AWSGlue.DeleteColumnStatisticsForPartition"] }
-def X-Amz-Target-completer-45 [] { ["AWSGlue.DeleteColumnStatisticsForTable"] }
-def X-Amz-Target-completer-46 [] { ["AWSGlue.DeleteConnection"] }
-def X-Amz-Target-completer-47 [] { ["AWSGlue.DeleteCrawler"] }
-def X-Amz-Target-completer-48 [] { ["AWSGlue.DeleteCustomEntityType"] }
-def X-Amz-Target-completer-49 [] { ["AWSGlue.DeleteDataQualityRuleset"] }
-def X-Amz-Target-completer-50 [] { ["AWSGlue.DeleteDatabase"] }
-def X-Amz-Target-completer-51 [] { ["AWSGlue.DeleteDevEndpoint"] }
-def X-Amz-Target-completer-52 [] { ["AWSGlue.DeleteJob"] }
-def X-Amz-Target-completer-53 [] { ["AWSGlue.DeleteMLTransform"] }
-def X-Amz-Target-completer-54 [] { ["AWSGlue.DeletePartition"] }
-def X-Amz-Target-completer-55 [] { ["AWSGlue.DeletePartitionIndex"] }
-def X-Amz-Target-completer-56 [] { ["AWSGlue.DeleteRegistry"] }
-def X-Amz-Target-completer-57 [] { ["AWSGlue.DeleteResourcePolicy"] }
-def X-Amz-Target-completer-58 [] { ["AWSGlue.DeleteSchema"] }
-def X-Amz-Target-completer-59 [] { ["AWSGlue.DeleteSchemaVersions"] }
-def X-Amz-Target-completer-60 [] { ["AWSGlue.DeleteSecurityConfiguration"] }
-def X-Amz-Target-completer-61 [] { ["AWSGlue.DeleteSession"] }
-def X-Amz-Target-completer-62 [] { ["AWSGlue.DeleteTable"] }
-def X-Amz-Target-completer-63 [] { ["AWSGlue.DeleteTableVersion"] }
-def X-Amz-Target-completer-64 [] { ["AWSGlue.DeleteTrigger"] }
-def X-Amz-Target-completer-65 [] { ["AWSGlue.DeleteUserDefinedFunction"] }
-def X-Amz-Target-completer-66 [] { ["AWSGlue.DeleteWorkflow"] }
-def X-Amz-Target-completer-67 [] { ["AWSGlue.GetBlueprint"] }
-def X-Amz-Target-completer-68 [] { ["AWSGlue.GetBlueprintRun"] }
-def X-Amz-Target-completer-69 [] { ["AWSGlue.GetBlueprintRuns"] }
-def X-Amz-Target-completer-70 [] { ["AWSGlue.GetCatalogImportStatus"] }
-def X-Amz-Target-completer-71 [] { ["AWSGlue.GetClassifier"] }
-def X-Amz-Target-completer-72 [] { ["AWSGlue.GetClassifiers"] }
-def X-Amz-Target-completer-73 [] { ["AWSGlue.GetColumnStatisticsForPartition"] }
-def X-Amz-Target-completer-74 [] { ["AWSGlue.GetColumnStatisticsForTable"] }
-def X-Amz-Target-completer-75 [] { ["AWSGlue.GetConnection"] }
-def X-Amz-Target-completer-76 [] { ["AWSGlue.GetConnections"] }
-def X-Amz-Target-completer-77 [] { ["AWSGlue.GetCrawler"] }
-def X-Amz-Target-completer-78 [] { ["AWSGlue.GetCrawlerMetrics"] }
-def X-Amz-Target-completer-79 [] { ["AWSGlue.GetCrawlers"] }
-def X-Amz-Target-completer-80 [] { ["AWSGlue.GetCustomEntityType"] }
-def X-Amz-Target-completer-81 [] { ["AWSGlue.GetDataCatalogEncryptionSettings"] }
-def X-Amz-Target-completer-82 [] { ["AWSGlue.GetDataQualityResult"] }
-def X-Amz-Target-completer-83 [] { ["AWSGlue.GetDataQualityRuleRecommendationRun"] }
-def X-Amz-Target-completer-84 [] { ["AWSGlue.GetDataQualityRuleset"] }
-def X-Amz-Target-completer-85 [] { ["AWSGlue.GetDataQualityRulesetEvaluationRun"] }
-def X-Amz-Target-completer-86 [] { ["AWSGlue.GetDatabase"] }
-def X-Amz-Target-completer-87 [] { ["AWSGlue.GetDatabases"] }
-def X-Amz-Target-completer-88 [] { ["AWSGlue.GetDataflowGraph"] }
-def X-Amz-Target-completer-89 [] { ["AWSGlue.GetDevEndpoint"] }
-def X-Amz-Target-completer-90 [] { ["AWSGlue.GetDevEndpoints"] }
-def X-Amz-Target-completer-91 [] { ["AWSGlue.GetJob"] }
-def X-Amz-Target-completer-92 [] { ["AWSGlue.GetJobBookmark"] }
-def X-Amz-Target-completer-93 [] { ["AWSGlue.GetJobRun"] }
-def X-Amz-Target-completer-94 [] { ["AWSGlue.GetJobRuns"] }
-def X-Amz-Target-completer-95 [] { ["AWSGlue.GetJobs"] }
-def X-Amz-Target-completer-96 [] { ["AWSGlue.GetMLTaskRun"] }
-def X-Amz-Target-completer-97 [] { ["AWSGlue.GetMLTaskRuns"] }
-def X-Amz-Target-completer-98 [] { ["AWSGlue.GetMLTransform"] }
-def X-Amz-Target-completer-99 [] { ["AWSGlue.GetMLTransforms"] }
-def X-Amz-Target-completer-100 [] { ["AWSGlue.GetMapping"] }
-def X-Amz-Target-completer-101 [] { ["AWSGlue.GetPartition"] }
-def X-Amz-Target-completer-102 [] { ["AWSGlue.GetPartitionIndexes"] }
-def X-Amz-Target-completer-103 [] { ["AWSGlue.GetPartitions"] }
-def X-Amz-Target-completer-104 [] { ["AWSGlue.GetPlan"] }
-def X-Amz-Target-completer-105 [] { ["AWSGlue.GetRegistry"] }
-def X-Amz-Target-completer-106 [] { ["AWSGlue.GetResourcePolicies"] }
-def X-Amz-Target-completer-107 [] { ["AWSGlue.GetResourcePolicy"] }
-def X-Amz-Target-completer-108 [] { ["AWSGlue.GetSchema"] }
-def X-Amz-Target-completer-109 [] { ["AWSGlue.GetSchemaByDefinition"] }
-def X-Amz-Target-completer-110 [] { ["AWSGlue.GetSchemaVersion"] }
-def X-Amz-Target-completer-111 [] { ["AWSGlue.GetSchemaVersionsDiff"] }
-def X-Amz-Target-completer-112 [] { ["AWSGlue.GetSecurityConfiguration"] }
-def X-Amz-Target-completer-113 [] { ["AWSGlue.GetSecurityConfigurations"] }
-def X-Amz-Target-completer-114 [] { ["AWSGlue.GetSession"] }
-def X-Amz-Target-completer-115 [] { ["AWSGlue.GetStatement"] }
-def X-Amz-Target-completer-116 [] { ["AWSGlue.GetTable"] }
-def X-Amz-Target-completer-117 [] { ["AWSGlue.GetTableVersion"] }
-def X-Amz-Target-completer-118 [] { ["AWSGlue.GetTableVersions"] }
-def X-Amz-Target-completer-119 [] { ["AWSGlue.GetTables"] }
-def X-Amz-Target-completer-120 [] { ["AWSGlue.GetTags"] }
-def X-Amz-Target-completer-121 [] { ["AWSGlue.GetTrigger"] }
-def X-Amz-Target-completer-122 [] { ["AWSGlue.GetTriggers"] }
-def X-Amz-Target-completer-123 [] { ["AWSGlue.GetUnfilteredPartitionMetadata"] }
-def X-Amz-Target-completer-124 [] { ["AWSGlue.GetUnfilteredPartitionsMetadata"] }
-def X-Amz-Target-completer-125 [] { ["AWSGlue.GetUnfilteredTableMetadata"] }
-def X-Amz-Target-completer-126 [] { ["AWSGlue.GetUserDefinedFunction"] }
-def X-Amz-Target-completer-127 [] { ["AWSGlue.GetUserDefinedFunctions"] }
-def X-Amz-Target-completer-128 [] { ["AWSGlue.GetWorkflow"] }
-def X-Amz-Target-completer-129 [] { ["AWSGlue.GetWorkflowRun"] }
-def X-Amz-Target-completer-130 [] { ["AWSGlue.GetWorkflowRunProperties"] }
-def X-Amz-Target-completer-131 [] { ["AWSGlue.GetWorkflowRuns"] }
-def X-Amz-Target-completer-132 [] { ["AWSGlue.ImportCatalogToGlue"] }
-def X-Amz-Target-completer-133 [] { ["AWSGlue.ListBlueprints"] }
-def X-Amz-Target-completer-134 [] { ["AWSGlue.ListCrawlers"] }
-def X-Amz-Target-completer-135 [] { ["AWSGlue.ListCrawls"] }
-def X-Amz-Target-completer-136 [] { ["AWSGlue.ListCustomEntityTypes"] }
-def X-Amz-Target-completer-137 [] { ["AWSGlue.ListDataQualityResults"] }
-def X-Amz-Target-completer-138 [] { ["AWSGlue.ListDataQualityRuleRecommendationRuns"] }
-def X-Amz-Target-completer-139 [] { ["AWSGlue.ListDataQualityRulesetEvaluationRuns"] }
-def X-Amz-Target-completer-140 [] { ["AWSGlue.ListDataQualityRulesets"] }
-def X-Amz-Target-completer-141 [] { ["AWSGlue.ListDevEndpoints"] }
-def X-Amz-Target-completer-142 [] { ["AWSGlue.ListJobs"] }
-def X-Amz-Target-completer-143 [] { ["AWSGlue.ListMLTransforms"] }
-def X-Amz-Target-completer-144 [] { ["AWSGlue.ListRegistries"] }
-def X-Amz-Target-completer-145 [] { ["AWSGlue.ListSchemaVersions"] }
-def X-Amz-Target-completer-146 [] { ["AWSGlue.ListSchemas"] }
-def X-Amz-Target-completer-147 [] { ["AWSGlue.ListSessions"] }
-def X-Amz-Target-completer-148 [] { ["AWSGlue.ListStatements"] }
-def X-Amz-Target-completer-149 [] { ["AWSGlue.ListTriggers"] }
-def X-Amz-Target-completer-150 [] { ["AWSGlue.ListWorkflows"] }
-def X-Amz-Target-completer-151 [] { ["AWSGlue.PutDataCatalogEncryptionSettings"] }
-def X-Amz-Target-completer-152 [] { ["AWSGlue.PutResourcePolicy"] }
-def X-Amz-Target-completer-153 [] { ["AWSGlue.PutSchemaVersionMetadata"] }
-def X-Amz-Target-completer-154 [] { ["AWSGlue.PutWorkflowRunProperties"] }
-def X-Amz-Target-completer-155 [] { ["AWSGlue.QuerySchemaVersionMetadata"] }
-def X-Amz-Target-completer-156 [] { ["AWSGlue.RegisterSchemaVersion"] }
-def X-Amz-Target-completer-157 [] { ["AWSGlue.RemoveSchemaVersionMetadata"] }
-def X-Amz-Target-completer-158 [] { ["AWSGlue.ResetJobBookmark"] }
-def X-Amz-Target-completer-159 [] { ["AWSGlue.ResumeWorkflowRun"] }
-def X-Amz-Target-completer-160 [] { ["AWSGlue.RunStatement"] }
-def X-Amz-Target-completer-161 [] { ["AWSGlue.SearchTables"] }
-def X-Amz-Target-completer-162 [] { ["AWSGlue.StartBlueprintRun"] }
-def X-Amz-Target-completer-163 [] { ["AWSGlue.StartCrawler"] }
-def X-Amz-Target-completer-164 [] { ["AWSGlue.StartCrawlerSchedule"] }
-def X-Amz-Target-completer-165 [] { ["AWSGlue.StartDataQualityRuleRecommendationRun"] }
-def X-Amz-Target-completer-166 [] { ["AWSGlue.StartDataQualityRulesetEvaluationRun"] }
-def X-Amz-Target-completer-167 [] { ["AWSGlue.StartExportLabelsTaskRun"] }
-def X-Amz-Target-completer-168 [] { ["AWSGlue.StartImportLabelsTaskRun"] }
-def X-Amz-Target-completer-169 [] { ["AWSGlue.StartJobRun"] }
-def X-Amz-Target-completer-170 [] { ["AWSGlue.StartMLEvaluationTaskRun"] }
-def X-Amz-Target-completer-171 [] { ["AWSGlue.StartMLLabelingSetGenerationTaskRun"] }
-def X-Amz-Target-completer-172 [] { ["AWSGlue.StartTrigger"] }
-def X-Amz-Target-completer-173 [] { ["AWSGlue.StartWorkflowRun"] }
-def X-Amz-Target-completer-174 [] { ["AWSGlue.StopCrawler"] }
-def X-Amz-Target-completer-175 [] { ["AWSGlue.StopCrawlerSchedule"] }
-def X-Amz-Target-completer-176 [] { ["AWSGlue.StopSession"] }
-def X-Amz-Target-completer-177 [] { ["AWSGlue.StopTrigger"] }
-def X-Amz-Target-completer-178 [] { ["AWSGlue.StopWorkflowRun"] }
-def X-Amz-Target-completer-179 [] { ["AWSGlue.TagResource"] }
-def X-Amz-Target-completer-180 [] { ["AWSGlue.UntagResource"] }
-def X-Amz-Target-completer-181 [] { ["AWSGlue.UpdateBlueprint"] }
-def X-Amz-Target-completer-182 [] { ["AWSGlue.UpdateClassifier"] }
-def X-Amz-Target-completer-183 [] { ["AWSGlue.UpdateColumnStatisticsForPartition"] }
-def X-Amz-Target-completer-184 [] { ["AWSGlue.UpdateColumnStatisticsForTable"] }
-def X-Amz-Target-completer-185 [] { ["AWSGlue.UpdateConnection"] }
-def X-Amz-Target-completer-186 [] { ["AWSGlue.UpdateCrawler"] }
-def X-Amz-Target-completer-187 [] { ["AWSGlue.UpdateCrawlerSchedule"] }
-def X-Amz-Target-completer-188 [] { ["AWSGlue.UpdateDataQualityRuleset"] }
-def X-Amz-Target-completer-189 [] { ["AWSGlue.UpdateDatabase"] }
-def X-Amz-Target-completer-190 [] { ["AWSGlue.UpdateDevEndpoint"] }
-def X-Amz-Target-completer-191 [] { ["AWSGlue.UpdateJob"] }
-def X-Amz-Target-completer-192 [] { ["AWSGlue.UpdateJobFromSourceControl"] }
-def X-Amz-Target-completer-193 [] { ["AWSGlue.UpdateMLTransform"] }
-def X-Amz-Target-completer-194 [] { ["AWSGlue.UpdatePartition"] }
-def X-Amz-Target-completer-195 [] { ["AWSGlue.UpdateRegistry"] }
-def X-Amz-Target-completer-196 [] { ["AWSGlue.UpdateSchema"] }
-def X-Amz-Target-completer-197 [] { ["AWSGlue.UpdateSourceControlFromJob"] }
-def X-Amz-Target-completer-198 [] { ["AWSGlue.UpdateTable"] }
-def X-Amz-Target-completer-199 [] { ["AWSGlue.UpdateTrigger"] }
-def X-Amz-Target-completer-200 [] { ["AWSGlue.UpdateUserDefinedFunction"] }
-def X-Amz-Target-completer-201 [] { ["AWSGlue.UpdateWorkflow"] }
+def x-amz-target-completer [] { ["AWSGlue.BatchCreatePartition"] }
+def x-amz-target-completer-1 [] { ["AWSGlue.BatchDeleteConnection"] }
+def x-amz-target-completer-2 [] { ["AWSGlue.BatchDeletePartition"] }
+def x-amz-target-completer-3 [] { ["AWSGlue.BatchDeleteTable"] }
+def x-amz-target-completer-4 [] { ["AWSGlue.BatchDeleteTableVersion"] }
+def x-amz-target-completer-5 [] { ["AWSGlue.BatchGetBlueprints"] }
+def x-amz-target-completer-6 [] { ["AWSGlue.BatchGetCrawlers"] }
+def x-amz-target-completer-7 [] { ["AWSGlue.BatchGetCustomEntityTypes"] }
+def x-amz-target-completer-8 [] { ["AWSGlue.BatchGetDataQualityResult"] }
+def x-amz-target-completer-9 [] { ["AWSGlue.BatchGetDevEndpoints"] }
+def x-amz-target-completer-10 [] { ["AWSGlue.BatchGetJobs"] }
+def x-amz-target-completer-11 [] { ["AWSGlue.BatchGetPartition"] }
+def x-amz-target-completer-12 [] { ["AWSGlue.BatchGetTriggers"] }
+def x-amz-target-completer-13 [] { ["AWSGlue.BatchGetWorkflows"] }
+def x-amz-target-completer-14 [] { ["AWSGlue.BatchStopJobRun"] }
+def x-amz-target-completer-15 [] { ["AWSGlue.BatchUpdatePartition"] }
+def x-amz-target-completer-16 [] { ["AWSGlue.CancelDataQualityRuleRecommendationRun"] }
+def x-amz-target-completer-17 [] { ["AWSGlue.CancelDataQualityRulesetEvaluationRun"] }
+def x-amz-target-completer-18 [] { ["AWSGlue.CancelMLTaskRun"] }
+def x-amz-target-completer-19 [] { ["AWSGlue.CancelStatement"] }
+def x-amz-target-completer-20 [] { ["AWSGlue.CheckSchemaVersionValidity"] }
+def x-amz-target-completer-21 [] { ["AWSGlue.CreateBlueprint"] }
+def x-amz-target-completer-22 [] { ["AWSGlue.CreateClassifier"] }
+def x-amz-target-completer-23 [] { ["AWSGlue.CreateConnection"] }
+def x-amz-target-completer-24 [] { ["AWSGlue.CreateCrawler"] }
+def x-amz-target-completer-25 [] { ["AWSGlue.CreateCustomEntityType"] }
+def x-amz-target-completer-26 [] { ["AWSGlue.CreateDataQualityRuleset"] }
+def x-amz-target-completer-27 [] { ["AWSGlue.CreateDatabase"] }
+def x-amz-target-completer-28 [] { ["AWSGlue.CreateDevEndpoint"] }
+def x-amz-target-completer-29 [] { ["AWSGlue.CreateJob"] }
+def x-amz-target-completer-30 [] { ["AWSGlue.CreateMLTransform"] }
+def x-amz-target-completer-31 [] { ["AWSGlue.CreatePartition"] }
+def x-amz-target-completer-32 [] { ["AWSGlue.CreatePartitionIndex"] }
+def x-amz-target-completer-33 [] { ["AWSGlue.CreateRegistry"] }
+def x-amz-target-completer-34 [] { ["AWSGlue.CreateSchema"] }
+def x-amz-target-completer-35 [] { ["AWSGlue.CreateScript"] }
+def x-amz-target-completer-36 [] { ["AWSGlue.CreateSecurityConfiguration"] }
+def x-amz-target-completer-37 [] { ["AWSGlue.CreateSession"] }
+def x-amz-target-completer-38 [] { ["AWSGlue.CreateTable"] }
+def x-amz-target-completer-39 [] { ["AWSGlue.CreateTrigger"] }
+def x-amz-target-completer-40 [] { ["AWSGlue.CreateUserDefinedFunction"] }
+def x-amz-target-completer-41 [] { ["AWSGlue.CreateWorkflow"] }
+def x-amz-target-completer-42 [] { ["AWSGlue.DeleteBlueprint"] }
+def x-amz-target-completer-43 [] { ["AWSGlue.DeleteClassifier"] }
+def x-amz-target-completer-44 [] { ["AWSGlue.DeleteColumnStatisticsForPartition"] }
+def x-amz-target-completer-45 [] { ["AWSGlue.DeleteColumnStatisticsForTable"] }
+def x-amz-target-completer-46 [] { ["AWSGlue.DeleteConnection"] }
+def x-amz-target-completer-47 [] { ["AWSGlue.DeleteCrawler"] }
+def x-amz-target-completer-48 [] { ["AWSGlue.DeleteCustomEntityType"] }
+def x-amz-target-completer-49 [] { ["AWSGlue.DeleteDataQualityRuleset"] }
+def x-amz-target-completer-50 [] { ["AWSGlue.DeleteDatabase"] }
+def x-amz-target-completer-51 [] { ["AWSGlue.DeleteDevEndpoint"] }
+def x-amz-target-completer-52 [] { ["AWSGlue.DeleteJob"] }
+def x-amz-target-completer-53 [] { ["AWSGlue.DeleteMLTransform"] }
+def x-amz-target-completer-54 [] { ["AWSGlue.DeletePartition"] }
+def x-amz-target-completer-55 [] { ["AWSGlue.DeletePartitionIndex"] }
+def x-amz-target-completer-56 [] { ["AWSGlue.DeleteRegistry"] }
+def x-amz-target-completer-57 [] { ["AWSGlue.DeleteResourcePolicy"] }
+def x-amz-target-completer-58 [] { ["AWSGlue.DeleteSchema"] }
+def x-amz-target-completer-59 [] { ["AWSGlue.DeleteSchemaVersions"] }
+def x-amz-target-completer-60 [] { ["AWSGlue.DeleteSecurityConfiguration"] }
+def x-amz-target-completer-61 [] { ["AWSGlue.DeleteSession"] }
+def x-amz-target-completer-62 [] { ["AWSGlue.DeleteTable"] }
+def x-amz-target-completer-63 [] { ["AWSGlue.DeleteTableVersion"] }
+def x-amz-target-completer-64 [] { ["AWSGlue.DeleteTrigger"] }
+def x-amz-target-completer-65 [] { ["AWSGlue.DeleteUserDefinedFunction"] }
+def x-amz-target-completer-66 [] { ["AWSGlue.DeleteWorkflow"] }
+def x-amz-target-completer-67 [] { ["AWSGlue.GetBlueprint"] }
+def x-amz-target-completer-68 [] { ["AWSGlue.GetBlueprintRun"] }
+def x-amz-target-completer-69 [] { ["AWSGlue.GetBlueprintRuns"] }
+def x-amz-target-completer-70 [] { ["AWSGlue.GetCatalogImportStatus"] }
+def x-amz-target-completer-71 [] { ["AWSGlue.GetClassifier"] }
+def x-amz-target-completer-72 [] { ["AWSGlue.GetClassifiers"] }
+def x-amz-target-completer-73 [] { ["AWSGlue.GetColumnStatisticsForPartition"] }
+def x-amz-target-completer-74 [] { ["AWSGlue.GetColumnStatisticsForTable"] }
+def x-amz-target-completer-75 [] { ["AWSGlue.GetConnection"] }
+def x-amz-target-completer-76 [] { ["AWSGlue.GetConnections"] }
+def x-amz-target-completer-77 [] { ["AWSGlue.GetCrawler"] }
+def x-amz-target-completer-78 [] { ["AWSGlue.GetCrawlerMetrics"] }
+def x-amz-target-completer-79 [] { ["AWSGlue.GetCrawlers"] }
+def x-amz-target-completer-80 [] { ["AWSGlue.GetCustomEntityType"] }
+def x-amz-target-completer-81 [] { ["AWSGlue.GetDataCatalogEncryptionSettings"] }
+def x-amz-target-completer-82 [] { ["AWSGlue.GetDataQualityResult"] }
+def x-amz-target-completer-83 [] { ["AWSGlue.GetDataQualityRuleRecommendationRun"] }
+def x-amz-target-completer-84 [] { ["AWSGlue.GetDataQualityRuleset"] }
+def x-amz-target-completer-85 [] { ["AWSGlue.GetDataQualityRulesetEvaluationRun"] }
+def x-amz-target-completer-86 [] { ["AWSGlue.GetDatabase"] }
+def x-amz-target-completer-87 [] { ["AWSGlue.GetDatabases"] }
+def x-amz-target-completer-88 [] { ["AWSGlue.GetDataflowGraph"] }
+def x-amz-target-completer-89 [] { ["AWSGlue.GetDevEndpoint"] }
+def x-amz-target-completer-90 [] { ["AWSGlue.GetDevEndpoints"] }
+def x-amz-target-completer-91 [] { ["AWSGlue.GetJob"] }
+def x-amz-target-completer-92 [] { ["AWSGlue.GetJobBookmark"] }
+def x-amz-target-completer-93 [] { ["AWSGlue.GetJobRun"] }
+def x-amz-target-completer-94 [] { ["AWSGlue.GetJobRuns"] }
+def x-amz-target-completer-95 [] { ["AWSGlue.GetJobs"] }
+def x-amz-target-completer-96 [] { ["AWSGlue.GetMLTaskRun"] }
+def x-amz-target-completer-97 [] { ["AWSGlue.GetMLTaskRuns"] }
+def x-amz-target-completer-98 [] { ["AWSGlue.GetMLTransform"] }
+def x-amz-target-completer-99 [] { ["AWSGlue.GetMLTransforms"] }
+def x-amz-target-completer-100 [] { ["AWSGlue.GetMapping"] }
+def x-amz-target-completer-101 [] { ["AWSGlue.GetPartition"] }
+def x-amz-target-completer-102 [] { ["AWSGlue.GetPartitionIndexes"] }
+def x-amz-target-completer-103 [] { ["AWSGlue.GetPartitions"] }
+def x-amz-target-completer-104 [] { ["AWSGlue.GetPlan"] }
+def x-amz-target-completer-105 [] { ["AWSGlue.GetRegistry"] }
+def x-amz-target-completer-106 [] { ["AWSGlue.GetResourcePolicies"] }
+def x-amz-target-completer-107 [] { ["AWSGlue.GetResourcePolicy"] }
+def x-amz-target-completer-108 [] { ["AWSGlue.GetSchema"] }
+def x-amz-target-completer-109 [] { ["AWSGlue.GetSchemaByDefinition"] }
+def x-amz-target-completer-110 [] { ["AWSGlue.GetSchemaVersion"] }
+def x-amz-target-completer-111 [] { ["AWSGlue.GetSchemaVersionsDiff"] }
+def x-amz-target-completer-112 [] { ["AWSGlue.GetSecurityConfiguration"] }
+def x-amz-target-completer-113 [] { ["AWSGlue.GetSecurityConfigurations"] }
+def x-amz-target-completer-114 [] { ["AWSGlue.GetSession"] }
+def x-amz-target-completer-115 [] { ["AWSGlue.GetStatement"] }
+def x-amz-target-completer-116 [] { ["AWSGlue.GetTable"] }
+def x-amz-target-completer-117 [] { ["AWSGlue.GetTableVersion"] }
+def x-amz-target-completer-118 [] { ["AWSGlue.GetTableVersions"] }
+def x-amz-target-completer-119 [] { ["AWSGlue.GetTables"] }
+def x-amz-target-completer-120 [] { ["AWSGlue.GetTags"] }
+def x-amz-target-completer-121 [] { ["AWSGlue.GetTrigger"] }
+def x-amz-target-completer-122 [] { ["AWSGlue.GetTriggers"] }
+def x-amz-target-completer-123 [] { ["AWSGlue.GetUnfilteredPartitionMetadata"] }
+def x-amz-target-completer-124 [] { ["AWSGlue.GetUnfilteredPartitionsMetadata"] }
+def x-amz-target-completer-125 [] { ["AWSGlue.GetUnfilteredTableMetadata"] }
+def x-amz-target-completer-126 [] { ["AWSGlue.GetUserDefinedFunction"] }
+def x-amz-target-completer-127 [] { ["AWSGlue.GetUserDefinedFunctions"] }
+def x-amz-target-completer-128 [] { ["AWSGlue.GetWorkflow"] }
+def x-amz-target-completer-129 [] { ["AWSGlue.GetWorkflowRun"] }
+def x-amz-target-completer-130 [] { ["AWSGlue.GetWorkflowRunProperties"] }
+def x-amz-target-completer-131 [] { ["AWSGlue.GetWorkflowRuns"] }
+def x-amz-target-completer-132 [] { ["AWSGlue.ImportCatalogToGlue"] }
+def x-amz-target-completer-133 [] { ["AWSGlue.ListBlueprints"] }
+def x-amz-target-completer-134 [] { ["AWSGlue.ListCrawlers"] }
+def x-amz-target-completer-135 [] { ["AWSGlue.ListCrawls"] }
+def x-amz-target-completer-136 [] { ["AWSGlue.ListCustomEntityTypes"] }
+def x-amz-target-completer-137 [] { ["AWSGlue.ListDataQualityResults"] }
+def x-amz-target-completer-138 [] { ["AWSGlue.ListDataQualityRuleRecommendationRuns"] }
+def x-amz-target-completer-139 [] { ["AWSGlue.ListDataQualityRulesetEvaluationRuns"] }
+def x-amz-target-completer-140 [] { ["AWSGlue.ListDataQualityRulesets"] }
+def x-amz-target-completer-141 [] { ["AWSGlue.ListDevEndpoints"] }
+def x-amz-target-completer-142 [] { ["AWSGlue.ListJobs"] }
+def x-amz-target-completer-143 [] { ["AWSGlue.ListMLTransforms"] }
+def x-amz-target-completer-144 [] { ["AWSGlue.ListRegistries"] }
+def x-amz-target-completer-145 [] { ["AWSGlue.ListSchemaVersions"] }
+def x-amz-target-completer-146 [] { ["AWSGlue.ListSchemas"] }
+def x-amz-target-completer-147 [] { ["AWSGlue.ListSessions"] }
+def x-amz-target-completer-148 [] { ["AWSGlue.ListStatements"] }
+def x-amz-target-completer-149 [] { ["AWSGlue.ListTriggers"] }
+def x-amz-target-completer-150 [] { ["AWSGlue.ListWorkflows"] }
+def x-amz-target-completer-151 [] { ["AWSGlue.PutDataCatalogEncryptionSettings"] }
+def x-amz-target-completer-152 [] { ["AWSGlue.PutResourcePolicy"] }
+def x-amz-target-completer-153 [] { ["AWSGlue.PutSchemaVersionMetadata"] }
+def x-amz-target-completer-154 [] { ["AWSGlue.PutWorkflowRunProperties"] }
+def x-amz-target-completer-155 [] { ["AWSGlue.QuerySchemaVersionMetadata"] }
+def x-amz-target-completer-156 [] { ["AWSGlue.RegisterSchemaVersion"] }
+def x-amz-target-completer-157 [] { ["AWSGlue.RemoveSchemaVersionMetadata"] }
+def x-amz-target-completer-158 [] { ["AWSGlue.ResetJobBookmark"] }
+def x-amz-target-completer-159 [] { ["AWSGlue.ResumeWorkflowRun"] }
+def x-amz-target-completer-160 [] { ["AWSGlue.RunStatement"] }
+def x-amz-target-completer-161 [] { ["AWSGlue.SearchTables"] }
+def x-amz-target-completer-162 [] { ["AWSGlue.StartBlueprintRun"] }
+def x-amz-target-completer-163 [] { ["AWSGlue.StartCrawler"] }
+def x-amz-target-completer-164 [] { ["AWSGlue.StartCrawlerSchedule"] }
+def x-amz-target-completer-165 [] { ["AWSGlue.StartDataQualityRuleRecommendationRun"] }
+def x-amz-target-completer-166 [] { ["AWSGlue.StartDataQualityRulesetEvaluationRun"] }
+def x-amz-target-completer-167 [] { ["AWSGlue.StartExportLabelsTaskRun"] }
+def x-amz-target-completer-168 [] { ["AWSGlue.StartImportLabelsTaskRun"] }
+def x-amz-target-completer-169 [] { ["AWSGlue.StartJobRun"] }
+def x-amz-target-completer-170 [] { ["AWSGlue.StartMLEvaluationTaskRun"] }
+def x-amz-target-completer-171 [] { ["AWSGlue.StartMLLabelingSetGenerationTaskRun"] }
+def x-amz-target-completer-172 [] { ["AWSGlue.StartTrigger"] }
+def x-amz-target-completer-173 [] { ["AWSGlue.StartWorkflowRun"] }
+def x-amz-target-completer-174 [] { ["AWSGlue.StopCrawler"] }
+def x-amz-target-completer-175 [] { ["AWSGlue.StopCrawlerSchedule"] }
+def x-amz-target-completer-176 [] { ["AWSGlue.StopSession"] }
+def x-amz-target-completer-177 [] { ["AWSGlue.StopTrigger"] }
+def x-amz-target-completer-178 [] { ["AWSGlue.StopWorkflowRun"] }
+def x-amz-target-completer-179 [] { ["AWSGlue.TagResource"] }
+def x-amz-target-completer-180 [] { ["AWSGlue.UntagResource"] }
+def x-amz-target-completer-181 [] { ["AWSGlue.UpdateBlueprint"] }
+def x-amz-target-completer-182 [] { ["AWSGlue.UpdateClassifier"] }
+def x-amz-target-completer-183 [] { ["AWSGlue.UpdateColumnStatisticsForPartition"] }
+def x-amz-target-completer-184 [] { ["AWSGlue.UpdateColumnStatisticsForTable"] }
+def x-amz-target-completer-185 [] { ["AWSGlue.UpdateConnection"] }
+def x-amz-target-completer-186 [] { ["AWSGlue.UpdateCrawler"] }
+def x-amz-target-completer-187 [] { ["AWSGlue.UpdateCrawlerSchedule"] }
+def x-amz-target-completer-188 [] { ["AWSGlue.UpdateDataQualityRuleset"] }
+def x-amz-target-completer-189 [] { ["AWSGlue.UpdateDatabase"] }
+def x-amz-target-completer-190 [] { ["AWSGlue.UpdateDevEndpoint"] }
+def x-amz-target-completer-191 [] { ["AWSGlue.UpdateJob"] }
+def x-amz-target-completer-192 [] { ["AWSGlue.UpdateJobFromSourceControl"] }
+def x-amz-target-completer-193 [] { ["AWSGlue.UpdateMLTransform"] }
+def x-amz-target-completer-194 [] { ["AWSGlue.UpdatePartition"] }
+def x-amz-target-completer-195 [] { ["AWSGlue.UpdateRegistry"] }
+def x-amz-target-completer-196 [] { ["AWSGlue.UpdateSchema"] }
+def x-amz-target-completer-197 [] { ["AWSGlue.UpdateSourceControlFromJob"] }
+def x-amz-target-completer-198 [] { ["AWSGlue.UpdateTable"] }
+def x-amz-target-completer-199 [] { ["AWSGlue.UpdateTrigger"] }
+def x-amz-target-completer-200 [] { ["AWSGlue.UpdateUserDefinedFunction"] }
+def x-amz-target-completer-201 [] { ["AWSGlue.UpdateWorkflow"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-glue-batch-create-partition BatchCreatePartition" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-glue-batch-create-partition post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -296,7 +296,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSGlue.BatchCreatePartition
 # operationId: BatchCreatePartition
-export def "x-amz-target-aws-glue-batch-create-partition BatchCreatePartition" [
+export def "x-amz-target-aws-glue-batch-create-partition post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,26 +305,26 @@ export def "x-amz-target-aws-glue-batch-create-partition BatchCreatePartition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionInputList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partition_input_list: any
 ]: any -> record<Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchCreatePartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionInputList: $PartitionInputList} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionInputList": $partition_input_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -335,7 +335,7 @@ export def "x-amz-target-aws-glue-batch-create-partition BatchCreatePartition" [
 #
 # POST /#X-Amz-Target=AWSGlue.BatchDeleteConnection
 # operationId: BatchDeleteConnection
-export def "x-amz-target-aws-glue-batch-delete-connection BatchDeleteConnection" [
+export def "x-amz-target-aws-glue-batch-delete-connection post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,24 +344,24 @@ export def "x-amz-target-aws-glue-batch-delete-connection BatchDeleteConnection"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  --CatalogId: any
-  ConnectionNameList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  --catalog-id: any
+  connection_name_list: any
 ]: any -> record<Succeeded: record, Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchDeleteConnection")
-  let body = {CatalogId: $CatalogId, ConnectionNameList: $ConnectionNameList} | compact
+  let body = {"CatalogId": $catalog_id, "ConnectionNameList": $connection_name_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -372,7 +372,7 @@ export def "x-amz-target-aws-glue-batch-delete-connection BatchDeleteConnection"
 #
 # POST /#X-Amz-Target=AWSGlue.BatchDeletePartition
 # operationId: BatchDeletePartition
-export def "x-amz-target-aws-glue-batch-delete-partition BatchDeletePartition" [
+export def "x-amz-target-aws-glue-batch-delete-partition post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,26 +381,26 @@ export def "x-amz-target-aws-glue-batch-delete-partition BatchDeletePartition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionsToDelete: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partitions_to_delete: any
 ]: any -> record<Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchDeletePartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionsToDelete: $PartitionsToDelete} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionsToDelete": $partitions_to_delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -411,7 +411,7 @@ export def "x-amz-target-aws-glue-batch-delete-partition BatchDeletePartition" [
 #
 # POST /#X-Amz-Target=AWSGlue.BatchDeleteTable
 # operationId: BatchDeleteTable
-export def "x-amz-target-aws-glue-batch-delete-table BatchDeleteTable" [
+export def "x-amz-target-aws-glue-batch-delete-table post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,26 +420,26 @@ export def "x-amz-target-aws-glue-batch-delete-table BatchDeleteTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  --CatalogId: any
-  DatabaseName: any
-  TablesToDelete: any
-  --TransactionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  --catalog-id: any
+  database_name: any
+  tables_to_delete: any
+  --transaction-id: any
 ]: any -> record<Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchDeleteTable")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TablesToDelete: $TablesToDelete, TransactionId: $TransactionId} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TablesToDelete": $tables_to_delete, "TransactionId": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -450,7 +450,7 @@ export def "x-amz-target-aws-glue-batch-delete-table BatchDeleteTable" [
 #
 # POST /#X-Amz-Target=AWSGlue.BatchDeleteTableVersion
 # operationId: BatchDeleteTableVersion
-export def "x-amz-target-aws-glue-batch-delete-table-version BatchDeleteTableVersion" [
+export def "x-amz-target-aws-glue-batch-delete-table-version version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,26 +459,26 @@ export def "x-amz-target-aws-glue-batch-delete-table-version BatchDeleteTableVer
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  VersionIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  version_ids: any
 ]: any -> record<Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchDeleteTableVersion")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, VersionIds: $VersionIds} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "VersionIds": $version_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -489,7 +489,7 @@ export def "x-amz-target-aws-glue-batch-delete-table-version BatchDeleteTableVer
 #
 # POST /#X-Amz-Target=AWSGlue.BatchGetBlueprints
 # operationId: BatchGetBlueprints
-export def "x-amz-target-aws-glue-batch-get-blueprints BatchGetBlueprints" [
+export def "x-amz-target-aws-glue-batch-get-blueprints post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,25 +498,25 @@ export def "x-amz-target-aws-glue-batch-get-blueprints BatchGetBlueprints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  Names: any
-  --IncludeBlueprint: any
-  --IncludeParameterSpec: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  names: any
+  --include-blueprint: any
+  --include-parameter-spec: any
 ]: any -> record<Blueprints: record, MissingBlueprints: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchGetBlueprints")
-  let body = {Names: $Names, IncludeBlueprint: $IncludeBlueprint, IncludeParameterSpec: $IncludeParameterSpec} | compact
+  let body = {"Names": $names, "IncludeBlueprint": $include_blueprint, "IncludeParameterSpec": $include_parameter_spec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -527,7 +527,7 @@ export def "x-amz-target-aws-glue-batch-get-blueprints BatchGetBlueprints" [
 #
 # POST /#X-Amz-Target=AWSGlue.BatchGetCrawlers
 # operationId: BatchGetCrawlers
-export def "x-amz-target-aws-glue-batch-get-crawlers BatchGetCrawlers" [
+export def "x-amz-target-aws-glue-batch-get-crawlers post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,23 +536,23 @@ export def "x-amz-target-aws-glue-batch-get-crawlers BatchGetCrawlers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  CrawlerNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  crawler_names: any
 ]: any -> record<Crawlers: record, CrawlersNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchGetCrawlers")
-  let body = {CrawlerNames: $CrawlerNames} | compact
+  let body = {"CrawlerNames": $crawler_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -563,7 +563,7 @@ export def "x-amz-target-aws-glue-batch-get-crawlers BatchGetCrawlers" [
 #
 # POST /#X-Amz-Target=AWSGlue.BatchGetCustomEntityTypes
 # operationId: BatchGetCustomEntityTypes
-export def "x-amz-target-aws-glue-batch-get-custom-entity-types BatchGetCustomEntityTypes" [
+export def "x-amz-target-aws-glue-batch-get-custom-entity-types post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,23 +572,23 @@ export def "x-amz-target-aws-glue-batch-get-custom-entity-types BatchGetCustomEn
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  Names: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  names: any
 ]: any -> record<CustomEntityTypes: record, CustomEntityTypesNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchGetCustomEntityTypes")
-  let body = {Names: $Names} | compact
+  let body = {"Names": $names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -599,7 +599,7 @@ export def "x-amz-target-aws-glue-batch-get-custom-entity-types BatchGetCustomEn
 #
 # POST /#X-Amz-Target=AWSGlue.BatchGetDataQualityResult
 # operationId: BatchGetDataQualityResult
-export def "x-amz-target-aws-glue-batch-get-data-quality-result BatchGetDataQualityResult" [
+export def "x-amz-target-aws-glue-batch-get-data-quality-result post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,23 +608,23 @@ export def "x-amz-target-aws-glue-batch-get-data-quality-result BatchGetDataQual
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ResultIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  result_ids: any
 ]: any -> record<Results: record, ResultsNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchGetDataQualityResult")
-  let body = {ResultIds: $ResultIds} | compact
+  let body = {"ResultIds": $result_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -635,7 +635,7 @@ export def "x-amz-target-aws-glue-batch-get-data-quality-result BatchGetDataQual
 #
 # POST /#X-Amz-Target=AWSGlue.BatchGetDevEndpoints
 # operationId: BatchGetDevEndpoints
-export def "x-amz-target-aws-glue-batch-get-dev-endpoints BatchGetDevEndpoints" [
+export def "x-amz-target-aws-glue-batch-get-dev-endpoints post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,23 +644,23 @@ export def "x-amz-target-aws-glue-batch-get-dev-endpoints BatchGetDevEndpoints" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  DevEndpointNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  dev_endpoint_names: any
 ]: any -> record<DevEndpoints: record, DevEndpointsNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchGetDevEndpoints")
-  let body = {DevEndpointNames: $DevEndpointNames} | compact
+  let body = {"DevEndpointNames": $dev_endpoint_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -671,7 +671,7 @@ export def "x-amz-target-aws-glue-batch-get-dev-endpoints BatchGetDevEndpoints" 
 #
 # POST /#X-Amz-Target=AWSGlue.BatchGetJobs
 # operationId: BatchGetJobs
-export def "x-amz-target-aws-glue-batch-get-jobs BatchGetJobs" [
+export def "x-amz-target-aws-glue-batch-get-jobs post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,23 +680,23 @@ export def "x-amz-target-aws-glue-batch-get-jobs BatchGetJobs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  JobNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  job_names: any
 ]: any -> record<Jobs: record, JobsNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchGetJobs")
-  let body = {JobNames: $JobNames} | compact
+  let body = {"JobNames": $job_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -707,7 +707,7 @@ export def "x-amz-target-aws-glue-batch-get-jobs BatchGetJobs" [
 #
 # POST /#X-Amz-Target=AWSGlue.BatchGetPartition
 # operationId: BatchGetPartition
-export def "x-amz-target-aws-glue-batch-get-partition BatchGetPartition" [
+export def "x-amz-target-aws-glue-batch-get-partition post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,26 +716,26 @@ export def "x-amz-target-aws-glue-batch-get-partition BatchGetPartition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionsToGet: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partitions_to_get: any
 ]: any -> record<Partitions: record, UnprocessedKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchGetPartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionsToGet: $PartitionsToGet} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionsToGet": $partitions_to_get} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -746,7 +746,7 @@ export def "x-amz-target-aws-glue-batch-get-partition BatchGetPartition" [
 #
 # POST /#X-Amz-Target=AWSGlue.BatchGetTriggers
 # operationId: BatchGetTriggers
-export def "x-amz-target-aws-glue-batch-get-triggers BatchGetTriggers" [
+export def "x-amz-target-aws-glue-batch-get-triggers post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,23 +755,23 @@ export def "x-amz-target-aws-glue-batch-get-triggers BatchGetTriggers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  TriggerNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  trigger_names: any
 ]: any -> record<Triggers: record, TriggersNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchGetTriggers")
-  let body = {TriggerNames: $TriggerNames} | compact
+  let body = {"TriggerNames": $trigger_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -782,7 +782,7 @@ export def "x-amz-target-aws-glue-batch-get-triggers BatchGetTriggers" [
 #
 # POST /#X-Amz-Target=AWSGlue.BatchGetWorkflows
 # operationId: BatchGetWorkflows
-export def "x-amz-target-aws-glue-batch-get-workflows BatchGetWorkflows" [
+export def "x-amz-target-aws-glue-batch-get-workflows post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,24 +791,24 @@ export def "x-amz-target-aws-glue-batch-get-workflows BatchGetWorkflows" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  Names: any
-  --IncludeGraph: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  names: any
+  --include-graph: any
 ]: any -> record<Workflows: record, MissingWorkflows: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchGetWorkflows")
-  let body = {Names: $Names, IncludeGraph: $IncludeGraph} | compact
+  let body = {"Names": $names, "IncludeGraph": $include_graph} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -819,7 +819,7 @@ export def "x-amz-target-aws-glue-batch-get-workflows BatchGetWorkflows" [
 #
 # POST /#X-Amz-Target=AWSGlue.BatchStopJobRun
 # operationId: BatchStopJobRun
-export def "x-amz-target-aws-glue-batch-stop-job-run BatchStopJobRun" [
+export def "x-amz-target-aws-glue-batch-stop-job-run post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,24 +828,24 @@ export def "x-amz-target-aws-glue-batch-stop-job-run BatchStopJobRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  JobName: any
-  JobRunIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  job_name: any
+  job_run_ids: any
 ]: any -> record<SuccessfulSubmissions: record, Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchStopJobRun")
-  let body = {JobName: $JobName, JobRunIds: $JobRunIds} | compact
+  let body = {"JobName": $job_name, "JobRunIds": $job_run_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -856,7 +856,7 @@ export def "x-amz-target-aws-glue-batch-stop-job-run BatchStopJobRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.BatchUpdatePartition
 # operationId: BatchUpdatePartition
-export def "x-amz-target-aws-glue-batch-update-partition BatchUpdatePartition" [
+export def "x-amz-target-aws-glue-batch-update-partition post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,26 +865,26 @@ export def "x-amz-target-aws-glue-batch-update-partition BatchUpdatePartition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  Entries: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  entries: any
 ]: any -> record<Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.BatchUpdatePartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, Entries: $Entries} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "Entries": $entries} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -895,7 +895,7 @@ export def "x-amz-target-aws-glue-batch-update-partition BatchUpdatePartition" [
 #
 # POST /#X-Amz-Target=AWSGlue.CancelDataQualityRuleRecommendationRun
 # operationId: CancelDataQualityRuleRecommendationRun
-export def "x-amz-target-aws-glue-cancel-data-quality-rule-recommendation-run CancelDataQualityRuleRecommendationRun" [
+export def "x-amz-target-aws-glue-cancel-data-quality-rule-recommendation-run cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -904,23 +904,23 @@ export def "x-amz-target-aws-glue-cancel-data-quality-rule-recommendation-run Ca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  RunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  run_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CancelDataQualityRuleRecommendationRun")
-  let body = {RunId: $RunId} | compact
+  let body = {"RunId": $run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -931,7 +931,7 @@ export def "x-amz-target-aws-glue-cancel-data-quality-rule-recommendation-run Ca
 #
 # POST /#X-Amz-Target=AWSGlue.CancelDataQualityRulesetEvaluationRun
 # operationId: CancelDataQualityRulesetEvaluationRun
-export def "x-amz-target-aws-glue-cancel-data-quality-ruleset-evaluation-run CancelDataQualityRulesetEvaluationRun" [
+export def "x-amz-target-aws-glue-cancel-data-quality-ruleset-evaluation-run cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,23 +940,23 @@ export def "x-amz-target-aws-glue-cancel-data-quality-ruleset-evaluation-run Can
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  RunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  run_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CancelDataQualityRulesetEvaluationRun")
-  let body = {RunId: $RunId} | compact
+  let body = {"RunId": $run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -967,7 +967,7 @@ export def "x-amz-target-aws-glue-cancel-data-quality-ruleset-evaluation-run Can
 #
 # POST /#X-Amz-Target=AWSGlue.CancelMLTaskRun
 # operationId: CancelMLTaskRun
-export def "x-amz-target-aws-glue-cancel-ml-task-run CancelMLTaskRun" [
+export def "x-amz-target-aws-glue-cancel-ml-task-run cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -976,24 +976,24 @@ export def "x-amz-target-aws-glue-cancel-ml-task-run CancelMLTaskRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  TransformId: any
-  TaskRunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  transform_id: any
+  task_run_id: any
 ]: any -> record<TransformId: record, TaskRunId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CancelMLTaskRun")
-  let body = {TransformId: $TransformId, TaskRunId: $TaskRunId} | compact
+  let body = {"TransformId": $transform_id, "TaskRunId": $task_run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1004,7 +1004,7 @@ export def "x-amz-target-aws-glue-cancel-ml-task-run CancelMLTaskRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.CancelStatement
 # operationId: CancelStatement
-export def "x-amz-target-aws-glue-cancel-statement CancelStatement" [
+export def "x-amz-target-aws-glue-cancel-statement cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,25 +1013,25 @@ export def "x-amz-target-aws-glue-cancel-statement CancelStatement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  SessionId: any
-  Id: any
-  --RequestOrigin: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  session_id: any
+  id: any
+  --request-origin: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CancelStatement")
-  let body = {SessionId: $SessionId, Id: $Id, RequestOrigin: $RequestOrigin} | compact
+  let body = {"SessionId": $session_id, "Id": $id, "RequestOrigin": $request_origin} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1042,7 +1042,7 @@ export def "x-amz-target-aws-glue-cancel-statement CancelStatement" [
 #
 # POST /#X-Amz-Target=AWSGlue.CheckSchemaVersionValidity
 # operationId: CheckSchemaVersionValidity
-export def "x-amz-target-aws-glue-check-schema-version-validity CheckSchemaVersionValidity" [
+export def "x-amz-target-aws-glue-check-schema-version-validity check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1051,24 +1051,24 @@ export def "x-amz-target-aws-glue-check-schema-version-validity CheckSchemaVersi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  DataFormat: any
-  SchemaDefinition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  data_format: any
+  schema_definition: any
 ]: any -> record<Valid: record, Error: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CheckSchemaVersionValidity")
-  let body = {DataFormat: $DataFormat, SchemaDefinition: $SchemaDefinition} | compact
+  let body = {"DataFormat": $data_format, "SchemaDefinition": $schema_definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1079,7 +1079,7 @@ export def "x-amz-target-aws-glue-check-schema-version-validity CheckSchemaVersi
 #
 # POST /#X-Amz-Target=AWSGlue.CreateBlueprint
 # operationId: CreateBlueprint
-export def "x-amz-target-aws-glue-create-blueprint CreateBlueprint" [
+export def "x-amz-target-aws-glue-create-blueprint create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1088,26 +1088,26 @@ export def "x-amz-target-aws-glue-create-blueprint CreateBlueprint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  Name: any
-  --Description: any
-  BlueprintLocation: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  name: any
+  --description: any
+  blueprint_location: any
+  --tags: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateBlueprint")
-  let body = {Name: $Name, Description: $Description, BlueprintLocation: $BlueprintLocation, Tags: $Tags} | compact
+  let body = {"Name": $name, "Description": $description, "BlueprintLocation": $blueprint_location, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1118,7 +1118,7 @@ export def "x-amz-target-aws-glue-create-blueprint CreateBlueprint" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateClassifier
 # operationId: CreateClassifier
-export def "x-amz-target-aws-glue-create-classifier CreateClassifier" [
+export def "x-amz-target-aws-glue-create-classifier create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1127,26 +1127,26 @@ export def "x-amz-target-aws-glue-create-classifier CreateClassifier" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  --GrokClassifier: any
-  --XMLClassifier: any
-  --JsonClassifier: any
-  --CsvClassifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  --grok-classifier: any
+  --xml-classifier: any
+  --json-classifier: any
+  --csv-classifier: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateClassifier")
-  let body = {GrokClassifier: $GrokClassifier, XMLClassifier: $XMLClassifier, JsonClassifier: $JsonClassifier, CsvClassifier: $CsvClassifier} | compact
+  let body = {"GrokClassifier": $grok_classifier, "XMLClassifier": $xml_classifier, "JsonClassifier": $json_classifier, "CsvClassifier": $csv_classifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1157,7 +1157,7 @@ export def "x-amz-target-aws-glue-create-classifier CreateClassifier" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateConnection
 # operationId: CreateConnection
-export def "x-amz-target-aws-glue-create-connection CreateConnection" [
+export def "x-amz-target-aws-glue-create-connection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1166,25 +1166,25 @@ export def "x-amz-target-aws-glue-create-connection CreateConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --CatalogId: any
-  ConnectionInput: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --catalog-id: any
+  connection_input: any
+  --tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateConnection")
-  let body = {CatalogId: $CatalogId, ConnectionInput: $ConnectionInput, Tags: $Tags} | compact
+  let body = {"CatalogId": $catalog_id, "ConnectionInput": $connection_input, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1195,7 +1195,7 @@ export def "x-amz-target-aws-glue-create-connection CreateConnection" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateCrawler
 # operationId: CreateCrawler
-export def "x-amz-target-aws-glue-create-crawler CreateCrawler" [
+export def "x-amz-target-aws-glue-create-crawler create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,37 +1204,37 @@ export def "x-amz-target-aws-glue-create-crawler CreateCrawler" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  Name: any
-  Role: any
-  --DatabaseName: any
-  --Description: any
-  Targets: any
-  --Schedule: any
-  --Classifiers: any
-  --TablePrefix: any
-  --SchemaChangePolicy: any
-  --RecrawlPolicy: any
-  --LineageConfiguration: any
-  --LakeFormationConfiguration: any
-  --Configuration: any
-  --CrawlerSecurityConfiguration: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  name: any
+  role: any
+  --database-name: any
+  --description: any
+  targets: any
+  --schedule: any
+  --classifiers: any
+  --table-prefix: any
+  --schema-change-policy: any
+  --recrawl-policy: any
+  --lineage-configuration: any
+  --lake-formation-configuration: any
+  --configuration: any
+  --crawler-security-configuration: any
+  --tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateCrawler")
-  let body = {Name: $Name, Role: $Role, DatabaseName: $DatabaseName, Description: $Description, Targets: $Targets, Schedule: $Schedule, Classifiers: $Classifiers, TablePrefix: $TablePrefix, SchemaChangePolicy: $SchemaChangePolicy, RecrawlPolicy: $RecrawlPolicy, LineageConfiguration: $LineageConfiguration, LakeFormationConfiguration: $LakeFormationConfiguration, Configuration: $Configuration, CrawlerSecurityConfiguration: $CrawlerSecurityConfiguration, Tags: $Tags} | compact
+  let body = {"Name": $name, "Role": $role, "DatabaseName": $database_name, "Description": $description, "Targets": $targets, "Schedule": $schedule, "Classifiers": $classifiers, "TablePrefix": $table_prefix, "SchemaChangePolicy": $schema_change_policy, "RecrawlPolicy": $recrawl_policy, "LineageConfiguration": $lineage_configuration, "LakeFormationConfiguration": $lake_formation_configuration, "Configuration": $configuration, "CrawlerSecurityConfiguration": $crawler_security_configuration, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1245,7 +1245,7 @@ export def "x-amz-target-aws-glue-create-crawler CreateCrawler" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateCustomEntityType
 # operationId: CreateCustomEntityType
-export def "x-amz-target-aws-glue-create-custom-entity-type CreateCustomEntityType" [
+export def "x-amz-target-aws-glue-create-custom-entity-type create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,25 +1254,25 @@ export def "x-amz-target-aws-glue-create-custom-entity-type CreateCustomEntityTy
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  Name: any
-  RegexString: any
-  --ContextWords: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  name: any
+  regex_string: any
+  --context-words: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateCustomEntityType")
-  let body = {Name: $Name, RegexString: $RegexString, ContextWords: $ContextWords} | compact
+  let body = {"Name": $name, "RegexString": $regex_string, "ContextWords": $context_words} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1283,7 +1283,7 @@ export def "x-amz-target-aws-glue-create-custom-entity-type CreateCustomEntityTy
 #
 # POST /#X-Amz-Target=AWSGlue.CreateDataQualityRuleset
 # operationId: CreateDataQualityRuleset
-export def "x-amz-target-aws-glue-create-data-quality-ruleset CreateDataQualityRuleset" [
+export def "x-amz-target-aws-glue-create-data-quality-ruleset create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,28 +1292,28 @@ export def "x-amz-target-aws-glue-create-data-quality-ruleset CreateDataQualityR
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  Name: any
-  --Description: any
-  Ruleset: any
-  --Tags: any
-  --TargetTable: any
-  --ClientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  name: any
+  --description: any
+  ruleset: any
+  --tags: any
+  --target-table: any
+  --client-token: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateDataQualityRuleset")
-  let body = {Name: $Name, Description: $Description, Ruleset: $Ruleset, Tags: $Tags, TargetTable: $TargetTable, ClientToken: $ClientToken} | compact
+  let body = {"Name": $name, "Description": $description, "Ruleset": $ruleset, "Tags": $tags, "TargetTable": $target_table, "ClientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1324,7 +1324,7 @@ export def "x-amz-target-aws-glue-create-data-quality-ruleset CreateDataQualityR
 #
 # POST /#X-Amz-Target=AWSGlue.CreateDatabase
 # operationId: CreateDatabase
-export def "x-amz-target-aws-glue-create-database CreateDatabase" [
+export def "x-amz-target-aws-glue-create-database create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,25 +1333,25 @@ export def "x-amz-target-aws-glue-create-database CreateDatabase" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  --CatalogId: any
-  DatabaseInput: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  --catalog-id: any
+  database_input: any
+  --tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateDatabase")
-  let body = {CatalogId: $CatalogId, DatabaseInput: $DatabaseInput, Tags: $Tags} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseInput": $database_input, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1362,7 +1362,7 @@ export def "x-amz-target-aws-glue-create-database CreateDatabase" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateDevEndpoint
 # operationId: CreateDevEndpoint
-export def "x-amz-target-aws-glue-create-dev-endpoint CreateDevEndpoint" [
+export def "x-amz-target-aws-glue-create-dev-endpoint create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1371,37 +1371,37 @@ export def "x-amz-target-aws-glue-create-dev-endpoint CreateDevEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  EndpointName: any
-  RoleArn: any
-  --SecurityGroupIds: any
-  --SubnetId: any
-  --PublicKey: any
-  --PublicKeys: any
-  --NumberOfNodes: any
-  --WorkerType: any
-  --GlueVersion: any
-  --NumberOfWorkers: any
-  --ExtraPythonLibsS3Path: any
-  --ExtraJarsS3Path: any
-  --SecurityConfiguration: any
-  --Tags: any
-  --Arguments: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  endpoint_name: any
+  role_arn: any
+  --security-group-ids: any
+  --subnet-id: any
+  --public-key: any
+  --public-keys: any
+  --number-of-nodes: any
+  --worker-type: any
+  --glue-version: any
+  --number-of-workers: any
+  --extra-python-libs-s3-path: any
+  --extra-jars-s3-path: any
+  --security-configuration: any
+  --tags: any
+  --arguments: any
 ]: any -> record<EndpointName: record, Status: record, SecurityGroupIds: record, SubnetId: record, RoleArn: record, YarnEndpointAddress: record, ZeppelinRemoteSparkInterpreterPort: record, NumberOfNodes: record, WorkerType: record, GlueVersion: record, NumberOfWorkers: record, AvailabilityZone: record, VpcId: record, ExtraPythonLibsS3Path: record, ExtraJarsS3Path: record, FailureReason: record, SecurityConfiguration: record, CreatedTimestamp: record, Arguments: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateDevEndpoint")
-  let body = {EndpointName: $EndpointName, RoleArn: $RoleArn, SecurityGroupIds: $SecurityGroupIds, SubnetId: $SubnetId, PublicKey: $PublicKey, PublicKeys: $PublicKeys, NumberOfNodes: $NumberOfNodes, WorkerType: $WorkerType, GlueVersion: $GlueVersion, NumberOfWorkers: $NumberOfWorkers, ExtraPythonLibsS3Path: $ExtraPythonLibsS3Path, ExtraJarsS3Path: $ExtraJarsS3Path, SecurityConfiguration: $SecurityConfiguration, Tags: $Tags, Arguments: $Arguments} | compact
+  let body = {"EndpointName": $endpoint_name, "RoleArn": $role_arn, "SecurityGroupIds": $security_group_ids, "SubnetId": $subnet_id, "PublicKey": $public_key, "PublicKeys": $public_keys, "NumberOfNodes": $number_of_nodes, "WorkerType": $worker_type, "GlueVersion": $glue_version, "NumberOfWorkers": $number_of_workers, "ExtraPythonLibsS3Path": $extra_python_libs_s3_path, "ExtraJarsS3Path": $extra_jars_s3_path, "SecurityConfiguration": $security_configuration, "Tags": $tags, "Arguments": $arguments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1412,7 +1412,7 @@ export def "x-amz-target-aws-glue-create-dev-endpoint CreateDevEndpoint" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateJob
 # operationId: CreateJob
-export def "x-amz-target-aws-glue-create-job CreateJob" [
+export def "x-amz-target-aws-glue-create-job create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1421,44 +1421,44 @@ export def "x-amz-target-aws-glue-create-job CreateJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  Name: any
-  --Description: any
-  --LogUri: any
-  Role: any
-  --ExecutionProperty: any
-  Command: any
-  --DefaultArguments: any
-  --NonOverridableArguments: any
-  --Connections: any
-  --MaxRetries: any
-  --AllocatedCapacity: any
-  --Timeout: any
-  --MaxCapacity: any
-  --SecurityConfiguration: any
-  --Tags: any
-  --NotificationProperty: any
-  --GlueVersion: any
-  --NumberOfWorkers: any
-  --WorkerType: any
-  --CodeGenConfigurationNodes: any
-  --ExecutionClass: any
-  --SourceControlDetails: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  name: any
+  --description: any
+  --log-uri: any
+  role: any
+  --execution-property: any
+  command: any
+  --default-arguments: any
+  --non-overridable-arguments: any
+  --connections: any
+  --max-retries: any
+  --allocated-capacity: any
+  --timeout: any
+  --max-capacity: any
+  --security-configuration: any
+  --tags: any
+  --notification-property: any
+  --glue-version: any
+  --number-of-workers: any
+  --worker-type: any
+  --code-gen-configuration-nodes: any
+  --execution-class: any
+  --source-control-details: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateJob")
-  let body = {Name: $Name, Description: $Description, LogUri: $LogUri, Role: $Role, ExecutionProperty: $ExecutionProperty, Command: $Command, DefaultArguments: $DefaultArguments, NonOverridableArguments: $NonOverridableArguments, Connections: $Connections, MaxRetries: $MaxRetries, AllocatedCapacity: $AllocatedCapacity, Timeout: $Timeout, MaxCapacity: $MaxCapacity, SecurityConfiguration: $SecurityConfiguration, Tags: $Tags, NotificationProperty: $NotificationProperty, GlueVersion: $GlueVersion, NumberOfWorkers: $NumberOfWorkers, WorkerType: $WorkerType, CodeGenConfigurationNodes: $CodeGenConfigurationNodes, ExecutionClass: $ExecutionClass, SourceControlDetails: $SourceControlDetails} | compact
+  let body = {"Name": $name, "Description": $description, "LogUri": $log_uri, "Role": $role, "ExecutionProperty": $execution_property, "Command": $command, "DefaultArguments": $default_arguments, "NonOverridableArguments": $non_overridable_arguments, "Connections": $connections, "MaxRetries": $max_retries, "AllocatedCapacity": $allocated_capacity, "Timeout": $timeout, "MaxCapacity": $max_capacity, "SecurityConfiguration": $security_configuration, "Tags": $tags, "NotificationProperty": $notification_property, "GlueVersion": $glue_version, "NumberOfWorkers": $number_of_workers, "WorkerType": $worker_type, "CodeGenConfigurationNodes": $code_gen_configuration_nodes, "ExecutionClass": $execution_class, "SourceControlDetails": $source_control_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1469,7 +1469,7 @@ export def "x-amz-target-aws-glue-create-job CreateJob" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateMLTransform
 # operationId: CreateMLTransform
-export def "x-amz-target-aws-glue-create-ml-transform CreateMLTransform" [
+export def "x-amz-target-aws-glue-create-ml-transform create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,35 +1478,35 @@ export def "x-amz-target-aws-glue-create-ml-transform CreateMLTransform" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  Name: any
-  --Description: any
-  InputRecordTables: any
-  Parameters: any
-  Role: any
-  --GlueVersion: any
-  --MaxCapacity: any
-  --WorkerType: any
-  --NumberOfWorkers: any
-  --Timeout: any
-  --MaxRetries: any
-  --Tags: any
-  --TransformEncryption: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  name: any
+  --description: any
+  input_record_tables: any
+  parameters: any
+  role: any
+  --glue-version: any
+  --max-capacity: any
+  --worker-type: any
+  --number-of-workers: any
+  --timeout: any
+  --max-retries: any
+  --tags: any
+  --transform-encryption: any
 ]: any -> record<TransformId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateMLTransform")
-  let body = {Name: $Name, Description: $Description, InputRecordTables: $InputRecordTables, Parameters: $Parameters, Role: $Role, GlueVersion: $GlueVersion, MaxCapacity: $MaxCapacity, WorkerType: $WorkerType, NumberOfWorkers: $NumberOfWorkers, Timeout: $Timeout, MaxRetries: $MaxRetries, Tags: $Tags, TransformEncryption: $TransformEncryption} | compact
+  let body = {"Name": $name, "Description": $description, "InputRecordTables": $input_record_tables, "Parameters": $parameters, "Role": $role, "GlueVersion": $glue_version, "MaxCapacity": $max_capacity, "WorkerType": $worker_type, "NumberOfWorkers": $number_of_workers, "Timeout": $timeout, "MaxRetries": $max_retries, "Tags": $tags, "TransformEncryption": $transform_encryption} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1517,7 +1517,7 @@ export def "x-amz-target-aws-glue-create-ml-transform CreateMLTransform" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreatePartition
 # operationId: CreatePartition
-export def "x-amz-target-aws-glue-create-partition CreatePartition" [
+export def "x-amz-target-aws-glue-create-partition create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,26 +1526,26 @@ export def "x-amz-target-aws-glue-create-partition CreatePartition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionInput: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partition_input: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreatePartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionInput: $PartitionInput} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionInput": $partition_input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1556,7 +1556,7 @@ export def "x-amz-target-aws-glue-create-partition CreatePartition" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreatePartitionIndex
 # operationId: CreatePartitionIndex
-export def "x-amz-target-aws-glue-create-partition-index CreatePartitionIndex" [
+export def "x-amz-target-aws-glue-create-partition-index create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1565,26 +1565,26 @@ export def "x-amz-target-aws-glue-create-partition-index CreatePartitionIndex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionIndex: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partition_index: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreatePartitionIndex")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionIndex: $PartitionIndex} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionIndex": $partition_index} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1595,7 +1595,7 @@ export def "x-amz-target-aws-glue-create-partition-index CreatePartitionIndex" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateRegistry
 # operationId: CreateRegistry
-export def "x-amz-target-aws-glue-create-registry CreateRegistry" [
+export def "x-amz-target-aws-glue-create-registry create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1604,25 +1604,25 @@ export def "x-amz-target-aws-glue-create-registry CreateRegistry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  RegistryName: any
-  --Description: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  registry_name: any
+  --description: any
+  --tags: any
 ]: any -> record<RegistryArn: record, RegistryName: record, Description: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateRegistry")
-  let body = {RegistryName: $RegistryName, Description: $Description, Tags: $Tags} | compact
+  let body = {"RegistryName": $registry_name, "Description": $description, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1633,7 +1633,7 @@ export def "x-amz-target-aws-glue-create-registry CreateRegistry" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateSchema
 # operationId: CreateSchema
-export def "x-amz-target-aws-glue-create-schema CreateSchema" [
+export def "x-amz-target-aws-glue-create-schema create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,29 +1642,29 @@ export def "x-amz-target-aws-glue-create-schema CreateSchema" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  --RegistryId: any
-  SchemaName: any
-  DataFormat: any
-  --Compatibility: any
-  --Description: any
-  --Tags: any
-  --SchemaDefinition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  --registry-id: any
+  schema_name: any
+  data_format: any
+  --compatibility: any
+  --description: any
+  --tags: any
+  --schema-definition: any
 ]: any -> record<RegistryName: record, RegistryArn: record, SchemaName: record, SchemaArn: record, Description: record, DataFormat: record, Compatibility: record, SchemaCheckpoint: record, LatestSchemaVersion: record, NextSchemaVersion: record, SchemaStatus: record, Tags: record, SchemaVersionId: record, SchemaVersionStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateSchema")
-  let body = {RegistryId: $RegistryId, SchemaName: $SchemaName, DataFormat: $DataFormat, Compatibility: $Compatibility, Description: $Description, Tags: $Tags, SchemaDefinition: $SchemaDefinition} | compact
+  let body = {"RegistryId": $registry_id, "SchemaName": $schema_name, "DataFormat": $data_format, "Compatibility": $compatibility, "Description": $description, "Tags": $tags, "SchemaDefinition": $schema_definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1675,7 +1675,7 @@ export def "x-amz-target-aws-glue-create-schema CreateSchema" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateScript
 # operationId: CreateScript
-export def "x-amz-target-aws-glue-create-script CreateScript" [
+export def "x-amz-target-aws-glue-create-script create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1684,25 +1684,25 @@ export def "x-amz-target-aws-glue-create-script CreateScript" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  --DagNodes: any
-  --DagEdges: any
-  --Language: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  --dag-nodes: any
+  --dag-edges: any
+  --language: any
 ]: any -> record<PythonScript: record, ScalaCode: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateScript")
-  let body = {DagNodes: $DagNodes, DagEdges: $DagEdges, Language: $Language} | compact
+  let body = {"DagNodes": $dag_nodes, "DagEdges": $dag_edges, "Language": $language} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1713,7 +1713,7 @@ export def "x-amz-target-aws-glue-create-script CreateScript" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateSecurityConfiguration
 # operationId: CreateSecurityConfiguration
-export def "x-amz-target-aws-glue-create-security-configuration CreateSecurityConfiguration" [
+export def "x-amz-target-aws-glue-create-security-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,24 +1722,24 @@ export def "x-amz-target-aws-glue-create-security-configuration CreateSecurityCo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  Name: any
-  EncryptionConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  name: any
+  encryption_configuration: any
 ]: any -> record<Name: record, CreatedTimestamp: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateSecurityConfiguration")
-  let body = {Name: $Name, EncryptionConfiguration: $EncryptionConfiguration} | compact
+  let body = {"Name": $name, "EncryptionConfiguration": $encryption_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1750,7 +1750,7 @@ export def "x-amz-target-aws-glue-create-security-configuration CreateSecurityCo
 #
 # POST /#X-Amz-Target=AWSGlue.CreateSession
 # operationId: CreateSession
-export def "x-amz-target-aws-glue-create-session CreateSession" [
+export def "x-amz-target-aws-glue-create-session create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1759,37 +1759,37 @@ export def "x-amz-target-aws-glue-create-session CreateSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  Id: any
-  --Description: any
-  Role: any
-  Command: any
-  --Timeout: any
-  --IdleTimeout: any
-  --DefaultArguments: any
-  --Connections: any
-  --MaxCapacity: any
-  --NumberOfWorkers: any
-  --WorkerType: any
-  --SecurityConfiguration: any
-  --GlueVersion: any
-  --Tags: any
-  --RequestOrigin: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  id: any
+  --description: any
+  role: any
+  command: any
+  --timeout: any
+  --idle-timeout: any
+  --default-arguments: any
+  --connections: any
+  --max-capacity: any
+  --number-of-workers: any
+  --worker-type: any
+  --security-configuration: any
+  --glue-version: any
+  --tags: any
+  --request-origin: any
 ]: any -> record<Session: record<Id: record, CreatedOn: record, Status: record, ErrorMessage: record, Description: record, Role: record, Command: record<Name: record, PythonVersion: record>, DefaultArguments: record, Connections: record<Connections: record>, Progress: record, MaxCapacity: record, SecurityConfiguration: record, GlueVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateSession")
-  let body = {Id: $Id, Description: $Description, Role: $Role, Command: $Command, Timeout: $Timeout, IdleTimeout: $IdleTimeout, DefaultArguments: $DefaultArguments, Connections: $Connections, MaxCapacity: $MaxCapacity, NumberOfWorkers: $NumberOfWorkers, WorkerType: $WorkerType, SecurityConfiguration: $SecurityConfiguration, GlueVersion: $GlueVersion, Tags: $Tags, RequestOrigin: $RequestOrigin} | compact
+  let body = {"Id": $id, "Description": $description, "Role": $role, "Command": $command, "Timeout": $timeout, "IdleTimeout": $idle_timeout, "DefaultArguments": $default_arguments, "Connections": $connections, "MaxCapacity": $max_capacity, "NumberOfWorkers": $number_of_workers, "WorkerType": $worker_type, "SecurityConfiguration": $security_configuration, "GlueVersion": $glue_version, "Tags": $tags, "RequestOrigin": $request_origin} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1800,7 +1800,7 @@ export def "x-amz-target-aws-glue-create-session CreateSession" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateTable
 # operationId: CreateTable
-export def "x-amz-target-aws-glue-create-table CreateTable" [
+export def "x-amz-target-aws-glue-create-table create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1809,27 +1809,27 @@ export def "x-amz-target-aws-glue-create-table CreateTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  --CatalogId: any
-  DatabaseName: any
-  TableInput: any
-  --PartitionIndexes: any
-  --TransactionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  --catalog-id: any
+  database_name: any
+  table_input: any
+  --partition-indexes: any
+  --transaction-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateTable")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableInput: $TableInput, PartitionIndexes: $PartitionIndexes, TransactionId: $TransactionId} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableInput": $table_input, "PartitionIndexes": $partition_indexes, "TransactionId": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1840,7 +1840,7 @@ export def "x-amz-target-aws-glue-create-table CreateTable" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateTrigger
 # operationId: CreateTrigger
-export def "x-amz-target-aws-glue-create-trigger CreateTrigger" [
+export def "x-amz-target-aws-glue-create-trigger create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1849,32 +1849,32 @@ export def "x-amz-target-aws-glue-create-trigger CreateTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  Name: any
-  --WorkflowName: any
-  Type: any
-  --Schedule: any
-  --Predicate: any
-  Actions: any
-  --Description: any
-  --StartOnCreation: any
-  --Tags: any
-  --EventBatchingCondition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  name: any
+  --workflow-name: any
+  type: any
+  --schedule: any
+  --predicate: any
+  actions: any
+  --description: any
+  --start-on-creation: any
+  --tags: any
+  --event-batching-condition: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateTrigger")
-  let body = {Name: $Name, WorkflowName: $WorkflowName, Type: $Type, Schedule: $Schedule, Predicate: $Predicate, Actions: $Actions, Description: $Description, StartOnCreation: $StartOnCreation, Tags: $Tags, EventBatchingCondition: $EventBatchingCondition} | compact
+  let body = {"Name": $name, "WorkflowName": $workflow_name, "Type": $type, "Schedule": $schedule, "Predicate": $predicate, "Actions": $actions, "Description": $description, "StartOnCreation": $start_on_creation, "Tags": $tags, "EventBatchingCondition": $event_batching_condition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1885,7 +1885,7 @@ export def "x-amz-target-aws-glue-create-trigger CreateTrigger" [
 #
 # POST /#X-Amz-Target=AWSGlue.CreateUserDefinedFunction
 # operationId: CreateUserDefinedFunction
-export def "x-amz-target-aws-glue-create-user-defined-function CreateUserDefinedFunction" [
+export def "x-amz-target-aws-glue-create-user-defined-function create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1894,25 +1894,25 @@ export def "x-amz-target-aws-glue-create-user-defined-function CreateUserDefined
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  --CatalogId: any
-  DatabaseName: any
-  FunctionInput: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  --catalog-id: any
+  database_name: any
+  function_input: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateUserDefinedFunction")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, FunctionInput: $FunctionInput} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "FunctionInput": $function_input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1923,7 +1923,7 @@ export def "x-amz-target-aws-glue-create-user-defined-function CreateUserDefined
 #
 # POST /#X-Amz-Target=AWSGlue.CreateWorkflow
 # operationId: CreateWorkflow
-export def "x-amz-target-aws-glue-create-workflow CreateWorkflow" [
+export def "x-amz-target-aws-glue-create-workflow create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1932,27 +1932,27 @@ export def "x-amz-target-aws-glue-create-workflow CreateWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  Name: any
-  --Description: any
-  --DefaultRunProperties: any
-  --Tags: any
-  --MaxConcurrentRuns: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  name: any
+  --description: any
+  --default-run-properties: any
+  --tags: any
+  --max-concurrent-runs: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.CreateWorkflow")
-  let body = {Name: $Name, Description: $Description, DefaultRunProperties: $DefaultRunProperties, Tags: $Tags, MaxConcurrentRuns: $MaxConcurrentRuns} | compact
+  let body = {"Name": $name, "Description": $description, "DefaultRunProperties": $default_run_properties, "Tags": $tags, "MaxConcurrentRuns": $max_concurrent_runs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1963,7 +1963,7 @@ export def "x-amz-target-aws-glue-create-workflow CreateWorkflow" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteBlueprint
 # operationId: DeleteBlueprint
-export def "x-amz-target-aws-glue-delete-blueprint DeleteBlueprint" [
+export def "x-amz-target-aws-glue-delete-blueprint delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1972,23 +1972,23 @@ export def "x-amz-target-aws-glue-delete-blueprint DeleteBlueprint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  name: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteBlueprint")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1999,7 +1999,7 @@ export def "x-amz-target-aws-glue-delete-blueprint DeleteBlueprint" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteClassifier
 # operationId: DeleteClassifier
-export def "x-amz-target-aws-glue-delete-classifier DeleteClassifier" [
+export def "x-amz-target-aws-glue-delete-classifier delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,23 +2008,23 @@ export def "x-amz-target-aws-glue-delete-classifier DeleteClassifier" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteClassifier")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2035,7 +2035,7 @@ export def "x-amz-target-aws-glue-delete-classifier DeleteClassifier" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteColumnStatisticsForPartition
 # operationId: DeleteColumnStatisticsForPartition
-export def "x-amz-target-aws-glue-delete-column-statistics-for-partition DeleteColumnStatisticsForPartition" [
+export def "x-amz-target-aws-glue-delete-column-statistics-for-partition delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2044,27 +2044,27 @@ export def "x-amz-target-aws-glue-delete-column-statistics-for-partition DeleteC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionValues: any
-  ColumnName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partition_values: any
+  column_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteColumnStatisticsForPartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionValues: $PartitionValues, ColumnName: $ColumnName} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionValues": $partition_values, "ColumnName": $column_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2075,7 +2075,7 @@ export def "x-amz-target-aws-glue-delete-column-statistics-for-partition DeleteC
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteColumnStatisticsForTable
 # operationId: DeleteColumnStatisticsForTable
-export def "x-amz-target-aws-glue-delete-column-statistics-for-table DeleteColumnStatisticsForTable" [
+export def "x-amz-target-aws-glue-delete-column-statistics-for-table delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2084,26 +2084,26 @@ export def "x-amz-target-aws-glue-delete-column-statistics-for-table DeleteColum
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  ColumnName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  column_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteColumnStatisticsForTable")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, ColumnName: $ColumnName} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "ColumnName": $column_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2114,7 +2114,7 @@ export def "x-amz-target-aws-glue-delete-column-statistics-for-table DeleteColum
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteConnection
 # operationId: DeleteConnection
-export def "x-amz-target-aws-glue-delete-connection DeleteConnection" [
+export def "x-amz-target-aws-glue-delete-connection delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2123,24 +2123,24 @@ export def "x-amz-target-aws-glue-delete-connection DeleteConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  --CatalogId: any
-  ConnectionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  --catalog-id: any
+  connection_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteConnection")
-  let body = {CatalogId: $CatalogId, ConnectionName: $ConnectionName} | compact
+  let body = {"CatalogId": $catalog_id, "ConnectionName": $connection_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2151,7 +2151,7 @@ export def "x-amz-target-aws-glue-delete-connection DeleteConnection" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteCrawler
 # operationId: DeleteCrawler
-export def "x-amz-target-aws-glue-delete-crawler DeleteCrawler" [
+export def "x-amz-target-aws-glue-delete-crawler delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2160,23 +2160,23 @@ export def "x-amz-target-aws-glue-delete-crawler DeleteCrawler" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteCrawler")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2187,7 +2187,7 @@ export def "x-amz-target-aws-glue-delete-crawler DeleteCrawler" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteCustomEntityType
 # operationId: DeleteCustomEntityType
-export def "x-amz-target-aws-glue-delete-custom-entity-type DeleteCustomEntityType" [
+export def "x-amz-target-aws-glue-delete-custom-entity-type delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2196,23 +2196,23 @@ export def "x-amz-target-aws-glue-delete-custom-entity-type DeleteCustomEntityTy
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  name: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteCustomEntityType")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2223,7 +2223,7 @@ export def "x-amz-target-aws-glue-delete-custom-entity-type DeleteCustomEntityTy
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteDataQualityRuleset
 # operationId: DeleteDataQualityRuleset
-export def "x-amz-target-aws-glue-delete-data-quality-ruleset DeleteDataQualityRuleset" [
+export def "x-amz-target-aws-glue-delete-data-quality-ruleset delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2232,23 +2232,23 @@ export def "x-amz-target-aws-glue-delete-data-quality-ruleset DeleteDataQualityR
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteDataQualityRuleset")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2259,7 +2259,7 @@ export def "x-amz-target-aws-glue-delete-data-quality-ruleset DeleteDataQualityR
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteDatabase
 # operationId: DeleteDatabase
-export def "x-amz-target-aws-glue-delete-database DeleteDatabase" [
+export def "x-amz-target-aws-glue-delete-database delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2268,24 +2268,24 @@ export def "x-amz-target-aws-glue-delete-database DeleteDatabase" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  --CatalogId: any
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  --catalog-id: any
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteDatabase")
-  let body = {CatalogId: $CatalogId, Name: $Name} | compact
+  let body = {"CatalogId": $catalog_id, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2296,7 +2296,7 @@ export def "x-amz-target-aws-glue-delete-database DeleteDatabase" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteDevEndpoint
 # operationId: DeleteDevEndpoint
-export def "x-amz-target-aws-glue-delete-dev-endpoint DeleteDevEndpoint" [
+export def "x-amz-target-aws-glue-delete-dev-endpoint delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2305,23 +2305,23 @@ export def "x-amz-target-aws-glue-delete-dev-endpoint DeleteDevEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  EndpointName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  endpoint_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteDevEndpoint")
-  let body = {EndpointName: $EndpointName} | compact
+  let body = {"EndpointName": $endpoint_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2332,7 +2332,7 @@ export def "x-amz-target-aws-glue-delete-dev-endpoint DeleteDevEndpoint" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteJob
 # operationId: DeleteJob
-export def "x-amz-target-aws-glue-delete-job DeleteJob" [
+export def "x-amz-target-aws-glue-delete-job delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2341,23 +2341,23 @@ export def "x-amz-target-aws-glue-delete-job DeleteJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  JobName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  job_name: any
 ]: any -> record<JobName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteJob")
-  let body = {JobName: $JobName} | compact
+  let body = {"JobName": $job_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2368,7 +2368,7 @@ export def "x-amz-target-aws-glue-delete-job DeleteJob" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteMLTransform
 # operationId: DeleteMLTransform
-export def "x-amz-target-aws-glue-delete-ml-transform DeleteMLTransform" [
+export def "x-amz-target-aws-glue-delete-ml-transform delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2377,23 +2377,23 @@ export def "x-amz-target-aws-glue-delete-ml-transform DeleteMLTransform" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  TransformId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  transform_id: any
 ]: any -> record<TransformId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteMLTransform")
-  let body = {TransformId: $TransformId} | compact
+  let body = {"TransformId": $transform_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2404,7 +2404,7 @@ export def "x-amz-target-aws-glue-delete-ml-transform DeleteMLTransform" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeletePartition
 # operationId: DeletePartition
-export def "x-amz-target-aws-glue-delete-partition DeletePartition" [
+export def "x-amz-target-aws-glue-delete-partition delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2413,26 +2413,26 @@ export def "x-amz-target-aws-glue-delete-partition DeletePartition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionValues: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partition_values: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeletePartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionValues: $PartitionValues} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionValues": $partition_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2443,7 +2443,7 @@ export def "x-amz-target-aws-glue-delete-partition DeletePartition" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeletePartitionIndex
 # operationId: DeletePartitionIndex
-export def "x-amz-target-aws-glue-delete-partition-index DeletePartitionIndex" [
+export def "x-amz-target-aws-glue-delete-partition-index delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2452,26 +2452,26 @@ export def "x-amz-target-aws-glue-delete-partition-index DeletePartitionIndex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  IndexName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  index_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeletePartitionIndex")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, IndexName: $IndexName} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "IndexName": $index_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2482,7 +2482,7 @@ export def "x-amz-target-aws-glue-delete-partition-index DeletePartitionIndex" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteRegistry
 # operationId: DeleteRegistry
-export def "x-amz-target-aws-glue-delete-registry DeleteRegistry" [
+export def "x-amz-target-aws-glue-delete-registry delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2491,23 +2491,23 @@ export def "x-amz-target-aws-glue-delete-registry DeleteRegistry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  RegistryId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  registry_id: any
 ]: any -> record<RegistryName: record, RegistryArn: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteRegistry")
-  let body = {RegistryId: $RegistryId} | compact
+  let body = {"RegistryId": $registry_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2518,7 +2518,7 @@ export def "x-amz-target-aws-glue-delete-registry DeleteRegistry" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteResourcePolicy
 # operationId: DeleteResourcePolicy
-export def "x-amz-target-aws-glue-delete-resource-policy DeleteResourcePolicy" [
+export def "x-amz-target-aws-glue-delete-resource-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2527,24 +2527,24 @@ export def "x-amz-target-aws-glue-delete-resource-policy DeleteResourcePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  --PolicyHashCondition: any
-  --ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  --policy-hash-condition: any
+  --resource-arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteResourcePolicy")
-  let body = {PolicyHashCondition: $PolicyHashCondition, ResourceArn: $ResourceArn} | compact
+  let body = {"PolicyHashCondition": $policy_hash_condition, "ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2555,7 +2555,7 @@ export def "x-amz-target-aws-glue-delete-resource-policy DeleteResourcePolicy" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteSchema
 # operationId: DeleteSchema
-export def "x-amz-target-aws-glue-delete-schema DeleteSchema" [
+export def "x-amz-target-aws-glue-delete-schema delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2564,23 +2564,23 @@ export def "x-amz-target-aws-glue-delete-schema DeleteSchema" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  SchemaId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  schema_id: any
 ]: any -> record<SchemaArn: record, SchemaName: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteSchema")
-  let body = {SchemaId: $SchemaId} | compact
+  let body = {"SchemaId": $schema_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2591,7 +2591,7 @@ export def "x-amz-target-aws-glue-delete-schema DeleteSchema" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteSchemaVersions
 # operationId: DeleteSchemaVersions
-export def "x-amz-target-aws-glue-delete-schema-versions DeleteSchemaVersions" [
+export def "x-amz-target-aws-glue-delete-schema-versions delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2600,24 +2600,24 @@ export def "x-amz-target-aws-glue-delete-schema-versions DeleteSchemaVersions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
-  SchemaId: any
-  Versions: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
+  schema_id: any
+  versions: any
 ]: any -> record<SchemaVersionErrors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteSchemaVersions")
-  let body = {SchemaId: $SchemaId, Versions: $Versions} | compact
+  let body = {"SchemaId": $schema_id, "Versions": $versions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2628,7 +2628,7 @@ export def "x-amz-target-aws-glue-delete-schema-versions DeleteSchemaVersions" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteSecurityConfiguration
 # operationId: DeleteSecurityConfiguration
-export def "x-amz-target-aws-glue-delete-security-configuration DeleteSecurityConfiguration" [
+export def "x-amz-target-aws-glue-delete-security-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2637,23 +2637,23 @@ export def "x-amz-target-aws-glue-delete-security-configuration DeleteSecurityCo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteSecurityConfiguration")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2664,7 +2664,7 @@ export def "x-amz-target-aws-glue-delete-security-configuration DeleteSecurityCo
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteSession
 # operationId: DeleteSession
-export def "x-amz-target-aws-glue-delete-session DeleteSession" [
+export def "x-amz-target-aws-glue-delete-session delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2673,24 +2673,24 @@ export def "x-amz-target-aws-glue-delete-session DeleteSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  Id: any
-  --RequestOrigin: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  id: any
+  --request-origin: any
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteSession")
-  let body = {Id: $Id, RequestOrigin: $RequestOrigin} | compact
+  let body = {"Id": $id, "RequestOrigin": $request_origin} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2701,7 +2701,7 @@ export def "x-amz-target-aws-glue-delete-session DeleteSession" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteTable
 # operationId: DeleteTable
-export def "x-amz-target-aws-glue-delete-table DeleteTable" [
+export def "x-amz-target-aws-glue-delete-table delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2710,26 +2710,26 @@ export def "x-amz-target-aws-glue-delete-table DeleteTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  --CatalogId: any
-  DatabaseName: any
-  Name: any
-  --TransactionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  --catalog-id: any
+  database_name: any
+  name: any
+  --transaction-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteTable")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, Name: $Name, TransactionId: $TransactionId} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "Name": $name, "TransactionId": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2740,7 +2740,7 @@ export def "x-amz-target-aws-glue-delete-table DeleteTable" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteTableVersion
 # operationId: DeleteTableVersion
-export def "x-amz-target-aws-glue-delete-table-version DeleteTableVersion" [
+export def "x-amz-target-aws-glue-delete-table-version delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2749,26 +2749,26 @@ export def "x-amz-target-aws-glue-delete-table-version DeleteTableVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-63
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  VersionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-63
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  version_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteTableVersion")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, VersionId: $VersionId} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "VersionId": $version_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2779,7 +2779,7 @@ export def "x-amz-target-aws-glue-delete-table-version DeleteTableVersion" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteTrigger
 # operationId: DeleteTrigger
-export def "x-amz-target-aws-glue-delete-trigger DeleteTrigger" [
+export def "x-amz-target-aws-glue-delete-trigger delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2788,23 +2788,23 @@ export def "x-amz-target-aws-glue-delete-trigger DeleteTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-64
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-64
+  name: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteTrigger")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2815,7 +2815,7 @@ export def "x-amz-target-aws-glue-delete-trigger DeleteTrigger" [
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteUserDefinedFunction
 # operationId: DeleteUserDefinedFunction
-export def "x-amz-target-aws-glue-delete-user-defined-function DeleteUserDefinedFunction" [
+export def "x-amz-target-aws-glue-delete-user-defined-function delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2824,25 +2824,25 @@ export def "x-amz-target-aws-glue-delete-user-defined-function DeleteUserDefined
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-65
-  --CatalogId: any
-  DatabaseName: any
-  FunctionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-65
+  --catalog-id: any
+  database_name: any
+  function_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteUserDefinedFunction")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, FunctionName: $FunctionName} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "FunctionName": $function_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2853,7 +2853,7 @@ export def "x-amz-target-aws-glue-delete-user-defined-function DeleteUserDefined
 #
 # POST /#X-Amz-Target=AWSGlue.DeleteWorkflow
 # operationId: DeleteWorkflow
-export def "x-amz-target-aws-glue-delete-workflow DeleteWorkflow" [
+export def "x-amz-target-aws-glue-delete-workflow delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2862,23 +2862,23 @@ export def "x-amz-target-aws-glue-delete-workflow DeleteWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-66
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-66
+  name: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.DeleteWorkflow")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2889,7 +2889,7 @@ export def "x-amz-target-aws-glue-delete-workflow DeleteWorkflow" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetBlueprint
 # operationId: GetBlueprint
-export def "x-amz-target-aws-glue-get-blueprint GetBlueprint" [
+export def "x-amz-target-aws-glue-get-blueprint get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2898,25 +2898,25 @@ export def "x-amz-target-aws-glue-get-blueprint GetBlueprint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-67
-  Name: any
-  --IncludeBlueprint: any
-  --IncludeParameterSpec: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-67
+  name: any
+  --include-blueprint: any
+  --include-parameter-spec: any
 ]: any -> record<Blueprint: record<Name: record, Description: record, CreatedOn: record, LastModifiedOn: record, ParameterSpec: record, BlueprintLocation: record, BlueprintServiceLocation: record, Status: record, ErrorMessage: record, LastActiveDefinition: record<Description: record, LastModifiedOn: record, ParameterSpec: record, BlueprintLocation: record, BlueprintServiceLocation: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetBlueprint")
-  let body = {Name: $Name, IncludeBlueprint: $IncludeBlueprint, IncludeParameterSpec: $IncludeParameterSpec} | compact
+  let body = {"Name": $name, "IncludeBlueprint": $include_blueprint, "IncludeParameterSpec": $include_parameter_spec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2927,7 +2927,7 @@ export def "x-amz-target-aws-glue-get-blueprint GetBlueprint" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetBlueprintRun
 # operationId: GetBlueprintRun
-export def "x-amz-target-aws-glue-get-blueprint-run GetBlueprintRun" [
+export def "x-amz-target-aws-glue-get-blueprint-run get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2936,24 +2936,24 @@ export def "x-amz-target-aws-glue-get-blueprint-run GetBlueprintRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-68
-  BlueprintName: any
-  RunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-68
+  blueprint_name: any
+  run_id: any
 ]: any -> record<BlueprintRun: record<BlueprintName: record, RunId: record, WorkflowName: record, State: record, StartedOn: record, CompletedOn: record, ErrorMessage: record, RollbackErrorMessage: record, Parameters: record, RoleArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetBlueprintRun")
-  let body = {BlueprintName: $BlueprintName, RunId: $RunId} | compact
+  let body = {"BlueprintName": $blueprint_name, "RunId": $run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2964,7 +2964,7 @@ export def "x-amz-target-aws-glue-get-blueprint-run GetBlueprintRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetBlueprintRuns
 # operationId: GetBlueprintRuns
-export def "x-amz-target-aws-glue-get-blueprint-runs GetBlueprintRuns" [
+export def "x-amz-target-aws-glue-get-blueprint-runs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2973,28 +2973,28 @@ export def "x-amz-target-aws-glue-get-blueprint-runs GetBlueprintRuns" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-69
-  BlueprintName: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-69
+  blueprint_name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<BlueprintRuns: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetBlueprintRuns" $qp)
-  let body = {BlueprintName: $BlueprintName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"BlueprintName": $blueprint_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3005,7 +3005,7 @@ export def "x-amz-target-aws-glue-get-blueprint-runs GetBlueprintRuns" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetCatalogImportStatus
 # operationId: GetCatalogImportStatus
-export def "x-amz-target-aws-glue-get-catalog-import-status GetCatalogImportStatus" [
+export def "x-amz-target-aws-glue-get-catalog-import-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3014,23 +3014,23 @@ export def "x-amz-target-aws-glue-get-catalog-import-status GetCatalogImportStat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-70
-  --CatalogId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-70
+  --catalog-id: any
 ]: any -> record<ImportStatus: record<ImportCompleted: record, ImportTime: record, ImportedBy: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetCatalogImportStatus")
-  let body = {CatalogId: $CatalogId} | compact
+  let body = {"CatalogId": $catalog_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3041,7 +3041,7 @@ export def "x-amz-target-aws-glue-get-catalog-import-status GetCatalogImportStat
 #
 # POST /#X-Amz-Target=AWSGlue.GetClassifier
 # operationId: GetClassifier
-export def "x-amz-target-aws-glue-get-classifier GetClassifier" [
+export def "x-amz-target-aws-glue-get-classifier get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3050,23 +3050,23 @@ export def "x-amz-target-aws-glue-get-classifier GetClassifier" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-71
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-71
+  name: any
 ]: any -> record<Classifier: record<GrokClassifier: record<Name: record, Classification: record, CreationTime: record, LastUpdated: record, Version: record, GrokPattern: record, CustomPatterns: record>, XMLClassifier: record<Name: record, Classification: record, CreationTime: record, LastUpdated: record, Version: record, RowTag: record>, JsonClassifier: record<Name: record, CreationTime: record, LastUpdated: record, Version: record, JsonPath: record>, CsvClassifier: record<Name: record, CreationTime: record, LastUpdated: record, Version: record, Delimiter: record, QuoteSymbol: record, ContainsHeader: record, Header: record, DisableValueTrimming: record, AllowSingleColumn: record, CustomDatatypeConfigured: record, CustomDatatypes: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetClassifier")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3077,7 +3077,7 @@ export def "x-amz-target-aws-glue-get-classifier GetClassifier" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetClassifiers
 # operationId: GetClassifiers
-export def "x-amz-target-aws-glue-get-classifiers GetClassifiers" [
+export def "x-amz-target-aws-glue-get-classifiers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3086,27 +3086,27 @@ export def "x-amz-target-aws-glue-get-classifiers GetClassifiers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-72
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-72
+  --max-results: any
+  --next-token: any
 ]: any -> record<Classifiers: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetClassifiers" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3117,7 +3117,7 @@ export def "x-amz-target-aws-glue-get-classifiers GetClassifiers" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetColumnStatisticsForPartition
 # operationId: GetColumnStatisticsForPartition
-export def "x-amz-target-aws-glue-get-column-statistics-for-partition GetColumnStatisticsForPartition" [
+export def "x-amz-target-aws-glue-get-column-statistics-for-partition get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3126,27 +3126,27 @@ export def "x-amz-target-aws-glue-get-column-statistics-for-partition GetColumnS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-73
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionValues: any
-  ColumnNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-73
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partition_values: any
+  column_names: any
 ]: any -> record<ColumnStatisticsList: record, Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetColumnStatisticsForPartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionValues: $PartitionValues, ColumnNames: $ColumnNames} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionValues": $partition_values, "ColumnNames": $column_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3157,7 +3157,7 @@ export def "x-amz-target-aws-glue-get-column-statistics-for-partition GetColumnS
 #
 # POST /#X-Amz-Target=AWSGlue.GetColumnStatisticsForTable
 # operationId: GetColumnStatisticsForTable
-export def "x-amz-target-aws-glue-get-column-statistics-for-table GetColumnStatisticsForTable" [
+export def "x-amz-target-aws-glue-get-column-statistics-for-table get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3166,26 +3166,26 @@ export def "x-amz-target-aws-glue-get-column-statistics-for-table GetColumnStati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-74
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  ColumnNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-74
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  column_names: any
 ]: any -> record<ColumnStatisticsList: record, Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetColumnStatisticsForTable")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, ColumnNames: $ColumnNames} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "ColumnNames": $column_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3196,7 +3196,7 @@ export def "x-amz-target-aws-glue-get-column-statistics-for-table GetColumnStati
 #
 # POST /#X-Amz-Target=AWSGlue.GetConnection
 # operationId: GetConnection
-export def "x-amz-target-aws-glue-get-connection GetConnection" [
+export def "x-amz-target-aws-glue-get-connection get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3205,25 +3205,25 @@ export def "x-amz-target-aws-glue-get-connection GetConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-75
-  --CatalogId: any
-  Name: any
-  --HidePassword: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-75
+  --catalog-id: any
+  name: any
+  --hide-password: any
 ]: any -> record<Connection: record<Name: record, Description: record, ConnectionType: record, MatchCriteria: record, ConnectionProperties: record, PhysicalConnectionRequirements: record<SubnetId: record, SecurityGroupIdList: record, AvailabilityZone: record>, CreationTime: record, LastUpdatedTime: record, LastUpdatedBy: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetConnection")
-  let body = {CatalogId: $CatalogId, Name: $Name, HidePassword: $HidePassword} | compact
+  let body = {"CatalogId": $catalog_id, "Name": $name, "HidePassword": $hide_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3234,7 +3234,7 @@ export def "x-amz-target-aws-glue-get-connection GetConnection" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetConnections
 # operationId: GetConnections
-export def "x-amz-target-aws-glue-get-connections GetConnections" [
+export def "x-amz-target-aws-glue-get-connections get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3243,30 +3243,30 @@ export def "x-amz-target-aws-glue-get-connections GetConnections" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-76
-  --CatalogId: any
-  --Filter: any
-  --HidePassword: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-76
+  --catalog-id: any
+  --filter: any
+  --hide-password: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<ConnectionList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetConnections" $qp)
-  let body = {CatalogId: $CatalogId, Filter: $Filter, HidePassword: $HidePassword, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"CatalogId": $catalog_id, "Filter": $filter, "HidePassword": $hide_password, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3277,7 +3277,7 @@ export def "x-amz-target-aws-glue-get-connections GetConnections" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetCrawler
 # operationId: GetCrawler
-export def "x-amz-target-aws-glue-get-crawler GetCrawler" [
+export def "x-amz-target-aws-glue-get-crawler get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3286,23 +3286,23 @@ export def "x-amz-target-aws-glue-get-crawler GetCrawler" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-77
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-77
+  name: any
 ]: any -> record<Crawler: record<Name: record, Role: record, Targets: record<S3Targets: record, JdbcTargets: record, MongoDBTargets: record, DynamoDBTargets: record, CatalogTargets: record, DeltaTargets: record>, DatabaseName: record, Description: record, Classifiers: record, RecrawlPolicy: record<RecrawlBehavior: record>, SchemaChangePolicy: record<UpdateBehavior: record, DeleteBehavior: record>, LineageConfiguration: record<CrawlerLineageSettings: record>, State: record, TablePrefix: record, Schedule: record<ScheduleExpression: record, State: record>, CrawlElapsedTime: record, CreationTime: record, LastUpdated: record, LastCrawl: record<Status: record, ErrorMessage: record, LogGroup: record, LogStream: record, MessagePrefix: record, StartTime: record>, Version: record, Configuration: record, CrawlerSecurityConfiguration: record, LakeFormationConfiguration: record<UseLakeFormationCredentials: record, AccountId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetCrawler")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3313,7 +3313,7 @@ export def "x-amz-target-aws-glue-get-crawler GetCrawler" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetCrawlerMetrics
 # operationId: GetCrawlerMetrics
-export def "x-amz-target-aws-glue-get-crawler-metrics GetCrawlerMetrics" [
+export def "x-amz-target-aws-glue-get-crawler-metrics get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3322,28 +3322,28 @@ export def "x-amz-target-aws-glue-get-crawler-metrics GetCrawlerMetrics" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-78
-  --CrawlerNameList: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-78
+  --crawler-name-list: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<CrawlerMetricsList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetCrawlerMetrics" $qp)
-  let body = {CrawlerNameList: $CrawlerNameList, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"CrawlerNameList": $crawler_name_list, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3354,7 +3354,7 @@ export def "x-amz-target-aws-glue-get-crawler-metrics GetCrawlerMetrics" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetCrawlers
 # operationId: GetCrawlers
-export def "x-amz-target-aws-glue-get-crawlers GetCrawlers" [
+export def "x-amz-target-aws-glue-get-crawlers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3363,27 +3363,27 @@ export def "x-amz-target-aws-glue-get-crawlers GetCrawlers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-79
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-79
+  --max-results: any
+  --next-token: any
 ]: any -> record<Crawlers: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetCrawlers" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3394,7 +3394,7 @@ export def "x-amz-target-aws-glue-get-crawlers GetCrawlers" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetCustomEntityType
 # operationId: GetCustomEntityType
-export def "x-amz-target-aws-glue-get-custom-entity-type GetCustomEntityType" [
+export def "x-amz-target-aws-glue-get-custom-entity-type get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3403,23 +3403,23 @@ export def "x-amz-target-aws-glue-get-custom-entity-type GetCustomEntityType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-80
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-80
+  name: any
 ]: any -> record<Name: record, RegexString: record, ContextWords: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetCustomEntityType")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3430,7 +3430,7 @@ export def "x-amz-target-aws-glue-get-custom-entity-type GetCustomEntityType" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetDataCatalogEncryptionSettings
 # operationId: GetDataCatalogEncryptionSettings
-export def "x-amz-target-aws-glue-get-data-catalog-encryption-settings GetDataCatalogEncryptionSettings" [
+export def "x-amz-target-aws-glue-get-data-catalog-encryption-settings get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3439,23 +3439,23 @@ export def "x-amz-target-aws-glue-get-data-catalog-encryption-settings GetDataCa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-81
-  --CatalogId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-81
+  --catalog-id: any
 ]: any -> record<DataCatalogEncryptionSettings: record<EncryptionAtRest: record<CatalogEncryptionMode: record, SseAwsKmsKeyId: record>, ConnectionPasswordEncryption: record<ReturnConnectionPasswordEncrypted: record, AwsKmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetDataCatalogEncryptionSettings")
-  let body = {CatalogId: $CatalogId} | compact
+  let body = {"CatalogId": $catalog_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3466,7 +3466,7 @@ export def "x-amz-target-aws-glue-get-data-catalog-encryption-settings GetDataCa
 #
 # POST /#X-Amz-Target=AWSGlue.GetDataQualityResult
 # operationId: GetDataQualityResult
-export def "x-amz-target-aws-glue-get-data-quality-result GetDataQualityResult" [
+export def "x-amz-target-aws-glue-get-data-quality-result get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3475,23 +3475,23 @@ export def "x-amz-target-aws-glue-get-data-quality-result GetDataQualityResult" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-82
-  ResultId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-82
+  result_id: any
 ]: any -> record<ResultId: record, Score: record, DataSource: record<GlueTable: record<DatabaseName: record, TableName: record, CatalogId: record, ConnectionName: record, AdditionalOptions: record>>, RulesetName: record, EvaluationContext: record, StartedOn: record, CompletedOn: record, JobName: record, JobRunId: record, RulesetEvaluationRunId: record, RuleResults: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetDataQualityResult")
-  let body = {ResultId: $ResultId} | compact
+  let body = {"ResultId": $result_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3502,7 +3502,7 @@ export def "x-amz-target-aws-glue-get-data-quality-result GetDataQualityResult" 
 #
 # POST /#X-Amz-Target=AWSGlue.GetDataQualityRuleRecommendationRun
 # operationId: GetDataQualityRuleRecommendationRun
-export def "x-amz-target-aws-glue-get-data-quality-rule-recommendation-run GetDataQualityRuleRecommendationRun" [
+export def "x-amz-target-aws-glue-get-data-quality-rule-recommendation-run get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3511,23 +3511,23 @@ export def "x-amz-target-aws-glue-get-data-quality-rule-recommendation-run GetDa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-83
-  RunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-83
+  run_id: any
 ]: any -> record<RunId: record, DataSource: record<GlueTable: record<DatabaseName: record, TableName: record, CatalogId: record, ConnectionName: record, AdditionalOptions: record>>, Role: record, NumberOfWorkers: record, Timeout: record, Status: record, ErrorString: record, StartedOn: record, LastModifiedOn: record, CompletedOn: record, ExecutionTime: record, RecommendedRuleset: record, CreatedRulesetName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetDataQualityRuleRecommendationRun")
-  let body = {RunId: $RunId} | compact
+  let body = {"RunId": $run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3538,7 +3538,7 @@ export def "x-amz-target-aws-glue-get-data-quality-rule-recommendation-run GetDa
 #
 # POST /#X-Amz-Target=AWSGlue.GetDataQualityRuleset
 # operationId: GetDataQualityRuleset
-export def "x-amz-target-aws-glue-get-data-quality-ruleset GetDataQualityRuleset" [
+export def "x-amz-target-aws-glue-get-data-quality-ruleset get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3547,23 +3547,23 @@ export def "x-amz-target-aws-glue-get-data-quality-ruleset GetDataQualityRuleset
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-84
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-84
+  name: any
 ]: any -> record<Name: record, Description: record, Ruleset: record, TargetTable: record<TableName: record, DatabaseName: record>, CreatedOn: record, LastModifiedOn: record, RecommendationRunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetDataQualityRuleset")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3574,7 +3574,7 @@ export def "x-amz-target-aws-glue-get-data-quality-ruleset GetDataQualityRuleset
 #
 # POST /#X-Amz-Target=AWSGlue.GetDataQualityRulesetEvaluationRun
 # operationId: GetDataQualityRulesetEvaluationRun
-export def "x-amz-target-aws-glue-get-data-quality-ruleset-evaluation-run GetDataQualityRulesetEvaluationRun" [
+export def "x-amz-target-aws-glue-get-data-quality-ruleset-evaluation-run get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3583,23 +3583,23 @@ export def "x-amz-target-aws-glue-get-data-quality-ruleset-evaluation-run GetDat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-85
-  RunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-85
+  run_id: any
 ]: any -> record<RunId: record, DataSource: record<GlueTable: record<DatabaseName: record, TableName: record, CatalogId: record, ConnectionName: record, AdditionalOptions: record>>, Role: record, NumberOfWorkers: record, Timeout: record, AdditionalRunOptions: record<CloudWatchMetricsEnabled: record, ResultsS3Prefix: record>, Status: record, ErrorString: record, StartedOn: record, LastModifiedOn: record, CompletedOn: record, ExecutionTime: record, RulesetNames: record, ResultIds: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetDataQualityRulesetEvaluationRun")
-  let body = {RunId: $RunId} | compact
+  let body = {"RunId": $run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3610,7 +3610,7 @@ export def "x-amz-target-aws-glue-get-data-quality-ruleset-evaluation-run GetDat
 #
 # POST /#X-Amz-Target=AWSGlue.GetDatabase
 # operationId: GetDatabase
-export def "x-amz-target-aws-glue-get-database GetDatabase" [
+export def "x-amz-target-aws-glue-get-database get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3619,24 +3619,24 @@ export def "x-amz-target-aws-glue-get-database GetDatabase" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-86
-  --CatalogId: any
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-86
+  --catalog-id: any
+  name: any
 ]: any -> record<Database: record<Name: record, Description: record, LocationUri: record, Parameters: record, CreateTime: record, CreateTableDefaultPermissions: record, TargetDatabase: record<CatalogId: record, DatabaseName: record>, CatalogId: record, FederatedDatabase: record<Identifier: record, ConnectionName: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetDatabase")
-  let body = {CatalogId: $CatalogId, Name: $Name} | compact
+  let body = {"CatalogId": $catalog_id, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3647,7 +3647,7 @@ export def "x-amz-target-aws-glue-get-database GetDatabase" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetDatabases
 # operationId: GetDatabases
-export def "x-amz-target-aws-glue-get-databases GetDatabases" [
+export def "x-amz-target-aws-glue-get-databases get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3656,29 +3656,29 @@ export def "x-amz-target-aws-glue-get-databases GetDatabases" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-87
-  --CatalogId: any
-  --NextToken: any
-  --MaxResults: any
-  --ResourceShareType: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-87
+  --catalog-id: any
+  --next-token: any
+  --max-results: any
+  --resource-share-type: any
 ]: any -> record<DatabaseList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetDatabases" $qp)
-  let body = {CatalogId: $CatalogId, NextToken: $NextToken, MaxResults: $MaxResults, ResourceShareType: $ResourceShareType} | compact
+  let body = {"CatalogId": $catalog_id, "NextToken": $next_token, "MaxResults": $max_results, "ResourceShareType": $resource_share_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3689,7 +3689,7 @@ export def "x-amz-target-aws-glue-get-databases GetDatabases" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetDataflowGraph
 # operationId: GetDataflowGraph
-export def "x-amz-target-aws-glue-get-dataflow-graph GetDataflowGraph" [
+export def "x-amz-target-aws-glue-get-dataflow-graph get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3698,23 +3698,23 @@ export def "x-amz-target-aws-glue-get-dataflow-graph GetDataflowGraph" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-88
-  --PythonScript: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-88
+  --python-script: any
 ]: any -> record<DagNodes: record, DagEdges: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetDataflowGraph")
-  let body = {PythonScript: $PythonScript} | compact
+  let body = {"PythonScript": $python_script} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3725,7 +3725,7 @@ export def "x-amz-target-aws-glue-get-dataflow-graph GetDataflowGraph" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetDevEndpoint
 # operationId: GetDevEndpoint
-export def "x-amz-target-aws-glue-get-dev-endpoint GetDevEndpoint" [
+export def "x-amz-target-aws-glue-get-dev-endpoint get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3734,23 +3734,23 @@ export def "x-amz-target-aws-glue-get-dev-endpoint GetDevEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-89
-  EndpointName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-89
+  endpoint_name: any
 ]: any -> record<DevEndpoint: record<EndpointName: record, RoleArn: record, SecurityGroupIds: record, SubnetId: record, YarnEndpointAddress: record, PrivateAddress: record, ZeppelinRemoteSparkInterpreterPort: record, PublicAddress: record, Status: record, WorkerType: record, GlueVersion: record, NumberOfWorkers: record, NumberOfNodes: record, AvailabilityZone: record, VpcId: record, ExtraPythonLibsS3Path: record, ExtraJarsS3Path: record, FailureReason: record, LastUpdateStatus: record, CreatedTimestamp: record, LastModifiedTimestamp: record, PublicKey: record, PublicKeys: record, SecurityConfiguration: record, Arguments: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetDevEndpoint")
-  let body = {EndpointName: $EndpointName} | compact
+  let body = {"EndpointName": $endpoint_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3761,7 +3761,7 @@ export def "x-amz-target-aws-glue-get-dev-endpoint GetDevEndpoint" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetDevEndpoints
 # operationId: GetDevEndpoints
-export def "x-amz-target-aws-glue-get-dev-endpoints GetDevEndpoints" [
+export def "x-amz-target-aws-glue-get-dev-endpoints get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3770,27 +3770,27 @@ export def "x-amz-target-aws-glue-get-dev-endpoints GetDevEndpoints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-90
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-90
+  --max-results: any
+  --next-token: any
 ]: any -> record<DevEndpoints: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetDevEndpoints" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3801,7 +3801,7 @@ export def "x-amz-target-aws-glue-get-dev-endpoints GetDevEndpoints" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetJob
 # operationId: GetJob
-export def "x-amz-target-aws-glue-get-job GetJob" [
+export def "x-amz-target-aws-glue-get-job get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3810,23 +3810,23 @@ export def "x-amz-target-aws-glue-get-job GetJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-91
-  JobName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-91
+  job_name: any
 ]: any -> record<Job: record<Name: record, Description: record, LogUri: record, Role: record, CreatedOn: record, LastModifiedOn: record, ExecutionProperty: record<MaxConcurrentRuns: record>, Command: record<Name: record, ScriptLocation: record, PythonVersion: record>, DefaultArguments: record, NonOverridableArguments: record, Connections: record<Connections: record>, MaxRetries: record, AllocatedCapacity: record, Timeout: record, MaxCapacity: record, WorkerType: record, NumberOfWorkers: record, SecurityConfiguration: record, NotificationProperty: record<NotifyDelayAfter: record>, GlueVersion: record, CodeGenConfigurationNodes: record, ExecutionClass: record, SourceControlDetails: record<Provider: record, Repository: record, Owner: record, Branch: record, Folder: record, LastCommitId: record, AuthStrategy: record, AuthToken: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetJob")
-  let body = {JobName: $JobName} | compact
+  let body = {"JobName": $job_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3837,7 +3837,7 @@ export def "x-amz-target-aws-glue-get-job GetJob" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetJobBookmark
 # operationId: GetJobBookmark
-export def "x-amz-target-aws-glue-get-job-bookmark GetJobBookmark" [
+export def "x-amz-target-aws-glue-get-job-bookmark get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3846,24 +3846,24 @@ export def "x-amz-target-aws-glue-get-job-bookmark GetJobBookmark" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-92
-  JobName: any
-  --RunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-92
+  job_name: any
+  --run-id: any
 ]: any -> record<JobBookmarkEntry: record<JobName: record, Version: record, Run: record, Attempt: record, PreviousRunId: record, RunId: record, JobBookmark: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetJobBookmark")
-  let body = {JobName: $JobName, RunId: $RunId} | compact
+  let body = {"JobName": $job_name, "RunId": $run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3874,7 +3874,7 @@ export def "x-amz-target-aws-glue-get-job-bookmark GetJobBookmark" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetJobRun
 # operationId: GetJobRun
-export def "x-amz-target-aws-glue-get-job-run GetJobRun" [
+export def "x-amz-target-aws-glue-get-job-run get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3883,25 +3883,25 @@ export def "x-amz-target-aws-glue-get-job-run GetJobRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-93
-  JobName: any
-  RunId: any
-  --PredecessorsIncluded: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-93
+  job_name: any
+  run_id: any
+  --predecessors-included: any
 ]: any -> record<JobRun: record<Id: record, Attempt: record, PreviousRunId: record, TriggerName: record, JobName: record, StartedOn: record, LastModifiedOn: record, CompletedOn: record, JobRunState: record, Arguments: record, ErrorMessage: record, PredecessorRuns: record, AllocatedCapacity: record, ExecutionTime: record, Timeout: record, MaxCapacity: record, WorkerType: record, NumberOfWorkers: record, SecurityConfiguration: record, LogGroupName: record, NotificationProperty: record<NotifyDelayAfter: record>, GlueVersion: record, DPUSeconds: record, ExecutionClass: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetJobRun")
-  let body = {JobName: $JobName, RunId: $RunId, PredecessorsIncluded: $PredecessorsIncluded} | compact
+  let body = {"JobName": $job_name, "RunId": $run_id, "PredecessorsIncluded": $predecessors_included} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3912,7 +3912,7 @@ export def "x-amz-target-aws-glue-get-job-run GetJobRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetJobRuns
 # operationId: GetJobRuns
-export def "x-amz-target-aws-glue-get-job-runs GetJobRuns" [
+export def "x-amz-target-aws-glue-get-job-runs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3921,28 +3921,28 @@ export def "x-amz-target-aws-glue-get-job-runs GetJobRuns" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-94
-  JobName: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-94
+  job_name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<JobRuns: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetJobRuns" $qp)
-  let body = {JobName: $JobName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"JobName": $job_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3953,7 +3953,7 @@ export def "x-amz-target-aws-glue-get-job-runs GetJobRuns" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetJobs
 # operationId: GetJobs
-export def "x-amz-target-aws-glue-get-jobs GetJobs" [
+export def "x-amz-target-aws-glue-get-jobs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3962,27 +3962,27 @@ export def "x-amz-target-aws-glue-get-jobs GetJobs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-95
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-95
+  --next-token: any
+  --max-results: any
 ]: any -> record<Jobs: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetJobs" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3993,7 +3993,7 @@ export def "x-amz-target-aws-glue-get-jobs GetJobs" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetMLTaskRun
 # operationId: GetMLTaskRun
-export def "x-amz-target-aws-glue-get-ml-task-run GetMLTaskRun" [
+export def "x-amz-target-aws-glue-get-ml-task-run get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4002,24 +4002,24 @@ export def "x-amz-target-aws-glue-get-ml-task-run GetMLTaskRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-96
-  TransformId: any
-  TaskRunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-96
+  transform_id: any
+  task_run_id: any
 ]: any -> record<TransformId: record, TaskRunId: record, Status: record, LogGroupName: record, Properties: record<TaskType: record, ImportLabelsTaskRunProperties: record<InputS3Path: record, Replace: record>, ExportLabelsTaskRunProperties: record<OutputS3Path: record>, LabelingSetGenerationTaskRunProperties: record<OutputS3Path: record>, FindMatchesTaskRunProperties: record<JobId: record, JobName: record, JobRunId: record>>, ErrorString: record, StartedOn: record, LastModifiedOn: record, CompletedOn: record, ExecutionTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetMLTaskRun")
-  let body = {TransformId: $TransformId, TaskRunId: $TaskRunId} | compact
+  let body = {"TransformId": $transform_id, "TaskRunId": $task_run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4030,7 +4030,7 @@ export def "x-amz-target-aws-glue-get-ml-task-run GetMLTaskRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetMLTaskRuns
 # operationId: GetMLTaskRuns
-export def "x-amz-target-aws-glue-get-ml-task-runs GetMLTaskRuns" [
+export def "x-amz-target-aws-glue-get-ml-task-runs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4039,30 +4039,30 @@ export def "x-amz-target-aws-glue-get-ml-task-runs GetMLTaskRuns" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-97
-  TransformId: any
-  --NextToken: any
-  --MaxResults: any
-  --Filter: any
-  --Sort: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-97
+  transform_id: any
+  --next-token: any
+  --max-results: any
+  --filter: any
+  --body-sort: any
 ]: any -> record<TaskRuns: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetMLTaskRuns" $qp)
-  let body = {TransformId: $TransformId, NextToken: $NextToken, MaxResults: $MaxResults, Filter: $Filter, Sort: $Sort} | compact
+  let body = {"TransformId": $transform_id, "NextToken": $next_token, "MaxResults": $max_results, "Filter": $filter, "Sort": $body_sort} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4073,7 +4073,7 @@ export def "x-amz-target-aws-glue-get-ml-task-runs GetMLTaskRuns" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetMLTransform
 # operationId: GetMLTransform
-export def "x-amz-target-aws-glue-get-ml-transform GetMLTransform" [
+export def "x-amz-target-aws-glue-get-ml-transform get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4082,23 +4082,23 @@ export def "x-amz-target-aws-glue-get-ml-transform GetMLTransform" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-98
-  TransformId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-98
+  transform_id: any
 ]: any -> record<TransformId: record, Name: record, Description: record, Status: record, CreatedOn: record, LastModifiedOn: record, InputRecordTables: record, Parameters: record<TransformType: record, FindMatchesParameters: record<PrimaryKeyColumnName: record, PrecisionRecallTradeoff: record, AccuracyCostTradeoff: record, EnforceProvidedLabels: record>>, EvaluationMetrics: record<TransformType: record, FindMatchesMetrics: record<AreaUnderPRCurve: record, Precision: record, Recall: record, F1: record, ConfusionMatrix: record, ColumnImportances: record>>, LabelCount: record, Schema: record, Role: record, GlueVersion: record, MaxCapacity: record, WorkerType: record, NumberOfWorkers: record, Timeout: record, MaxRetries: record, TransformEncryption: record<MlUserDataEncryption: record<MlUserDataEncryptionMode: record, KmsKeyId: record>, TaskRunSecurityConfigurationName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetMLTransform")
-  let body = {TransformId: $TransformId} | compact
+  let body = {"TransformId": $transform_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4109,7 +4109,7 @@ export def "x-amz-target-aws-glue-get-ml-transform GetMLTransform" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetMLTransforms
 # operationId: GetMLTransforms
-export def "x-amz-target-aws-glue-get-ml-transforms GetMLTransforms" [
+export def "x-amz-target-aws-glue-get-ml-transforms get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4118,29 +4118,29 @@ export def "x-amz-target-aws-glue-get-ml-transforms GetMLTransforms" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-99
-  --NextToken: any
-  --MaxResults: any
-  --Filter: any
-  --Sort: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-99
+  --next-token: any
+  --max-results: any
+  --filter: any
+  --body-sort: any
 ]: any -> record<Transforms: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetMLTransforms" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filter: $Filter, Sort: $Sort} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filter": $filter, "Sort": $body_sort} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4151,7 +4151,7 @@ export def "x-amz-target-aws-glue-get-ml-transforms GetMLTransforms" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetMapping
 # operationId: GetMapping
-export def "x-amz-target-aws-glue-get-mapping GetMapping" [
+export def "x-amz-target-aws-glue-get-mapping get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4160,25 +4160,25 @@ export def "x-amz-target-aws-glue-get-mapping GetMapping" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-100
-  Source: any
-  --Sinks: any
-  --Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-100
+  --body-source: any
+  --sinks: any
+  --location: any
 ]: any -> record<Mapping: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetMapping")
-  let body = {Source: $Source, Sinks: $Sinks, Location: $Location} | compact
+  let body = {"Source": $body_source, "Sinks": $sinks, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4189,7 +4189,7 @@ export def "x-amz-target-aws-glue-get-mapping GetMapping" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetPartition
 # operationId: GetPartition
-export def "x-amz-target-aws-glue-get-partition GetPartition" [
+export def "x-amz-target-aws-glue-get-partition get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4198,26 +4198,26 @@ export def "x-amz-target-aws-glue-get-partition GetPartition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-101
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionValues: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-101
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partition_values: any
 ]: any -> record<Partition: record<Values: record, DatabaseName: record, TableName: record, CreationTime: record, LastAccessTime: record, StorageDescriptor: record<Columns: record, Location: record, AdditionalLocations: record, InputFormat: record, OutputFormat: record, Compressed: record, NumberOfBuckets: record, SerdeInfo: record, BucketColumns: record, SortColumns: record, Parameters: record, SkewedInfo: record, StoredAsSubDirectories: record, SchemaReference: record>, Parameters: record, LastAnalyzedTime: record, CatalogId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetPartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionValues: $PartitionValues} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionValues": $partition_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4228,7 +4228,7 @@ export def "x-amz-target-aws-glue-get-partition GetPartition" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetPartitionIndexes
 # operationId: GetPartitionIndexes
-export def "x-amz-target-aws-glue-get-partition-indexes GetPartitionIndexes" [
+export def "x-amz-target-aws-glue-get-partition-indexes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4237,28 +4237,28 @@ export def "x-amz-target-aws-glue-get-partition-indexes GetPartitionIndexes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-102
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  --NextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-102
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  --next-token: any
 ]: any -> record<PartitionIndexDescriptorList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetPartitionIndexes" $qp)
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, NextToken: $NextToken} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4269,7 +4269,7 @@ export def "x-amz-target-aws-glue-get-partition-indexes GetPartitionIndexes" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetPartitions
 # operationId: GetPartitions
-export def "x-amz-target-aws-glue-get-partitions GetPartitions" [
+export def "x-amz-target-aws-glue-get-partitions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4278,35 +4278,35 @@ export def "x-amz-target-aws-glue-get-partitions GetPartitions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-103
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  --Expression: any
-  --NextToken: any
-  --Segment: any
-  --MaxResults: any
-  --ExcludeColumnSchema: any
-  --TransactionId: any
-  --QueryAsOfTime: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-103
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  --expression: any
+  --next-token: any
+  --segment: any
+  --max-results: any
+  --exclude-column-schema: any
+  --transaction-id: any
+  --query-as-of-time: any
 ]: any -> record<Partitions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetPartitions" $qp)
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, Expression: $Expression, NextToken: $NextToken, Segment: $Segment, MaxResults: $MaxResults, ExcludeColumnSchema: $ExcludeColumnSchema, TransactionId: $TransactionId, QueryAsOfTime: $QueryAsOfTime} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "Expression": $expression, "NextToken": $next_token, "Segment": $segment, "MaxResults": $max_results, "ExcludeColumnSchema": $exclude_column_schema, "TransactionId": $transaction_id, "QueryAsOfTime": $query_as_of_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4317,7 +4317,7 @@ export def "x-amz-target-aws-glue-get-partitions GetPartitions" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetPlan
 # operationId: GetPlan
-export def "x-amz-target-aws-glue-get-plan GetPlan" [
+export def "x-amz-target-aws-glue-get-plan get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4326,28 +4326,28 @@ export def "x-amz-target-aws-glue-get-plan GetPlan" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-104
-  Mapping: any
-  Source: any
-  --Sinks: any
-  --Location: any
-  --Language: any
-  --AdditionalPlanOptionsMap: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-104
+  mapping: any
+  --body-source: any
+  --sinks: any
+  --location: any
+  --language: any
+  --additional-plan-options-map: any
 ]: any -> record<PythonScript: record, ScalaCode: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetPlan")
-  let body = {Mapping: $Mapping, Source: $Source, Sinks: $Sinks, Location: $Location, Language: $Language, AdditionalPlanOptionsMap: $AdditionalPlanOptionsMap} | compact
+  let body = {"Mapping": $mapping, "Source": $body_source, "Sinks": $sinks, "Location": $location, "Language": $language, "AdditionalPlanOptionsMap": $additional_plan_options_map} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4358,7 +4358,7 @@ export def "x-amz-target-aws-glue-get-plan GetPlan" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetRegistry
 # operationId: GetRegistry
-export def "x-amz-target-aws-glue-get-registry GetRegistry" [
+export def "x-amz-target-aws-glue-get-registry get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4367,23 +4367,23 @@ export def "x-amz-target-aws-glue-get-registry GetRegistry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-105
-  RegistryId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-105
+  registry_id: any
 ]: any -> record<RegistryName: record, RegistryArn: record, Description: record, Status: record, CreatedTime: record, UpdatedTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetRegistry")
-  let body = {RegistryId: $RegistryId} | compact
+  let body = {"RegistryId": $registry_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4394,7 +4394,7 @@ export def "x-amz-target-aws-glue-get-registry GetRegistry" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetResourcePolicies
 # operationId: GetResourcePolicies
-export def "x-amz-target-aws-glue-get-resource-policies GetResourcePolicies" [
+export def "x-amz-target-aws-glue-get-resource-policies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4403,27 +4403,27 @@ export def "x-amz-target-aws-glue-get-resource-policies GetResourcePolicies" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-106
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-106
+  --next-token: any
+  --max-results: any
 ]: any -> record<GetResourcePoliciesResponseList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetResourcePolicies" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4434,7 +4434,7 @@ export def "x-amz-target-aws-glue-get-resource-policies GetResourcePolicies" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetResourcePolicy
 # operationId: GetResourcePolicy
-export def "x-amz-target-aws-glue-get-resource-policy GetResourcePolicy" [
+export def "x-amz-target-aws-glue-get-resource-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4443,23 +4443,23 @@ export def "x-amz-target-aws-glue-get-resource-policy GetResourcePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-107
-  --ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-107
+  --resource-arn: any
 ]: any -> record<PolicyInJson: record, PolicyHash: record, CreateTime: record, UpdateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetResourcePolicy")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4470,7 +4470,7 @@ export def "x-amz-target-aws-glue-get-resource-policy GetResourcePolicy" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetSchema
 # operationId: GetSchema
-export def "x-amz-target-aws-glue-get-schema GetSchema" [
+export def "x-amz-target-aws-glue-get-schema get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4479,23 +4479,23 @@ export def "x-amz-target-aws-glue-get-schema GetSchema" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-108
-  SchemaId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-108
+  schema_id: any
 ]: any -> record<RegistryName: record, RegistryArn: record, SchemaName: record, SchemaArn: record, Description: record, DataFormat: record, Compatibility: record, SchemaCheckpoint: record, LatestSchemaVersion: record, NextSchemaVersion: record, SchemaStatus: record, CreatedTime: record, UpdatedTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetSchema")
-  let body = {SchemaId: $SchemaId} | compact
+  let body = {"SchemaId": $schema_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4506,7 +4506,7 @@ export def "x-amz-target-aws-glue-get-schema GetSchema" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetSchemaByDefinition
 # operationId: GetSchemaByDefinition
-export def "x-amz-target-aws-glue-get-schema-by-definition GetSchemaByDefinition" [
+export def "x-amz-target-aws-glue-get-schema-by-definition get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4515,24 +4515,24 @@ export def "x-amz-target-aws-glue-get-schema-by-definition GetSchemaByDefinition
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-109
-  SchemaId: any
-  SchemaDefinition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-109
+  schema_id: any
+  schema_definition: any
 ]: any -> record<SchemaVersionId: record, SchemaArn: record, DataFormat: record, Status: record, CreatedTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetSchemaByDefinition")
-  let body = {SchemaId: $SchemaId, SchemaDefinition: $SchemaDefinition} | compact
+  let body = {"SchemaId": $schema_id, "SchemaDefinition": $schema_definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4543,7 +4543,7 @@ export def "x-amz-target-aws-glue-get-schema-by-definition GetSchemaByDefinition
 #
 # POST /#X-Amz-Target=AWSGlue.GetSchemaVersion
 # operationId: GetSchemaVersion
-export def "x-amz-target-aws-glue-get-schema-version GetSchemaVersion" [
+export def "x-amz-target-aws-glue-get-schema-version get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4552,25 +4552,25 @@ export def "x-amz-target-aws-glue-get-schema-version GetSchemaVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-110
-  --SchemaId: any
-  --SchemaVersionId: any
-  --SchemaVersionNumber: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-110
+  --schema-id: any
+  --schema-version-id: any
+  --schema-version-number: any
 ]: any -> record<SchemaVersionId: record, SchemaDefinition: record, DataFormat: record, SchemaArn: record, VersionNumber: record, Status: record, CreatedTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetSchemaVersion")
-  let body = {SchemaId: $SchemaId, SchemaVersionId: $SchemaVersionId, SchemaVersionNumber: $SchemaVersionNumber} | compact
+  let body = {"SchemaId": $schema_id, "SchemaVersionId": $schema_version_id, "SchemaVersionNumber": $schema_version_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4581,7 +4581,7 @@ export def "x-amz-target-aws-glue-get-schema-version GetSchemaVersion" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetSchemaVersionsDiff
 # operationId: GetSchemaVersionsDiff
-export def "x-amz-target-aws-glue-get-schema-versions-diff GetSchemaVersionsDiff" [
+export def "x-amz-target-aws-glue-get-schema-versions-diff get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4590,26 +4590,26 @@ export def "x-amz-target-aws-glue-get-schema-versions-diff GetSchemaVersionsDiff
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-111
-  SchemaId: any
-  FirstSchemaVersionNumber: any
-  SecondSchemaVersionNumber: any
-  SchemaDiffType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-111
+  schema_id: any
+  first_schema_version_number: any
+  second_schema_version_number: any
+  schema_diff_type: any
 ]: any -> record<Diff: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetSchemaVersionsDiff")
-  let body = {SchemaId: $SchemaId, FirstSchemaVersionNumber: $FirstSchemaVersionNumber, SecondSchemaVersionNumber: $SecondSchemaVersionNumber, SchemaDiffType: $SchemaDiffType} | compact
+  let body = {"SchemaId": $schema_id, "FirstSchemaVersionNumber": $first_schema_version_number, "SecondSchemaVersionNumber": $second_schema_version_number, "SchemaDiffType": $schema_diff_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4620,7 +4620,7 @@ export def "x-amz-target-aws-glue-get-schema-versions-diff GetSchemaVersionsDiff
 #
 # POST /#X-Amz-Target=AWSGlue.GetSecurityConfiguration
 # operationId: GetSecurityConfiguration
-export def "x-amz-target-aws-glue-get-security-configuration GetSecurityConfiguration" [
+export def "x-amz-target-aws-glue-get-security-configuration get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4629,23 +4629,23 @@ export def "x-amz-target-aws-glue-get-security-configuration GetSecurityConfigur
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-112
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-112
+  name: any
 ]: any -> record<SecurityConfiguration: record<Name: record, CreatedTimeStamp: record, EncryptionConfiguration: record<S3Encryption: record, CloudWatchEncryption: record, JobBookmarksEncryption: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetSecurityConfiguration")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4656,7 +4656,7 @@ export def "x-amz-target-aws-glue-get-security-configuration GetSecurityConfigur
 #
 # POST /#X-Amz-Target=AWSGlue.GetSecurityConfigurations
 # operationId: GetSecurityConfigurations
-export def "x-amz-target-aws-glue-get-security-configurations GetSecurityConfigurations" [
+export def "x-amz-target-aws-glue-get-security-configurations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4665,27 +4665,27 @@ export def "x-amz-target-aws-glue-get-security-configurations GetSecurityConfigu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-113
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-113
+  --max-results: any
+  --next-token: any
 ]: any -> record<SecurityConfigurations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetSecurityConfigurations" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4696,7 +4696,7 @@ export def "x-amz-target-aws-glue-get-security-configurations GetSecurityConfigu
 #
 # POST /#X-Amz-Target=AWSGlue.GetSession
 # operationId: GetSession
-export def "x-amz-target-aws-glue-get-session GetSession" [
+export def "x-amz-target-aws-glue-get-session get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4705,24 +4705,24 @@ export def "x-amz-target-aws-glue-get-session GetSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-114
-  Id: any
-  --RequestOrigin: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-114
+  id: any
+  --request-origin: any
 ]: any -> record<Session: record<Id: record, CreatedOn: record, Status: record, ErrorMessage: record, Description: record, Role: record, Command: record<Name: record, PythonVersion: record>, DefaultArguments: record, Connections: record<Connections: record>, Progress: record, MaxCapacity: record, SecurityConfiguration: record, GlueVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetSession")
-  let body = {Id: $Id, RequestOrigin: $RequestOrigin} | compact
+  let body = {"Id": $id, "RequestOrigin": $request_origin} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4733,7 +4733,7 @@ export def "x-amz-target-aws-glue-get-session GetSession" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetStatement
 # operationId: GetStatement
-export def "x-amz-target-aws-glue-get-statement GetStatement" [
+export def "x-amz-target-aws-glue-get-statement get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4742,25 +4742,25 @@ export def "x-amz-target-aws-glue-get-statement GetStatement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-115
-  SessionId: any
-  Id: any
-  --RequestOrigin: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-115
+  session_id: any
+  id: any
+  --request-origin: any
 ]: any -> record<Statement: record<Id: record, Code: record, State: record, Output: record<Data: record, ExecutionCount: record, Status: record, ErrorName: record, ErrorValue: record, Traceback: record>, Progress: record, StartedOn: record, CompletedOn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetStatement")
-  let body = {SessionId: $SessionId, Id: $Id, RequestOrigin: $RequestOrigin} | compact
+  let body = {"SessionId": $session_id, "Id": $id, "RequestOrigin": $request_origin} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4771,7 +4771,7 @@ export def "x-amz-target-aws-glue-get-statement GetStatement" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetTable
 # operationId: GetTable
-export def "x-amz-target-aws-glue-get-table GetTable" [
+export def "x-amz-target-aws-glue-get-table get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4780,27 +4780,27 @@ export def "x-amz-target-aws-glue-get-table GetTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-116
-  --CatalogId: any
-  DatabaseName: any
-  Name: any
-  --TransactionId: any
-  --QueryAsOfTime: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-116
+  --catalog-id: any
+  database_name: any
+  name: any
+  --transaction-id: any
+  --query-as-of-time: any
 ]: any -> record<Table: record<Name: record, DatabaseName: record, Description: record, Owner: record, CreateTime: record, UpdateTime: record, LastAccessTime: record, LastAnalyzedTime: record, Retention: record, StorageDescriptor: record<Columns: record, Location: record, AdditionalLocations: record, InputFormat: record, OutputFormat: record, Compressed: record, NumberOfBuckets: record, SerdeInfo: record, BucketColumns: record, SortColumns: record, Parameters: record, SkewedInfo: record, StoredAsSubDirectories: record, SchemaReference: record>, PartitionKeys: record, ViewOriginalText: record, ViewExpandedText: record, TableType: record, Parameters: record, CreatedBy: record, IsRegisteredWithLakeFormation: record, TargetTable: record<CatalogId: record, DatabaseName: record, Name: record>, CatalogId: record, VersionId: record, FederatedTable: record<Identifier: record, DatabaseIdentifier: record, ConnectionName: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetTable")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, Name: $Name, TransactionId: $TransactionId, QueryAsOfTime: $QueryAsOfTime} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "Name": $name, "TransactionId": $transaction_id, "QueryAsOfTime": $query_as_of_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4811,7 +4811,7 @@ export def "x-amz-target-aws-glue-get-table GetTable" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetTableVersion
 # operationId: GetTableVersion
-export def "x-amz-target-aws-glue-get-table-version GetTableVersion" [
+export def "x-amz-target-aws-glue-get-table-version get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4820,26 +4820,26 @@ export def "x-amz-target-aws-glue-get-table-version GetTableVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-117
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  --VersionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-117
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  --version-id: any
 ]: any -> record<TableVersion: record<Table: record<Name: record, DatabaseName: record, Description: record, Owner: record, CreateTime: record, UpdateTime: record, LastAccessTime: record, LastAnalyzedTime: record, Retention: record, StorageDescriptor: record, PartitionKeys: record, ViewOriginalText: record, ViewExpandedText: record, TableType: record, Parameters: record, CreatedBy: record, IsRegisteredWithLakeFormation: record, TargetTable: record, CatalogId: record, VersionId: record, FederatedTable: record>, VersionId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetTableVersion")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, VersionId: $VersionId} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "VersionId": $version_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4850,7 +4850,7 @@ export def "x-amz-target-aws-glue-get-table-version GetTableVersion" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetTableVersions
 # operationId: GetTableVersions
-export def "x-amz-target-aws-glue-get-table-versions GetTableVersions" [
+export def "x-amz-target-aws-glue-get-table-versions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4859,30 +4859,30 @@ export def "x-amz-target-aws-glue-get-table-versions GetTableVersions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-118
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-118
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<TableVersions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetTableVersions" $qp)
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4893,7 +4893,7 @@ export def "x-amz-target-aws-glue-get-table-versions GetTableVersions" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetTables
 # operationId: GetTables
-export def "x-amz-target-aws-glue-get-tables GetTables" [
+export def "x-amz-target-aws-glue-get-tables get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4902,32 +4902,32 @@ export def "x-amz-target-aws-glue-get-tables GetTables" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-119
-  --CatalogId: any
-  DatabaseName: any
-  --Expression: any
-  --NextToken: any
-  --MaxResults: any
-  --TransactionId: any
-  --QueryAsOfTime: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-119
+  --catalog-id: any
+  database_name: any
+  --expression: any
+  --next-token: any
+  --max-results: any
+  --transaction-id: any
+  --query-as-of-time: any
 ]: any -> record<TableList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetTables" $qp)
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, Expression: $Expression, NextToken: $NextToken, MaxResults: $MaxResults, TransactionId: $TransactionId, QueryAsOfTime: $QueryAsOfTime} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "Expression": $expression, "NextToken": $next_token, "MaxResults": $max_results, "TransactionId": $transaction_id, "QueryAsOfTime": $query_as_of_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4938,7 +4938,7 @@ export def "x-amz-target-aws-glue-get-tables GetTables" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetTags
 # operationId: GetTags
-export def "x-amz-target-aws-glue-get-tags GetTags" [
+export def "x-amz-target-aws-glue-get-tags get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4947,23 +4947,23 @@ export def "x-amz-target-aws-glue-get-tags GetTags" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-120
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-120
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetTags")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4974,7 +4974,7 @@ export def "x-amz-target-aws-glue-get-tags GetTags" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetTrigger
 # operationId: GetTrigger
-export def "x-amz-target-aws-glue-get-trigger GetTrigger" [
+export def "x-amz-target-aws-glue-get-trigger get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4983,23 +4983,23 @@ export def "x-amz-target-aws-glue-get-trigger GetTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-121
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-121
+  name: any
 ]: any -> record<Trigger: record<Name: record, WorkflowName: record, Id: record, Type: record, State: record, Description: record, Schedule: record, Actions: record, Predicate: record<Logical: record, Conditions: record>, EventBatchingCondition: record<BatchSize: record, BatchWindow: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetTrigger")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5010,7 +5010,7 @@ export def "x-amz-target-aws-glue-get-trigger GetTrigger" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetTriggers
 # operationId: GetTriggers
-export def "x-amz-target-aws-glue-get-triggers GetTriggers" [
+export def "x-amz-target-aws-glue-get-triggers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5019,28 +5019,28 @@ export def "x-amz-target-aws-glue-get-triggers GetTriggers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-122
-  --NextToken: any
-  --DependentJobName: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-122
+  --next-token: any
+  --dependent-job-name: any
+  --max-results: any
 ]: any -> record<Triggers: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetTriggers" $qp)
-  let body = {NextToken: $NextToken, DependentJobName: $DependentJobName, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "DependentJobName": $dependent_job_name, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5051,7 +5051,7 @@ export def "x-amz-target-aws-glue-get-triggers GetTriggers" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetUnfilteredPartitionMetadata
 # operationId: GetUnfilteredPartitionMetadata
-export def "x-amz-target-aws-glue-get-unfiltered-partition-metadata GetUnfilteredPartitionMetadata" [
+export def "x-amz-target-aws-glue-get-unfiltered-partition-metadata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5060,28 +5060,28 @@ export def "x-amz-target-aws-glue-get-unfiltered-partition-metadata GetUnfiltere
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-123
-  CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionValues: any
-  --AuditContext: any
-  SupportedPermissionTypes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-123
+  catalog_id: any
+  database_name: any
+  table_name: any
+  partition_values: any
+  --audit-context: any
+  supported_permission_types: any
 ]: any -> record<Partition: record<Values: record, DatabaseName: record, TableName: record, CreationTime: record, LastAccessTime: record, StorageDescriptor: record<Columns: record, Location: record, AdditionalLocations: record, InputFormat: record, OutputFormat: record, Compressed: record, NumberOfBuckets: record, SerdeInfo: record, BucketColumns: record, SortColumns: record, Parameters: record, SkewedInfo: record, StoredAsSubDirectories: record, SchemaReference: record>, Parameters: record, LastAnalyzedTime: record, CatalogId: record>, AuthorizedColumns: record, IsRegisteredWithLakeFormation: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetUnfilteredPartitionMetadata")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionValues: $PartitionValues, AuditContext: $AuditContext, SupportedPermissionTypes: $SupportedPermissionTypes} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionValues": $partition_values, "AuditContext": $audit_context, "SupportedPermissionTypes": $supported_permission_types} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5092,7 +5092,7 @@ export def "x-amz-target-aws-glue-get-unfiltered-partition-metadata GetUnfiltere
 #
 # POST /#X-Amz-Target=AWSGlue.GetUnfilteredPartitionsMetadata
 # operationId: GetUnfilteredPartitionsMetadata
-export def "x-amz-target-aws-glue-get-unfiltered-partitions-metadata GetUnfilteredPartitionsMetadata" [
+export def "x-amz-target-aws-glue-get-unfiltered-partitions-metadata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5101,34 +5101,34 @@ export def "x-amz-target-aws-glue-get-unfiltered-partitions-metadata GetUnfilter
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-124
-  CatalogId: any
-  DatabaseName: any
-  TableName: any
-  --Expression: any
-  --AuditContext: any
-  SupportedPermissionTypes: any
-  --NextToken: any
-  --Segment: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-124
+  catalog_id: any
+  database_name: any
+  table_name: any
+  --expression: any
+  --audit-context: any
+  supported_permission_types: any
+  --next-token: any
+  --segment: any
+  --max-results: any
 ]: any -> record<UnfilteredPartitions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetUnfilteredPartitionsMetadata" $qp)
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, Expression: $Expression, AuditContext: $AuditContext, SupportedPermissionTypes: $SupportedPermissionTypes, NextToken: $NextToken, Segment: $Segment, MaxResults: $MaxResults} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "Expression": $expression, "AuditContext": $audit_context, "SupportedPermissionTypes": $supported_permission_types, "NextToken": $next_token, "Segment": $segment, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5139,7 +5139,7 @@ export def "x-amz-target-aws-glue-get-unfiltered-partitions-metadata GetUnfilter
 #
 # POST /#X-Amz-Target=AWSGlue.GetUnfilteredTableMetadata
 # operationId: GetUnfilteredTableMetadata
-export def "x-amz-target-aws-glue-get-unfiltered-table-metadata GetUnfilteredTableMetadata" [
+export def "x-amz-target-aws-glue-get-unfiltered-table-metadata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5148,27 +5148,27 @@ export def "x-amz-target-aws-glue-get-unfiltered-table-metadata GetUnfilteredTab
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-125
-  CatalogId: any
-  DatabaseName: any
-  Name: any
-  --AuditContext: any
-  SupportedPermissionTypes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-125
+  catalog_id: any
+  database_name: any
+  name: any
+  --audit-context: any
+  supported_permission_types: any
 ]: any -> record<Table: record<Name: record, DatabaseName: record, Description: record, Owner: record, CreateTime: record, UpdateTime: record, LastAccessTime: record, LastAnalyzedTime: record, Retention: record, StorageDescriptor: record<Columns: record, Location: record, AdditionalLocations: record, InputFormat: record, OutputFormat: record, Compressed: record, NumberOfBuckets: record, SerdeInfo: record, BucketColumns: record, SortColumns: record, Parameters: record, SkewedInfo: record, StoredAsSubDirectories: record, SchemaReference: record>, PartitionKeys: record, ViewOriginalText: record, ViewExpandedText: record, TableType: record, Parameters: record, CreatedBy: record, IsRegisteredWithLakeFormation: record, TargetTable: record<CatalogId: record, DatabaseName: record, Name: record>, CatalogId: record, VersionId: record, FederatedTable: record<Identifier: record, DatabaseIdentifier: record, ConnectionName: record>>, AuthorizedColumns: record, IsRegisteredWithLakeFormation: record, CellFilters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetUnfilteredTableMetadata")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, Name: $Name, AuditContext: $AuditContext, SupportedPermissionTypes: $SupportedPermissionTypes} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "Name": $name, "AuditContext": $audit_context, "SupportedPermissionTypes": $supported_permission_types} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5179,7 +5179,7 @@ export def "x-amz-target-aws-glue-get-unfiltered-table-metadata GetUnfilteredTab
 #
 # POST /#X-Amz-Target=AWSGlue.GetUserDefinedFunction
 # operationId: GetUserDefinedFunction
-export def "x-amz-target-aws-glue-get-user-defined-function GetUserDefinedFunction" [
+export def "x-amz-target-aws-glue-get-user-defined-function get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5188,25 +5188,25 @@ export def "x-amz-target-aws-glue-get-user-defined-function GetUserDefinedFuncti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-126
-  --CatalogId: any
-  DatabaseName: any
-  FunctionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-126
+  --catalog-id: any
+  database_name: any
+  function_name: any
 ]: any -> record<UserDefinedFunction: record<FunctionName: record, DatabaseName: record, ClassName: record, OwnerName: record, OwnerType: record, CreateTime: record, ResourceUris: record, CatalogId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetUserDefinedFunction")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, FunctionName: $FunctionName} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "FunctionName": $function_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5217,7 +5217,7 @@ export def "x-amz-target-aws-glue-get-user-defined-function GetUserDefinedFuncti
 #
 # POST /#X-Amz-Target=AWSGlue.GetUserDefinedFunctions
 # operationId: GetUserDefinedFunctions
-export def "x-amz-target-aws-glue-get-user-defined-functions GetUserDefinedFunctions" [
+export def "x-amz-target-aws-glue-get-user-defined-functions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5226,30 +5226,30 @@ export def "x-amz-target-aws-glue-get-user-defined-functions GetUserDefinedFunct
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-127
-  --CatalogId: any
-  --DatabaseName: any
-  Pattern: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-127
+  --catalog-id: any
+  --database-name: any
+  pattern: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<UserDefinedFunctions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetUserDefinedFunctions" $qp)
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, Pattern: $Pattern, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "Pattern": $pattern, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5260,7 +5260,7 @@ export def "x-amz-target-aws-glue-get-user-defined-functions GetUserDefinedFunct
 #
 # POST /#X-Amz-Target=AWSGlue.GetWorkflow
 # operationId: GetWorkflow
-export def "x-amz-target-aws-glue-get-workflow GetWorkflow" [
+export def "x-amz-target-aws-glue-get-workflow get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5269,24 +5269,24 @@ export def "x-amz-target-aws-glue-get-workflow GetWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-128
-  Name: any
-  --IncludeGraph: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-128
+  name: any
+  --include-graph: any
 ]: any -> record<Workflow: record<Name: record, Description: record, DefaultRunProperties: record, CreatedOn: record, LastModifiedOn: record, LastRun: record<Name: record, WorkflowRunId: record, PreviousRunId: record, WorkflowRunProperties: record, StartedOn: record, CompletedOn: record, Status: record, ErrorMessage: record, Statistics: record, Graph: record, StartingEventBatchCondition: record>, Graph: record<Nodes: record, Edges: record>, MaxConcurrentRuns: record, BlueprintDetails: record<BlueprintName: record, RunId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetWorkflow")
-  let body = {Name: $Name, IncludeGraph: $IncludeGraph} | compact
+  let body = {"Name": $name, "IncludeGraph": $include_graph} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5297,7 +5297,7 @@ export def "x-amz-target-aws-glue-get-workflow GetWorkflow" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetWorkflowRun
 # operationId: GetWorkflowRun
-export def "x-amz-target-aws-glue-get-workflow-run GetWorkflowRun" [
+export def "x-amz-target-aws-glue-get-workflow-run get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5306,25 +5306,25 @@ export def "x-amz-target-aws-glue-get-workflow-run GetWorkflowRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-129
-  Name: any
-  RunId: any
-  --IncludeGraph: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-129
+  name: any
+  run_id: any
+  --include-graph: any
 ]: any -> record<Run: record<Name: record, WorkflowRunId: record, PreviousRunId: record, WorkflowRunProperties: record, StartedOn: record, CompletedOn: record, Status: record, ErrorMessage: record, Statistics: record<TotalActions: record, TimeoutActions: record, FailedActions: record, StoppedActions: record, SucceededActions: record, RunningActions: record, ErroredActions: record, WaitingActions: record>, Graph: record<Nodes: record, Edges: record>, StartingEventBatchCondition: record<BatchSize: record, BatchWindow: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetWorkflowRun")
-  let body = {Name: $Name, RunId: $RunId, IncludeGraph: $IncludeGraph} | compact
+  let body = {"Name": $name, "RunId": $run_id, "IncludeGraph": $include_graph} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5335,7 +5335,7 @@ export def "x-amz-target-aws-glue-get-workflow-run GetWorkflowRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.GetWorkflowRunProperties
 # operationId: GetWorkflowRunProperties
-export def "x-amz-target-aws-glue-get-workflow-run-properties GetWorkflowRunProperties" [
+export def "x-amz-target-aws-glue-get-workflow-run-properties get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5344,24 +5344,24 @@ export def "x-amz-target-aws-glue-get-workflow-run-properties GetWorkflowRunProp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-130
-  Name: any
-  RunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-130
+  name: any
+  run_id: any
 ]: any -> record<RunProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetWorkflowRunProperties")
-  let body = {Name: $Name, RunId: $RunId} | compact
+  let body = {"Name": $name, "RunId": $run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5372,7 +5372,7 @@ export def "x-amz-target-aws-glue-get-workflow-run-properties GetWorkflowRunProp
 #
 # POST /#X-Amz-Target=AWSGlue.GetWorkflowRuns
 # operationId: GetWorkflowRuns
-export def "x-amz-target-aws-glue-get-workflow-runs GetWorkflowRuns" [
+export def "x-amz-target-aws-glue-get-workflow-runs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5381,29 +5381,29 @@ export def "x-amz-target-aws-glue-get-workflow-runs GetWorkflowRuns" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-131
-  Name: any
-  --IncludeGraph: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-131
+  name: any
+  --include-graph: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Runs: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.GetWorkflowRuns" $qp)
-  let body = {Name: $Name, IncludeGraph: $IncludeGraph, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Name": $name, "IncludeGraph": $include_graph, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5414,7 +5414,7 @@ export def "x-amz-target-aws-glue-get-workflow-runs GetWorkflowRuns" [
 #
 # POST /#X-Amz-Target=AWSGlue.ImportCatalogToGlue
 # operationId: ImportCatalogToGlue
-export def "x-amz-target-aws-glue-import-catalog-to-glue ImportCatalogToGlue" [
+export def "x-amz-target-aws-glue-import-catalog-to-glue import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5423,23 +5423,23 @@ export def "x-amz-target-aws-glue-import-catalog-to-glue ImportCatalogToGlue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-132
-  --CatalogId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-132
+  --catalog-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ImportCatalogToGlue")
-  let body = {CatalogId: $CatalogId} | compact
+  let body = {"CatalogId": $catalog_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5450,7 +5450,7 @@ export def "x-amz-target-aws-glue-import-catalog-to-glue ImportCatalogToGlue" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListBlueprints
 # operationId: ListBlueprints
-export def "x-amz-target-aws-glue-list-blueprints ListBlueprints" [
+export def "x-amz-target-aws-glue-list-blueprints list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5459,28 +5459,28 @@ export def "x-amz-target-aws-glue-list-blueprints ListBlueprints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-133
-  --NextToken: any
-  --MaxResults: any
-  --Tags: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-133
+  --next-token: any
+  --max-results: any
+  --tags: any
 ]: any -> record<Blueprints: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListBlueprints" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Tags: $Tags} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5491,7 +5491,7 @@ export def "x-amz-target-aws-glue-list-blueprints ListBlueprints" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListCrawlers
 # operationId: ListCrawlers
-export def "x-amz-target-aws-glue-list-crawlers ListCrawlers" [
+export def "x-amz-target-aws-glue-list-crawlers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5500,28 +5500,28 @@ export def "x-amz-target-aws-glue-list-crawlers ListCrawlers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-134
-  --MaxResults: any
-  --NextToken: any
-  --Tags: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-134
+  --max-results: any
+  --next-token: any
+  --tags: any
 ]: any -> record<CrawlerNames: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListCrawlers" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken, Tags: $Tags} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5532,7 +5532,7 @@ export def "x-amz-target-aws-glue-list-crawlers ListCrawlers" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListCrawls
 # operationId: ListCrawls
-export def "x-amz-target-aws-glue-list-crawls ListCrawls" [
+export def "x-amz-target-aws-glue-list-crawls list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5541,26 +5541,26 @@ export def "x-amz-target-aws-glue-list-crawls ListCrawls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-135
-  CrawlerName: any
-  --MaxResults: any
-  --Filters: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-135
+  crawler_name: any
+  --max-results: any
+  --filters: any
+  --next-token: any
 ]: any -> record<Crawls: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListCrawls")
-  let body = {CrawlerName: $CrawlerName, MaxResults: $MaxResults, Filters: $Filters, NextToken: $NextToken} | compact
+  let body = {"CrawlerName": $crawler_name, "MaxResults": $max_results, "Filters": $filters, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5571,7 +5571,7 @@ export def "x-amz-target-aws-glue-list-crawls ListCrawls" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListCustomEntityTypes
 # operationId: ListCustomEntityTypes
-export def "x-amz-target-aws-glue-list-custom-entity-types ListCustomEntityTypes" [
+export def "x-amz-target-aws-glue-list-custom-entity-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5580,27 +5580,27 @@ export def "x-amz-target-aws-glue-list-custom-entity-types ListCustomEntityTypes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-136
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-136
+  --next-token: any
+  --max-results: any
 ]: any -> record<CustomEntityTypes: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListCustomEntityTypes" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5611,7 +5611,7 @@ export def "x-amz-target-aws-glue-list-custom-entity-types ListCustomEntityTypes
 #
 # POST /#X-Amz-Target=AWSGlue.ListDataQualityResults
 # operationId: ListDataQualityResults
-export def "x-amz-target-aws-glue-list-data-quality-results ListDataQualityResults" [
+export def "x-amz-target-aws-glue-list-data-quality-results list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5620,28 +5620,28 @@ export def "x-amz-target-aws-glue-list-data-quality-results ListDataQualityResul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-137
-  --Filter: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-137
+  --filter: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Results: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListDataQualityResults" $qp)
-  let body = {Filter: $Filter, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5652,7 +5652,7 @@ export def "x-amz-target-aws-glue-list-data-quality-results ListDataQualityResul
 #
 # POST /#X-Amz-Target=AWSGlue.ListDataQualityRuleRecommendationRuns
 # operationId: ListDataQualityRuleRecommendationRuns
-export def "x-amz-target-aws-glue-list-data-quality-rule-recommendation-runs ListDataQualityRuleRecommendationRuns" [
+export def "x-amz-target-aws-glue-list-data-quality-rule-recommendation-runs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5661,28 +5661,28 @@ export def "x-amz-target-aws-glue-list-data-quality-rule-recommendation-runs Lis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-138
-  --Filter: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-138
+  --filter: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Runs: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListDataQualityRuleRecommendationRuns" $qp)
-  let body = {Filter: $Filter, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5693,7 +5693,7 @@ export def "x-amz-target-aws-glue-list-data-quality-rule-recommendation-runs Lis
 #
 # POST /#X-Amz-Target=AWSGlue.ListDataQualityRulesetEvaluationRuns
 # operationId: ListDataQualityRulesetEvaluationRuns
-export def "x-amz-target-aws-glue-list-data-quality-ruleset-evaluation-runs ListDataQualityRulesetEvaluationRuns" [
+export def "x-amz-target-aws-glue-list-data-quality-ruleset-evaluation-runs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5702,28 +5702,28 @@ export def "x-amz-target-aws-glue-list-data-quality-ruleset-evaluation-runs List
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-139
-  --Filter: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-139
+  --filter: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Runs: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListDataQualityRulesetEvaluationRuns" $qp)
-  let body = {Filter: $Filter, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Filter": $filter, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5734,7 +5734,7 @@ export def "x-amz-target-aws-glue-list-data-quality-ruleset-evaluation-runs List
 #
 # POST /#X-Amz-Target=AWSGlue.ListDataQualityRulesets
 # operationId: ListDataQualityRulesets
-export def "x-amz-target-aws-glue-list-data-quality-rulesets ListDataQualityRulesets" [
+export def "x-amz-target-aws-glue-list-data-quality-rulesets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5743,29 +5743,29 @@ export def "x-amz-target-aws-glue-list-data-quality-rulesets ListDataQualityRule
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-140
-  --NextToken: any
-  --MaxResults: any
-  --Filter: any
-  --Tags: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-140
+  --next-token: any
+  --max-results: any
+  --filter: any
+  --tags: any
 ]: any -> record<Rulesets: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListDataQualityRulesets" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filter: $Filter, Tags: $Tags} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filter": $filter, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5776,7 +5776,7 @@ export def "x-amz-target-aws-glue-list-data-quality-rulesets ListDataQualityRule
 #
 # POST /#X-Amz-Target=AWSGlue.ListDevEndpoints
 # operationId: ListDevEndpoints
-export def "x-amz-target-aws-glue-list-dev-endpoints ListDevEndpoints" [
+export def "x-amz-target-aws-glue-list-dev-endpoints list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5785,28 +5785,28 @@ export def "x-amz-target-aws-glue-list-dev-endpoints ListDevEndpoints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-141
-  --NextToken: any
-  --MaxResults: any
-  --Tags: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-141
+  --next-token: any
+  --max-results: any
+  --tags: any
 ]: any -> record<DevEndpointNames: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListDevEndpoints" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Tags: $Tags} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5817,7 +5817,7 @@ export def "x-amz-target-aws-glue-list-dev-endpoints ListDevEndpoints" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListJobs
 # operationId: ListJobs
-export def "x-amz-target-aws-glue-list-jobs ListJobs" [
+export def "x-amz-target-aws-glue-list-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5826,28 +5826,28 @@ export def "x-amz-target-aws-glue-list-jobs ListJobs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-142
-  --NextToken: any
-  --MaxResults: any
-  --Tags: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-142
+  --next-token: any
+  --max-results: any
+  --tags: any
 ]: any -> record<JobNames: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListJobs" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Tags: $Tags} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5858,7 +5858,7 @@ export def "x-amz-target-aws-glue-list-jobs ListJobs" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListMLTransforms
 # operationId: ListMLTransforms
-export def "x-amz-target-aws-glue-list-ml-transforms ListMLTransforms" [
+export def "x-amz-target-aws-glue-list-ml-transforms list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5867,30 +5867,30 @@ export def "x-amz-target-aws-glue-list-ml-transforms ListMLTransforms" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-143
-  --NextToken: any
-  --MaxResults: any
-  --Filter: any
-  --Sort: any
-  --Tags: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-143
+  --next-token: any
+  --max-results: any
+  --filter: any
+  --body-sort: any
+  --tags: any
 ]: any -> record<TransformIds: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListMLTransforms" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Filter: $Filter, Sort: $Sort, Tags: $Tags} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Filter": $filter, "Sort": $body_sort, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5901,7 +5901,7 @@ export def "x-amz-target-aws-glue-list-ml-transforms ListMLTransforms" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListRegistries
 # operationId: ListRegistries
-export def "x-amz-target-aws-glue-list-registries ListRegistries" [
+export def "x-amz-target-aws-glue-list-registries list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5910,27 +5910,27 @@ export def "x-amz-target-aws-glue-list-registries ListRegistries" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-144
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-144
+  --max-results: any
+  --next-token: any
 ]: any -> record<Registries: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListRegistries" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5941,7 +5941,7 @@ export def "x-amz-target-aws-glue-list-registries ListRegistries" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListSchemaVersions
 # operationId: ListSchemaVersions
-export def "x-amz-target-aws-glue-list-schema-versions ListSchemaVersions" [
+export def "x-amz-target-aws-glue-list-schema-versions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5950,28 +5950,28 @@ export def "x-amz-target-aws-glue-list-schema-versions ListSchemaVersions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-145
-  SchemaId: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-145
+  schema_id: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Schemas: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListSchemaVersions" $qp)
-  let body = {SchemaId: $SchemaId, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"SchemaId": $schema_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5982,7 +5982,7 @@ export def "x-amz-target-aws-glue-list-schema-versions ListSchemaVersions" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListSchemas
 # operationId: ListSchemas
-export def "x-amz-target-aws-glue-list-schemas ListSchemas" [
+export def "x-amz-target-aws-glue-list-schemas list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5991,28 +5991,28 @@ export def "x-amz-target-aws-glue-list-schemas ListSchemas" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-146
-  --RegistryId: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-146
+  --registry-id: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Schemas: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListSchemas" $qp)
-  let body = {RegistryId: $RegistryId, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"RegistryId": $registry_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6023,7 +6023,7 @@ export def "x-amz-target-aws-glue-list-schemas ListSchemas" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListSessions
 # operationId: ListSessions
-export def "x-amz-target-aws-glue-list-sessions ListSessions" [
+export def "x-amz-target-aws-glue-list-sessions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6032,29 +6032,29 @@ export def "x-amz-target-aws-glue-list-sessions ListSessions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-147
-  --NextToken: any
-  --MaxResults: any
-  --Tags: any
-  --RequestOrigin: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-147
+  --next-token: any
+  --max-results: any
+  --tags: any
+  --request-origin: any
 ]: any -> record<Ids: record, Sessions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListSessions" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, Tags: $Tags, RequestOrigin: $RequestOrigin} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "Tags": $tags, "RequestOrigin": $request_origin} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6065,7 +6065,7 @@ export def "x-amz-target-aws-glue-list-sessions ListSessions" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListStatements
 # operationId: ListStatements
-export def "x-amz-target-aws-glue-list-statements ListStatements" [
+export def "x-amz-target-aws-glue-list-statements list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6074,25 +6074,25 @@ export def "x-amz-target-aws-glue-list-statements ListStatements" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-148
-  SessionId: any
-  --RequestOrigin: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-148
+  session_id: any
+  --request-origin: any
+  --next-token: any
 ]: any -> record<Statements: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListStatements")
-  let body = {SessionId: $SessionId, RequestOrigin: $RequestOrigin, NextToken: $NextToken} | compact
+  let body = {"SessionId": $session_id, "RequestOrigin": $request_origin, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6103,7 +6103,7 @@ export def "x-amz-target-aws-glue-list-statements ListStatements" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListTriggers
 # operationId: ListTriggers
-export def "x-amz-target-aws-glue-list-triggers ListTriggers" [
+export def "x-amz-target-aws-glue-list-triggers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6112,29 +6112,29 @@ export def "x-amz-target-aws-glue-list-triggers ListTriggers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-149
-  --NextToken: any
-  --DependentJobName: any
-  --MaxResults: any
-  --Tags: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-149
+  --next-token: any
+  --dependent-job-name: any
+  --max-results: any
+  --tags: any
 ]: any -> record<TriggerNames: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListTriggers" $qp)
-  let body = {NextToken: $NextToken, DependentJobName: $DependentJobName, MaxResults: $MaxResults, Tags: $Tags} | compact
+  let body = {"NextToken": $next_token, "DependentJobName": $dependent_job_name, "MaxResults": $max_results, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6145,7 +6145,7 @@ export def "x-amz-target-aws-glue-list-triggers ListTriggers" [
 #
 # POST /#X-Amz-Target=AWSGlue.ListWorkflows
 # operationId: ListWorkflows
-export def "x-amz-target-aws-glue-list-workflows ListWorkflows" [
+export def "x-amz-target-aws-glue-list-workflows list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6154,27 +6154,27 @@ export def "x-amz-target-aws-glue-list-workflows ListWorkflows" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-150
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-150
+  --next-token: any
+  --max-results: any
 ]: any -> record<Workflows: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ListWorkflows" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6185,7 +6185,7 @@ export def "x-amz-target-aws-glue-list-workflows ListWorkflows" [
 #
 # POST /#X-Amz-Target=AWSGlue.PutDataCatalogEncryptionSettings
 # operationId: PutDataCatalogEncryptionSettings
-export def "x-amz-target-aws-glue-put-data-catalog-encryption-settings PutDataCatalogEncryptionSettings" [
+export def "x-amz-target-aws-glue-put-data-catalog-encryption-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6194,24 +6194,24 @@ export def "x-amz-target-aws-glue-put-data-catalog-encryption-settings PutDataCa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-151
-  --CatalogId: any
-  DataCatalogEncryptionSettings: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-151
+  --catalog-id: any
+  data_catalog_encryption_settings: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.PutDataCatalogEncryptionSettings")
-  let body = {CatalogId: $CatalogId, DataCatalogEncryptionSettings: $DataCatalogEncryptionSettings} | compact
+  let body = {"CatalogId": $catalog_id, "DataCatalogEncryptionSettings": $data_catalog_encryption_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6222,7 +6222,7 @@ export def "x-amz-target-aws-glue-put-data-catalog-encryption-settings PutDataCa
 #
 # POST /#X-Amz-Target=AWSGlue.PutResourcePolicy
 # operationId: PutResourcePolicy
-export def "x-amz-target-aws-glue-put-resource-policy PutResourcePolicy" [
+export def "x-amz-target-aws-glue-put-resource-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6231,27 +6231,27 @@ export def "x-amz-target-aws-glue-put-resource-policy PutResourcePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-152
-  PolicyInJson: any
-  --ResourceArn: any
-  --PolicyHashCondition: any
-  --PolicyExistsCondition: any
-  --EnableHybrid: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-152
+  policy_in_json: any
+  --resource-arn: any
+  --policy-hash-condition: any
+  --policy-exists-condition: any
+  --enable-hybrid: any
 ]: any -> record<PolicyHash: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.PutResourcePolicy")
-  let body = {PolicyInJson: $PolicyInJson, ResourceArn: $ResourceArn, PolicyHashCondition: $PolicyHashCondition, PolicyExistsCondition: $PolicyExistsCondition, EnableHybrid: $EnableHybrid} | compact
+  let body = {"PolicyInJson": $policy_in_json, "ResourceArn": $resource_arn, "PolicyHashCondition": $policy_hash_condition, "PolicyExistsCondition": $policy_exists_condition, "EnableHybrid": $enable_hybrid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6262,7 +6262,7 @@ export def "x-amz-target-aws-glue-put-resource-policy PutResourcePolicy" [
 #
 # POST /#X-Amz-Target=AWSGlue.PutSchemaVersionMetadata
 # operationId: PutSchemaVersionMetadata
-export def "x-amz-target-aws-glue-put-schema-version-metadata PutSchemaVersionMetadata" [
+export def "x-amz-target-aws-glue-put-schema-version-metadata update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6271,26 +6271,26 @@ export def "x-amz-target-aws-glue-put-schema-version-metadata PutSchemaVersionMe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-153
-  --SchemaId: any
-  --SchemaVersionNumber: any
-  --SchemaVersionId: any
-  MetadataKeyValue: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-153
+  --schema-id: any
+  --schema-version-number: any
+  --schema-version-id: any
+  metadata_key_value: any
 ]: any -> record<SchemaArn: record, SchemaName: record, RegistryName: record, LatestVersion: record, VersionNumber: record, SchemaVersionId: record, MetadataKey: record, MetadataValue: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.PutSchemaVersionMetadata")
-  let body = {SchemaId: $SchemaId, SchemaVersionNumber: $SchemaVersionNumber, SchemaVersionId: $SchemaVersionId, MetadataKeyValue: $MetadataKeyValue} | compact
+  let body = {"SchemaId": $schema_id, "SchemaVersionNumber": $schema_version_number, "SchemaVersionId": $schema_version_id, "MetadataKeyValue": $metadata_key_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6301,7 +6301,7 @@ export def "x-amz-target-aws-glue-put-schema-version-metadata PutSchemaVersionMe
 #
 # POST /#X-Amz-Target=AWSGlue.PutWorkflowRunProperties
 # operationId: PutWorkflowRunProperties
-export def "x-amz-target-aws-glue-put-workflow-run-properties PutWorkflowRunProperties" [
+export def "x-amz-target-aws-glue-put-workflow-run-properties update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6310,25 +6310,25 @@ export def "x-amz-target-aws-glue-put-workflow-run-properties PutWorkflowRunProp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-154
-  Name: any
-  RunId: any
-  RunProperties: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-154
+  name: any
+  run_id: any
+  run_properties: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.PutWorkflowRunProperties")
-  let body = {Name: $Name, RunId: $RunId, RunProperties: $RunProperties} | compact
+  let body = {"Name": $name, "RunId": $run_id, "RunProperties": $run_properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6339,7 +6339,7 @@ export def "x-amz-target-aws-glue-put-workflow-run-properties PutWorkflowRunProp
 #
 # POST /#X-Amz-Target=AWSGlue.QuerySchemaVersionMetadata
 # operationId: QuerySchemaVersionMetadata
-export def "x-amz-target-aws-glue-query-schema-version-metadata QuerySchemaVersionMetadata" [
+export def "x-amz-target-aws-glue-query-schema-version-metadata list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6348,28 +6348,28 @@ export def "x-amz-target-aws-glue-query-schema-version-metadata QuerySchemaVersi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-155
-  --SchemaId: any
-  --SchemaVersionNumber: any
-  --SchemaVersionId: any
-  --MetadataList: any
-  --MaxResults: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-155
+  --schema-id: any
+  --schema-version-number: any
+  --schema-version-id: any
+  --metadata-list: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<MetadataInfoMap: record, SchemaVersionId: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.QuerySchemaVersionMetadata")
-  let body = {SchemaId: $SchemaId, SchemaVersionNumber: $SchemaVersionNumber, SchemaVersionId: $SchemaVersionId, MetadataList: $MetadataList, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"SchemaId": $schema_id, "SchemaVersionNumber": $schema_version_number, "SchemaVersionId": $schema_version_id, "MetadataList": $metadata_list, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6380,7 +6380,7 @@ export def "x-amz-target-aws-glue-query-schema-version-metadata QuerySchemaVersi
 #
 # POST /#X-Amz-Target=AWSGlue.RegisterSchemaVersion
 # operationId: RegisterSchemaVersion
-export def "x-amz-target-aws-glue-register-schema-version RegisterSchemaVersion" [
+export def "x-amz-target-aws-glue-register-schema-version create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6389,24 +6389,24 @@ export def "x-amz-target-aws-glue-register-schema-version RegisterSchemaVersion"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-156
-  SchemaId: any
-  SchemaDefinition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-156
+  schema_id: any
+  schema_definition: any
 ]: any -> record<SchemaVersionId: record, VersionNumber: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.RegisterSchemaVersion")
-  let body = {SchemaId: $SchemaId, SchemaDefinition: $SchemaDefinition} | compact
+  let body = {"SchemaId": $schema_id, "SchemaDefinition": $schema_definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6417,7 +6417,7 @@ export def "x-amz-target-aws-glue-register-schema-version RegisterSchemaVersion"
 #
 # POST /#X-Amz-Target=AWSGlue.RemoveSchemaVersionMetadata
 # operationId: RemoveSchemaVersionMetadata
-export def "x-amz-target-aws-glue-remove-schema-version-metadata RemoveSchemaVersionMetadata" [
+export def "x-amz-target-aws-glue-remove-schema-version-metadata delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6426,26 +6426,26 @@ export def "x-amz-target-aws-glue-remove-schema-version-metadata RemoveSchemaVer
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-157
-  --SchemaId: any
-  --SchemaVersionNumber: any
-  --SchemaVersionId: any
-  MetadataKeyValue: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-157
+  --schema-id: any
+  --schema-version-number: any
+  --schema-version-id: any
+  metadata_key_value: any
 ]: any -> record<SchemaArn: record, SchemaName: record, RegistryName: record, LatestVersion: record, VersionNumber: record, SchemaVersionId: record, MetadataKey: record, MetadataValue: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.RemoveSchemaVersionMetadata")
-  let body = {SchemaId: $SchemaId, SchemaVersionNumber: $SchemaVersionNumber, SchemaVersionId: $SchemaVersionId, MetadataKeyValue: $MetadataKeyValue} | compact
+  let body = {"SchemaId": $schema_id, "SchemaVersionNumber": $schema_version_number, "SchemaVersionId": $schema_version_id, "MetadataKeyValue": $metadata_key_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6456,7 +6456,7 @@ export def "x-amz-target-aws-glue-remove-schema-version-metadata RemoveSchemaVer
 #
 # POST /#X-Amz-Target=AWSGlue.ResetJobBookmark
 # operationId: ResetJobBookmark
-export def "x-amz-target-aws-glue-reset-job-bookmark ResetJobBookmark" [
+export def "x-amz-target-aws-glue-reset-job-bookmark reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6465,24 +6465,24 @@ export def "x-amz-target-aws-glue-reset-job-bookmark ResetJobBookmark" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-158
-  JobName: any
-  --RunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-158
+  job_name: any
+  --run-id: any
 ]: any -> record<JobBookmarkEntry: record<JobName: record, Version: record, Run: record, Attempt: record, PreviousRunId: record, RunId: record, JobBookmark: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ResetJobBookmark")
-  let body = {JobName: $JobName, RunId: $RunId} | compact
+  let body = {"JobName": $job_name, "RunId": $run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6493,7 +6493,7 @@ export def "x-amz-target-aws-glue-reset-job-bookmark ResetJobBookmark" [
 #
 # POST /#X-Amz-Target=AWSGlue.ResumeWorkflowRun
 # operationId: ResumeWorkflowRun
-export def "x-amz-target-aws-glue-resume-workflow-run ResumeWorkflowRun" [
+export def "x-amz-target-aws-glue-resume-workflow-run post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6502,25 +6502,25 @@ export def "x-amz-target-aws-glue-resume-workflow-run ResumeWorkflowRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-159
-  Name: any
-  RunId: any
-  NodeIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-159
+  name: any
+  run_id: any
+  node_ids: any
 ]: any -> record<RunId: record, NodeIds: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.ResumeWorkflowRun")
-  let body = {Name: $Name, RunId: $RunId, NodeIds: $NodeIds} | compact
+  let body = {"Name": $name, "RunId": $run_id, "NodeIds": $node_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6531,7 +6531,7 @@ export def "x-amz-target-aws-glue-resume-workflow-run ResumeWorkflowRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.RunStatement
 # operationId: RunStatement
-export def "x-amz-target-aws-glue-run-statement RunStatement" [
+export def "x-amz-target-aws-glue-run-statement post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6540,25 +6540,25 @@ export def "x-amz-target-aws-glue-run-statement RunStatement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-160
-  SessionId: any
-  Code: any
-  --RequestOrigin: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-160
+  session_id: any
+  code: any
+  --request-origin: any
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.RunStatement")
-  let body = {SessionId: $SessionId, Code: $Code, RequestOrigin: $RequestOrigin} | compact
+  let body = {"SessionId": $session_id, "Code": $code, "RequestOrigin": $request_origin} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6569,7 +6569,7 @@ export def "x-amz-target-aws-glue-run-statement RunStatement" [
 #
 # POST /#X-Amz-Target=AWSGlue.SearchTables
 # operationId: SearchTables
-export def "x-amz-target-aws-glue-search-tables SearchTables" [
+export def "x-amz-target-aws-glue-search-tables list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6578,32 +6578,32 @@ export def "x-amz-target-aws-glue-search-tables SearchTables" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-161
-  --CatalogId: any
-  --NextToken: any
-  --Filters: any
-  --SearchText: any
-  --SortCriteria: any
-  --MaxResults: any
-  --ResourceShareType: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-161
+  --catalog-id: any
+  --next-token: any
+  --filters: any
+  --search-text: any
+  --sort-criteria: any
+  --max-results: any
+  --resource-share-type: any
 ]: any -> record<NextToken: record, TableList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.SearchTables" $qp)
-  let body = {CatalogId: $CatalogId, NextToken: $NextToken, Filters: $Filters, SearchText: $SearchText, SortCriteria: $SortCriteria, MaxResults: $MaxResults, ResourceShareType: $ResourceShareType} | compact
+  let body = {"CatalogId": $catalog_id, "NextToken": $next_token, "Filters": $filters, "SearchText": $search_text, "SortCriteria": $sort_criteria, "MaxResults": $max_results, "ResourceShareType": $resource_share_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6614,7 +6614,7 @@ export def "x-amz-target-aws-glue-search-tables SearchTables" [
 #
 # POST /#X-Amz-Target=AWSGlue.StartBlueprintRun
 # operationId: StartBlueprintRun
-export def "x-amz-target-aws-glue-start-blueprint-run StartBlueprintRun" [
+export def "x-amz-target-aws-glue-start-blueprint-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6623,25 +6623,25 @@ export def "x-amz-target-aws-glue-start-blueprint-run StartBlueprintRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-162
-  BlueprintName: any
-  --Parameters: any
-  RoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-162
+  blueprint_name: any
+  --parameters: any
+  role_arn: any
 ]: any -> record<RunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartBlueprintRun")
-  let body = {BlueprintName: $BlueprintName, Parameters: $Parameters, RoleArn: $RoleArn} | compact
+  let body = {"BlueprintName": $blueprint_name, "Parameters": $parameters, "RoleArn": $role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6652,7 +6652,7 @@ export def "x-amz-target-aws-glue-start-blueprint-run StartBlueprintRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.StartCrawler
 # operationId: StartCrawler
-export def "x-amz-target-aws-glue-start-crawler StartCrawler" [
+export def "x-amz-target-aws-glue-start-crawler start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6661,23 +6661,23 @@ export def "x-amz-target-aws-glue-start-crawler StartCrawler" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-163
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-163
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartCrawler")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6688,7 +6688,7 @@ export def "x-amz-target-aws-glue-start-crawler StartCrawler" [
 #
 # POST /#X-Amz-Target=AWSGlue.StartCrawlerSchedule
 # operationId: StartCrawlerSchedule
-export def "x-amz-target-aws-glue-start-crawler-schedule StartCrawlerSchedule" [
+export def "x-amz-target-aws-glue-start-crawler-schedule start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6697,23 +6697,23 @@ export def "x-amz-target-aws-glue-start-crawler-schedule StartCrawlerSchedule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-164
-  CrawlerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-164
+  crawler_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartCrawlerSchedule")
-  let body = {CrawlerName: $CrawlerName} | compact
+  let body = {"CrawlerName": $crawler_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6724,7 +6724,7 @@ export def "x-amz-target-aws-glue-start-crawler-schedule StartCrawlerSchedule" [
 #
 # POST /#X-Amz-Target=AWSGlue.StartDataQualityRuleRecommendationRun
 # operationId: StartDataQualityRuleRecommendationRun
-export def "x-amz-target-aws-glue-start-data-quality-rule-recommendation-run StartDataQualityRuleRecommendationRun" [
+export def "x-amz-target-aws-glue-start-data-quality-rule-recommendation-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6733,28 +6733,28 @@ export def "x-amz-target-aws-glue-start-data-quality-rule-recommendation-run Sta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-165
-  DataSource: any
-  Role: any
-  --NumberOfWorkers: any
-  --Timeout: any
-  --CreatedRulesetName: any
-  --ClientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-165
+  data_source: any
+  role: any
+  --number-of-workers: any
+  --timeout: any
+  --created-ruleset-name: any
+  --client-token: any
 ]: any -> record<RunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartDataQualityRuleRecommendationRun")
-  let body = {DataSource: $DataSource, Role: $Role, NumberOfWorkers: $NumberOfWorkers, Timeout: $Timeout, CreatedRulesetName: $CreatedRulesetName, ClientToken: $ClientToken} | compact
+  let body = {"DataSource": $data_source, "Role": $role, "NumberOfWorkers": $number_of_workers, "Timeout": $timeout, "CreatedRulesetName": $created_ruleset_name, "ClientToken": $client_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6765,7 +6765,7 @@ export def "x-amz-target-aws-glue-start-data-quality-rule-recommendation-run Sta
 #
 # POST /#X-Amz-Target=AWSGlue.StartDataQualityRulesetEvaluationRun
 # operationId: StartDataQualityRulesetEvaluationRun
-export def "x-amz-target-aws-glue-start-data-quality-ruleset-evaluation-run StartDataQualityRulesetEvaluationRun" [
+export def "x-amz-target-aws-glue-start-data-quality-ruleset-evaluation-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6774,29 +6774,29 @@ export def "x-amz-target-aws-glue-start-data-quality-ruleset-evaluation-run Star
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-166
-  DataSource: any
-  Role: any
-  --NumberOfWorkers: any
-  --Timeout: any
-  --ClientToken: any
-  --AdditionalRunOptions: any
-  RulesetNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-166
+  data_source: any
+  role: any
+  --number-of-workers: any
+  --timeout: any
+  --client-token: any
+  --additional-run-options: any
+  ruleset_names: any
 ]: any -> record<RunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartDataQualityRulesetEvaluationRun")
-  let body = {DataSource: $DataSource, Role: $Role, NumberOfWorkers: $NumberOfWorkers, Timeout: $Timeout, ClientToken: $ClientToken, AdditionalRunOptions: $AdditionalRunOptions, RulesetNames: $RulesetNames} | compact
+  let body = {"DataSource": $data_source, "Role": $role, "NumberOfWorkers": $number_of_workers, "Timeout": $timeout, "ClientToken": $client_token, "AdditionalRunOptions": $additional_run_options, "RulesetNames": $ruleset_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6807,7 +6807,7 @@ export def "x-amz-target-aws-glue-start-data-quality-ruleset-evaluation-run Star
 #
 # POST /#X-Amz-Target=AWSGlue.StartExportLabelsTaskRun
 # operationId: StartExportLabelsTaskRun
-export def "x-amz-target-aws-glue-start-export-labels-task-run StartExportLabelsTaskRun" [
+export def "x-amz-target-aws-glue-start-export-labels-task-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6816,24 +6816,24 @@ export def "x-amz-target-aws-glue-start-export-labels-task-run StartExportLabels
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-167
-  TransformId: any
-  OutputS3Path: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-167
+  transform_id: any
+  output_s3_path: any
 ]: any -> record<TaskRunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartExportLabelsTaskRun")
-  let body = {TransformId: $TransformId, OutputS3Path: $OutputS3Path} | compact
+  let body = {"TransformId": $transform_id, "OutputS3Path": $output_s3_path} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6844,7 +6844,7 @@ export def "x-amz-target-aws-glue-start-export-labels-task-run StartExportLabels
 #
 # POST /#X-Amz-Target=AWSGlue.StartImportLabelsTaskRun
 # operationId: StartImportLabelsTaskRun
-export def "x-amz-target-aws-glue-start-import-labels-task-run StartImportLabelsTaskRun" [
+export def "x-amz-target-aws-glue-start-import-labels-task-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6853,25 +6853,25 @@ export def "x-amz-target-aws-glue-start-import-labels-task-run StartImportLabels
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-168
-  TransformId: any
-  InputS3Path: any
-  --ReplaceAllLabels: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-168
+  transform_id: any
+  input_s3_path: any
+  --replace-all-labels: any
 ]: any -> record<TaskRunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartImportLabelsTaskRun")
-  let body = {TransformId: $TransformId, InputS3Path: $InputS3Path, ReplaceAllLabels: $ReplaceAllLabels} | compact
+  let body = {"TransformId": $transform_id, "InputS3Path": $input_s3_path, "ReplaceAllLabels": $replace_all_labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6882,7 +6882,7 @@ export def "x-amz-target-aws-glue-start-import-labels-task-run StartImportLabels
 #
 # POST /#X-Amz-Target=AWSGlue.StartJobRun
 # operationId: StartJobRun
-export def "x-amz-target-aws-glue-start-job-run StartJobRun" [
+export def "x-amz-target-aws-glue-start-job-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6891,33 +6891,33 @@ export def "x-amz-target-aws-glue-start-job-run StartJobRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-169
-  JobName: any
-  --JobRunId: any
-  --Arguments: any
-  --AllocatedCapacity: any
-  --Timeout: any
-  --MaxCapacity: any
-  --SecurityConfiguration: any
-  --NotificationProperty: any
-  --WorkerType: any
-  --NumberOfWorkers: any
-  --ExecutionClass: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-169
+  job_name: any
+  --job-run-id: any
+  --arguments: any
+  --allocated-capacity: any
+  --timeout: any
+  --max-capacity: any
+  --security-configuration: any
+  --notification-property: any
+  --worker-type: any
+  --number-of-workers: any
+  --execution-class: any
 ]: any -> record<JobRunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartJobRun")
-  let body = {JobName: $JobName, JobRunId: $JobRunId, Arguments: $Arguments, AllocatedCapacity: $AllocatedCapacity, Timeout: $Timeout, MaxCapacity: $MaxCapacity, SecurityConfiguration: $SecurityConfiguration, NotificationProperty: $NotificationProperty, WorkerType: $WorkerType, NumberOfWorkers: $NumberOfWorkers, ExecutionClass: $ExecutionClass} | compact
+  let body = {"JobName": $job_name, "JobRunId": $job_run_id, "Arguments": $arguments, "AllocatedCapacity": $allocated_capacity, "Timeout": $timeout, "MaxCapacity": $max_capacity, "SecurityConfiguration": $security_configuration, "NotificationProperty": $notification_property, "WorkerType": $worker_type, "NumberOfWorkers": $number_of_workers, "ExecutionClass": $execution_class} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6928,7 +6928,7 @@ export def "x-amz-target-aws-glue-start-job-run StartJobRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.StartMLEvaluationTaskRun
 # operationId: StartMLEvaluationTaskRun
-export def "x-amz-target-aws-glue-start-ml-evaluation-task-run StartMLEvaluationTaskRun" [
+export def "x-amz-target-aws-glue-start-ml-evaluation-task-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6937,23 +6937,23 @@ export def "x-amz-target-aws-glue-start-ml-evaluation-task-run StartMLEvaluation
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-170
-  TransformId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-170
+  transform_id: any
 ]: any -> record<TaskRunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartMLEvaluationTaskRun")
-  let body = {TransformId: $TransformId} | compact
+  let body = {"TransformId": $transform_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6964,7 +6964,7 @@ export def "x-amz-target-aws-glue-start-ml-evaluation-task-run StartMLEvaluation
 #
 # POST /#X-Amz-Target=AWSGlue.StartMLLabelingSetGenerationTaskRun
 # operationId: StartMLLabelingSetGenerationTaskRun
-export def "x-amz-target-aws-glue-start-ml-labeling-set-generation-task-run StartMLLabelingSetGenerationTaskRun" [
+export def "x-amz-target-aws-glue-start-ml-labeling-set-generation-task-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6973,24 +6973,24 @@ export def "x-amz-target-aws-glue-start-ml-labeling-set-generation-task-run Star
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-171
-  TransformId: any
-  OutputS3Path: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-171
+  transform_id: any
+  output_s3_path: any
 ]: any -> record<TaskRunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartMLLabelingSetGenerationTaskRun")
-  let body = {TransformId: $TransformId, OutputS3Path: $OutputS3Path} | compact
+  let body = {"TransformId": $transform_id, "OutputS3Path": $output_s3_path} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7001,7 +7001,7 @@ export def "x-amz-target-aws-glue-start-ml-labeling-set-generation-task-run Star
 #
 # POST /#X-Amz-Target=AWSGlue.StartTrigger
 # operationId: StartTrigger
-export def "x-amz-target-aws-glue-start-trigger StartTrigger" [
+export def "x-amz-target-aws-glue-start-trigger start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7010,23 +7010,23 @@ export def "x-amz-target-aws-glue-start-trigger StartTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-172
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-172
+  name: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartTrigger")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7037,7 +7037,7 @@ export def "x-amz-target-aws-glue-start-trigger StartTrigger" [
 #
 # POST /#X-Amz-Target=AWSGlue.StartWorkflowRun
 # operationId: StartWorkflowRun
-export def "x-amz-target-aws-glue-start-workflow-run StartWorkflowRun" [
+export def "x-amz-target-aws-glue-start-workflow-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7046,24 +7046,24 @@ export def "x-amz-target-aws-glue-start-workflow-run StartWorkflowRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-173
-  Name: any
-  --RunProperties: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-173
+  name: any
+  --run-properties: any
 ]: any -> record<RunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StartWorkflowRun")
-  let body = {Name: $Name, RunProperties: $RunProperties} | compact
+  let body = {"Name": $name, "RunProperties": $run_properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7074,7 +7074,7 @@ export def "x-amz-target-aws-glue-start-workflow-run StartWorkflowRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.StopCrawler
 # operationId: StopCrawler
-export def "x-amz-target-aws-glue-stop-crawler StopCrawler" [
+export def "x-amz-target-aws-glue-stop-crawler stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7083,23 +7083,23 @@ export def "x-amz-target-aws-glue-stop-crawler StopCrawler" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-174
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-174
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StopCrawler")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7110,7 +7110,7 @@ export def "x-amz-target-aws-glue-stop-crawler StopCrawler" [
 #
 # POST /#X-Amz-Target=AWSGlue.StopCrawlerSchedule
 # operationId: StopCrawlerSchedule
-export def "x-amz-target-aws-glue-stop-crawler-schedule StopCrawlerSchedule" [
+export def "x-amz-target-aws-glue-stop-crawler-schedule stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7119,23 +7119,23 @@ export def "x-amz-target-aws-glue-stop-crawler-schedule StopCrawlerSchedule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-175
-  CrawlerName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-175
+  crawler_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StopCrawlerSchedule")
-  let body = {CrawlerName: $CrawlerName} | compact
+  let body = {"CrawlerName": $crawler_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7146,7 +7146,7 @@ export def "x-amz-target-aws-glue-stop-crawler-schedule StopCrawlerSchedule" [
 #
 # POST /#X-Amz-Target=AWSGlue.StopSession
 # operationId: StopSession
-export def "x-amz-target-aws-glue-stop-session StopSession" [
+export def "x-amz-target-aws-glue-stop-session stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7155,24 +7155,24 @@ export def "x-amz-target-aws-glue-stop-session StopSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-176
-  Id: any
-  --RequestOrigin: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-176
+  id: any
+  --request-origin: any
 ]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StopSession")
-  let body = {Id: $Id, RequestOrigin: $RequestOrigin} | compact
+  let body = {"Id": $id, "RequestOrigin": $request_origin} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7183,7 +7183,7 @@ export def "x-amz-target-aws-glue-stop-session StopSession" [
 #
 # POST /#X-Amz-Target=AWSGlue.StopTrigger
 # operationId: StopTrigger
-export def "x-amz-target-aws-glue-stop-trigger StopTrigger" [
+export def "x-amz-target-aws-glue-stop-trigger stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7192,23 +7192,23 @@ export def "x-amz-target-aws-glue-stop-trigger StopTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-177
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-177
+  name: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StopTrigger")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7219,7 +7219,7 @@ export def "x-amz-target-aws-glue-stop-trigger StopTrigger" [
 #
 # POST /#X-Amz-Target=AWSGlue.StopWorkflowRun
 # operationId: StopWorkflowRun
-export def "x-amz-target-aws-glue-stop-workflow-run StopWorkflowRun" [
+export def "x-amz-target-aws-glue-stop-workflow-run stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7228,24 +7228,24 @@ export def "x-amz-target-aws-glue-stop-workflow-run StopWorkflowRun" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-178
-  Name: any
-  RunId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-178
+  name: any
+  run_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.StopWorkflowRun")
-  let body = {Name: $Name, RunId: $RunId} | compact
+  let body = {"Name": $name, "RunId": $run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7256,7 +7256,7 @@ export def "x-amz-target-aws-glue-stop-workflow-run StopWorkflowRun" [
 #
 # POST /#X-Amz-Target=AWSGlue.TagResource
 # operationId: TagResource
-export def "x-amz-target-aws-glue-tag-resource TagResource" [
+export def "x-amz-target-aws-glue-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7265,24 +7265,24 @@ export def "x-amz-target-aws-glue-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-179
-  ResourceArn: any
-  TagsToAdd: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-179
+  resource_arn: any
+  tags_to_add: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.TagResource")
-  let body = {ResourceArn: $ResourceArn, TagsToAdd: $TagsToAdd} | compact
+  let body = {"ResourceArn": $resource_arn, "TagsToAdd": $tags_to_add} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7293,7 +7293,7 @@ export def "x-amz-target-aws-glue-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=AWSGlue.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-aws-glue-untag-resource UntagResource" [
+export def "x-amz-target-aws-glue-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7302,24 +7302,24 @@ export def "x-amz-target-aws-glue-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-180
-  ResourceArn: any
-  TagsToRemove: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-180
+  resource_arn: any
+  tags_to_remove: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagsToRemove: $TagsToRemove} | compact
+  let body = {"ResourceArn": $resource_arn, "TagsToRemove": $tags_to_remove} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7330,7 +7330,7 @@ export def "x-amz-target-aws-glue-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateBlueprint
 # operationId: UpdateBlueprint
-export def "x-amz-target-aws-glue-update-blueprint UpdateBlueprint" [
+export def "x-amz-target-aws-glue-update-blueprint update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7339,25 +7339,25 @@ export def "x-amz-target-aws-glue-update-blueprint UpdateBlueprint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-181
-  Name: any
-  --Description: any
-  BlueprintLocation: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-181
+  name: any
+  --description: any
+  blueprint_location: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateBlueprint")
-  let body = {Name: $Name, Description: $Description, BlueprintLocation: $BlueprintLocation} | compact
+  let body = {"Name": $name, "Description": $description, "BlueprintLocation": $blueprint_location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7368,7 +7368,7 @@ export def "x-amz-target-aws-glue-update-blueprint UpdateBlueprint" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateClassifier
 # operationId: UpdateClassifier
-export def "x-amz-target-aws-glue-update-classifier UpdateClassifier" [
+export def "x-amz-target-aws-glue-update-classifier update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7377,26 +7377,26 @@ export def "x-amz-target-aws-glue-update-classifier UpdateClassifier" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-182
-  --GrokClassifier: any
-  --XMLClassifier: any
-  --JsonClassifier: any
-  --CsvClassifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-182
+  --grok-classifier: any
+  --xml-classifier: any
+  --json-classifier: any
+  --csv-classifier: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateClassifier")
-  let body = {GrokClassifier: $GrokClassifier, XMLClassifier: $XMLClassifier, JsonClassifier: $JsonClassifier, CsvClassifier: $CsvClassifier} | compact
+  let body = {"GrokClassifier": $grok_classifier, "XMLClassifier": $xml_classifier, "JsonClassifier": $json_classifier, "CsvClassifier": $csv_classifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7407,7 +7407,7 @@ export def "x-amz-target-aws-glue-update-classifier UpdateClassifier" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateColumnStatisticsForPartition
 # operationId: UpdateColumnStatisticsForPartition
-export def "x-amz-target-aws-glue-update-column-statistics-for-partition UpdateColumnStatisticsForPartition" [
+export def "x-amz-target-aws-glue-update-column-statistics-for-partition update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7416,27 +7416,27 @@ export def "x-amz-target-aws-glue-update-column-statistics-for-partition UpdateC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-183
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionValues: any
-  ColumnStatisticsList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-183
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partition_values: any
+  column_statistics_list: any
 ]: any -> record<Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateColumnStatisticsForPartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionValues: $PartitionValues, ColumnStatisticsList: $ColumnStatisticsList} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionValues": $partition_values, "ColumnStatisticsList": $column_statistics_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7447,7 +7447,7 @@ export def "x-amz-target-aws-glue-update-column-statistics-for-partition UpdateC
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateColumnStatisticsForTable
 # operationId: UpdateColumnStatisticsForTable
-export def "x-amz-target-aws-glue-update-column-statistics-for-table UpdateColumnStatisticsForTable" [
+export def "x-amz-target-aws-glue-update-column-statistics-for-table update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7456,26 +7456,26 @@ export def "x-amz-target-aws-glue-update-column-statistics-for-table UpdateColum
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-184
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  ColumnStatisticsList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-184
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  column_statistics_list: any
 ]: any -> record<Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateColumnStatisticsForTable")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, ColumnStatisticsList: $ColumnStatisticsList} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "ColumnStatisticsList": $column_statistics_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7486,7 +7486,7 @@ export def "x-amz-target-aws-glue-update-column-statistics-for-table UpdateColum
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateConnection
 # operationId: UpdateConnection
-export def "x-amz-target-aws-glue-update-connection UpdateConnection" [
+export def "x-amz-target-aws-glue-update-connection update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7495,25 +7495,25 @@ export def "x-amz-target-aws-glue-update-connection UpdateConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-185
-  --CatalogId: any
-  Name: any
-  ConnectionInput: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-185
+  --catalog-id: any
+  name: any
+  connection_input: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateConnection")
-  let body = {CatalogId: $CatalogId, Name: $Name, ConnectionInput: $ConnectionInput} | compact
+  let body = {"CatalogId": $catalog_id, "Name": $name, "ConnectionInput": $connection_input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7524,7 +7524,7 @@ export def "x-amz-target-aws-glue-update-connection UpdateConnection" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateCrawler
 # operationId: UpdateCrawler
-export def "x-amz-target-aws-glue-update-crawler UpdateCrawler" [
+export def "x-amz-target-aws-glue-update-crawler update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7533,36 +7533,36 @@ export def "x-amz-target-aws-glue-update-crawler UpdateCrawler" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-186
-  Name: any
-  --Role: any
-  --DatabaseName: any
-  --Description: any
-  --Targets: any
-  --Schedule: any
-  --Classifiers: any
-  --TablePrefix: any
-  --SchemaChangePolicy: any
-  --RecrawlPolicy: any
-  --LineageConfiguration: any
-  --LakeFormationConfiguration: any
-  --Configuration: any
-  --CrawlerSecurityConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-186
+  name: any
+  --role: any
+  --database-name: any
+  --description: any
+  --targets: any
+  --schedule: any
+  --classifiers: any
+  --table-prefix: any
+  --schema-change-policy: any
+  --recrawl-policy: any
+  --lineage-configuration: any
+  --lake-formation-configuration: any
+  --configuration: any
+  --crawler-security-configuration: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateCrawler")
-  let body = {Name: $Name, Role: $Role, DatabaseName: $DatabaseName, Description: $Description, Targets: $Targets, Schedule: $Schedule, Classifiers: $Classifiers, TablePrefix: $TablePrefix, SchemaChangePolicy: $SchemaChangePolicy, RecrawlPolicy: $RecrawlPolicy, LineageConfiguration: $LineageConfiguration, LakeFormationConfiguration: $LakeFormationConfiguration, Configuration: $Configuration, CrawlerSecurityConfiguration: $CrawlerSecurityConfiguration} | compact
+  let body = {"Name": $name, "Role": $role, "DatabaseName": $database_name, "Description": $description, "Targets": $targets, "Schedule": $schedule, "Classifiers": $classifiers, "TablePrefix": $table_prefix, "SchemaChangePolicy": $schema_change_policy, "RecrawlPolicy": $recrawl_policy, "LineageConfiguration": $lineage_configuration, "LakeFormationConfiguration": $lake_formation_configuration, "Configuration": $configuration, "CrawlerSecurityConfiguration": $crawler_security_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7573,7 +7573,7 @@ export def "x-amz-target-aws-glue-update-crawler UpdateCrawler" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateCrawlerSchedule
 # operationId: UpdateCrawlerSchedule
-export def "x-amz-target-aws-glue-update-crawler-schedule UpdateCrawlerSchedule" [
+export def "x-amz-target-aws-glue-update-crawler-schedule update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7582,24 +7582,24 @@ export def "x-amz-target-aws-glue-update-crawler-schedule UpdateCrawlerSchedule"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-187
-  CrawlerName: any
-  --Schedule: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-187
+  crawler_name: any
+  --schedule: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateCrawlerSchedule")
-  let body = {CrawlerName: $CrawlerName, Schedule: $Schedule} | compact
+  let body = {"CrawlerName": $crawler_name, "Schedule": $schedule} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7610,7 +7610,7 @@ export def "x-amz-target-aws-glue-update-crawler-schedule UpdateCrawlerSchedule"
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateDataQualityRuleset
 # operationId: UpdateDataQualityRuleset
-export def "x-amz-target-aws-glue-update-data-quality-ruleset UpdateDataQualityRuleset" [
+export def "x-amz-target-aws-glue-update-data-quality-ruleset update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7619,25 +7619,25 @@ export def "x-amz-target-aws-glue-update-data-quality-ruleset UpdateDataQualityR
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-188
-  Name: any
-  --Description: any
-  --Ruleset: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-188
+  name: any
+  --description: any
+  --ruleset: any
 ]: any -> record<Name: record, Description: record, Ruleset: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateDataQualityRuleset")
-  let body = {Name: $Name, Description: $Description, Ruleset: $Ruleset} | compact
+  let body = {"Name": $name, "Description": $description, "Ruleset": $ruleset} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7648,7 +7648,7 @@ export def "x-amz-target-aws-glue-update-data-quality-ruleset UpdateDataQualityR
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateDatabase
 # operationId: UpdateDatabase
-export def "x-amz-target-aws-glue-update-database UpdateDatabase" [
+export def "x-amz-target-aws-glue-update-database update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7657,25 +7657,25 @@ export def "x-amz-target-aws-glue-update-database UpdateDatabase" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-189
-  --CatalogId: any
-  Name: any
-  DatabaseInput: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-189
+  --catalog-id: any
+  name: any
+  database_input: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateDatabase")
-  let body = {CatalogId: $CatalogId, Name: $Name, DatabaseInput: $DatabaseInput} | compact
+  let body = {"CatalogId": $catalog_id, "Name": $name, "DatabaseInput": $database_input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7686,7 +7686,7 @@ export def "x-amz-target-aws-glue-update-database UpdateDatabase" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateDevEndpoint
 # operationId: UpdateDevEndpoint
-export def "x-amz-target-aws-glue-update-dev-endpoint UpdateDevEndpoint" [
+export def "x-amz-target-aws-glue-update-dev-endpoint update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7695,30 +7695,30 @@ export def "x-amz-target-aws-glue-update-dev-endpoint UpdateDevEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-190
-  EndpointName: any
-  --PublicKey: any
-  --AddPublicKeys: any
-  --DeletePublicKeys: any
-  --CustomLibraries: any
-  --UpdateEtlLibraries: any
-  --DeleteArguments: any
-  --AddArguments: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-190
+  endpoint_name: any
+  --public-key: any
+  --add-public-keys: any
+  --delete-public-keys: any
+  --custom-libraries: any
+  --update-etl-libraries: any
+  --delete-arguments: any
+  --add-arguments: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateDevEndpoint")
-  let body = {EndpointName: $EndpointName, PublicKey: $PublicKey, AddPublicKeys: $AddPublicKeys, DeletePublicKeys: $DeletePublicKeys, CustomLibraries: $CustomLibraries, UpdateEtlLibraries: $UpdateEtlLibraries, DeleteArguments: $DeleteArguments, AddArguments: $AddArguments} | compact
+  let body = {"EndpointName": $endpoint_name, "PublicKey": $public_key, "AddPublicKeys": $add_public_keys, "DeletePublicKeys": $delete_public_keys, "CustomLibraries": $custom_libraries, "UpdateEtlLibraries": $update_etl_libraries, "DeleteArguments": $delete_arguments, "AddArguments": $add_arguments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7729,7 +7729,7 @@ export def "x-amz-target-aws-glue-update-dev-endpoint UpdateDevEndpoint" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateJob
 # operationId: UpdateJob
-export def "x-amz-target-aws-glue-update-job UpdateJob" [
+export def "x-amz-target-aws-glue-update-job update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7738,24 +7738,24 @@ export def "x-amz-target-aws-glue-update-job UpdateJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-191
-  JobName: any
-  JobUpdate: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-191
+  job_name: any
+  job_update: any
 ]: any -> record<JobName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateJob")
-  let body = {JobName: $JobName, JobUpdate: $JobUpdate} | compact
+  let body = {"JobName": $job_name, "JobUpdate": $job_update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7766,7 +7766,7 @@ export def "x-amz-target-aws-glue-update-job UpdateJob" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateJobFromSourceControl
 # operationId: UpdateJobFromSourceControl
-export def "x-amz-target-aws-glue-update-job-from-source-control UpdateJobFromSourceControl" [
+export def "x-amz-target-aws-glue-update-job-from-source-control update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7775,31 +7775,31 @@ export def "x-amz-target-aws-glue-update-job-from-source-control UpdateJobFromSo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-192
-  --JobName: any
-  --Provider: any
-  --RepositoryName: any
-  --RepositoryOwner: any
-  --BranchName: any
-  --Folder: any
-  --CommitId: any
-  --AuthStrategy: any
-  --AuthToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-192
+  --job-name: any
+  --provider: any
+  --repository-name: any
+  --repository-owner: any
+  --branch-name: any
+  --folder: any
+  --commit-id: any
+  --auth-strategy: any
+  --auth-token: any
 ]: any -> record<JobName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateJobFromSourceControl")
-  let body = {JobName: $JobName, Provider: $Provider, RepositoryName: $RepositoryName, RepositoryOwner: $RepositoryOwner, BranchName: $BranchName, Folder: $Folder, CommitId: $CommitId, AuthStrategy: $AuthStrategy, AuthToken: $AuthToken} | compact
+  let body = {"JobName": $job_name, "Provider": $provider, "RepositoryName": $repository_name, "RepositoryOwner": $repository_owner, "BranchName": $branch_name, "Folder": $folder, "CommitId": $commit_id, "AuthStrategy": $auth_strategy, "AuthToken": $auth_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7810,7 +7810,7 @@ export def "x-amz-target-aws-glue-update-job-from-source-control UpdateJobFromSo
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateMLTransform
 # operationId: UpdateMLTransform
-export def "x-amz-target-aws-glue-update-ml-transform UpdateMLTransform" [
+export def "x-amz-target-aws-glue-update-ml-transform update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7819,33 +7819,33 @@ export def "x-amz-target-aws-glue-update-ml-transform UpdateMLTransform" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-193
-  TransformId: any
-  --Name: any
-  --Description: any
-  --Parameters: any
-  --Role: any
-  --GlueVersion: any
-  --MaxCapacity: any
-  --WorkerType: any
-  --NumberOfWorkers: any
-  --Timeout: any
-  --MaxRetries: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-193
+  transform_id: any
+  --name: any
+  --description: any
+  --parameters: any
+  --role: any
+  --glue-version: any
+  --max-capacity: any
+  --worker-type: any
+  --number-of-workers: any
+  --timeout: any
+  --max-retries: any
 ]: any -> record<TransformId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateMLTransform")
-  let body = {TransformId: $TransformId, Name: $Name, Description: $Description, Parameters: $Parameters, Role: $Role, GlueVersion: $GlueVersion, MaxCapacity: $MaxCapacity, WorkerType: $WorkerType, NumberOfWorkers: $NumberOfWorkers, Timeout: $Timeout, MaxRetries: $MaxRetries} | compact
+  let body = {"TransformId": $transform_id, "Name": $name, "Description": $description, "Parameters": $parameters, "Role": $role, "GlueVersion": $glue_version, "MaxCapacity": $max_capacity, "WorkerType": $worker_type, "NumberOfWorkers": $number_of_workers, "Timeout": $timeout, "MaxRetries": $max_retries} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7856,7 +7856,7 @@ export def "x-amz-target-aws-glue-update-ml-transform UpdateMLTransform" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdatePartition
 # operationId: UpdatePartition
-export def "x-amz-target-aws-glue-update-partition UpdatePartition" [
+export def "x-amz-target-aws-glue-update-partition update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7865,27 +7865,27 @@ export def "x-amz-target-aws-glue-update-partition UpdatePartition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-194
-  --CatalogId: any
-  DatabaseName: any
-  TableName: any
-  PartitionValueList: any
-  PartitionInput: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-194
+  --catalog-id: any
+  database_name: any
+  table_name: any
+  partition_value_list: any
+  partition_input: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdatePartition")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableName: $TableName, PartitionValueList: $PartitionValueList, PartitionInput: $PartitionInput} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableName": $table_name, "PartitionValueList": $partition_value_list, "PartitionInput": $partition_input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7896,7 +7896,7 @@ export def "x-amz-target-aws-glue-update-partition UpdatePartition" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateRegistry
 # operationId: UpdateRegistry
-export def "x-amz-target-aws-glue-update-registry UpdateRegistry" [
+export def "x-amz-target-aws-glue-update-registry update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7905,24 +7905,24 @@ export def "x-amz-target-aws-glue-update-registry UpdateRegistry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-195
-  RegistryId: any
-  Description: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-195
+  registry_id: any
+  description: any
 ]: any -> record<RegistryName: record, RegistryArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateRegistry")
-  let body = {RegistryId: $RegistryId, Description: $Description} | compact
+  let body = {"RegistryId": $registry_id, "Description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7933,7 +7933,7 @@ export def "x-amz-target-aws-glue-update-registry UpdateRegistry" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateSchema
 # operationId: UpdateSchema
-export def "x-amz-target-aws-glue-update-schema UpdateSchema" [
+export def "x-amz-target-aws-glue-update-schema update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7942,26 +7942,26 @@ export def "x-amz-target-aws-glue-update-schema UpdateSchema" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-196
-  SchemaId: any
-  --SchemaVersionNumber: any
-  --Compatibility: any
-  --Description: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-196
+  schema_id: any
+  --schema-version-number: any
+  --compatibility: any
+  --description: any
 ]: any -> record<SchemaArn: record, SchemaName: record, RegistryName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateSchema")
-  let body = {SchemaId: $SchemaId, SchemaVersionNumber: $SchemaVersionNumber, Compatibility: $Compatibility, Description: $Description} | compact
+  let body = {"SchemaId": $schema_id, "SchemaVersionNumber": $schema_version_number, "Compatibility": $compatibility, "Description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7972,7 +7972,7 @@ export def "x-amz-target-aws-glue-update-schema UpdateSchema" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateSourceControlFromJob
 # operationId: UpdateSourceControlFromJob
-export def "x-amz-target-aws-glue-update-source-control-from-job UpdateSourceControlFromJob" [
+export def "x-amz-target-aws-glue-update-source-control-from-job update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7981,31 +7981,31 @@ export def "x-amz-target-aws-glue-update-source-control-from-job UpdateSourceCon
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-197
-  --JobName: any
-  --Provider: any
-  --RepositoryName: any
-  --RepositoryOwner: any
-  --BranchName: any
-  --Folder: any
-  --CommitId: any
-  --AuthStrategy: any
-  --AuthToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-197
+  --job-name: any
+  --provider: any
+  --repository-name: any
+  --repository-owner: any
+  --branch-name: any
+  --folder: any
+  --commit-id: any
+  --auth-strategy: any
+  --auth-token: any
 ]: any -> record<JobName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateSourceControlFromJob")
-  let body = {JobName: $JobName, Provider: $Provider, RepositoryName: $RepositoryName, RepositoryOwner: $RepositoryOwner, BranchName: $BranchName, Folder: $Folder, CommitId: $CommitId, AuthStrategy: $AuthStrategy, AuthToken: $AuthToken} | compact
+  let body = {"JobName": $job_name, "Provider": $provider, "RepositoryName": $repository_name, "RepositoryOwner": $repository_owner, "BranchName": $branch_name, "Folder": $folder, "CommitId": $commit_id, "AuthStrategy": $auth_strategy, "AuthToken": $auth_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8016,7 +8016,7 @@ export def "x-amz-target-aws-glue-update-source-control-from-job UpdateSourceCon
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateTable
 # operationId: UpdateTable
-export def "x-amz-target-aws-glue-update-table UpdateTable" [
+export def "x-amz-target-aws-glue-update-table update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8025,28 +8025,28 @@ export def "x-amz-target-aws-glue-update-table UpdateTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-198
-  --CatalogId: any
-  DatabaseName: any
-  TableInput: any
-  --SkipArchive: any
-  --TransactionId: any
-  --VersionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-198
+  --catalog-id: any
+  database_name: any
+  table_input: any
+  --skip-archive: any
+  --transaction-id: any
+  --version-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateTable")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, TableInput: $TableInput, SkipArchive: $SkipArchive, TransactionId: $TransactionId, VersionId: $VersionId} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "TableInput": $table_input, "SkipArchive": $skip_archive, "TransactionId": $transaction_id, "VersionId": $version_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8057,7 +8057,7 @@ export def "x-amz-target-aws-glue-update-table UpdateTable" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateTrigger
 # operationId: UpdateTrigger
-export def "x-amz-target-aws-glue-update-trigger UpdateTrigger" [
+export def "x-amz-target-aws-glue-update-trigger update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8066,24 +8066,24 @@ export def "x-amz-target-aws-glue-update-trigger UpdateTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-199
-  Name: any
-  TriggerUpdate: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-199
+  name: any
+  trigger_update: any
 ]: any -> record<Trigger: record<Name: record, WorkflowName: record, Id: record, Type: record, State: record, Description: record, Schedule: record, Actions: record, Predicate: record<Logical: record, Conditions: record>, EventBatchingCondition: record<BatchSize: record, BatchWindow: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateTrigger")
-  let body = {Name: $Name, TriggerUpdate: $TriggerUpdate} | compact
+  let body = {"Name": $name, "TriggerUpdate": $trigger_update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8094,7 +8094,7 @@ export def "x-amz-target-aws-glue-update-trigger UpdateTrigger" [
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateUserDefinedFunction
 # operationId: UpdateUserDefinedFunction
-export def "x-amz-target-aws-glue-update-user-defined-function UpdateUserDefinedFunction" [
+export def "x-amz-target-aws-glue-update-user-defined-function update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8103,26 +8103,26 @@ export def "x-amz-target-aws-glue-update-user-defined-function UpdateUserDefined
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-200
-  --CatalogId: any
-  DatabaseName: any
-  FunctionName: any
-  FunctionInput: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-200
+  --catalog-id: any
+  database_name: any
+  function_name: any
+  function_input: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateUserDefinedFunction")
-  let body = {CatalogId: $CatalogId, DatabaseName: $DatabaseName, FunctionName: $FunctionName, FunctionInput: $FunctionInput} | compact
+  let body = {"CatalogId": $catalog_id, "DatabaseName": $database_name, "FunctionName": $function_name, "FunctionInput": $function_input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8133,7 +8133,7 @@ export def "x-amz-target-aws-glue-update-user-defined-function UpdateUserDefined
 #
 # POST /#X-Amz-Target=AWSGlue.UpdateWorkflow
 # operationId: UpdateWorkflow
-export def "x-amz-target-aws-glue-update-workflow UpdateWorkflow" [
+export def "x-amz-target-aws-glue-update-workflow update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8142,26 +8142,26 @@ export def "x-amz-target-aws-glue-update-workflow UpdateWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-201
-  Name: any
-  --Description: any
-  --DefaultRunProperties: any
-  --MaxConcurrentRuns: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-201
+  name: any
+  --description: any
+  --default-run-properties: any
+  --max-concurrent-runs: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSGlue.UpdateWorkflow")
-  let body = {Name: $Name, Description: $Description, DefaultRunProperties: $DefaultRunProperties, MaxConcurrentRuns: $MaxConcurrentRuns} | compact
+  let body = {"Name": $name, "Description": $description, "DefaultRunProperties": $default_run_properties, "MaxConcurrentRuns": $max_concurrent_runs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

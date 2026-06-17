@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "amz-amazon-lookup-buy-recommendations requestBuyRecommendation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "amz-amazon-lookup-buy-recommendations request" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /amz/amazon-lookup-buy-recommendations
 # operationId: requestBuyRecommendation
-export def "amz-amazon-lookup-buy-recommendations requestBuyRecommendation" [
+export def "amz-amazon-lookup-buy-recommendations request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,7 +116,7 @@ export def "amz-amazon-lookup-buy-recommendations requestBuyRecommendation" [
 #
 # GET /amz/amazon-lookup-product
 # operationId: requestProduct
-export def "amz-amazon-lookup-product requestProduct" [
+export def "amz-amazon-lookup-product request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,13 +151,13 @@ export def "amz-amazon-search-by-keyword keywordSearch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --keyword: string # keyword to search
-  --domainCode: string # domain for the search
-  --sortBy: string # sort option (default: relevanceblender)
-  --numberOfProducts: int # number of the results (max 20) (default: 20)
+  --domain-code: string # domain for the search
+  --sort-by: string # sort option (default: relevanceblender)
+  --number-of-products: int # number of the results (max 20) (default: 20)
 ]: nothing -> record<domainCode: string, foundProducts: list<string>, keyword: string, numberOfProducts: int, responseMessage: string, responseStatus: string, sortStrategy: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keyword" $keyword "scalar") (serialize-qp "domainCode" $domainCode "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "numberOfProducts" $numberOfProducts "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "keyword" $keyword "scalar") (serialize-qp "domainCode" $domain_code "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "numberOfProducts" $number_of_products "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amz/amazon-search-by-keyword" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

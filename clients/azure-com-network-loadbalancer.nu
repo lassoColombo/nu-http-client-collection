@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-load-balancers ListAll" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-load-balancers list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/loadBalancers
 # operationId: LoadBalancers_ListAll
-export def "subscriptions-providers-microsoft-network-load-balancers ListAll" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-load-balancers list-all" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-network-load-balancers ListAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/loadBalancers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/loadBalancers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "subscriptions-providers-microsoft-network-load-balancers ListAll" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers
 # operationId: LoadBalancers_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers List" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,10 +144,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}
 # operationId: LoadBalancers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers Delete" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers delete" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,10 +171,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}
 # operationId: LoadBalancers_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers Get" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers get" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,10 +199,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}
 # operationId: LoadBalancers_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers UpdateTags" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,8 +218,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,10 +232,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 # operationId: LoadBalancers_CreateOrUpdate
 # --properties shape: {backendAddressPools?: list, frontendIPConfigurations?: list, inboundNatPools?: list, inboundNatRules?: list, loadBalancingRules?: list, outboundRules?: list, probes?: list, resourceGuid?: string}
 # --sku shape: {name?: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers CreateOrUpdate" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,8 +256,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)" $qp)
-  let body = {etag: $etag, properties: $properties, sku: $sku, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}") $qp)
+  let body = {"etag": $etag, "properties": $properties, "sku": $sku, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -268,10 +268,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/backendAddressPools
 # operationId: LoadBalancerBackendAddressPools_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-backend-address-pools List" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-backend-address-pools list" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/backendAddressPools" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/backendAddressPools") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,11 +295,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/backendAddressPools/{backendAddressPoolName}
 # operationId: LoadBalancerBackendAddressPools_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-backend-address-pools Get" [
-  resourceGroupName: string
-  loadBalancerName: string
-  backendAddressPoolName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-backend-address-pools get" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
+  backend_address_pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/backendAddressPools/($backendAddressPoolName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name, backend_address_pool_name: $backend_address_pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/backendAddressPools/{backend_address_pool_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,10 +323,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/frontendIPConfigurations
 # operationId: LoadBalancerFrontendIPConfigurations_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-frontend-ip-configurations List" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-frontend-ip-configurations list" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/frontendIPConfigurations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/frontendIPConfigurations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,11 +350,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/frontendIPConfigurations/{frontendIPConfigurationName}
 # operationId: LoadBalancerFrontendIPConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-frontend-ip-configurations Get" [
-  resourceGroupName: string
-  loadBalancerName: string
-  frontendIPConfigurationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-frontend-ip-configurations get" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
+  frontend_ip_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/frontendIPConfigurations/($frontendIPConfigurationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name, frontend_ip_configuration_name: $frontend_ip_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/frontendIPConfigurations/{frontend_ip_configuration_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -378,10 +378,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/inboundNatRules
 # operationId: InboundNatRules_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules List" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/inboundNatRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/inboundNatRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -405,11 +405,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/inboundNatRules/{inboundNatRuleName}
 # operationId: InboundNatRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules Delete" [
-  resourceGroupName: string
-  loadBalancerName: string
-  inboundNatRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
+  inbound_nat_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,7 +423,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/inboundNatRules/($inboundNatRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name, inbound_nat_rule_name: $inbound_nat_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/inboundNatRules/{inbound_nat_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -433,11 +433,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/inboundNatRules/{inboundNatRuleName}
 # operationId: InboundNatRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules Get" [
-  resourceGroupName: string
-  loadBalancerName: string
-  inboundNatRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
+  inbound_nat_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/inboundNatRules/($inboundNatRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name, inbound_nat_rule_name: $inbound_nat_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/inboundNatRules/{inbound_nat_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,11 +463,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/inboundNatRules/{inboundNatRuleName}
 # operationId: InboundNatRules_CreateOrUpdate
 # --properties shape: {backendPort?: int, enableFloatingIP?: bool, enableTcpReset?: bool, frontendIPConfiguration?: any, frontendPort?: int, idleTimeoutInMinutes?: int, protocol?: "Udp"|"Tcp"|"All"}
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules CreateOrUpdate" [
-  resourceGroupName: string
-  loadBalancerName: string
-  inboundNatRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-inbound-nat-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
+  inbound_nat_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,8 +486,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/inboundNatRules/($inboundNatRuleName)" $qp)
-  let body = {etag: $etag, name: $name, properties: $properties, id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name, inbound_nat_rule_name: $inbound_nat_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/inboundNatRules/{inbound_nat_rule_name}") $qp)
+  let body = {"etag": $etag, "name": $name, "properties": $properties, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,10 +498,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/loadBalancingRules
 # operationId: LoadBalancerLoadBalancingRules_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-load-balancing-rules List" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-load-balancing-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,7 +515,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/loadBalancingRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/loadBalancingRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -525,11 +525,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/loadBalancingRules/{loadBalancingRuleName}
 # operationId: LoadBalancerLoadBalancingRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-load-balancing-rules Get" [
-  resourceGroupName: string
-  loadBalancerName: string
-  loadBalancingRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-load-balancing-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
+  load_balancing_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +543,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/loadBalancingRules/($loadBalancingRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name, load_balancing_rule_name: $load_balancing_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/loadBalancingRules/{load_balancing_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,10 +553,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/networkInterfaces
 # operationId: LoadBalancerNetworkInterfaces_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-network-interfaces List" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-network-interfaces list" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +570,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/networkInterfaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/networkInterfaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -580,10 +580,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/outboundRules
 # operationId: LoadBalancerOutboundRules_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-outbound-rules List" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-outbound-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,7 +597,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/outboundRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/outboundRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,11 +607,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/outboundRules/{outboundRuleName}
 # operationId: LoadBalancerOutboundRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-outbound-rules Get" [
-  resourceGroupName: string
-  loadBalancerName: string
-  outboundRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-outbound-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
+  outbound_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/outboundRules/($outboundRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name, outbound_rule_name: $outbound_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/outboundRules/{outbound_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -635,10 +635,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/probes
 # operationId: LoadBalancerProbes_List
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-probes List" [
-  resourceGroupName: string
-  loadBalancerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-probes list" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,7 +652,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/probes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/probes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -662,11 +662,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/loadBalancers/{loadBalancerName}/probes/{probeName}
 # operationId: LoadBalancerProbes_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-probes Get" [
-  resourceGroupName: string
-  loadBalancerName: string
-  probeName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-load-balancers-probes get" [
+  subscription_id: string
+  resource_group_name: string
+  load_balancer_name: string
+  probe_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-load-balan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/loadBalancers/($loadBalancerName)/probes/($probeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, load_balancer_name: $load_balancer_name, probe_name: $probe_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/loadBalancers/{load_balancer_name}/probes/{probe_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

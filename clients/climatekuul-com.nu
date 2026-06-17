@@ -101,9 +101,9 @@ export def "airtravel-coordinates airtravelCoordinates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # e.g. application/x-www-form-urlencoded
-  apiKey_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
-  apiKey_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
+  --content-type: string # e.g. application/x-www-form-urlencoded
+  api_key_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
+  api_key_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
   destination_airport_latitude: float # Destination latitude (like:  50.870752, value = -90<=x<=90) (format: double, e.g. 24.9056)
   destination_airport_longitude: float # Destination longitude (like:  4.669490, value = -180<=x<=180) (format: double, e.g. 67.1569)
   number_of_passengers: int # Number of passengers (like: 1, 2 ,3 ) (format: int32, e.g. 2)
@@ -116,9 +116,9 @@ export def "airtravel-coordinates airtravelCoordinates" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, destination_airport_latitude: $destination_airport_latitude, destination_airport_longitude: $destination_airport_longitude, number_of_passengers: $number_of_passengers, origin_airport_latitude: $origin_airport_latitude, origin_airport_longitude: $origin_airport_longitude, travel_class: $travel_class, travel_mode: $travel_mode} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "destination_airport_latitude": $destination_airport_latitude, "destination_airport_longitude": $destination_airport_longitude, "number_of_passengers": $number_of_passengers, "origin_airport_latitude": $origin_airport_latitude, "origin_airport_longitude": $origin_airport_longitude, "travel_class": $travel_class, "travel_mode": $travel_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -138,17 +138,17 @@ export def "airtravel-coordinates-confirm-carbon-offset confirmCarbonOffset4" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  carbonOffset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
-  --contactEmail: string # Contact email (e.g. example@example.com)
-  --contactFirstName: string # Contact first name (e.g. abc)
-  --contactLastName: string # Contact last name (e.g. xyz)
+  carbon_offset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
+  --contact-email: string # Contact email (e.g. example@example.com)
+  --contact-first-name: string # Contact first name (e.g. abc)
+  --contact-last-name: string # Contact last name (e.g. xyz)
   transaction_id: string # transaction_id (e.g. 60a78ed201d88997746c91b5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmCarbonOffset")
-  let body = {carbonOffset: $carbonOffset, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, transaction_id: $transaction_id} | compact
+  let body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -168,17 +168,17 @@ export def "airtravel-coordinates-confirm-payment confirmPayment4" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPayment: string # Confirm Payment (Value = y/n) (e.g. y)
-  paymentID: int # Payment Id (format: int32, e.g. 34567878)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_payment: string # Confirm Payment (Value = y/n) (e.g. y)
+  payment_id: int # Payment Id (format: int32, e.g. 34567878)
   transaction_id: string # transaction_id (e.g. 60a78ed201d88997746c91b5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmPayment")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPayment: $confirmPayment, paymentID: $paymentID, transaction_id: $transaction_id} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -198,16 +198,16 @@ export def "airtravel-coordinates-confirm-planting confirmsPlanting4" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPlanting: string # Confirm Planting (Value = y/n) (e.g. y)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_planting: string # Confirm Planting (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a78ed201d88997746c91b5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmPlanting")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPlanting: $confirmPlanting, transaction_id: $transaction_id} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,14 +227,14 @@ export def "airtravel-coordinates-confirm-transaction confirmPaymentOfTransactio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  confirmTransaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
+  confirm_transaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a78ed201d88997746c91b5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelCoordinates/confirmTransaction")
-  let body = {confirmTransaction: $confirmTransaction, transaction_id: $transaction_id} | compact
+  let body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,11 +257,11 @@ export def "airtravel-multileg airtravelMultileg" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string
-  apiKey_l2: string
-  contactEmail: string
-  contactFirstName: string
-  contactLastName: string
+  api_key_l1: string
+  api_key_l2: string
+  contact_email: string
+  contact_first_name: string
+  contact_last_name: string
   leg1: record # e.g. {destination_airport_code: DXB, origin_airport_code: KHI, travel_class: Economy} — shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
   leg2: record # e.g. {destination_airport_code: DXB, origin_airport_code: KHI, travel_class: Economy} — shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
   leg3: record # e.g. {destination_airport_code: DXB, origin_airport_code: KHI, travel_class: Economy} — shape: {destination_airport_code: string, origin_airport_code: string, travel_class: string}
@@ -273,7 +273,7 @@ export def "airtravel-multileg airtravelMultileg" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, leg1: $leg1, leg2: $leg2, leg3: $leg3, legs_count: $legs_count, number_of_passengers: $number_of_passengers, travel_mode: $travel_mode} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "leg1": $leg1, "leg2": $leg2, "leg3": $leg3, "legs_count": $legs_count, "number_of_passengers": $number_of_passengers, "travel_mode": $travel_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,17 +293,17 @@ export def "airtravel-multileg-confirm-carbon-offset confirmCarbonOffset3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  carbonOffset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
-  --contactEmail: string # Contact email (e.g. example@example.com)
-  --contactFirstName: string # Contact first name (e.g. abc)
-  --contactLastName: string # Contact last name (e.g. xyz)
+  carbon_offset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
+  --contact-email: string # Contact email (e.g. example@example.com)
+  --contact-first-name: string # Contact first name (e.g. abc)
+  --contact-last-name: string # Contact last name (e.g. xyz)
   transaction_id: string # transaction_id (e.g. 60a75c0e94c8cb95a6d0e02e)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmCarbonOffset")
-  let body = {carbonOffset: $carbonOffset, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, transaction_id: $transaction_id} | compact
+  let body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -323,17 +323,17 @@ export def "airtravel-multileg-confirm-payment confirmPayment3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPayment: string # Confirm Payment (Value = y/n) (e.g. y)
-  paymentID: int # Payment Id (format: int32, e.g. 34567878)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_payment: string # Confirm Payment (Value = y/n) (e.g. y)
+  payment_id: int # Payment Id (format: int32, e.g. 34567878)
   transaction_id: string # transaction_id (e.g. 60a75c0e94c8cb95a6d0e02e)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmPayment")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPayment: $confirmPayment, paymentID: $paymentID, transaction_id: $transaction_id} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -353,16 +353,16 @@ export def "airtravel-multileg-confirm-planting confirmsPlanting3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPlanting: string # Confirm Planting (Value = y/n) (e.g. y)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_planting: string # Confirm Planting (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a75c0e94c8cb95a6d0e02e)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmPlanting")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPlanting: $confirmPlanting, transaction_id: $transaction_id} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -382,14 +382,14 @@ export def "airtravel-multileg-confirm-transaction confirmPaymentOfTransaction3"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  confirmTransaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
+  confirm_transaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a75c0e94c8cb95a6d0e02e)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/airtravelMultileg/confirmTransaction")
-  let body = {confirmTransaction: $confirmTransaction, transaction_id: $transaction_id} | compact
+  let body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -409,9 +409,9 @@ export def "ecommerce-delivery ecommerceDelivery" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # e.g. application/x-www-form-urlencoded
-  apiKey_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
-  apiKey_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
+  --content-type: string # e.g. application/x-www-form-urlencoded
+  api_key_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
+  api_key_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
   --destination-airport-code: string # valid airport code of destination (e.g. BRU)
   destination_latitude: float # valid latitude of destination (format: double, e.g. 50.870752)
   destination_longitude: float # valid longitude of destination (format: double, e.g. 4.66949)
@@ -425,9 +425,9 @@ export def "ecommerce-delivery ecommerceDelivery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, destination_airport_code: $destination_airport_code, destination_latitude: $destination_latitude, destination_longitude: $destination_longitude, origin_airport_code: $origin_airport_code, origin_latitude: $origin_latitude, origin_longitude: $origin_longitude, volumetric_weight: $volumetric_weight, waybill_type: $waybill_type} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "destination_airport_code": $destination_airport_code, "destination_latitude": $destination_latitude, "destination_longitude": $destination_longitude, "origin_airport_code": $origin_airport_code, "origin_latitude": $origin_latitude, "origin_longitude": $origin_longitude, "volumetric_weight": $volumetric_weight, "waybill_type": $waybill_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -447,17 +447,17 @@ export def "ecommerce-delivery-confirm-carbon-offset confirmCarbonOffset1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  carbonOffset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
-  --contactEmail: string # Contact email (e.g. example@example.com)
-  --contactFirstName: string # Contact first name (e.g. abc)
-  --contactLastName: string # Contact last name (e.g. xyz)
+  carbon_offset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
+  --contact-email: string # Contact email (e.g. example@example.com)
+  --contact-first-name: string # Contact first name (e.g. abc)
+  --contact-last-name: string # Contact last name (e.g. xyz)
   transaction_id: string # transaction_id (e.g. 60a766d401d88997746c91a0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmCarbonOffset")
-  let body = {carbonOffset: $carbonOffset, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, transaction_id: $transaction_id} | compact
+  let body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -477,17 +477,17 @@ export def "ecommerce-delivery-confirm-payment confirmPayment1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPayment: string # Confirm Payment (Value = y/n) (e.g. y)
-  paymentID: int # Payment Id (format: int32, e.g. 34567878)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_payment: string # Confirm Payment (Value = y/n) (e.g. y)
+  payment_id: int # Payment Id (format: int32, e.g. 34567878)
   transaction_id: string # transaction_id (e.g. 60a766d401d88997746c91a0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmPayment")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPayment: $confirmPayment, paymentID: $paymentID, transaction_id: $transaction_id} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,16 +507,16 @@ export def "ecommerce-delivery-confirm-planting confirmsPlanting2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPlanting: string # Confirm Planting (Value = y/n) (e.g. y)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_planting: string # Confirm Planting (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a766d401d88997746c91a0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmPlanting")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPlanting: $confirmPlanting, transaction_id: $transaction_id} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -536,14 +536,14 @@ export def "ecommerce-delivery-confirm-transaction confirmPaymentOfTransaction1"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  confirmTransaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
+  confirm_transaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a766d401d88997746c91a0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/ecommerceDelivery/confirmTransaction")
-  let body = {confirmTransaction: $confirmTransaction, transaction_id: $transaction_id} | compact
+  let body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -554,7 +554,7 @@ export def "ecommerce-delivery-confirm-transaction confirmPaymentOfTransaction1"
 #
 # POST /requestApiKey
 # operationId: requestApiKey
-export def "request-api-key requestApiKey" [
+export def "request-api-key request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,18 +563,18 @@ export def "request-api-key requestApiKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # Api Key for client (e.g. qNahlSrEaduQ)
-  apiKey_l2: string # Integration Partner Api Key (e.g. eCqMeAfaDBWG)
+  api_key_l1: string # Api Key for client (e.g. qNahlSrEaduQ)
+  api_key_l2: string # Integration Partner Api Key (e.g. eCqMeAfaDBWG)
   email: string # User email (e.g. abcd@gmail.com)
   password: int # User password (format: int32, e.g. 234)
-  userFirstName: string # User first name (e.g. usman)
-  userLastName: string # User last name (e.g. ch)
+  user_first_name: string # User first name (e.g. usman)
+  user_last_name: string # User last name (e.g. ch)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/requestApiKey")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, email: $email, password: $password, userFirstName: $userFirstName, userLastName: $userLastName} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "email": $email, "password": $password, "userFirstName": $user_first_name, "userLastName": $user_last_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -594,8 +594,8 @@ export def "road-distance roadDistance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
-  apiKey_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
+  api_key_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
+  api_key_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
   travel_distance: int # format: int32, e.g. 2450
   trip_end: int # timestamp in epoch time (like: 1606780799) (format: int32, e.g. 18)
   trip_start: int # timestamp in epoch time (like: 1604188800) (format: int32, e.g. 16)
@@ -607,7 +607,7 @@ export def "road-distance roadDistance" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, travel_distance: $travel_distance, trip_end: $trip_end, trip_start: $trip_start, vehicle_make: $vehicle_make, vehicle_type: $vehicle_type, vehicle_year: $vehicle_year} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "travel_distance": $travel_distance, "trip_end": $trip_end, "trip_start": $trip_start, "vehicle_make": $vehicle_make, "vehicle_type": $vehicle_type, "vehicle_year": $vehicle_year} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -627,17 +627,17 @@ export def "road-distance-confirm-carbon-offset confirmCarbonOffset5" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  carbonOffset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
-  --contactEmail: string # Contact email (e.g. example@example.com)
-  --contactFirstName: string # Contact first name (e.g. abc)
-  --contactLastName: string # Contact last name (e.g. xyz)
+  carbon_offset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
+  --contact-email: string # Contact email (e.g. example@example.com)
+  --contact-first-name: string # Contact first name (e.g. abc)
+  --contact-last-name: string # Contact last name (e.g. xyz)
   transaction_id: string # transaction_id (e.g. 60a7823401d88997746c91a7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmCarbonOffset")
-  let body = {carbonOffset: $carbonOffset, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, transaction_id: $transaction_id} | compact
+  let body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -657,17 +657,17 @@ export def "road-distance-confirm-payment confirmPayment5" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPayment: string # Confirm Payment (Value = y/n) (e.g. y)
-  paymentID: int # Payment Id (format: int32, e.g. 34567878)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_payment: string # Confirm Payment (Value = y/n) (e.g. y)
+  payment_id: int # Payment Id (format: int32, e.g. 34567878)
   transaction_id: string # transaction_id (e.g. 60a7823401d88997746c91a7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmPayment")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPayment: $confirmPayment, paymentID: $paymentID, transaction_id: $transaction_id} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -687,16 +687,16 @@ export def "road-distance-confirm-planting confirmsPlanting5" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPlanting: string # Confirm Planting (Value = y/n) (e.g. y)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_planting: string # Confirm Planting (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a7823401d88997746c91a7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmPlanting")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPlanting: $confirmPlanting, transaction_id: $transaction_id} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -716,14 +716,14 @@ export def "road-distance-confirm-transaction confirmPaymentOfTransaction5" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  confirmTransaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
+  confirm_transaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a7823401d88997746c91a7)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/roadDistance/confirmTransaction")
-  let body = {confirmTransaction: $confirmTransaction, transaction_id: $transaction_id} | compact
+  let body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -743,8 +743,8 @@ export def "urban-delivery urbanDelivery" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
-  apiKey_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
+  api_key_l1: string # Client Api Key (e.g. d95fead6-e8a6-4547-9fb9-7835101a3960)
+  api_key_l2: string # Integration Partner Api Key (e.g. c60f8db5-7204-4427-960d-27400c38b166)
   destination_latitude: float # Destination latitude (like: 50.870752, value = -90<=x<=90) (format: double, e.g. -89.870752)
   destination_longitude: float # Destination longitude (like: 4.669490, value = -180<=x<=180) (format: double, e.g. 179.66949)
   item_count: int # item_count' (like:2, value = 0<x<=100) (format: int32, e.g. 3)
@@ -756,7 +756,7 @@ export def "urban-delivery urbanDelivery" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, destination_latitude: $destination_latitude, destination_longitude: $destination_longitude, item_count: $item_count, origin_latitude: $origin_latitude, origin_longitude: $origin_longitude, vehicle_type: $vehicle_type} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "destination_latitude": $destination_latitude, "destination_longitude": $destination_longitude, "item_count": $item_count, "origin_latitude": $origin_latitude, "origin_longitude": $origin_longitude, "vehicle_type": $vehicle_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -776,17 +776,17 @@ export def "urban-delivery-confirm-carbon-offset confirmCarbonOffset" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  carbonOffset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
-  --contactEmail: string # Contact email (e.g. example@example.com)
-  --contactFirstName: string # Contact first name (e.g. abc)
-  --contactLastName: string # Contact last name (e.g. xyz)
+  carbon_offset: string # Confirm Carbon Offset (Value = y/n) (e.g. y)
+  --contact-email: string # Contact email (e.g. example@example.com)
+  --contact-first-name: string # Contact first name (e.g. abc)
+  --contact-last-name: string # Contact last name (e.g. xyz)
   transaction_id: string # transaction_id (e.g. 60a7875a01d88997746c91ae)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmCarbonOffset")
-  let body = {carbonOffset: $carbonOffset, contactEmail: $contactEmail, contactFirstName: $contactFirstName, contactLastName: $contactLastName, transaction_id: $transaction_id} | compact
+  let body = {"carbonOffset": $carbon_offset, "contactEmail": $contact_email, "contactFirstName": $contact_first_name, "contactLastName": $contact_last_name, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -806,17 +806,17 @@ export def "urban-delivery-confirm-payment confirmPayment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPayment: string # Confirm Payment (Value = y/n) (e.g. y)
-  paymentID: int # Payment Id (format: int32, e.g. 34567878)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_payment: string # Confirm Payment (Value = y/n) (e.g. y)
+  payment_id: int # Payment Id (format: int32, e.g. 34567878)
   transaction_id: string # transaction_id (e.g. 60a7875a01d88997746c91ae)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmPayment")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPayment: $confirmPayment, paymentID: $paymentID, transaction_id: $transaction_id} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPayment": $confirm_payment, "paymentID": $payment_id, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -836,16 +836,16 @@ export def "urban-delivery-confirm-planting confirmsPlanting" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  apiKey_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
-  apiKey_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
-  confirmPlanting: string # Confirm Planting (Value = y/n) (e.g. y)
+  api_key_l1: string # apikey_l1 (Like: d95fead6-e8a6-4247-9fb9-7835101a4560) (e.g. d95fead6-e8a6-4247-9fb9-7835101a4560)
+  api_key_l2: string # apikey_l2 (Like: c60f8db5-7904-4227-960d-27400c38b166) (e.g. c60f8db5-7904-4227-960d-27400c38b166)
+  confirm_planting: string # Confirm Planting (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a7875a01d88997746c91ae)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmPlanting")
-  let body = {apiKey_l1: $apiKey_l1, apiKey_l2: $apiKey_l2, confirmPlanting: $confirmPlanting, transaction_id: $transaction_id} | compact
+  let body = {"apiKey_l1": $api_key_l1, "apiKey_l2": $api_key_l2, "confirmPlanting": $confirm_planting, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -865,14 +865,14 @@ export def "urban-delivery-confirm-transaction confirmPaymentOfTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  confirmTransaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
+  confirm_transaction: string # Confirm Payment Of Transaction (Value = y/n) (e.g. y)
   transaction_id: string # transaction_id (e.g. 60a7875a01d88997746c91ae)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "http://api.climatekuul.com:8000/footprint")
   let full_url = (build-url $base "/urbanDelivery/confirmTransaction")
-  let body = {confirmTransaction: $confirmTransaction, transaction_id: $transaction_id} | compact
+  let body = {"confirmTransaction": $confirm_transaction, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-d-bfor-my-sql-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-d-bfor-my-sql-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DBforMySQL/operations
 # operationId: Operations_List
-export def "providers-microsoft-d-bfor-my-sql-operations List" [
+export def "providers-microsoft-d-bfor-my-sql-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-d-bfor-my-sql-operations List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DBforMySQL/checkNameAvailability
 # operationId: CheckNameAvailability_Execute
-export def "subscriptions-providers-microsoft-d-bfor-my-sql-check-name-availability Execute" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-d-bfor-my-sql-check-name-availability exec-ute" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,8 +135,8 @@ export def "subscriptions-providers-microsoft-d-bfor-my-sql-check-name-availabil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DBforMySQL/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DBforMySQL/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -147,9 +147,9 @@ export def "subscriptions-providers-microsoft-d-bfor-my-sql-check-name-availabil
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DBforMySQL/locations/{locationName}/performanceTiers
 # operationId: LocationBasedPerformanceTier_List
-export def "subscriptions-providers-microsoft-d-bfor-my-sql-locations-performance-tiers List" [
-  subscriptionId: string
-  locationName: string
+export def "subscriptions-providers-microsoft-d-bfor-my-sql-locations-performance-tiers list" [
+  subscription_id: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "subscriptions-providers-microsoft-d-bfor-my-sql-locations-performanc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DBforMySQL/locations/($locationName)/performanceTiers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DBforMySQL/locations/{location_name}/performanceTiers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,8 +173,8 @@ export def "subscriptions-providers-microsoft-d-bfor-my-sql-locations-performanc
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DBforMySQL/servers
 # operationId: Servers_List
-export def "subscriptions-providers-microsoft-d-bfor-my-sql-servers List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-d-bfor-my-sql-servers list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "subscriptions-providers-microsoft-d-bfor-my-sql-servers List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DBforMySQL/servers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DBforMySQL/servers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,9 +198,9 @@ export def "subscriptions-providers-microsoft-d-bfor-my-sql-servers List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers
 # operationId: Servers_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,10 +224,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}
 # operationId: Servers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers delete" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,10 +251,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}
 # operationId: Servers_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -280,10 +280,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 # operationId: Servers_Update
 # --properties shape: {administratorLoginPassword?: string, replicationRole?: string, sslEnforcement?: "Enabled"|"Disabled", storageProfile?: any, version?: "5.6"|"5.7"|"8.0"}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: "Basic"|"GeneralPurpose"|"MemoryOptimized"}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,8 +301,8 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)" $qp)
-  let body = {properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,10 +315,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 # operationId: Servers_Create
 # --properties shape: {createMode: "Default"|"PointInTimeRestore"|"GeoRestore"|"Replica", sslEnforcement?: "Enabled"|"Disabled", storageProfile?: any, version?: "5.6"|"5.7"|"8.0"}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: "Basic"|"GeneralPurpose"|"MemoryOptimized"}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers create" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,8 +337,8 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)" $qp)
-  let body = {location: $location, properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -349,10 +349,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/Administrators/activeDirectory
 # operationId: ServerAdministrators_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-administrators-active-directory Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-administrators-active-directory delete" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/Administrators/activeDirectory" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/Administrators/activeDirectory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,10 +376,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/Administrators/activeDirectory
 # operationId: ServerAdministrators_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-administrators-active-directory Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-administrators-active-directory get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/Administrators/activeDirectory" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/Administrators/activeDirectory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -404,10 +404,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/Administrators/activeDirectory
 # operationId: ServerAdministrators_CreateOrUpdate
 # --properties shape: {administratorType: "ActiveDirectory", login: string, sid: string, tenantId: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-administrators-active-directory CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-administrators-active-directory create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,8 +423,8 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/Administrators/activeDirectory" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/Administrators/activeDirectory") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -435,10 +435,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/administrators
 # operationId: ServerAdministrators_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-administrators ListByServer" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-administrators list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/administrators" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/administrators") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -462,10 +462,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/configurations
 # operationId: Configurations_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-configurations ListByServer" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-configurations list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/configurations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/configurations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -489,11 +489,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/configurations/{configurationName}
 # operationId: Configurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-configurations Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  configurationName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-configurations get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/configurations/($configurationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, configuration_name: $configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/configurations/{configuration_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,11 +518,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/configurations/{configurationName}
 # operationId: Configurations_CreateOrUpdate
 # --properties shape: {source?: string, value?: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-configurations CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  configurationName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-configurations create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,8 +538,8 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/configurations/($configurationName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, configuration_name: $configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/configurations/{configuration_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -550,10 +550,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/databases
 # operationId: Databases_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-databases ListByServer" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-databases list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -567,7 +567,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/databases" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/databases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -577,11 +577,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/databases/{databaseName}
 # operationId: Databases_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-databases Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-databases delete" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/databases/($databaseName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/databases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -605,11 +605,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/databases/{databaseName}
 # operationId: Databases_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-databases Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-databases get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,7 +623,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/databases/($databaseName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/databases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -634,11 +634,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/databases/{databaseName}
 # operationId: Databases_CreateOrUpdate
 # --properties shape: {charset?: string, collation?: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-databases CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-databases create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,8 +654,8 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/databases/($databaseName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/databases/{database_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -666,10 +666,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/firewallRules
 # operationId: FirewallRules_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-firewall-rules ListByServer" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-firewall-rules list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,7 +683,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/firewallRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/firewallRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -693,11 +693,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-firewall-rules Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  firewallRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-firewall-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  firewall_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,7 +711,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/firewallRules/($firewallRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/firewallRules/{firewall_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -721,11 +721,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-firewall-rules Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  firewallRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-firewall-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  firewall_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,7 +739,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/firewallRules/($firewallRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/firewallRules/{firewall_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -750,11 +750,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_CreateOrUpdate
 # --properties shape: {endIpAddress: string, startIpAddress: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-firewall-rules CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  firewallRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-firewall-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  firewall_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,8 +770,8 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/firewallRules/($firewallRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, firewall_rule_name: $firewall_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/firewallRules/{firewall_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -782,10 +782,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/logFiles
 # operationId: LogFiles_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-log-files ListByServer" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-log-files list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -799,7 +799,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/logFiles" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/logFiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -809,10 +809,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/replicas
 # operationId: Replicas_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-replicas ListByServer" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-replicas list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,7 +826,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/replicas" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/replicas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -836,10 +836,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/restart
 # operationId: Servers_Restart
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-restart Restart" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-restart restart" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -853,7 +853,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/restart" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/restart") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -863,11 +863,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/securityAlertPolicies/{securityAlertPolicyName}
 # operationId: ServerSecurityAlertPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-security-alert-policies Get" [
-  resourceGroupName: string
-  serverName: string
-  securityAlertPolicyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-security-alert-policies get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  security_alert_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/securityAlertPolicies/($securityAlertPolicyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, security_alert_policy_name: $security_alert_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/securityAlertPolicies/{security_alert_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -892,11 +892,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/securityAlertPolicies/{securityAlertPolicyName}
 # operationId: ServerSecurityAlertPolicies_CreateOrUpdate
 # --properties shape: {disabledAlerts?: list, emailAccountAdmins?: bool, emailAddresses?: list, retentionDays?: int, state: "Enabled"|"Disabled", storageAccountAccessKey?: string, storageEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-security-alert-policies CreateOrUpdate" [
-  resourceGroupName: string
-  serverName: string
-  securityAlertPolicyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-security-alert-policies create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  security_alert_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,8 +912,8 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/securityAlertPolicies/($securityAlertPolicyName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, security_alert_policy_name: $security_alert_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/securityAlertPolicies/{security_alert_policy_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -924,10 +924,10 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/virtualNetworkRules
 # operationId: VirtualNetworkRules_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-virtual-network-rules ListByServer" [
-  resourceGroupName: string
-  serverName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-virtual-network-rules list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -941,7 +941,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/virtualNetworkRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/virtualNetworkRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -951,11 +951,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-virtual-network-rules Delete" [
-  resourceGroupName: string
-  serverName: string
-  virtualNetworkRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-virtual-network-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  virtual_network_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,7 +969,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/virtualNetworkRules/($virtualNetworkRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, virtual_network_rule_name: $virtual_network_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/virtualNetworkRules/{virtual_network_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -979,11 +979,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-virtual-network-rules Get" [
-  resourceGroupName: string
-  serverName: string
-  subscriptionId: string
-  virtualNetworkRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-virtual-network-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  virtual_network_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,7 +997,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/virtualNetworkRules/($virtualNetworkRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, virtual_network_rule_name: $virtual_network_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/virtualNetworkRules/{virtual_network_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1008,11 +1008,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMySQL/servers/{serverName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_CreateOrUpdate
 # --properties shape: {ignoreMissingVnetServiceEndpoint?: bool, virtualNetworkSubnetId: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-virtual-network-rules CreateOrUpdate" [
-  resourceGroupName: string
-  serverName: string
-  subscriptionId: string
-  virtualNetworkRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-servers-virtual-network-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  virtual_network_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,8 +1028,8 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-my-sql-serv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMySQL/servers/($serverName)/virtualNetworkRules/($virtualNetworkRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, virtual_network_rule_name: $virtual_network_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMySQL/servers/{server_name}/virtualNetworkRules/{virtual_network_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

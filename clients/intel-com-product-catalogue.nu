@@ -120,7 +120,7 @@ export def "products-get-codename get" [
 #
 # GET /api/products/get-ordering-info
 # operationId: getorderinginfo
-export def "products-get-ordering-info getorderinginfo" [
+export def "products-get-ordering-info get-orderinginfo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,7 +145,7 @@ export def "products-get-ordering-info getorderinginfo" [
 #
 # GET /api/products/get-products
 # operationId: getProductList
-export def "products-get-products get" [
+export def "products-get-products get-product-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

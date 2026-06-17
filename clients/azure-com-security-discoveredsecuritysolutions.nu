@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-discovered-security-solutions List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-discovered-security-solutions list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/discoveredSecuritySolutions
 # operationId: DiscoveredSecuritySolutions_List
-export def "subscriptions-providers-microsoft-security-discovered-security-solutions List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-security-discovered-security-solutions list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-security-discovered-security-solut
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/discoveredSecuritySolutions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/discoveredSecuritySolutions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "subscriptions-providers-microsoft-security-discovered-security-solut
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/locations/{ascLocation}/discoveredSecuritySolutions
 # operationId: DiscoveredSecuritySolutions_ListByHomeRegion
-export def "subscriptions-providers-microsoft-security-locations-discovered-security-solutions ListByHomeRegion" [
-  subscriptionId: string
-  ascLocation: string
+export def "subscriptions-providers-microsoft-security-locations-discovered-security-solutions list-by-home-region" [
+  subscription_id: string
+  asc_location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoft-security-locations-discovered-secu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Security/locations/($ascLocation)/discoveredSecuritySolutions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, asc_location: $asc_location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Security/locations/{asc_location}/discoveredSecuritySolutions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,11 +144,11 @@ export def "subscriptions-providers-microsoft-security-locations-discovered-secu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/locations/{ascLocation}/discoveredSecuritySolutions/{discoveredSecuritySolutionName}
 # operationId: DiscoveredSecuritySolutions_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-locations-discovered-security-solutions Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  ascLocation: string
-  discoveredSecuritySolutionName: string
+export def "subscriptions-resource-groups-providers-microsoft-security-locations-discovered-security-solutions get" [
+  subscription_id: string
+  resource_group_name: string
+  asc_location: string
+  discovered_security_solution_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-locations
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Security/locations/($ascLocation)/discoveredSecuritySolutions/($discoveredSecuritySolutionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, asc_location: $asc_location, discovered_security_solution_name: $discovered_security_solution_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Security/locations/{asc_location}/discoveredSecuritySolutions/{discovered_security_solution_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

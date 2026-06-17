@@ -67,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def alt-completer [] { ["json"] }
-def groupingStrategy-completer [] { ["driveUi" "none"] }
+def grouping-strategy-completer [] { ["driveUi" "none"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -109,20 +109,20 @@ export def "activities appsactivityactivitieslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
-  --userIp: string # Deprecated. Please use quotaUser instead.
-  --driveancestorId: string # Identifies the Drive folder containing the items for which to return activities.
-  --drivefileId: string # Identifies the Drive item to return activities for.
-  --groupingStrategy: string@groupingStrategy-completer # Indicates the strategy to use when grouping singleEvents items in the associated combinedEvent object.
-  --pageSize: int # The maximum number of events to return on a page. The response includes a continuation token if there are more events.
-  --pageToken: string # A token to retrieve a specific page of results.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
+  --user-ip: string # Deprecated. Please use quotaUser instead.
+  --drive-ancestor-id: string # Identifies the Drive folder containing the items for which to return activities.
+  --drive-file-id: string # Identifies the Drive item to return activities for.
+  --grouping-strategy: string@grouping-strategy-completer # Indicates the strategy to use when grouping singleEvents items in the associated combinedEvent object.
+  --page-size: int # The maximum number of events to return on a page. The response includes a continuation token if there are more events.
+  --page-token: string # A token to retrieve a specific page of results.
   --qp-source: string # The Google service from which to return activities. Possible values of source are:  - drive.google.com
-  --userId: string # The ID used for ACL checks (does not filter the resulting event list by the assigned value). Use the special value me to indicate the currently authenticated user.
+  --user-id: string # The ID used for ACL checks (does not filter the resulting event list by the assigned value). Use the special value me to indicate the currently authenticated user.
 ]: nothing -> record<activities: table<combinedEvent: record, singleEvents: list>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "userIp" $userIp "scalar") (serialize-qp "drive.ancestorId" $driveancestorId "scalar") (serialize-qp "drive.fileId" $drivefileId "scalar") (serialize-qp "groupingStrategy" $groupingStrategy "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "drive.ancestorId" $drive_ancestor_id "scalar") (serialize-qp "drive.fileId" $drive_file_id "scalar") (serialize-qp "groupingStrategy" $grouping_strategy "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/activities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

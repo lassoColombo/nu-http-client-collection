@@ -87,21 +87,21 @@ def intelligent-tiering-completer [] { ["true"] }
 def inventory-completer [] { ["true"] }
 def lifecycle-completer [] { ["true"] }
 def metrics-completer [] { ["true"] }
-def ownershipControls-completer [] { ["true"] }
+def ownership-controls-completer [] { ["true"] }
 def policy-completer [] { ["true"] }
 def replication-completer [] { ["true"] }
 def tagging-completer [] { ["true"] }
 def website-completer [] { ["true"] }
 def x-amz-checksum-mode-completer [] { ["ENABLED"] }
 def delete-completer [] { ["true"] }
-def publicAccessBlock-completer [] { ["true"] }
+def public-access-block-completer [] { ["true"] }
 def accelerate-completer [] { ["true"] }
 def acl-completer [] { ["true"] }
 def location-completer [] { ["true"] }
 def logging-completer [] { ["true"] }
 def notification-completer [] { ["true"] }
-def policyStatus-completer [] { ["true"] }
-def requestPayment-completer [] { ["true"] }
+def policy-status-completer [] { ["true"] }
+def request-payment-completer [] { ["true"] }
 def versioning-completer [] { ["true"] }
 def attributes-completer [] { ["true"] }
 def legal-hold-completer [] { ["true"] }
@@ -123,7 +123,7 @@ def x-amz-fwd-header-x-amz-storage-class-completer [] { ["DEEP_ARCHIVE" "GLACIER
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api AbortMultipartUpload" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api abort-multipart-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,9 +148,9 @@ export def commands []: nothing -> table {
 # DELETE /{Bucket}/{Key}#uploadId
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadAbort.html
 # operationId: AbortMultipartUpload
-export def "api AbortMultipartUpload" [
-  Bucket: string
-  Key: string
+export def "api abort-multipart-upload" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,15 +159,15 @@ export def "api AbortMultipartUpload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --uploadId: string # Upload ID that identifies the multipart upload.
+  --upload-id: string # Upload ID that identifies the multipart upload.
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "uploadId" $uploadId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#uploadId" $qp)
+  let qp = [(serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#uploadId") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -180,9 +180,9 @@ export def "api AbortMultipartUpload" [
 # POST /{Bucket}/{Key}#uploadId
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadComplete.html
 # operationId: CompleteMultipartUpload
-export def "api CompleteMultipartUpload" [
-  Bucket: string
-  Key: string
+export def "api post-by-Bucket-Key" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,7 +191,7 @@ export def "api CompleteMultipartUpload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --uploadId: string # ID for the initiated multipart upload.
+  --upload-id: string # ID for the initiated multipart upload.
   --x-amz-security-token: string
   --x-amz-checksum-crc32: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 32-bit CRC32 checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-checksum-crc32c: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 32-bit CRC32C checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.
@@ -201,16 +201,16 @@ export def "api CompleteMultipartUpload" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --x-amz-server-side-encryption-customer-algorithm: string # The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
-  --x-amz-server-side-encryption-customer-key-MD5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
+  --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "uploadId" $uploadId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#uploadId" $qp)
+  let qp = [(serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#uploadId") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -222,9 +222,9 @@ export def "api CompleteMultipartUpload" [
 # GET /{Bucket}/{Key}#uploadId
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadListParts.html
 # operationId: ListParts
-export def "api ListParts" [
-  Bucket: string
-  Key: string
+export def "api list-parts" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,21 +235,21 @@ export def "api ListParts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-parts: int # Sets the maximum number of parts to return.
   --part-number-marker: int # Specifies the part after which listing should begin. Only parts with higher part numbers will be listed.
-  --uploadId: string # Upload ID identifying the multipart upload whose parts are being listed.
-  --MaxParts: string # Pagination limit
-  --PartNumberMarker: string # Pagination token
+  --upload-id: string # Upload ID identifying the multipart upload whose parts are being listed.
+  --max-parts: string # Pagination limit
+  --part-number-marker: string # Pagination token
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --x-amz-server-side-encryption-customer-algorithm: string # The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
-  --x-amz-server-side-encryption-customer-key-MD5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
+  --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "max-parts" $max_parts "scalar") (serialize-qp "part-number-marker" $part_number_marker "scalar") (serialize-qp "uploadId" $uploadId "scalar") (serialize-qp "MaxParts" $MaxParts "scalar") (serialize-qp "PartNumberMarker" $PartNumberMarker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#uploadId" $qp)
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5} | compact
+  let qp = [(serialize-qp "max-parts" $max_parts "scalar") (serialize-qp "part-number-marker" $part_number_marker "scalar") (serialize-qp "uploadId" $upload_id "scalar") (serialize-qp "MaxParts" $max_parts "scalar") (serialize-qp "PartNumberMarker" $part_number_marker "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#uploadId") $qp)
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,9 +261,9 @@ export def "api ListParts" [
 # PUT /{Bucket}/{Key}#x-amz-copy-source
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectCOPY.html
 # operationId: CopyObject
-export def "api CopyObject" [
-  Bucket: string
-  Key: string
+export def "api copy-object" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,18 +274,18 @@ export def "api CopyObject" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer # <p>The canned ACL to apply to the object.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
-  --Cache-Control: string # Specifies caching behavior along the request/reply chain.
+  --cache-control: string # Specifies caching behavior along the request/reply chain.
   --x-amz-checksum-algorithm: string@x-amz-checksum-algorithm-completer # Indicates the algorithm you want Amazon S3 to use to create the checksum for the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.
-  --Content-Disposition: string # Specifies presentational information for the object.
-  --Content-Encoding: string # Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field.
-  --Content-Language: string # The language the content is in.
-  --Content-Type: string # A standard MIME type describing the format of the object data.
+  --content-disposition: string # Specifies presentational information for the object.
+  --content-encoding: string # Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field.
+  --content-language: string # The language the content is in.
+  --content-type: string # A standard MIME type describing the format of the object data.
   --x-amz-copy-source: string # <p>Specifies the source object for the copy operation. You specify the value in one of two formats, depending on whether you want to access the source object through an <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html">access point</a>:</p> <ul> <li> <p>For objects not accessed through an access point, specify the name of the source bucket and the key of the source object, separated by a slash (/). For example, to copy the object <code>reports/january.pdf</code> from the bucket <code>awsexamplebucket</code>, use <code>awsexamplebucket/reports/january.pdf</code>. The value must be URL-encoded.</p> </li> <li> <p>For objects accessed through access points, specify the Amazon Resource Name (ARN) of the object as accessed through the access point, in the format <code>arn:aws:s3:&lt;Region&gt;:&lt;account-id&gt;:accesspoint/&lt;access-point-name&gt;/object/&lt;key&gt;</code>. For example, to copy the object <code>reports/january.pdf</code> through access point <code>my-access-point</code> owned by account <code>123456789012</code> in Region <code>us-west-2</code>, use the URL encoding of <code>arn:aws:s3:us-west-2:123456789012:accesspoint/my-access-point/object/reports/january.pdf</code>. The value must be URL encoded.</p> <note> <p>Amazon S3 supports copy operations using access points only when the source and destination buckets are in the same Amazon Web Services Region.</p> </note> <p>Alternatively, for objects accessed through Amazon S3 on Outposts, specify the ARN of the object as accessed in the format <code>arn:aws:s3-outposts:&lt;Region&gt;:&lt;account-id&gt;:outpost/&lt;outpost-id&gt;/object/&lt;key&gt;</code>. For example, to copy the object <code>reports/january.pdf</code> through outpost <code>my-outpost</code> owned by account <code>123456789012</code> in Region <code>us-west-2</code>, use the URL encoding of <code>arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/reports/january.pdf</code>. The value must be URL-encoded. </p> </li> </ul> <p>To copy a specific version of an object, append <code>?versionId=&lt;version-id&gt;</code> to the value (for example, <code>awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893</code>). If you don't specify a version ID, Amazon S3 copies the latest version of the source object.</p>
   --x-amz-copy-source-if-match: string # Copies the object if its entity tag (ETag) matches the specified tag.
   --x-amz-copy-source-if-modified-since: string # Copies the object if it has been modified since the specified time.
   --x-amz-copy-source-if-none-match: string # Copies the object if its entity tag (ETag) is different than the specified ETag.
   --x-amz-copy-source-if-unmodified-since: string # Copies the object if it hasn't been modified since the specified time.
-  --Expires: string # The date and time at which the object is no longer cacheable.
+  --expires: string # The date and time at which the object is no longer cacheable.
   --x-amz-grant-full-control: string # <p>Gives the grantee READ, READ_ACP, and WRITE_ACP permissions on the object.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
   --x-amz-grant-read: string # <p>Allows grantee to read the object data and its metadata.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
   --x-amz-grant-read-acp: string # <p>Allows grantee to read the object ACL.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
@@ -297,13 +297,13 @@ export def "api CopyObject" [
   --x-amz-website-redirect-location: string # If the bucket is configured as a website, redirects requests for this object to another object in the same bucket or to an external URL. Amazon S3 stores the value of this header in the object metadata.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
   --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the <code>x-amz-server-side-encryption-customer-algorithm</code> header.
-  --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
+  --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-server-side-encryption-aws-kms-key-id: string # Specifies the Amazon Web Services KMS key ID to use for object encryption. All GET and PUT requests for an object protected by Amazon Web Services KMS will fail if not made via SSL or using SigV4. For information about configuring using any of the officially supported Amazon Web Services SDKs and Amazon Web Services CLI, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version">Specifying the Signature Version in Request Authentication</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.
   --x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> # <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS. </p> <p>Specifying this header with a COPY action doesn’t affect bucket-level settings for S3 Bucket Key.</p>
   --x-amz-copy-source-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use when decrypting the source object (for example, AES256).
   --x-amz-copy-source-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source object. The encryption key provided in this header must be one that was used when the source object was created.
-  --x-amz-copy-source-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
+  --x-amz-copy-source-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-tagging: string # The tag-set for the object destination object this value must be used in conjunction with the <code>TaggingDirective</code>. The tag-set must be encoded as URL Query parameters.
   --x-amz-object-lock-mode: string@x-amz-object-lock-mode-completer # The Object Lock mode that you want to apply to the copied object.
@@ -316,9 +316,9 @@ export def "api CopyObject" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($Bucket)/($Key)#x-amz-copy-source")
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#x-amz-copy-source"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $Cache_Control, "x-amz-checksum-algorithm": $x_amz_checksum_algorithm, "Content-Disposition": $Content_Disposition, "Content-Encoding": $Content_Encoding, "Content-Language": $Content_Language, "Content-Type": $Content_Type, "x-amz-copy-source": $x_amz_copy_source, "x-amz-copy-source-if-match": $x_amz_copy_source_if_match, "x-amz-copy-source-if-modified-since": $x_amz_copy_source_if_modified_since, "x-amz-copy-source-if-none-match": $x_amz_copy_source_if_none_match, "x-amz-copy-source-if-unmodified-since": $x_amz_copy_source_if_unmodified_since, "Expires": $Expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-metadata-directive": $x_amz_metadata_directive, "x-amz-tagging-directive": $x_amz_tagging_directive, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-copy-source-server-side-encryption-customer-algorithm": $x_amz_copy_source_server_side_encryption_customer_algorithm, "x-amz-copy-source-server-side-encryption-customer-key": $x_amz_copy_source_server_side_encryption_customer_key, "x-amz-copy-source-server-side-encryption-customer-key-MD5": $x_amz_copy_source_server_side_encryption_customer_key_MD5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-source-expected-bucket-owner": $x_amz_source_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $cache_control, "x-amz-checksum-algorithm": $x_amz_checksum_algorithm, "Content-Disposition": $content_disposition, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Type": $content_type, "x-amz-copy-source": $x_amz_copy_source, "x-amz-copy-source-if-match": $x_amz_copy_source_if_match, "x-amz-copy-source-if-modified-since": $x_amz_copy_source_if_modified_since, "x-amz-copy-source-if-none-match": $x_amz_copy_source_if_none_match, "x-amz-copy-source-if-unmodified-since": $x_amz_copy_source_if_unmodified_since, "Expires": $expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-metadata-directive": $x_amz_metadata_directive, "x-amz-tagging-directive": $x_amz_tagging_directive, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-copy-source-server-side-encryption-customer-algorithm": $x_amz_copy_source_server_side_encryption_customer_algorithm, "x-amz-copy-source-server-side-encryption-customer-key": $x_amz_copy_source_server_side_encryption_customer_key, "x-amz-copy-source-server-side-encryption-customer-key-MD5": $x_amz_copy_source_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-source-expected-bucket-owner": $x_amz_source_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -330,8 +330,8 @@ export def "api CopyObject" [
 # PUT /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUT.html
 # operationId: CreateBucket
-export def "api CreateBucket" [
-  Bucket: string
+export def "api create" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "api CreateBucket" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($Bucket)")
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-bucket-object-lock-enabled": $x_amz_bucket_object_lock_enabled, "x-amz-object-ownership": $x_amz_object_ownership} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -368,8 +368,8 @@ export def "api CreateBucket" [
 # DELETE /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETE.html
 # operationId: DeleteBucket
-export def "api DeleteBucket" [
-  Bucket: string
+export def "api delete" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,7 +383,7 @@ export def "api DeleteBucket" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($Bucket)")
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}"))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -396,8 +396,8 @@ export def "api DeleteBucket" [
 # HEAD /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketHEAD.html
 # operationId: HeadBucket
-export def "api HeadBucket" [
-  Bucket: string
+export def "api head-by-Bucket" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "api HeadBucket" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($Bucket)")
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}"))
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -424,8 +424,8 @@ export def "api HeadBucket" [
 # GET /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGET.html
 # operationId: ListObjects
-export def "api ListObjects" [
-  Bucket: string
+export def "api list-objects" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,16 +439,16 @@ export def "api ListObjects" [
   --marker: string # Marker is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key. Marker can be any key in the bucket.
   --max-keys: int # Sets the maximum number of keys returned in the response. By default the action returns up to 1,000 key names. The response might contain fewer keys but will never contain more. 
   --prefix: string # Limits the response to keys that begin with the specified prefix.
-  --MaxKeys: string # Pagination limit
-  --Marker: string # Pagination token
+  --max-keys: string # Pagination limit
+  --marker: string # Pagination token
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer # Confirms that the requester knows that she or he will be charged for the list objects request. Bucket owners need not specify this parameter in their requests.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "MaxKeys" $MaxKeys "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)" $qp)
+  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "MaxKeys" $max_keys "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -461,9 +461,9 @@ export def "api ListObjects" [
 # POST /{Bucket}/{Key}#uploads
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadInitiate.html
 # operationId: CreateMultipartUpload
-export def "api CreateMultipartUpload" [
-  Bucket: string
-  Key: string
+export def "api create-multipart-upload" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,12 +475,12 @@ export def "api CreateMultipartUpload" [
   --uploads: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer # <p>The canned ACL to apply to the object.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
-  --Cache-Control: string # Specifies caching behavior along the request/reply chain.
-  --Content-Disposition: string # Specifies presentational information for the object.
-  --Content-Encoding: string # Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field.
-  --Content-Language: string # The language the content is in.
-  --Content-Type: string # A standard MIME type describing the format of the object data.
-  --Expires: string # The date and time at which the object is no longer cacheable.
+  --cache-control: string # Specifies caching behavior along the request/reply chain.
+  --content-disposition: string # Specifies presentational information for the object.
+  --content-encoding: string # Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field.
+  --content-language: string # The language the content is in.
+  --content-type: string # A standard MIME type describing the format of the object data.
+  --expires: string # The date and time at which the object is no longer cacheable.
   --x-amz-grant-full-control: string # <p>Gives the grantee READ, READ_ACP, and WRITE_ACP permissions on the object.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
   --x-amz-grant-read: string # <p>Allows grantee to read the object data and its metadata.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
   --x-amz-grant-read-acp: string # <p>Allows grantee to read the object ACL.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
@@ -490,7 +490,7 @@ export def "api CreateMultipartUpload" [
   --x-amz-website-redirect-location: string # If the bucket is configured as a website, redirects requests for this object to another object in the same bucket or to an external URL. Amazon S3 stores the value of this header in the object metadata.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
   --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the <code>x-amz-server-side-encryption-customer-algorithm</code> header.
-  --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
+  --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-server-side-encryption-aws-kms-key-id: string # Specifies the ID of the symmetric customer managed key to use for object encryption. All GET and PUT requests for an object protected by Amazon Web Services KMS will fail if not made via SSL or using SigV4. For information about configuring using any of the officially supported Amazon Web Services SDKs and Amazon Web Services CLI, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingAWSSDK.html#specify-signature-version">Specifying the Signature Version in Request Authentication</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.
   --x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> # <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS.</p> <p>Specifying this header with an object action doesn’t affect bucket-level settings for S3 Bucket Key.</p>
@@ -507,9 +507,9 @@ export def "api CreateMultipartUpload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "uploads" $uploads "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#uploads" $qp)
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#uploads") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $Cache_Control, "Content-Disposition": $Content_Disposition, "Content-Encoding": $Content_Encoding, "Content-Language": $Content_Language, "Content-Type": $Content_Type, "Expires": $Expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-algorithm": $x_amz_checksum_algorithm} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $cache_control, "Content-Disposition": $content_disposition, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Type": $content_type, "Expires": $expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-algorithm": $x_amz_checksum_algorithm} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -520,8 +520,8 @@ export def "api CreateMultipartUpload" [
 #
 # DELETE /{Bucket}#analytics&id
 # operationId: DeleteBucketAnalyticsConfiguration
-export def "api DeleteBucketAnalyticsConfiguration" [
-  Bucket: string
+export def "api delete-analytics-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "api DeleteBucketAnalyticsConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#analytics&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#analytics&id") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -550,8 +550,8 @@ export def "api DeleteBucketAnalyticsConfiguration" [
 #
 # GET /{Bucket}#analytics&id
 # operationId: GetBucketAnalyticsConfiguration
-export def "api GetBucketAnalyticsConfiguration" [
-  Bucket: string
+export def "api get-analytics-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,7 +568,7 @@ export def "api GetBucketAnalyticsConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#analytics&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#analytics&id") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -580,8 +580,8 @@ export def "api GetBucketAnalyticsConfiguration" [
 #
 # PUT /{Bucket}#analytics&id
 # operationId: PutBucketAnalyticsConfiguration
-export def "api PutBucketAnalyticsConfiguration" [
-  Bucket: string
+export def "api update-analytics-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "api PutBucketAnalyticsConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#analytics&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#analytics&id") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -614,8 +614,8 @@ export def "api PutBucketAnalyticsConfiguration" [
 # DELETE /{Bucket}#cors
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETEcors.html
 # operationId: DeleteBucketCors
-export def "api DeleteBucketCors" [
-  Bucket: string
+export def "api delete-cors" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "api DeleteBucketCors" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#cors" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#cors") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -644,8 +644,8 @@ export def "api DeleteBucketCors" [
 # GET /{Bucket}#cors
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETcors.html
 # operationId: GetBucketCors
-export def "api GetBucketCors" [
-  Bucket: string
+export def "api get-cors" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "api GetBucketCors" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#cors" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#cors") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -674,8 +674,8 @@ export def "api GetBucketCors" [
 # PUT /{Bucket}#cors
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTcors.html
 # operationId: PutBucketCors
-export def "api PutBucketCors" [
-  Bucket: string
+export def "api update-cors" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,7 +686,7 @@ export def "api PutBucketCors" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cors: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.</a> </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.</a> </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -695,9 +695,9 @@ export def "api PutBucketCors" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cors" $cors "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#cors" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#cors") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -708,8 +708,8 @@ export def "api PutBucketCors" [
 #
 # DELETE /{Bucket}#encryption
 # operationId: DeleteBucketEncryption
-export def "api DeleteBucketEncryption" [
-  Bucket: string
+export def "api delete-encryption" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,7 +725,7 @@ export def "api DeleteBucketEncryption" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#encryption" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#encryption") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -737,8 +737,8 @@ export def "api DeleteBucketEncryption" [
 #
 # GET /{Bucket}#encryption
 # operationId: GetBucketEncryption
-export def "api GetBucketEncryption" [
-  Bucket: string
+export def "api get-encryption" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,7 +754,7 @@ export def "api GetBucketEncryption" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#encryption" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#encryption") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -766,8 +766,8 @@ export def "api GetBucketEncryption" [
 #
 # PUT /{Bucket}#encryption
 # operationId: PutBucketEncryption
-export def "api PutBucketEncryption" [
-  Bucket: string
+export def "api update-encryption" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +778,7 @@ export def "api PutBucketEncryption" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --encryption: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the server-side encryption configuration.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The base64-encoded 128-bit MD5 digest of the server-side encryption configuration.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -787,9 +787,9 @@ export def "api PutBucketEncryption" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "encryption" $encryption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#encryption" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#encryption") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -800,8 +800,8 @@ export def "api PutBucketEncryption" [
 #
 # DELETE /{Bucket}#intelligent-tiering&id
 # operationId: DeleteBucketIntelligentTieringConfiguration
-export def "api DeleteBucketIntelligentTieringConfiguration" [
-  Bucket: string
+export def "api delete-intelligent-tiering-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -817,7 +817,7 @@ export def "api DeleteBucketIntelligentTieringConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#intelligent-tiering&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#intelligent-tiering&id") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -829,8 +829,8 @@ export def "api DeleteBucketIntelligentTieringConfiguration" [
 #
 # GET /{Bucket}#intelligent-tiering&id
 # operationId: GetBucketIntelligentTieringConfiguration
-export def "api GetBucketIntelligentTieringConfiguration" [
-  Bucket: string
+export def "api get-intelligent-tiering-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,7 +846,7 @@ export def "api GetBucketIntelligentTieringConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#intelligent-tiering&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#intelligent-tiering&id") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -858,8 +858,8 @@ export def "api GetBucketIntelligentTieringConfiguration" [
 #
 # PUT /{Bucket}#intelligent-tiering&id
 # operationId: PutBucketIntelligentTieringConfiguration
-export def "api PutBucketIntelligentTieringConfiguration" [
-  Bucket: string
+export def "api update-intelligent-tiering-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -877,7 +877,7 @@ export def "api PutBucketIntelligentTieringConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#intelligent-tiering&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#intelligent-tiering&id") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -890,8 +890,8 @@ export def "api PutBucketIntelligentTieringConfiguration" [
 #
 # DELETE /{Bucket}#inventory&id
 # operationId: DeleteBucketInventoryConfiguration
-export def "api DeleteBucketInventoryConfiguration" [
-  Bucket: string
+export def "api delete-inventory-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -908,7 +908,7 @@ export def "api DeleteBucketInventoryConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#inventory&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#inventory&id") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -920,8 +920,8 @@ export def "api DeleteBucketInventoryConfiguration" [
 #
 # GET /{Bucket}#inventory&id
 # operationId: GetBucketInventoryConfiguration
-export def "api GetBucketInventoryConfiguration" [
-  Bucket: string
+export def "api get-inventory-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -938,7 +938,7 @@ export def "api GetBucketInventoryConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#inventory&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#inventory&id") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -950,8 +950,8 @@ export def "api GetBucketInventoryConfiguration" [
 #
 # PUT /{Bucket}#inventory&id
 # operationId: PutBucketInventoryConfiguration
-export def "api PutBucketInventoryConfiguration" [
-  Bucket: string
+export def "api update-inventory-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "api PutBucketInventoryConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#inventory&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#inventory&id") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -984,8 +984,8 @@ export def "api PutBucketInventoryConfiguration" [
 # DELETE /{Bucket}#lifecycle
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETElifecycle.html
 # operationId: DeleteBucketLifecycle
-export def "api DeleteBucketLifecycle" [
-  Bucket: string
+export def "api delete-lifecycle" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,7 +1001,7 @@ export def "api DeleteBucketLifecycle" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#lifecycle" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#lifecycle") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1013,8 +1013,8 @@ export def "api DeleteBucketLifecycle" [
 #
 # GET /{Bucket}#lifecycle
 # operationId: GetBucketLifecycleConfiguration
-export def "api GetBucketLifecycleConfiguration" [
-  Bucket: string
+export def "api get-lifecycle-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1030,7 +1030,7 @@ export def "api GetBucketLifecycleConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#lifecycle" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#lifecycle") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -1042,8 +1042,8 @@ export def "api GetBucketLifecycleConfiguration" [
 #
 # PUT /{Bucket}#lifecycle
 # operationId: PutBucketLifecycleConfiguration
-export def "api PutBucketLifecycleConfiguration" [
-  Bucket: string
+export def "api update-lifecycle-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,7 +1062,7 @@ export def "api PutBucketLifecycleConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#lifecycle" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#lifecycle") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1075,8 +1075,8 @@ export def "api PutBucketLifecycleConfiguration" [
 #
 # DELETE /{Bucket}#metrics&id
 # operationId: DeleteBucketMetricsConfiguration
-export def "api DeleteBucketMetricsConfiguration" [
-  Bucket: string
+export def "api delete-metrics-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,7 +1093,7 @@ export def "api DeleteBucketMetricsConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#metrics&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#metrics&id") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1105,8 +1105,8 @@ export def "api DeleteBucketMetricsConfiguration" [
 #
 # GET /{Bucket}#metrics&id
 # operationId: GetBucketMetricsConfiguration
-export def "api GetBucketMetricsConfiguration" [
-  Bucket: string
+export def "api get-metrics-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,7 +1123,7 @@ export def "api GetBucketMetricsConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#metrics&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#metrics&id") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -1135,8 +1135,8 @@ export def "api GetBucketMetricsConfiguration" [
 #
 # PUT /{Bucket}#metrics&id
 # operationId: PutBucketMetricsConfiguration
-export def "api PutBucketMetricsConfiguration" [
-  Bucket: string
+export def "api update-metrics-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,7 +1155,7 @@ export def "api PutBucketMetricsConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#metrics&id" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#metrics&id") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1168,8 +1168,8 @@ export def "api PutBucketMetricsConfiguration" [
 #
 # DELETE /{Bucket}#ownershipControls
 # operationId: DeleteBucketOwnershipControls
-export def "api DeleteBucketOwnershipControls" [
-  Bucket: string
+export def "api delete-ownership-controls" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1178,14 +1178,14 @@ export def "api DeleteBucketOwnershipControls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ownershipControls: oneof<nothing, bool> # allows empty value
+  --ownership-controls: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ownershipControls" $ownershipControls "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#ownershipControls" $qp)
+  let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#ownershipControls") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1197,8 +1197,8 @@ export def "api DeleteBucketOwnershipControls" [
 #
 # GET /{Bucket}#ownershipControls
 # operationId: GetBucketOwnershipControls
-export def "api GetBucketOwnershipControls" [
-  Bucket: string
+export def "api get-ownership-controls" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1207,14 +1207,14 @@ export def "api GetBucketOwnershipControls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ownershipControls: oneof<nothing, bool> # allows empty value
+  --ownership-controls: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ownershipControls" $ownershipControls "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#ownershipControls" $qp)
+  let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#ownershipControls") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -1226,8 +1226,8 @@ export def "api GetBucketOwnershipControls" [
 #
 # PUT /{Bucket}#ownershipControls
 # operationId: PutBucketOwnershipControls
-export def "api PutBucketOwnershipControls" [
-  Bucket: string
+export def "api update-ownership-controls" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1236,19 +1236,19 @@ export def "api PutBucketOwnershipControls" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ownershipControls: oneof<nothing, bool> # allows empty value
+  --ownership-controls: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The MD5 hash of the <code>OwnershipControls</code> request body. </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ownershipControls" $ownershipControls "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#ownershipControls" $qp)
+  let qp = [(serialize-qp "ownershipControls" $ownership_controls "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#ownershipControls") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1260,8 +1260,8 @@ export def "api PutBucketOwnershipControls" [
 # DELETE /{Bucket}#policy
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETEpolicy.html
 # operationId: DeleteBucketPolicy
-export def "api DeleteBucketPolicy" [
-  Bucket: string
+export def "api delete-policy" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1277,7 +1277,7 @@ export def "api DeleteBucketPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#policy" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#policy") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1290,8 +1290,8 @@ export def "api DeleteBucketPolicy" [
 # GET /{Bucket}#policy
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETpolicy.html
 # operationId: GetBucketPolicy
-export def "api GetBucketPolicy" [
-  Bucket: string
+export def "api get-policy" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1307,7 +1307,7 @@ export def "api GetBucketPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#policy" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#policy") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -1320,8 +1320,8 @@ export def "api GetBucketPolicy" [
 # PUT /{Bucket}#policy
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTpolicy.html
 # operationId: PutBucketPolicy
-export def "api PutBucketPolicy" [
-  Bucket: string
+export def "api update-policy" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1332,7 +1332,7 @@ export def "api PutBucketPolicy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --policy: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The MD5 hash of the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The MD5 hash of the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-confirm-remove-self-bucket-access: oneof<nothing, bool> # Set this parameter to true to confirm that you want to remove your permissions to change this bucket policy in the future.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -1342,9 +1342,9 @@ export def "api PutBucketPolicy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "policy" $policy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#policy" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#policy") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-confirm-remove-self-bucket-access": $x_amz_confirm_remove_self_bucket_access, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-confirm-remove-self-bucket-access": $x_amz_confirm_remove_self_bucket_access, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1355,8 +1355,8 @@ export def "api PutBucketPolicy" [
 #
 # DELETE /{Bucket}#replication
 # operationId: DeleteBucketReplication
-export def "api DeleteBucketReplication" [
-  Bucket: string
+export def "api delete-replication" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1372,7 +1372,7 @@ export def "api DeleteBucketReplication" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#replication" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#replication") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1384,8 +1384,8 @@ export def "api DeleteBucketReplication" [
 #
 # GET /{Bucket}#replication
 # operationId: GetBucketReplication
-export def "api GetBucketReplication" [
-  Bucket: string
+export def "api get-replication" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1401,7 +1401,7 @@ export def "api GetBucketReplication" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#replication" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#replication") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -1413,8 +1413,8 @@ export def "api GetBucketReplication" [
 #
 # PUT /{Bucket}#replication
 # operationId: PutBucketReplication
-export def "api PutBucketReplication" [
-  Bucket: string
+export def "api update-replication" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1425,7 +1425,7 @@ export def "api PutBucketReplication" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --replication: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-bucket-object-lock-token: string # A token to allow Object Lock to be enabled for an existing bucket.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -1435,9 +1435,9 @@ export def "api PutBucketReplication" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "replication" $replication "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#replication" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#replication") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-bucket-object-lock-token": $x_amz_bucket_object_lock_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-bucket-object-lock-token": $x_amz_bucket_object_lock_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1449,8 +1449,8 @@ export def "api PutBucketReplication" [
 # DELETE /{Bucket}#tagging
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETEtagging.html
 # operationId: DeleteBucketTagging
-export def "api DeleteBucketTagging" [
-  Bucket: string
+export def "api delete-tagging" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1466,7 +1466,7 @@ export def "api DeleteBucketTagging" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#tagging" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#tagging") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1479,8 +1479,8 @@ export def "api DeleteBucketTagging" [
 # GET /{Bucket}#tagging
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETtagging.html
 # operationId: GetBucketTagging
-export def "api GetBucketTagging" [
-  Bucket: string
+export def "api get-tagging" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1496,7 +1496,7 @@ export def "api GetBucketTagging" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#tagging" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#tagging") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -1509,8 +1509,8 @@ export def "api GetBucketTagging" [
 # PUT /{Bucket}#tagging
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTtagging.html
 # operationId: PutBucketTagging
-export def "api PutBucketTagging" [
-  Bucket: string
+export def "api update-tagging" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,7 +1521,7 @@ export def "api PutBucketTagging" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -1530,9 +1530,9 @@ export def "api PutBucketTagging" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#tagging" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#tagging") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1544,8 +1544,8 @@ export def "api PutBucketTagging" [
 # DELETE /{Bucket}#website
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETEwebsite.html
 # operationId: DeleteBucketWebsite
-export def "api DeleteBucketWebsite" [
-  Bucket: string
+export def "api delete-website" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1561,7 +1561,7 @@ export def "api DeleteBucketWebsite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#website" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#website") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1574,8 +1574,8 @@ export def "api DeleteBucketWebsite" [
 # GET /{Bucket}#website
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETwebsite.html
 # operationId: GetBucketWebsite
-export def "api GetBucketWebsite" [
-  Bucket: string
+export def "api get-website" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1591,7 +1591,7 @@ export def "api GetBucketWebsite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#website" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#website") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -1604,8 +1604,8 @@ export def "api GetBucketWebsite" [
 # PUT /{Bucket}#website
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTwebsite.html
 # operationId: PutBucketWebsite
-export def "api PutBucketWebsite" [
-  Bucket: string
+export def "api update-website" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1616,7 +1616,7 @@ export def "api PutBucketWebsite" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --website: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -1625,9 +1625,9 @@ export def "api PutBucketWebsite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "website" $website "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#website" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#website") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1639,9 +1639,9 @@ export def "api PutBucketWebsite" [
 # DELETE /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectDELETE.html
 # operationId: DeleteObject
-export def "api DeleteObject" [
-  Bucket: string
-  Key: string
+export def "api delete-object" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1650,7 +1650,7 @@ export def "api DeleteObject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # VersionId used to reference a specific version of the object.
+  --version-id: string # VersionId used to reference a specific version of the object.
   --x-amz-security-token: string
   --x-amz-mfa: string # The concatenation of the authentication device's serial number, a space, and the value that is displayed on your authentication device. Required to permanently delete a versioned object if versioning is configured with MFA delete enabled.
   --x-amz-request-payer: string@x-amz-request-payer-completer
@@ -1659,8 +1659,8 @@ export def "api DeleteObject" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-mfa": $x_amz_mfa, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bypass-governance-retention": $x_amz_bypass_governance_retention, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -1673,9 +1673,9 @@ export def "api DeleteObject" [
 # GET /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectGET.html
 # operationId: GetObject
-export def "api GetObject" [
-  Bucket: string
-  Key: string
+export def "api get-object" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1690,26 +1690,26 @@ export def "api GetObject" [
   --response-content-language: string # Sets the <code>Content-Language</code> header of the response.
   --response-content-type: string # Sets the <code>Content-Type</code> header of the response.
   --response-expires: string # Sets the <code>Expires</code> header of the response. (format: date-time)
-  --versionId: string # VersionId used to reference a specific version of the object.
-  --partNumber: int # Part number of the object being read. This is a positive integer between 1 and 10,000. Effectively performs a 'ranged' GET request for the part specified. Useful for downloading just a part of an object.
+  --version-id: string # VersionId used to reference a specific version of the object.
+  --part-number: int # Part number of the object being read. This is a positive integer between 1 and 10,000. Effectively performs a 'ranged' GET request for the part specified. Useful for downloading just a part of an object.
   --x-amz-security-token: string
-  --If-Match: string # Return the object only if its entity tag (ETag) is the same as the one specified; otherwise, return a 412 (precondition failed) error.
-  --If-Modified-Since: string # Return the object only if it has been modified since the specified time; otherwise, return a 304 (not modified) error.
-  --If-None-Match: string # Return the object only if its entity tag (ETag) is different from the one specified; otherwise, return a 304 (not modified) error.
-  --If-Unmodified-Since: string # Return the object only if it has not been modified since the specified time; otherwise, return a 412 (precondition failed) error.
-  --Range: string # <p>Downloads the specified range bytes of an object. For more information about the HTTP Range header, see <a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35">https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35</a>.</p> <note> <p>Amazon S3 doesn't support retrieving multiple ranges of data per <code>GET</code> request.</p> </note>
+  --if-match: string # Return the object only if its entity tag (ETag) is the same as the one specified; otherwise, return a 412 (precondition failed) error.
+  --if-modified-since: string # Return the object only if it has been modified since the specified time; otherwise, return a 304 (not modified) error.
+  --if-none-match: string # Return the object only if its entity tag (ETag) is different from the one specified; otherwise, return a 304 (not modified) error.
+  --if-unmodified-since: string # Return the object only if it has not been modified since the specified time; otherwise, return a 412 (precondition failed) error.
+  --range: string # <p>Downloads the specified range bytes of an object. For more information about the HTTP Range header, see <a href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35">https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35</a>.</p> <note> <p>Amazon S3 doesn't support retrieving multiple ranges of data per <code>GET</code> request.</p> </note>
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when decrypting the object (for example, AES256).
   --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 used to encrypt the data. This value is used to decrypt the object when recovering it and must match the one used when storing the data. The key must be appropriate for use with the algorithm specified in the <code>x-amz-server-side-encryption-customer-algorithm</code> header.
-  --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
+  --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --x-amz-checksum-mode: string@x-amz-checksum-mode-completer # To retrieve the checksum, this mode must be enabled.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "response-cache-control" $response_cache_control "scalar") (serialize-qp "response-content-disposition" $response_content_disposition "scalar") (serialize-qp "response-content-encoding" $response_content_encoding "scalar") (serialize-qp "response-content-language" $response_content_language "scalar") (serialize-qp "response-content-type" $response_content_type "scalar") (serialize-qp "response-expires" $response_expires "scalar") (serialize-qp "versionId" $versionId "scalar") (serialize-qp "partNumber" $partNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)" $qp)
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "If-Match": $If_Match, "If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match, "If-Unmodified-Since": $If_Unmodified_Since, "Range": $Range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-mode": $x_amz_checksum_mode} | compact
+  let qp = [(serialize-qp "response-cache-control" $response_cache_control "scalar") (serialize-qp "response-content-disposition" $response_content_disposition "scalar") (serialize-qp "response-content-encoding" $response_content_encoding "scalar") (serialize-qp "response-content-language" $response_content_language "scalar") (serialize-qp "response-content-type" $response_content_type "scalar") (serialize-qp "response-expires" $response_expires "scalar") (serialize-qp "versionId" $version_id "scalar") (serialize-qp "partNumber" $part_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}") $qp)
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "If-Match": $if_match, "If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match, "If-Unmodified-Since": $if_unmodified_since, "Range": $range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-mode": $x_amz_checksum_mode} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1721,9 +1721,9 @@ export def "api GetObject" [
 # HEAD /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectHEAD.html
 # operationId: HeadObject
-export def "api HeadObject" [
-  Bucket: string
-  Key: string
+export def "api head-by-Bucket-Key" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1732,26 +1732,26 @@ export def "api HeadObject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # VersionId used to reference a specific version of the object.
-  --partNumber: int # Part number of the object being read. This is a positive integer between 1 and 10,000. Effectively performs a 'ranged' HEAD request for the part specified. Useful querying about the size of the part and the number of parts in this object.
+  --version-id: string # VersionId used to reference a specific version of the object.
+  --part-number: int # Part number of the object being read. This is a positive integer between 1 and 10,000. Effectively performs a 'ranged' HEAD request for the part specified. Useful querying about the size of the part and the number of parts in this object.
   --x-amz-security-token: string
-  --If-Match: string # Return the object only if its entity tag (ETag) is the same as the one specified; otherwise, return a 412 (precondition failed) error.
-  --If-Modified-Since: string # Return the object only if it has been modified since the specified time; otherwise, return a 304 (not modified) error.
-  --If-None-Match: string # Return the object only if its entity tag (ETag) is different from the one specified; otherwise, return a 304 (not modified) error.
-  --If-Unmodified-Since: string # Return the object only if it has not been modified since the specified time; otherwise, return a 412 (precondition failed) error.
-  --Range: string # Because <code>HeadObject</code> returns only the metadata for an object, this parameter has no effect.
+  --if-match: string # Return the object only if its entity tag (ETag) is the same as the one specified; otherwise, return a 412 (precondition failed) error.
+  --if-modified-since: string # Return the object only if it has been modified since the specified time; otherwise, return a 304 (not modified) error.
+  --if-none-match: string # Return the object only if its entity tag (ETag) is different from the one specified; otherwise, return a 304 (not modified) error.
+  --if-unmodified-since: string # Return the object only if it has not been modified since the specified time; otherwise, return a 412 (precondition failed) error.
+  --range: string # Because <code>HeadObject</code> returns only the metadata for an object, this parameter has no effect.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
   --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the <code>x-amz-server-side-encryption-customer-algorithm</code> header.
-  --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
+  --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --x-amz-checksum-mode: string@x-amz-checksum-mode-completer # <p>To retrieve the checksum, this parameter must be enabled.</p> <p>In addition, if you enable <code>ChecksumMode</code> and the object is encrypted with Amazon Web Services Key Management Service (Amazon Web Services KMS), you must have permission to use the <code>kms:Decrypt</code> action for the request to succeed.</p>
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "partNumber" $partNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)" $qp)
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "If-Match": $If_Match, "If-Modified-Since": $If_Modified_Since, "If-None-Match": $If_None_Match, "If-Unmodified-Since": $If_Unmodified_Since, "Range": $Range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-mode": $x_amz_checksum_mode} | compact
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "partNumber" $part_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}") $qp)
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "If-Match": $if_match, "If-Modified-Since": $if_modified_since, "If-None-Match": $if_none_match, "If-Unmodified-Since": $if_unmodified_since, "Range": $range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-checksum-mode": $x_amz_checksum_mode} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1763,9 +1763,9 @@ export def "api HeadObject" [
 # PUT /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectPUT.html
 # operationId: PutObject
-export def "api PutObject" [
-  Bucket: string
-  Key: string
+export def "api update-object" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,19 +1776,19 @@ export def "api PutObject" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer # <p>The canned ACL to apply to the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL">Canned ACL</a>.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
-  --Cache-Control: string #  Can be used to specify caching behavior along the request/reply chain. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9</a>.
-  --Content-Disposition: string # Specifies presentational information for the object. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec19.html#sec19.5.1">http://www.w3.org/Protocols/rfc2616/rfc2616-sec19.html#sec19.5.1</a>.
-  --Content-Encoding: string # Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.11">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.11</a>.
-  --Content-Language: string # The language the content is in.
-  --Content-Length: int # Size of the body in bytes. This parameter is useful when the size of the body cannot be determined automatically. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.13">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.13</a>.
-  --Content-MD5: string # The base64-encoded 128-bit MD5 digest of the message (without the headers) according to RFC 1864. This header can be used as a message integrity check to verify that the data is the same data that was originally sent. Although it is optional, we recommend using the Content-MD5 mechanism as an end-to-end integrity check. For more information about REST request authentication, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html">REST Authentication</a>.
-  --Content-Type: string # A standard MIME type describing the format of the contents. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.17">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.17</a>.
+  --cache-control: string #  Can be used to specify caching behavior along the request/reply chain. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9</a>.
+  --content-disposition: string # Specifies presentational information for the object. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec19.html#sec19.5.1">http://www.w3.org/Protocols/rfc2616/rfc2616-sec19.html#sec19.5.1</a>.
+  --content-encoding: string # Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.11">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.11</a>.
+  --content-language: string # The language the content is in.
+  --content-length: int # Size of the body in bytes. This parameter is useful when the size of the body cannot be determined automatically. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.13">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.13</a>.
+  --content-md5: string # The base64-encoded 128-bit MD5 digest of the message (without the headers) according to RFC 1864. This header can be used as a message integrity check to verify that the data is the same data that was originally sent. Although it is optional, we recommend using the Content-MD5 mechanism as an end-to-end integrity check. For more information about REST request authentication, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html">REST Authentication</a>.
+  --content-type: string # A standard MIME type describing the format of the contents. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.17">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.17</a>.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-checksum-crc32: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 32-bit CRC32 checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-checksum-crc32c: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 32-bit CRC32C checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-checksum-sha1: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 160-bit SHA-1 digest of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-checksum-sha256: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 256-bit SHA-256 digest of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.
-  --Expires: string # The date and time at which the object is no longer cacheable. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21</a>.
+  --expires: string # The date and time at which the object is no longer cacheable. For more information, see <a href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.21</a>.
   --x-amz-grant-full-control: string # <p>Gives the grantee READ, READ_ACP, and WRITE_ACP permissions on the object.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
   --x-amz-grant-read: string # <p>Allows grantee to read the object data and its metadata.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
   --x-amz-grant-read-acp: string # <p>Allows grantee to read the object ACL.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
@@ -1798,7 +1798,7 @@ export def "api PutObject" [
   --x-amz-website-redirect-location: string # <p>If the bucket is configured as a website, redirects requests for this object to another object in the same bucket or to an external URL. Amazon S3 stores the value of this header in the object metadata. For information about object metadata, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMetadata.html">Object Key and Metadata</a>.</p> <p>In the following example, the request header sets the redirect to an object (anotherPage.html) in the same bucket:</p> <p> <code>x-amz-website-redirect-location: /anotherPage.html</code> </p> <p>In the following example, the request header sets the object redirect to another website:</p> <p> <code>x-amz-website-redirect-location: http://www.example.com/</code> </p> <p>For more information about website hosting in Amazon S3, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/WebsiteHosting.html">Hosting Websites on Amazon S3</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/how-to-page-redirect.html">How to Configure Website Page Redirects</a>. </p>
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
   --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the <code>x-amz-server-side-encryption-customer-algorithm</code> header.
-  --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
+  --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-server-side-encryption-aws-kms-key-id: string # If <code>x-amz-server-side-encryption</code> is present and has the value of <code>aws:kms</code>, this header specifies the ID of the Amazon Web Services Key Management Service (Amazon Web Services KMS) symmetrical customer managed key that was used for the object. If you specify <code>x-amz-server-side-encryption:aws:kms</code>, but do not provide<code> x-amz-server-side-encryption-aws-kms-key-id</code>, Amazon S3 uses the Amazon Web Services managed key to protect the data. If the KMS key does not exist in the same account issuing the command, you must use the full ARN and not just the ID. 
   --x-amz-server-side-encryption-context: string # Specifies the Amazon Web Services KMS Encryption Context to use for object encryption. The value of this header is a base64-encoded UTF-8 string holding JSON with the encryption context key-value pairs.
   --x-amz-server-side-encryption-bucket-key-enabled: oneof<nothing, bool> # <p>Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption with server-side encryption using AWS KMS (SSE-KMS). Setting this header to <code>true</code> causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS.</p> <p>Specifying this header with a PUT action doesn’t affect bucket-level settings for S3 Bucket Key.</p>
@@ -1813,9 +1813,9 @@ export def "api PutObject" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($Bucket)/($Key)")
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $Cache_Control, "Content-Disposition": $Content_Disposition, "Content-Encoding": $Content_Encoding, "Content-Language": $Content_Language, "Content-Length": $Content_Length, "Content-MD5": $Content_MD5, "Content-Type": $Content_Type, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "Expires": $Expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Cache-Control": $cache_control, "Content-Disposition": $content_disposition, "Content-Encoding": $content_encoding, "Content-Language": $content_language, "Content-Length": $content_length, "Content-MD5": $content_md5, "Content-Type": $content_type, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "Expires": $expires, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-server-side-encryption": $x_amz_server_side_encryption, "x-amz-storage-class": $x_amz_storage_class, "x-amz-website-redirect-location": $x_amz_website_redirect_location, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-server-side-encryption-aws-kms-key-id": $x_amz_server_side_encryption_aws_kms_key_id, "x-amz-server-side-encryption-context": $x_amz_server_side_encryption_context, "x-amz-server-side-encryption-bucket-key-enabled": $x_amz_server_side_encryption_bucket_key_enabled, "x-amz-request-payer": $x_amz_request_payer, "x-amz-tagging": $x_amz_tagging, "x-amz-object-lock-mode": $x_amz_object_lock_mode, "x-amz-object-lock-retain-until-date": $x_amz_object_lock_retain_until_date, "x-amz-object-lock-legal-hold": $x_amz_object_lock_legal_hold, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1826,9 +1826,9 @@ export def "api PutObject" [
 #
 # DELETE /{Bucket}/{Key}#tagging
 # operationId: DeleteObjectTagging
-export def "api DeleteObjectTagging" [
-  Bucket: string
-  Key: string
+export def "api delete-object-tagging" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1837,15 +1837,15 @@ export def "api DeleteObjectTagging" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # The versionId of the object that the tag-set will be removed from.
+  --version-id: string # The versionId of the object that the tag-set will be removed from.
   --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#tagging" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#tagging") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -1857,9 +1857,9 @@ export def "api DeleteObjectTagging" [
 #
 # GET /{Bucket}/{Key}#tagging
 # operationId: GetObjectTagging
-export def "api GetObjectTagging" [
-  Bucket: string
-  Key: string
+export def "api get-object-tagging" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1868,7 +1868,7 @@ export def "api GetObjectTagging" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # The versionId of the object for which to get the tagging information.
+  --version-id: string # The versionId of the object for which to get the tagging information.
   --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -1876,8 +1876,8 @@ export def "api GetObjectTagging" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#tagging" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#tagging") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-request-payer": $x_amz_request_payer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -1889,9 +1889,9 @@ export def "api GetObjectTagging" [
 #
 # PUT /{Bucket}/{Key}#tagging
 # operationId: PutObjectTagging
-export def "api PutObjectTagging" [
-  Bucket: string
-  Key: string
+export def "api update-object-tagging" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1900,10 +1900,10 @@ export def "api PutObjectTagging" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # The versionId of the object that the tag-set will be added to.
+  --version-id: string # The versionId of the object that the tag-set will be added to.
   --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --x-amz-request-payer: string@x-amz-request-payer-completer
@@ -1912,10 +1912,10 @@ export def "api PutObjectTagging" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#tagging" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "tagging" $tagging "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#tagging") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-request-payer": $x_amz_request_payer} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-request-payer": $x_amz_request_payer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1927,8 +1927,8 @@ export def "api PutObjectTagging" [
 # POST /{Bucket}#delete
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/multiobjectdeleteapi.html
 # operationId: DeleteObjects
-export def "api DeleteObjects" [
-  Bucket: string
+export def "api delete-objects" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1950,7 +1950,7 @@ export def "api DeleteObjects" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "delete" $delete "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#delete" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#delete") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-mfa": $x_amz_mfa, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bypass-governance-retention": $x_amz_bypass_governance_retention, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1963,8 +1963,8 @@ export def "api DeleteObjects" [
 #
 # DELETE /{Bucket}#publicAccessBlock
 # operationId: DeletePublicAccessBlock
-export def "api DeletePublicAccessBlock" [
-  Bucket: string
+export def "api delete-public-access-block" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1973,14 +1973,14 @@ export def "api DeletePublicAccessBlock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --publicAccessBlock: oneof<nothing, bool> # allows empty value
+  --public-access-block: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "publicAccessBlock" $publicAccessBlock "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#publicAccessBlock" $qp)
+  let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#publicAccessBlock") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1992,8 +1992,8 @@ export def "api DeletePublicAccessBlock" [
 #
 # GET /{Bucket}#publicAccessBlock
 # operationId: GetPublicAccessBlock
-export def "api GetPublicAccessBlock" [
-  Bucket: string
+export def "api get-public-access-block" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,14 +2002,14 @@ export def "api GetPublicAccessBlock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --publicAccessBlock: oneof<nothing, bool> # allows empty value
+  --public-access-block: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "publicAccessBlock" $publicAccessBlock "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#publicAccessBlock" $qp)
+  let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#publicAccessBlock") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2021,8 +2021,8 @@ export def "api GetPublicAccessBlock" [
 #
 # PUT /{Bucket}#publicAccessBlock
 # operationId: PutPublicAccessBlock
-export def "api PutPublicAccessBlock" [
-  Bucket: string
+export def "api update-public-access-block" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,9 +2031,9 @@ export def "api PutPublicAccessBlock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --publicAccessBlock: oneof<nothing, bool> # allows empty value
+  --public-access-block: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The MD5 hash of the <code>PutPublicAccessBlock</code> request body. </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The MD5 hash of the <code>PutPublicAccessBlock</code> request body. </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -2041,10 +2041,10 @@ export def "api PutPublicAccessBlock" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "publicAccessBlock" $publicAccessBlock "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#publicAccessBlock" $qp)
+  let qp = [(serialize-qp "publicAccessBlock" $public_access_block "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#publicAccessBlock") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2055,8 +2055,8 @@ export def "api PutPublicAccessBlock" [
 #
 # GET /{Bucket}#accelerate
 # operationId: GetBucketAccelerateConfiguration
-export def "api GetBucketAccelerateConfiguration" [
-  Bucket: string
+export def "api get-accelerate-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2072,7 +2072,7 @@ export def "api GetBucketAccelerateConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accelerate" $accelerate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#accelerate" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#accelerate") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2084,8 +2084,8 @@ export def "api GetBucketAccelerateConfiguration" [
 #
 # PUT /{Bucket}#accelerate
 # operationId: PutBucketAccelerateConfiguration
-export def "api PutBucketAccelerateConfiguration" [
-  Bucket: string
+export def "api update-accelerate-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2104,7 +2104,7 @@ export def "api PutBucketAccelerateConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accelerate" $accelerate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#accelerate" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#accelerate") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2118,8 +2118,8 @@ export def "api PutBucketAccelerateConfiguration" [
 # GET /{Bucket}#acl
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETacl.html
 # operationId: GetBucketAcl
-export def "api GetBucketAcl" [
-  Bucket: string
+export def "api get-acl" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2135,7 +2135,7 @@ export def "api GetBucketAcl" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#acl" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#acl") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2148,8 +2148,8 @@ export def "api GetBucketAcl" [
 # PUT /{Bucket}#acl
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTacl.html
 # operationId: PutBucketAcl
-export def "api PutBucketAcl" [
-  Bucket: string
+export def "api update-acl" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2161,7 +2161,7 @@ export def "api PutBucketAcl" [
   --acl: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer-1 # The canned ACL to apply to the bucket.
-  --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.</a> </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.</a> </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-grant-full-control: string # Allows grantee the read, write, read ACP, and write ACP permissions on the bucket.
   --x-amz-grant-read: string # Allows grantee to list the objects in the bucket.
@@ -2175,9 +2175,9 @@ export def "api PutBucketAcl" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#acl" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#acl") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2191,8 +2191,8 @@ export def "api PutBucketAcl" [
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETlifecycle.html
 # operationId: GetBucketLifecycle
 @deprecated
-export def "api GetBucketLifecycle" [
-  Bucket: string
+export def "api get-lifecycle" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2208,7 +2208,7 @@ export def "api GetBucketLifecycle" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#lifecycle&deprecated!" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#lifecycle&deprecated!") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2223,8 +2223,8 @@ export def "api GetBucketLifecycle" [
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTlifecycle.html
 # operationId: PutBucketLifecycle
 @deprecated
-export def "api PutBucketLifecycle" [
-  Bucket: string
+export def "api update-lifecycle" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2235,7 +2235,7 @@ export def "api PutBucketLifecycle" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lifecycle: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p/> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p/> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -2244,9 +2244,9 @@ export def "api PutBucketLifecycle" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lifecycle" $lifecycle "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#lifecycle&deprecated!" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#lifecycle&deprecated!") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2258,8 +2258,8 @@ export def "api PutBucketLifecycle" [
 # GET /{Bucket}#location
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETlocation.html
 # operationId: GetBucketLocation
-export def "api GetBucketLocation" [
-  Bucket: string
+export def "api get-location" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2275,7 +2275,7 @@ export def "api GetBucketLocation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#location" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#location") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2288,8 +2288,8 @@ export def "api GetBucketLocation" [
 # GET /{Bucket}#logging
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETlogging.html
 # operationId: GetBucketLogging
-export def "api GetBucketLogging" [
-  Bucket: string
+export def "api get-logging" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2305,7 +2305,7 @@ export def "api GetBucketLogging" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "logging" $logging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#logging" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#logging") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2318,8 +2318,8 @@ export def "api GetBucketLogging" [
 # PUT /{Bucket}#logging
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTlogging.html
 # operationId: PutBucketLogging
-export def "api PutBucketLogging" [
-  Bucket: string
+export def "api update-logging" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2330,7 +2330,7 @@ export def "api PutBucketLogging" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --logging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The MD5 hash of the <code>PutBucketLogging</code> request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -2339,9 +2339,9 @@ export def "api PutBucketLogging" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "logging" $logging "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#logging" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#logging") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2352,8 +2352,8 @@ export def "api PutBucketLogging" [
 #
 # GET /{Bucket}#notification
 # operationId: GetBucketNotificationConfiguration
-export def "api GetBucketNotificationConfiguration" [
-  Bucket: string
+export def "api get-notification-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2369,7 +2369,7 @@ export def "api GetBucketNotificationConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#notification" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#notification") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2381,8 +2381,8 @@ export def "api GetBucketNotificationConfiguration" [
 #
 # PUT /{Bucket}#notification
 # operationId: PutBucketNotificationConfiguration
-export def "api PutBucketNotificationConfiguration" [
-  Bucket: string
+export def "api update-notification-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2401,7 +2401,7 @@ export def "api PutBucketNotificationConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#notification" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#notification") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-skip-destination-validation": $x_amz_skip_destination_validation} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2417,8 +2417,8 @@ export def "api PutBucketNotificationConfiguration" [
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETnotification.html
 # operationId: GetBucketNotification
 @deprecated
-export def "api GetBucketNotification" [
-  Bucket: string
+export def "api get-notification" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2434,7 +2434,7 @@ export def "api GetBucketNotification" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#notification&deprecated!" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#notification&deprecated!") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2449,8 +2449,8 @@ export def "api GetBucketNotification" [
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTnotification.html
 # operationId: PutBucketNotification
 @deprecated
-export def "api PutBucketNotification" [
-  Bucket: string
+export def "api update-notification" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2461,7 +2461,7 @@ export def "api PutBucketNotification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --notification: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The MD5 hash of the <code>PutPublicAccessBlock</code> request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The MD5 hash of the <code>PutPublicAccessBlock</code> request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -2470,9 +2470,9 @@ export def "api PutBucketNotification" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "notification" $notification "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#notification&deprecated!" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#notification&deprecated!") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2483,8 +2483,8 @@ export def "api PutBucketNotification" [
 #
 # GET /{Bucket}#policyStatus
 # operationId: GetBucketPolicyStatus
-export def "api GetBucketPolicyStatus" [
-  Bucket: string
+export def "api get-policy-status" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2493,14 +2493,14 @@ export def "api GetBucketPolicyStatus" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --policyStatus: oneof<nothing, bool> # allows empty value
+  --policy-status: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "policyStatus" $policyStatus "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#policyStatus" $qp)
+  let qp = [(serialize-qp "policyStatus" $policy_status "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#policyStatus") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2513,8 +2513,8 @@ export def "api GetBucketPolicyStatus" [
 # GET /{Bucket}#requestPayment
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTrequestPaymentGET.html
 # operationId: GetBucketRequestPayment
-export def "api GetBucketRequestPayment" [
-  Bucket: string
+export def "api get-request-payment" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2523,14 +2523,14 @@ export def "api GetBucketRequestPayment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --requestPayment: oneof<nothing, bool> # allows empty value
+  --request-payment: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "requestPayment" $requestPayment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#requestPayment" $qp)
+  let qp = [(serialize-qp "requestPayment" $request_payment "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#requestPayment") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2543,8 +2543,8 @@ export def "api GetBucketRequestPayment" [
 # PUT /{Bucket}#requestPayment
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTrequestPaymentPUT.html
 # operationId: PutBucketRequestPayment
-export def "api PutBucketRequestPayment" [
-  Bucket: string
+export def "api update-request-payment" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2553,9 +2553,9 @@ export def "api PutBucketRequestPayment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --requestPayment: oneof<nothing, bool> # allows empty value
+  --request-payment: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -2563,10 +2563,10 @@ export def "api PutBucketRequestPayment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "requestPayment" $requestPayment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#requestPayment" $qp)
+  let qp = [(serialize-qp "requestPayment" $request_payment "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#requestPayment") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2578,8 +2578,8 @@ export def "api PutBucketRequestPayment" [
 # GET /{Bucket}#versioning
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETversioningStatus.html
 # operationId: GetBucketVersioning
-export def "api GetBucketVersioning" [
-  Bucket: string
+export def "api get-versioning" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2595,7 +2595,7 @@ export def "api GetBucketVersioning" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "versioning" $versioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#versioning" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#versioning") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2608,8 +2608,8 @@ export def "api GetBucketVersioning" [
 # PUT /{Bucket}#versioning
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketPUTVersioningStatus.html
 # operationId: PutBucketVersioning
-export def "api PutBucketVersioning" [
-  Bucket: string
+export def "api update-versioning" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2620,7 +2620,7 @@ export def "api PutBucketVersioning" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --versioning: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-  --Content-MD5: string # <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this header as a message integrity check to verify that the request body was not corrupted in transit. For more information, see <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-mfa: string # The concatenation of the authentication device's serial number, a space, and the value that is displayed on your authentication device.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
@@ -2630,9 +2630,9 @@ export def "api PutBucketVersioning" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "versioning" $versioning "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#versioning" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#versioning") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-mfa": $x_amz_mfa, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-mfa": $x_amz_mfa, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2644,9 +2644,9 @@ export def "api PutBucketVersioning" [
 # GET /{Bucket}/{Key}#acl
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectGETacl.html
 # operationId: GetObjectAcl
-export def "api GetObjectAcl" [
-  Bucket: string
-  Key: string
+export def "api get-object-acl" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2655,7 +2655,7 @@ export def "api GetObjectAcl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # VersionId used to reference a specific version of the object.
+  --version-id: string # VersionId used to reference a specific version of the object.
   --acl: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
@@ -2663,8 +2663,8 @@ export def "api GetObjectAcl" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#acl" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#acl") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2677,9 +2677,9 @@ export def "api GetObjectAcl" [
 # PUT /{Bucket}/{Key}#acl
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectPUTacl.html
 # operationId: PutObjectAcl
-export def "api PutObjectAcl" [
-  Bucket: string
-  Key: string
+export def "api update-object-acl" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2688,11 +2688,11 @@ export def "api PutObjectAcl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # VersionId used to reference a specific version of the object.
+  --version-id: string # VersionId used to reference a specific version of the object.
   --acl: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-acl: string@x-amz-acl-completer # The canned ACL to apply to the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#CannedACL">Canned ACL</a>.
-  --Content-MD5: string # <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The base64-encoded 128-bit MD5 digest of the data. This header must be used as a message integrity check to verify that the request body was not corrupted in transit. For more information, go to <a href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864.&gt;</a> </p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-grant-full-control: string # <p>Allows grantee the read, write, read ACP, and write ACP permissions on the bucket.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
   --x-amz-grant-read: string # <p>Allows grantee to list the objects in the bucket.</p> <p>This action is not supported by Amazon S3 on Outposts.</p>
@@ -2706,10 +2706,10 @@ export def "api PutObjectAcl" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#acl" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "acl" $acl "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#acl") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-acl": $x_amz_acl, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-grant-full-control": $x_amz_grant_full_control, "x-amz-grant-read": $x_amz_grant_read, "x-amz-grant-read-acp": $x_amz_grant_read_acp, "x-amz-grant-write": $x_amz_grant_write, "x-amz-grant-write-acp": $x_amz_grant_write_acp, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2720,9 +2720,9 @@ export def "api PutObjectAcl" [
 #
 # GET /{Bucket}/{Key}#attributes&x-amz-object-attributes
 # operationId: GetObjectAttributes
-export def "api GetObjectAttributes" [
-  Bucket: string
-  Key: string
+export def "api get-object-attributes" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2731,23 +2731,23 @@ export def "api GetObjectAttributes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # The version ID used to reference a specific version of the object.
+  --version-id: string # The version ID used to reference a specific version of the object.
   --attributes: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-max-parts: int # Sets the maximum number of parts to return.
   --x-amz-part-number-marker: int # Specifies the part after which listing should begin. Only parts with higher part numbers will be listed.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use when encrypting the object (for example, AES256).
   --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the <code>x-amz-server-side-encryption-customer-algorithm</code> header.
-  --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
+  --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --x-amz-object-attributes: list # An XML header that specifies the fields at the root level that you want returned in the response. Fields that you do not specify are not returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#attributes&x-amz-object-attributes" $qp)
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-max-parts": $x_amz_max_parts, "x-amz-part-number-marker": $x_amz_part_number_marker, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-object-attributes": $x_amz_object_attributes} | compact
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "attributes" $attributes "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#attributes&x-amz-object-attributes") $qp)
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-max-parts": $x_amz_max_parts, "x-amz-part-number-marker": $x_amz_part_number_marker, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-object-attributes": $x_amz_object_attributes} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2758,9 +2758,9 @@ export def "api GetObjectAttributes" [
 #
 # GET /{Bucket}/{Key}#legal-hold
 # operationId: GetObjectLegalHold
-export def "api GetObjectLegalHold" [
-  Bucket: string
-  Key: string
+export def "api get-object-legal-hold" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2769,7 +2769,7 @@ export def "api GetObjectLegalHold" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # The version ID of the object whose legal hold status you want to retrieve.
+  --version-id: string # The version ID of the object whose legal hold status you want to retrieve.
   --legal-hold: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
@@ -2777,8 +2777,8 @@ export def "api GetObjectLegalHold" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "legal-hold" $legal_hold "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#legal-hold" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "legal-hold" $legal_hold "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#legal-hold") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2790,9 +2790,9 @@ export def "api GetObjectLegalHold" [
 #
 # PUT /{Bucket}/{Key}#legal-hold
 # operationId: PutObjectLegalHold
-export def "api PutObjectLegalHold" [
-  Bucket: string
-  Key: string
+export def "api update-object-legal-hold" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2801,11 +2801,11 @@ export def "api PutObjectLegalHold" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # The version ID of the object that you want to place a legal hold on.
+  --version-id: string # The version ID of the object that you want to place a legal hold on.
   --legal-hold: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
-  --Content-MD5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -2813,10 +2813,10 @@ export def "api PutObjectLegalHold" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "legal-hold" $legal_hold "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#legal-hold" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "legal-hold" $legal_hold "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#legal-hold") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2827,8 +2827,8 @@ export def "api PutObjectLegalHold" [
 #
 # GET /{Bucket}#object-lock
 # operationId: GetObjectLockConfiguration
-export def "api GetObjectLockConfiguration" [
-  Bucket: string
+export def "api get-object-lock-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2844,7 +2844,7 @@ export def "api GetObjectLockConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "object-lock" $object_lock "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#object-lock" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#object-lock") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2856,8 +2856,8 @@ export def "api GetObjectLockConfiguration" [
 #
 # PUT /{Bucket}#object-lock
 # operationId: PutObjectLockConfiguration
-export def "api PutObjectLockConfiguration" [
-  Bucket: string
+export def "api update-object-lock-configuration" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2870,7 +2870,7 @@ export def "api PutObjectLockConfiguration" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-bucket-object-lock-token: string # A token to allow Object Lock to be enabled for an existing bucket.
-  --Content-MD5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -2879,9 +2879,9 @@ export def "api PutObjectLockConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "object-lock" $object_lock "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#object-lock" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#object-lock") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bucket-object-lock-token": $x_amz_bucket_object_lock_token, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bucket-object-lock-token": $x_amz_bucket_object_lock_token, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2892,9 +2892,9 @@ export def "api PutObjectLockConfiguration" [
 #
 # GET /{Bucket}/{Key}#retention
 # operationId: GetObjectRetention
-export def "api GetObjectRetention" [
-  Bucket: string
-  Key: string
+export def "api get-object-retention" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2903,7 +2903,7 @@ export def "api GetObjectRetention" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # The version ID for the object whose retention settings you want to retrieve.
+  --version-id: string # The version ID for the object whose retention settings you want to retrieve.
   --retention: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
@@ -2911,8 +2911,8 @@ export def "api GetObjectRetention" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#retention" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#retention") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2924,9 +2924,9 @@ export def "api GetObjectRetention" [
 #
 # PUT /{Bucket}/{Key}#retention
 # operationId: PutObjectRetention
-export def "api PutObjectRetention" [
-  Bucket: string
-  Key: string
+export def "api update-object-retention" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2935,12 +2935,12 @@ export def "api PutObjectRetention" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # The version ID for the object that you want to apply this Object Retention configuration to.
+  --version-id: string # The version ID for the object that you want to apply this Object Retention configuration to.
   --retention: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-bypass-governance-retention: oneof<nothing, bool> # Indicates whether this action should bypass Governance-mode restrictions.
-  --Content-MD5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
+  --content-md5: string # <p>The MD5 hash for the request body.</p> <p>For requests made using the Amazon Web Services Command Line Interface (CLI) or Amazon Web Services SDKs, this field is calculated automatically.</p>
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p>
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -2948,10 +2948,10 @@ export def "api PutObjectRetention" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#retention" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "retention" $retention "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#retention") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bypass-governance-retention": $x_amz_bypass_governance_retention, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-bypass-governance-retention": $x_amz_bypass_governance_retention, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2963,9 +2963,9 @@ export def "api PutObjectRetention" [
 # GET /{Bucket}/{Key}#torrent
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectGETtorrent.html
 # operationId: GetObjectTorrent
-export def "api GetObjectTorrent" [
-  Bucket: string
-  Key: string
+export def "api get-object-torrent" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2982,7 +2982,7 @@ export def "api GetObjectTorrent" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "torrent" $torrent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#torrent" $qp)
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#torrent") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -2994,8 +2994,8 @@ export def "api GetObjectTorrent" [
 #
 # GET /{Bucket}#analytics
 # operationId: ListBucketAnalyticsConfigurations
-export def "api ListBucketAnalyticsConfigurations" [
-  Bucket: string
+export def "api list-analytics-configurations" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3012,7 +3012,7 @@ export def "api ListBucketAnalyticsConfigurations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "analytics" $analytics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#analytics" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#analytics") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -3024,8 +3024,8 @@ export def "api ListBucketAnalyticsConfigurations" [
 #
 # GET /{Bucket}#intelligent-tiering
 # operationId: ListBucketIntelligentTieringConfigurations
-export def "api ListBucketIntelligentTieringConfigurations" [
-  Bucket: string
+export def "api list-intelligent-tiering-configurations" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3041,7 +3041,7 @@ export def "api ListBucketIntelligentTieringConfigurations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "intelligent-tiering" $intelligent_tiering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#intelligent-tiering" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#intelligent-tiering") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -3053,8 +3053,8 @@ export def "api ListBucketIntelligentTieringConfigurations" [
 #
 # GET /{Bucket}#inventory
 # operationId: ListBucketInventoryConfigurations
-export def "api ListBucketInventoryConfigurations" [
-  Bucket: string
+export def "api list-inventory-configurations" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3071,7 +3071,7 @@ export def "api ListBucketInventoryConfigurations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "inventory" $inventory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#inventory" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#inventory") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -3083,8 +3083,8 @@ export def "api ListBucketInventoryConfigurations" [
 #
 # GET /{Bucket}#metrics
 # operationId: ListBucketMetricsConfigurations
-export def "api ListBucketMetricsConfigurations" [
-  Bucket: string
+export def "api list-metrics-configurations" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3101,7 +3101,7 @@ export def "api ListBucketMetricsConfigurations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#metrics" $qp)
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#metrics") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -3114,7 +3114,7 @@ export def "api ListBucketMetricsConfigurations" [
 # GET /
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTServiceGET.html
 # operationId: ListBuckets
-export def "api ListBuckets" [
+export def "api list-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3140,8 +3140,8 @@ export def "api ListBuckets" [
 # GET /{Bucket}#uploads
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadListMPUpload.html
 # operationId: ListMultipartUploads
-export def "api ListMultipartUploads" [
-  Bucket: string
+export def "api list-multipart-uploads" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3156,17 +3156,17 @@ export def "api ListMultipartUploads" [
   --max-uploads: int # Sets the maximum number of multipart uploads, from 1 to 1,000, to return in the response body. 1,000 is the maximum number of uploads that can be returned in a response.
   --prefix: string # Lists in-progress uploads only for those keys that begin with the specified prefix. You can use prefixes to separate a bucket into different grouping of keys. (You can think of using prefix to make groups in the same way you'd use a folder in a file system.)
   --upload-id-marker: string # Together with key-marker, specifies the multipart upload after which listing should begin. If key-marker is not specified, the upload-id-marker parameter is ignored. Otherwise, any multipart uploads for a key equal to the key-marker might be included in the list only if they have an upload ID lexicographically greater than the specified <code>upload-id-marker</code>.
-  --MaxUploads: string # Pagination limit
-  --KeyMarker: string # Pagination token
-  --UploadIdMarker: string # Pagination token
+  --max-uploads: string # Pagination limit
+  --key-marker: string # Pagination token
+  --upload-id-marker: string # Pagination token
   --uploads: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-uploads" $max_uploads "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "upload-id-marker" $upload_id_marker "scalar") (serialize-qp "MaxUploads" $MaxUploads "scalar") (serialize-qp "KeyMarker" $KeyMarker "scalar") (serialize-qp "UploadIdMarker" $UploadIdMarker "scalar") (serialize-qp "uploads" $uploads "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#uploads" $qp)
+  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-uploads" $max_uploads "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "upload-id-marker" $upload_id_marker "scalar") (serialize-qp "MaxUploads" $max_uploads "scalar") (serialize-qp "KeyMarker" $key_marker "scalar") (serialize-qp "UploadIdMarker" $upload_id_marker "scalar") (serialize-qp "uploads" $uploads "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#uploads") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -3179,8 +3179,8 @@ export def "api ListMultipartUploads" [
 # GET /{Bucket}#versions
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketGETVersion.html
 # operationId: ListObjectVersions
-export def "api ListObjectVersions" [
-  Bucket: string
+export def "api list-object-versions" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3195,17 +3195,17 @@ export def "api ListObjectVersions" [
   --max-keys: int # Sets the maximum number of keys returned in the response. By default the action returns up to 1,000 key names. The response might contain fewer keys but will never contain more. If additional keys satisfy the search criteria, but were not returned because max-keys was exceeded, the response contains &lt;isTruncated&gt;true&lt;/isTruncated&gt;. To return the additional keys, see key-marker and version-id-marker.
   --prefix: string # Use this parameter to select only those keys that begin with the specified prefix. You can use prefixes to separate a bucket into different groupings of keys. (You can think of using prefix to make groups in the same way you'd use a folder in a file system.) You can use prefix with delimiter to roll up numerous objects into a single result under CommonPrefixes. 
   --version-id-marker: string # Specifies the object version you want to start listing from.
-  --MaxKeys: string # Pagination limit
-  --KeyMarker: string # Pagination token
-  --VersionIdMarker: string # Pagination token
+  --max-keys: string # Pagination limit
+  --key-marker: string # Pagination token
+  --version-id-marker: string # Pagination token
   --versions: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "version-id-marker" $version_id_marker "scalar") (serialize-qp "MaxKeys" $MaxKeys "scalar") (serialize-qp "KeyMarker" $KeyMarker "scalar") (serialize-qp "VersionIdMarker" $VersionIdMarker "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#versions" $qp)
+  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "key-marker" $key_marker "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "version-id-marker" $version_id_marker "scalar") (serialize-qp "MaxKeys" $max_keys "scalar") (serialize-qp "KeyMarker" $key_marker "scalar") (serialize-qp "VersionIdMarker" $version_id_marker "scalar") (serialize-qp "versions" $versions "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#versions") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -3217,8 +3217,8 @@ export def "api ListObjectVersions" [
 #
 # GET /{Bucket}#list-type=2
 # operationId: ListObjectsV2
-export def "api ListObjectsV2" [
-  Bucket: string
+export def "api list-objects-v2" [
+  bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3234,8 +3234,8 @@ export def "api ListObjectsV2" [
   --continuation-token: string # ContinuationToken indicates Amazon S3 that the list is being continued on this bucket with a token. ContinuationToken is obfuscated and is not a real key.
   --fetch-owner: oneof<nothing, bool> # The owner field is not present in listV2 by default, if you want to return owner field with each key in the result then set the fetch owner field to true.
   --start-after: string # StartAfter is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key. StartAfter can be any key in the bucket.
-  --MaxKeys: string # Pagination limit
-  --ContinuationToken: string # Pagination token
+  --max-keys: string # Pagination limit
+  --continuation-token: string # Pagination token
   --list-type: string@list-type-completer
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer # Confirms that the requester knows that she or he will be charged for the list objects request in V2 style. Bucket owners need not specify this parameter in their requests.
@@ -3243,8 +3243,8 @@ export def "api ListObjectsV2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "fetch-owner" $fetch_owner "scalar") (serialize-qp "start-after" $start_after "scalar") (serialize-qp "MaxKeys" $MaxKeys "scalar") (serialize-qp "ContinuationToken" $ContinuationToken "scalar") (serialize-qp "list-type" $list_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)#list-type=2" $qp)
+  let qp = [(serialize-qp "delimiter" $delimiter "scalar") (serialize-qp "encoding-type" $encoding_type "scalar") (serialize-qp "max-keys" $max_keys "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "continuation-token" $continuation_token "scalar") (serialize-qp "fetch-owner" $fetch_owner "scalar") (serialize-qp "start-after" $start_after "scalar") (serialize-qp "MaxKeys" $max_keys "scalar") (serialize-qp "ContinuationToken" $continuation_token "scalar") (serialize-qp "list-type" $list_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket} | format pattern "/{bucket}#list-type=2") $qp)
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
@@ -3257,9 +3257,9 @@ export def "api ListObjectsV2" [
 # POST /{Bucket}/{Key}#restore
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectRestore.html
 # operationId: RestoreObject
-export def "api RestoreObject" [
-  Bucket: string
-  Key: string
+export def "api post-by-Bucket-Key-1" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3268,7 +3268,7 @@ export def "api RestoreObject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --versionId: string # VersionId used to reference a specific version of the object.
+  --version-id: string # VersionId used to reference a specific version of the object.
   --restore: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
@@ -3279,8 +3279,8 @@ export def "api RestoreObject" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "versionId" $versionId "scalar") (serialize-qp "restore" $restore "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#restore" $qp)
+  let qp = [(serialize-qp "versionId" $version_id "scalar") (serialize-qp "restore" $restore "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#restore") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-payer": $x_amz_request_payer, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3293,9 +3293,9 @@ export def "api RestoreObject" [
 #
 # POST /{Bucket}/{Key}#select&select-type=2
 # operationId: SelectObjectContent
-export def "api SelectObjectContent" [
-  Bucket: string
-  Key: string
+export def "api post-by-Bucket-Key-2" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3309,7 +3309,7 @@ export def "api SelectObjectContent" [
   --x-amz-security-token: string
   --x-amz-server-side-encryption-customer-algorithm: string # The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
-  --x-amz-server-side-encryption-customer-key-MD5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
+  --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Protecting data using SSE-C keys</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
 ]: any -> any {
@@ -3317,9 +3317,9 @@ export def "api SelectObjectContent" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "select-type" $select_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#select&select-type=2" $qp)
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#select&select-type=2") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3331,9 +3331,9 @@ export def "api SelectObjectContent" [
 # PUT /{Bucket}/{Key}#partNumber&uploadId
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadUploadPart.html
 # operationId: UploadPart
-export def "api UploadPart" [
-  Bucket: string
-  Key: string
+export def "api upload-part" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3342,11 +3342,11 @@ export def "api UploadPart" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --partNumber: int # Part number of part being uploaded. This is a positive integer between 1 and 10,000.
-  --uploadId: string # Upload ID identifying the multipart upload whose part is being uploaded.
+  --part-number: int # Part number of part being uploaded. This is a positive integer between 1 and 10,000.
+  --upload-id: string # Upload ID identifying the multipart upload whose part is being uploaded.
   --x-amz-security-token: string
-  --Content-Length: int # Size of the body in bytes. This parameter is useful when the size of the body cannot be determined automatically.
-  --Content-MD5: string # The base64-encoded 128-bit MD5 digest of the part data. This parameter is auto-populated when using the command from the CLI. This parameter is required if object lock parameters are specified.
+  --content-length: int # Size of the body in bytes. This parameter is useful when the size of the body cannot be determined automatically.
+  --content-md5: string # The base64-encoded 128-bit MD5 digest of the part data. This parameter is auto-populated when using the command from the CLI. This parameter is required if object lock parameters are specified.
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # <p>Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding <code>x-amz-checksum</code> or <code>x-amz-trailer</code> header sent. Otherwise, Amazon S3 fails the request with the HTTP status code <code>400 Bad Request</code>. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>If you provide an individual checksum, Amazon S3 ignores any provided <code>ChecksumAlgorithm</code> parameter.</p> <p>This checksum algorithm must be the same for all parts and it match the checksum value supplied in the <code>CreateMultipartUpload</code> request.</p>
   --x-amz-checksum-crc32: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 32-bit CRC32 checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-checksum-crc32c: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 32-bit CRC32C checksum of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.
@@ -3354,7 +3354,7 @@ export def "api UploadPart" [
   --x-amz-checksum-sha256: string # This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 256-bit SHA-256 digest of the object. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
   --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the <code>x-amz-server-side-encryption-customer-algorithm header</code>. This must be the same encryption key specified in the initiate multipart upload request.
-  --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
+  --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --body: record
@@ -3362,10 +3362,10 @@ export def "api UploadPart" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "partNumber" $partNumber "scalar") (serialize-qp "uploadId" $uploadId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#partNumber&uploadId" $qp)
+  let qp = [(serialize-qp "partNumber" $part_number "scalar") (serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#partNumber&uploadId") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-Length": $Content_Length, "Content-MD5": $Content_MD5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "Content-Length": $content_length, "Content-MD5": $content_md5, "x-amz-sdk-checksum-algorithm": $x_amz_sdk_checksum_algorithm, "x-amz-checksum-crc32": $x_amz_checksum_crc32, "x-amz-checksum-crc32c": $x_amz_checksum_crc32c, "x-amz-checksum-sha1": $x_amz_checksum_sha1, "x-amz-checksum-sha256": $x_amz_checksum_sha256, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3377,9 +3377,9 @@ export def "api UploadPart" [
 # PUT /{Bucket}/{Key}#x-amz-copy-source&partNumber&uploadId
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadUploadPartCopy.html
 # operationId: UploadPartCopy
-export def "api UploadPartCopy" [
-  Bucket: string
-  Key: string
+export def "api upload-part-copy" [
+  bucket: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3388,8 +3388,8 @@ export def "api UploadPartCopy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --partNumber: int # Part number of part being copied. This is a positive integer between 1 and 10,000.
-  --uploadId: string # Upload ID identifying the multipart upload whose part is being copied.
+  --part-number: int # Part number of part being copied. This is a positive integer between 1 and 10,000.
+  --upload-id: string # Upload ID identifying the multipart upload whose part is being copied.
   --x-amz-security-token: string
   --x-amz-copy-source: string # <p>Specifies the source object for the copy operation. You specify the value in one of two formats, depending on whether you want to access the source object through an <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-points.html">access point</a>:</p> <ul> <li> <p>For objects not accessed through an access point, specify the name of the source bucket and key of the source object, separated by a slash (/). For example, to copy the object <code>reports/january.pdf</code> from the bucket <code>awsexamplebucket</code>, use <code>awsexamplebucket/reports/january.pdf</code>. The value must be URL-encoded.</p> </li> <li> <p>For objects accessed through access points, specify the Amazon Resource Name (ARN) of the object as accessed through the access point, in the format <code>arn:aws:s3:&lt;Region&gt;:&lt;account-id&gt;:accesspoint/&lt;access-point-name&gt;/object/&lt;key&gt;</code>. For example, to copy the object <code>reports/january.pdf</code> through access point <code>my-access-point</code> owned by account <code>123456789012</code> in Region <code>us-west-2</code>, use the URL encoding of <code>arn:aws:s3:us-west-2:123456789012:accesspoint/my-access-point/object/reports/january.pdf</code>. The value must be URL encoded.</p> <note> <p>Amazon S3 supports copy operations using access points only when the source and destination buckets are in the same Amazon Web Services Region.</p> </note> <p>Alternatively, for objects accessed through Amazon S3 on Outposts, specify the ARN of the object as accessed in the format <code>arn:aws:s3-outposts:&lt;Region&gt;:&lt;account-id&gt;:outpost/&lt;outpost-id&gt;/object/&lt;key&gt;</code>. For example, to copy the object <code>reports/january.pdf</code> through outpost <code>my-outpost</code> owned by account <code>123456789012</code> in Region <code>us-west-2</code>, use the URL encoding of <code>arn:aws:s3-outposts:us-west-2:123456789012:outpost/my-outpost/object/reports/january.pdf</code>. The value must be URL-encoded. </p> </li> </ul> <p>To copy a specific version of an object, append <code>?versionId=&lt;version-id&gt;</code> to the value (for example, <code>awsexamplebucket/reports/january.pdf?versionId=QUpfdndhfd8438MNFDN93jdnJFkdmqnh893</code>). If you don't specify a version ID, Amazon S3 copies the latest version of the source object.</p>
   --x-amz-copy-source-if-match: string # Copies the object if its entity tag (ETag) matches the specified tag.
@@ -3399,19 +3399,19 @@ export def "api UploadPartCopy" [
   --x-amz-copy-source-range: string # The range of bytes to copy from the source object. The range value must use the form bytes=first-last, where the first and last are the zero-based byte offsets to copy. For example, bytes=0-9 indicates that you want to copy the first 10 bytes of the source. You can copy a range only if the source object is greater than 5 MB.
   --x-amz-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use to when encrypting the object (for example, AES256).
   --x-amz-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use in encrypting data. This value is used to store the object and then it is discarded; Amazon S3 does not store the encryption key. The key must be appropriate for use with the algorithm specified in the <code>x-amz-server-side-encryption-customer-algorithm</code> header. This must be the same encryption key specified in the initiate multipart upload request.
-  --x-amz-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
+  --x-amz-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-copy-source-server-side-encryption-customer-algorithm: string # Specifies the algorithm to use when decrypting the source object (for example, AES256).
   --x-amz-copy-source-server-side-encryption-customer-key: string # Specifies the customer-provided encryption key for Amazon S3 to use to decrypt the source object. The encryption key provided in this header must be one that was used when the source object was created.
-  --x-amz-copy-source-server-side-encryption-customer-key-MD5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
+  --x-amz-copy-source-server-side-encryption-customer-key-md5: string # Specifies the 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key was transmitted without error.
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected destination bucket owner. If the destination bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
   --x-amz-source-expected-bucket-owner: string # The account ID of the expected source bucket owner. If the source bucket is owned by a different account, the request fails with the HTTP status code <code>403 Forbidden</code> (access denied).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "partNumber" $partNumber "scalar") (serialize-qp "uploadId" $uploadId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($Bucket)/($Key)#x-amz-copy-source&partNumber&uploadId" $qp)
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-copy-source": $x_amz_copy_source, "x-amz-copy-source-if-match": $x_amz_copy_source_if_match, "x-amz-copy-source-if-modified-since": $x_amz_copy_source_if_modified_since, "x-amz-copy-source-if-none-match": $x_amz_copy_source_if_none_match, "x-amz-copy-source-if-unmodified-since": $x_amz_copy_source_if_unmodified_since, "x-amz-copy-source-range": $x_amz_copy_source_range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_MD5, "x-amz-copy-source-server-side-encryption-customer-algorithm": $x_amz_copy_source_server_side_encryption_customer_algorithm, "x-amz-copy-source-server-side-encryption-customer-key": $x_amz_copy_source_server_side_encryption_customer_key, "x-amz-copy-source-server-side-encryption-customer-key-MD5": $x_amz_copy_source_server_side_encryption_customer_key_MD5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-source-expected-bucket-owner": $x_amz_source_expected_bucket_owner} | compact
+  let qp = [(serialize-qp "partNumber" $part_number "scalar") (serialize-qp "uploadId" $upload_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bucket: $bucket, key: $key} | format pattern "/{bucket}/{key}#x-amz-copy-source&partNumber&uploadId") $qp)
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-copy-source": $x_amz_copy_source, "x-amz-copy-source-if-match": $x_amz_copy_source_if_match, "x-amz-copy-source-if-modified-since": $x_amz_copy_source_if_modified_since, "x-amz-copy-source-if-none-match": $x_amz_copy_source_if_none_match, "x-amz-copy-source-if-unmodified-since": $x_amz_copy_source_if_unmodified_since, "x-amz-copy-source-range": $x_amz_copy_source_range, "x-amz-server-side-encryption-customer-algorithm": $x_amz_server_side_encryption_customer_algorithm, "x-amz-server-side-encryption-customer-key": $x_amz_server_side_encryption_customer_key, "x-amz-server-side-encryption-customer-key-MD5": $x_amz_server_side_encryption_customer_key_md5, "x-amz-copy-source-server-side-encryption-customer-algorithm": $x_amz_copy_source_server_side_encryption_customer_algorithm, "x-amz-copy-source-server-side-encryption-customer-key": $x_amz_copy_source_server_side_encryption_customer_key, "x-amz-copy-source-server-side-encryption-customer-key-MD5": $x_amz_copy_source_server_side_encryption_customer_key_md5, "x-amz-request-payer": $x_amz_request_payer, "x-amz-expected-bucket-owner": $x_amz_expected_bucket_owner, "x-amz-source-expected-bucket-owner": $x_amz_source_expected_bucket_owner} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3422,7 +3422,7 @@ export def "api UploadPartCopy" [
 #
 # POST /WriteGetObjectResponse#x-amz-request-route&x-amz-request-token
 # operationId: WriteGetObjectResponse
-export def "write-get-object-responsex-amz-request-routex-amz-request-token WriteGetObjectResponse" [
+export def "write-get-object-responsex-amz-request-routex-amz-request-token post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3438,22 +3438,22 @@ export def "write-get-object-responsex-amz-request-routex-amz-request-token Writ
   --x-amz-fwd-error-code: string # A string that uniquely identifies an error condition. Returned in the &lt;Code&gt; tag of the error XML response for a corresponding <code>GetObject</code> call. Cannot be used with a successful <code>StatusCode</code> header or when the transformed object is provided in the body. All error codes from S3 are sentence-cased. The regular expression (regex) value is <code>"^[A-Z][a-zA-Z]+$"</code>.
   --x-amz-fwd-error-message: string # Contains a generic description of the error condition. Returned in the &lt;Message&gt; tag of the error XML response for a corresponding <code>GetObject</code> call. Cannot be used with a successful <code>StatusCode</code> header or when the transformed object is provided in body.
   --x-amz-fwd-header-accept-ranges: string # Indicates that a range of bytes was specified.
-  --x-amz-fwd-header-Cache-Control: string # Specifies caching behavior along the request/reply chain.
-  --x-amz-fwd-header-Content-Disposition: string # Specifies presentational information for the object.
-  --x-amz-fwd-header-Content-Encoding: string # Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field.
-  --x-amz-fwd-header-Content-Language: string # The language the content is in.
-  --Content-Length: int # The size of the content body in bytes.
-  --x-amz-fwd-header-Content-Range: string # The portion of the object returned in the response.
-  --x-amz-fwd-header-Content-Type: string # A standard MIME type describing the format of the object data.
+  --x-amz-fwd-header-cache-control: string # Specifies caching behavior along the request/reply chain.
+  --x-amz-fwd-header-content-disposition: string # Specifies presentational information for the object.
+  --x-amz-fwd-header-content-encoding: string # Specifies what content encodings have been applied to the object and thus what decoding mechanisms must be applied to obtain the media-type referenced by the Content-Type header field.
+  --x-amz-fwd-header-content-language: string # The language the content is in.
+  --content-length: int # The size of the content body in bytes.
+  --x-amz-fwd-header-content-range: string # The portion of the object returned in the response.
+  --x-amz-fwd-header-content-type: string # A standard MIME type describing the format of the object data.
   --x-amz-fwd-header-x-amz-checksum-crc32: string # <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This specifies the base64-encoded, 32-bit CRC32 checksum of the object returned by the Object Lambda function. This may not match the checksum for the object stored in Amazon S3. Amazon S3 will perform validation of the checksum values only when the original <code>GetObject</code> request required checksum validation. For more information about checksums, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Only one checksum header can be specified at a time. If you supply multiple checksum headers, this request will fail.</p> <p/>
   --x-amz-fwd-header-x-amz-checksum-crc32c: string # <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This specifies the base64-encoded, 32-bit CRC32C checksum of the object returned by the Object Lambda function. This may not match the checksum for the object stored in Amazon S3. Amazon S3 will perform validation of the checksum values only when the original <code>GetObject</code> request required checksum validation. For more information about checksums, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Only one checksum header can be specified at a time. If you supply multiple checksum headers, this request will fail.</p>
   --x-amz-fwd-header-x-amz-checksum-sha1: string # <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This specifies the base64-encoded, 160-bit SHA-1 digest of the object returned by the Object Lambda function. This may not match the checksum for the object stored in Amazon S3. Amazon S3 will perform validation of the checksum values only when the original <code>GetObject</code> request required checksum validation. For more information about checksums, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Only one checksum header can be specified at a time. If you supply multiple checksum headers, this request will fail.</p>
   --x-amz-fwd-header-x-amz-checksum-sha256: string # <p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This specifies the base64-encoded, 256-bit SHA-256 digest of the object returned by the Object Lambda function. This may not match the checksum for the object stored in Amazon S3. Amazon S3 will perform validation of the checksum values only when the original <code>GetObject</code> request required checksum validation. For more information about checksums, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>.</p> <p>Only one checksum header can be specified at a time. If you supply multiple checksum headers, this request will fail.</p>
   --x-amz-fwd-header-x-amz-delete-marker: oneof<nothing, bool> # Specifies whether an object stored in Amazon S3 is (<code>true</code>) or is not (<code>false</code>) a delete marker. 
-  --x-amz-fwd-header-ETag: string # An opaque identifier assigned by a web server to a specific version of a resource found at a URL. 
-  --x-amz-fwd-header-Expires: string # The date and time at which the object is no longer cacheable.
+  --x-amz-fwd-header-e-tag: string # An opaque identifier assigned by a web server to a specific version of a resource found at a URL. 
+  --x-amz-fwd-header-expires: string # The date and time at which the object is no longer cacheable.
   --x-amz-fwd-header-x-amz-expiration: string # If the object expiration is configured (see PUT Bucket lifecycle), the response includes this header. It includes the <code>expiry-date</code> and <code>rule-id</code> key-value pairs that provide the object expiration information. The value of the <code>rule-id</code> is URL-encoded. 
-  --x-amz-fwd-header-Last-Modified: string # The date and time that the object was last modified.
+  --x-amz-fwd-header-last-modified: string # The date and time that the object was last modified.
   --x-amz-fwd-header-x-amz-missing-meta: int # Set to the number of metadata entries not returned in <code>x-amz-meta</code> headers. This can happen if you create metadata using an API like SOAP that supports more flexible metadata than the REST API. For example, using SOAP, you can create metadata whose values are not legal HTTP headers.
   --x-amz-fwd-header-x-amz-object-lock-mode: string@x-amz-fwd-header-x-amz-object-lock-mode-completer # Indicates whether an object stored in Amazon S3 has Object Lock enabled. For more information about S3 Object Lock, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html">Object Lock</a>.
   --x-amz-fwd-header-x-amz-object-lock-legal-hold: string@x-amz-fwd-header-x-amz-object-lock-legal-hold-completer # Indicates whether an object stored in Amazon S3 has an active legal hold.
@@ -3465,7 +3465,7 @@ export def "write-get-object-responsex-amz-request-routex-amz-request-token Writ
   --x-amz-fwd-header-x-amz-server-side-encryption: string@x-amz-fwd-header-x-amz-server-side-encryption-completer #  The server-side encryption algorithm used when storing requested object in Amazon S3 (for example, AES256, aws:kms).
   --x-amz-fwd-header-x-amz-server-side-encryption-customer-algorithm: string # Encryption algorithm used if server-side encryption with a customer-provided encryption key was specified for object stored in Amazon S3.
   --x-amz-fwd-header-x-amz-server-side-encryption-aws-kms-key-id: string #  If present, specifies the ID of the Amazon Web Services Key Management Service (Amazon Web Services KMS) symmetric customer managed key that was used for stored in Amazon S3 object. 
-  --x-amz-fwd-header-x-amz-server-side-encryption-customer-key-MD5: string #  128-bit MD5 digest of customer-provided encryption key used in Amazon S3 to encrypt data stored in S3. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html">Protecting data using server-side encryption with customer-provided encryption keys (SSE-C)</a>.
+  --x-amz-fwd-header-x-amz-server-side-encryption-customer-key-md5: string #  128-bit MD5 digest of customer-provided encryption key used in Amazon S3 to encrypt data stored in S3. For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html">Protecting data using server-side encryption with customer-provided encryption keys (SSE-C)</a>.
   --x-amz-fwd-header-x-amz-storage-class: string@x-amz-fwd-header-x-amz-storage-class-completer # <p>Provides storage class information of the object. Amazon S3 returns this header for all objects except for S3 Standard storage class objects.</p> <p>For more information, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/storage-class-intro.html">Storage Classes</a>.</p>
   --x-amz-fwd-header-x-amz-tagging-count: int # The number of tags, if any, on the object.
   --x-amz-fwd-header-x-amz-version-id: string # An ID used to reference a specific version of the object.
@@ -3477,7 +3477,7 @@ export def "write-get-object-responsex-amz-request-routex-amz-request-token Writ
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/WriteGetObjectResponse#x-amz-request-route&x-amz-request-token")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-route": $x_amz_request_route, "x-amz-request-token": $x_amz_request_token, "x-amz-fwd-status": $x_amz_fwd_status, "x-amz-fwd-error-code": $x_amz_fwd_error_code, "x-amz-fwd-error-message": $x_amz_fwd_error_message, "x-amz-fwd-header-accept-ranges": $x_amz_fwd_header_accept_ranges, "x-amz-fwd-header-Cache-Control": $x_amz_fwd_header_Cache_Control, "x-amz-fwd-header-Content-Disposition": $x_amz_fwd_header_Content_Disposition, "x-amz-fwd-header-Content-Encoding": $x_amz_fwd_header_Content_Encoding, "x-amz-fwd-header-Content-Language": $x_amz_fwd_header_Content_Language, "Content-Length": $Content_Length, "x-amz-fwd-header-Content-Range": $x_amz_fwd_header_Content_Range, "x-amz-fwd-header-Content-Type": $x_amz_fwd_header_Content_Type, "x-amz-fwd-header-x-amz-checksum-crc32": $x_amz_fwd_header_x_amz_checksum_crc32, "x-amz-fwd-header-x-amz-checksum-crc32c": $x_amz_fwd_header_x_amz_checksum_crc32c, "x-amz-fwd-header-x-amz-checksum-sha1": $x_amz_fwd_header_x_amz_checksum_sha1, "x-amz-fwd-header-x-amz-checksum-sha256": $x_amz_fwd_header_x_amz_checksum_sha256, "x-amz-fwd-header-x-amz-delete-marker": $x_amz_fwd_header_x_amz_delete_marker, "x-amz-fwd-header-ETag": $x_amz_fwd_header_ETag, "x-amz-fwd-header-Expires": $x_amz_fwd_header_Expires, "x-amz-fwd-header-x-amz-expiration": $x_amz_fwd_header_x_amz_expiration, "x-amz-fwd-header-Last-Modified": $x_amz_fwd_header_Last_Modified, "x-amz-fwd-header-x-amz-missing-meta": $x_amz_fwd_header_x_amz_missing_meta, "x-amz-fwd-header-x-amz-object-lock-mode": $x_amz_fwd_header_x_amz_object_lock_mode, "x-amz-fwd-header-x-amz-object-lock-legal-hold": $x_amz_fwd_header_x_amz_object_lock_legal_hold, "x-amz-fwd-header-x-amz-object-lock-retain-until-date": $x_amz_fwd_header_x_amz_object_lock_retain_until_date, "x-amz-fwd-header-x-amz-mp-parts-count": $x_amz_fwd_header_x_amz_mp_parts_count, "x-amz-fwd-header-x-amz-replication-status": $x_amz_fwd_header_x_amz_replication_status, "x-amz-fwd-header-x-amz-request-charged": $x_amz_fwd_header_x_amz_request_charged, "x-amz-fwd-header-x-amz-restore": $x_amz_fwd_header_x_amz_restore, "x-amz-fwd-header-x-amz-server-side-encryption": $x_amz_fwd_header_x_amz_server_side_encryption, "x-amz-fwd-header-x-amz-server-side-encryption-customer-algorithm": $x_amz_fwd_header_x_amz_server_side_encryption_customer_algorithm, "x-amz-fwd-header-x-amz-server-side-encryption-aws-kms-key-id": $x_amz_fwd_header_x_amz_server_side_encryption_aws_kms_key_id, "x-amz-fwd-header-x-amz-server-side-encryption-customer-key-MD5": $x_amz_fwd_header_x_amz_server_side_encryption_customer_key_MD5, "x-amz-fwd-header-x-amz-storage-class": $x_amz_fwd_header_x_amz_storage_class, "x-amz-fwd-header-x-amz-tagging-count": $x_amz_fwd_header_x_amz_tagging_count, "x-amz-fwd-header-x-amz-version-id": $x_amz_fwd_header_x_amz_version_id, "x-amz-fwd-header-x-amz-server-side-encryption-bucket-key-enabled": $x_amz_fwd_header_x_amz_server_side_encryption_bucket_key_enabled} | compact
+  let extra_headers = {"x-amz-security-token": $x_amz_security_token, "x-amz-request-route": $x_amz_request_route, "x-amz-request-token": $x_amz_request_token, "x-amz-fwd-status": $x_amz_fwd_status, "x-amz-fwd-error-code": $x_amz_fwd_error_code, "x-amz-fwd-error-message": $x_amz_fwd_error_message, "x-amz-fwd-header-accept-ranges": $x_amz_fwd_header_accept_ranges, "x-amz-fwd-header-Cache-Control": $x_amz_fwd_header_cache_control, "x-amz-fwd-header-Content-Disposition": $x_amz_fwd_header_content_disposition, "x-amz-fwd-header-Content-Encoding": $x_amz_fwd_header_content_encoding, "x-amz-fwd-header-Content-Language": $x_amz_fwd_header_content_language, "Content-Length": $content_length, "x-amz-fwd-header-Content-Range": $x_amz_fwd_header_content_range, "x-amz-fwd-header-Content-Type": $x_amz_fwd_header_content_type, "x-amz-fwd-header-x-amz-checksum-crc32": $x_amz_fwd_header_x_amz_checksum_crc32, "x-amz-fwd-header-x-amz-checksum-crc32c": $x_amz_fwd_header_x_amz_checksum_crc32c, "x-amz-fwd-header-x-amz-checksum-sha1": $x_amz_fwd_header_x_amz_checksum_sha1, "x-amz-fwd-header-x-amz-checksum-sha256": $x_amz_fwd_header_x_amz_checksum_sha256, "x-amz-fwd-header-x-amz-delete-marker": $x_amz_fwd_header_x_amz_delete_marker, "x-amz-fwd-header-ETag": $x_amz_fwd_header_e_tag, "x-amz-fwd-header-Expires": $x_amz_fwd_header_expires, "x-amz-fwd-header-x-amz-expiration": $x_amz_fwd_header_x_amz_expiration, "x-amz-fwd-header-Last-Modified": $x_amz_fwd_header_last_modified, "x-amz-fwd-header-x-amz-missing-meta": $x_amz_fwd_header_x_amz_missing_meta, "x-amz-fwd-header-x-amz-object-lock-mode": $x_amz_fwd_header_x_amz_object_lock_mode, "x-amz-fwd-header-x-amz-object-lock-legal-hold": $x_amz_fwd_header_x_amz_object_lock_legal_hold, "x-amz-fwd-header-x-amz-object-lock-retain-until-date": $x_amz_fwd_header_x_amz_object_lock_retain_until_date, "x-amz-fwd-header-x-amz-mp-parts-count": $x_amz_fwd_header_x_amz_mp_parts_count, "x-amz-fwd-header-x-amz-replication-status": $x_amz_fwd_header_x_amz_replication_status, "x-amz-fwd-header-x-amz-request-charged": $x_amz_fwd_header_x_amz_request_charged, "x-amz-fwd-header-x-amz-restore": $x_amz_fwd_header_x_amz_restore, "x-amz-fwd-header-x-amz-server-side-encryption": $x_amz_fwd_header_x_amz_server_side_encryption, "x-amz-fwd-header-x-amz-server-side-encryption-customer-algorithm": $x_amz_fwd_header_x_amz_server_side_encryption_customer_algorithm, "x-amz-fwd-header-x-amz-server-side-encryption-aws-kms-key-id": $x_amz_fwd_header_x_amz_server_side_encryption_aws_kms_key_id, "x-amz-fwd-header-x-amz-server-side-encryption-customer-key-MD5": $x_amz_fwd_header_x_amz_server_side_encryption_customer_key_md5, "x-amz-fwd-header-x-amz-storage-class": $x_amz_fwd_header_x_amz_storage_class, "x-amz-fwd-header-x-amz-tagging-count": $x_amz_fwd_header_x_amz_tagging_count, "x-amz-fwd-header-x-amz-version-id": $x_amz_fwd_header_x_amz_version_id, "x-amz-fwd-header-x-amz-server-side-encryption-bucket-key-enabled": $x_amz_fwd_header_x_amz_server_side_encryption_bucket_key_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

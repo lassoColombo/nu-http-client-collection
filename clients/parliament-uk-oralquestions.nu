@@ -66,14 +66,14 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "text/json"] }
-def parametersorderBy-completer [] { ["DateTabledAsc" "DateTabledDesc" "SignatureCountAsc" "SignatureCountDesc" "TitleAsc" "TitleDesc"] }
+def parameters-order-by-completer [] { ["DateTabledAsc" "DateTabledDesc" "SignatureCountAsc" "SignatureCountDesc" "TitleAsc" "TitleDesc"] }
 def accept-completer-1 [] { ["application/json" "application/xml" "text/json" "text/xml"] }
-def parametersquestionType-completer [] { ["Substantive" "Topical"] }
+def parameters-question-type-completer [] { ["Substantive" "Topical"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "early-day-motion Get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "early-day-motion get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 #
 # GET /EarlyDayMotion/{id}
 # operationId: PublishedEarlyDayMotion_Get
-export def "early-day-motion Get" [
+export def "early-day-motion get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -111,7 +111,7 @@ export def "early-day-motion Get" [
 ]: nothing -> record<Errors: list<string>, PagingInfo: record<GlobalStatusCounts: list<record>, GlobalTotal: int, Skip: int, StatusCounts: list<record>, Take: int, Total: int>, Response: table<Answer: string, AnsweredWhen: string, AnsweringBody: string, AnsweringBodyId: int, AnsweringMinister: record, AnsweringMinisterId: int, AnsweringMinisterTitle: string, AskingMember: record, AskingMemberId: int, DueForAnswer: string, Id: int, QuestionText: string, QuestionType: string, TabledWhen: string, UIN: int>, StatusCode: string, Success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/EarlyDayMotion/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/EarlyDayMotion/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -130,24 +130,24 @@ export def "early-day-motions-list get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --parametersedmIds: list # Early Day Motions with an ID in the list provided.
-  --parametersuINWithAmendmentSuffix: string # Early Day Motions with an UINWithAmendmentSuffix provided.
-  --parameterssearchTerm: string # Early Day Motions where the title includes the search term provided.
-  --parameterscurrentStatusDateStart: string # Early Day Motions where the current status has been set on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parameterscurrentStatusDateEnd: string # Early Day Motions where the current status has been set on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parametersisPrayer: oneof<nothing, bool> # Early Day Motions which are a prayer against a Negative Statutory Instrument.
-  --parametersmemberId: int # Return Early Day Motions tabled by Member with ID provided. (format: int32)
-  --parametersincludeSponsoredByMember: oneof<nothing, bool> # Include Early Day Motions sponsored by Member specified
-  --parameterstabledStartDate: string # Early Day Motions where the date tabled is on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parameterstabledEndDate: string # Early Day Motions where the date tabled is on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parametersstatuses: list # Early Day Motions where current status is in the selected list.
-  --parametersorderBy: string@parametersorderBy-completer # Order results by date tabled, title or signature count. Default is date tabled.
-  --parametersskip: int # The number of records to skip from the first, default is 0. (format: int32)
-  --parameterstake: int # The number of records to return, default is 25, maximum is 100. (format: int32)
+  --parameters-edm-ids: list # Early Day Motions with an ID in the list provided.
+  --parameters-u-in-with-amendment-suffix: string # Early Day Motions with an UINWithAmendmentSuffix provided.
+  --parameters-search-term: string # Early Day Motions where the title includes the search term provided.
+  --parameters-current-status-date-start: string # Early Day Motions where the current status has been set on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
+  --parameters-current-status-date-end: string # Early Day Motions where the current status has been set on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
+  --parameters-is-prayer: oneof<nothing, bool> # Early Day Motions which are a prayer against a Negative Statutory Instrument.
+  --parameters-member-id: int # Return Early Day Motions tabled by Member with ID provided. (format: int32)
+  --parameters-include-sponsored-by-member: oneof<nothing, bool> # Include Early Day Motions sponsored by Member specified
+  --parameters-tabled-start-date: string # Early Day Motions where the date tabled is on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
+  --parameters-tabled-end-date: string # Early Day Motions where the date tabled is on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
+  --parameters-statuses: list # Early Day Motions where current status is in the selected list.
+  --parameters-order-by: string@parameters-order-by-completer # Order results by date tabled, title or signature count. Default is date tabled.
+  --parameters-skip: int # The number of records to skip from the first, default is 0. (format: int32)
+  --parameters-take: int # The number of records to return, default is 25, maximum is 100. (format: int32)
 ]: nothing -> record<Errors: list<string>, PagingInfo: record<GlobalStatusCounts: list<record>, GlobalTotal: int, Skip: int, StatusCounts: list<record>, Take: int, Total: int>, Response: table<Answer: string, AnsweredWhen: string, AnsweringBody: string, AnsweringBodyId: int, AnsweringMinister: record, AnsweringMinisterId: int, AnsweringMinisterTitle: string, AskingMember: record, AskingMemberId: int, DueForAnswer: string, Id: int, QuestionText: string, QuestionType: string, TabledWhen: string, UIN: int>, StatusCode: string, Success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "parameters.edmIds" $parametersedmIds "multi") (serialize-qp "parameters.uINWithAmendmentSuffix" $parametersuINWithAmendmentSuffix "scalar") (serialize-qp "parameters.searchTerm" $parameterssearchTerm "scalar") (serialize-qp "parameters.currentStatusDateStart" $parameterscurrentStatusDateStart "scalar") (serialize-qp "parameters.currentStatusDateEnd" $parameterscurrentStatusDateEnd "scalar") (serialize-qp "parameters.isPrayer" $parametersisPrayer "scalar") (serialize-qp "parameters.memberId" $parametersmemberId "scalar") (serialize-qp "parameters.includeSponsoredByMember" $parametersincludeSponsoredByMember "scalar") (serialize-qp "parameters.tabledStartDate" $parameterstabledStartDate "scalar") (serialize-qp "parameters.tabledEndDate" $parameterstabledEndDate "scalar") (serialize-qp "parameters.statuses" $parametersstatuses "multi") (serialize-qp "parameters.orderBy" $parametersorderBy "scalar") (serialize-qp "parameters.skip" $parametersskip "scalar") (serialize-qp "parameters.take" $parameterstake "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "parameters.edmIds" $parameters_edm_ids "multi") (serialize-qp "parameters.uINWithAmendmentSuffix" $parameters_u_in_with_amendment_suffix "scalar") (serialize-qp "parameters.searchTerm" $parameters_search_term "scalar") (serialize-qp "parameters.currentStatusDateStart" $parameters_current_status_date_start "scalar") (serialize-qp "parameters.currentStatusDateEnd" $parameters_current_status_date_end "scalar") (serialize-qp "parameters.isPrayer" $parameters_is_prayer "scalar") (serialize-qp "parameters.memberId" $parameters_member_id "scalar") (serialize-qp "parameters.includeSponsoredByMember" $parameters_include_sponsored_by_member "scalar") (serialize-qp "parameters.tabledStartDate" $parameters_tabled_start_date "scalar") (serialize-qp "parameters.tabledEndDate" $parameters_tabled_end_date "scalar") (serialize-qp "parameters.statuses" $parameters_statuses "multi") (serialize-qp "parameters.orderBy" $parameters_order_by "scalar") (serialize-qp "parameters.skip" $parameters_skip "scalar") (serialize-qp "parameters.take" $parameters_take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/EarlyDayMotions/list" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -158,7 +158,7 @@ export def "early-day-motions-list get" [
 #
 # GET /oralquestions/list
 # operationId: PublishedOralQuestion_Get
-export def "oralquestions-list Get" [
+export def "oralquestions-list get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,19 +168,19 @@ export def "oralquestions-list Get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --parametersansweringDateStart: string # Oral Questions where the answering date has been set on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parametersansweringDateEnd: string # Oral Questions where the answering date has been set on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parametersquestionType: string@parametersquestionType-completer # Oral Questions where the question type is the selected type, substantive or topical.
-  --parametersoralQuestionTimeId: int # Oral Questions where the question is within the question time with the ID provided (format: int32)
-  --parametersaskingMemberIds: list # The ID of the member asking the question. Lists of member IDs for each house are available <a href="http://data.parliament.uk/membersdataplatform/services/mnis/members/query/house=Commons" target="_blank">Commons</a> and <a href="http://data.parliament.uk/membersdataplatform/services/mnis/members/query/house=Lords" target="_blank">Lords</a>.
-  --parametersuINs: list # The UIN for the question - note that UINs reset at the start of each Parliamentary session.
-  --parametersansweringBodyIds: list # Which answering body is to respond. A list of answering bodies can be found <a target="_blank" href="http://data.parliament.uk/membersdataplatform/services/mnis/referencedata/AnsweringBodies/">here</a>.
-  --parametersskip: int # The number of records to skip from the first, default is 0. (format: int32)
-  --parameterstake: int # The number of records to return, default is 25, maximum is 100. (format: int32)
+  --parameters-answering-date-start: string # Oral Questions where the answering date has been set on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
+  --parameters-answering-date-end: string # Oral Questions where the answering date has been set on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
+  --parameters-question-type: string@parameters-question-type-completer # Oral Questions where the question type is the selected type, substantive or topical.
+  --parameters-oral-question-time-id: int # Oral Questions where the question is within the question time with the ID provided (format: int32)
+  --parameters-asking-member-ids: list # The ID of the member asking the question. Lists of member IDs for each house are available <a href="http://data.parliament.uk/membersdataplatform/services/mnis/members/query/house=Commons" target="_blank">Commons</a> and <a href="http://data.parliament.uk/membersdataplatform/services/mnis/members/query/house=Lords" target="_blank">Lords</a>.
+  --parameters-u-i-ns: list # The UIN for the question - note that UINs reset at the start of each Parliamentary session.
+  --parameters-answering-body-ids: list # Which answering body is to respond. A list of answering bodies can be found <a target="_blank" href="http://data.parliament.uk/membersdataplatform/services/mnis/referencedata/AnsweringBodies/">here</a>.
+  --parameters-skip: int # The number of records to skip from the first, default is 0. (format: int32)
+  --parameters-take: int # The number of records to return, default is 25, maximum is 100. (format: int32)
 ]: nothing -> record<Errors: list<string>, PagingInfo: record<GlobalStatusCounts: list<record>, GlobalTotal: int, Skip: int, StatusCounts: list<record>, Take: int, Total: int>, Response: table<Answer: string, AnsweredWhen: string, AnsweringBody: string, AnsweringBodyId: int, AnsweringMinister: record, AnsweringMinisterId: int, AnsweringMinisterTitle: string, AskingMember: record, AskingMemberId: int, DueForAnswer: string, Id: int, QuestionText: string, QuestionType: string, TabledWhen: string, UIN: int>, StatusCode: string, Success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "parameters.answeringDateStart" $parametersansweringDateStart "scalar") (serialize-qp "parameters.answeringDateEnd" $parametersansweringDateEnd "scalar") (serialize-qp "parameters.questionType" $parametersquestionType "scalar") (serialize-qp "parameters.oralQuestionTimeId" $parametersoralQuestionTimeId "scalar") (serialize-qp "parameters.askingMemberIds" $parametersaskingMemberIds "multi") (serialize-qp "parameters.uINs" $parametersuINs "multi") (serialize-qp "parameters.answeringBodyIds" $parametersansweringBodyIds "multi") (serialize-qp "parameters.skip" $parametersskip "scalar") (serialize-qp "parameters.take" $parameterstake "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "parameters.answeringDateStart" $parameters_answering_date_start "scalar") (serialize-qp "parameters.answeringDateEnd" $parameters_answering_date_end "scalar") (serialize-qp "parameters.questionType" $parameters_question_type "scalar") (serialize-qp "parameters.oralQuestionTimeId" $parameters_oral_question_time_id "scalar") (serialize-qp "parameters.askingMemberIds" $parameters_asking_member_ids "multi") (serialize-qp "parameters.uINs" $parameters_u_i_ns "multi") (serialize-qp "parameters.answeringBodyIds" $parameters_answering_body_ids "multi") (serialize-qp "parameters.skip" $parameters_skip "scalar") (serialize-qp "parameters.take" $parameters_take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oralquestions/list" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,7 +191,7 @@ export def "oralquestions-list Get" [
 #
 # GET /oralquestiontimes/list
 # operationId: PublishedOralQuestionTime_Get
-export def "oralquestiontimes-list Get" [
+export def "oralquestiontimes-list get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,18 +201,18 @@ export def "oralquestiontimes-list Get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-  --parametersansweringDateStart: string # Oral Questions Time where the answering date has been set on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parametersansweringDateEnd: string # Oral Questions Time where the answering date has been set on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parametersdeadlineDateStart: string # Oral Questions Time where the deadline date has been set on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parametersdeadlineDateEnd: string # Oral Questions Time where the deadline date has been set on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
-  --parametersoralQuestionTimeId: int # Identifier of the OQT (format: int32)
-  --parametersansweringBodyIds: list # Which answering body is to respond. A list of answering bodies can be found <a target="_blank" href="http://data.parliament.uk/membersdataplatform/services/mnis/referencedata/AnsweringBodies/">here</a>.
-  --parametersskip: int # The number of records to skip from the first, default is 0. (format: int32)
-  --parameterstake: int # The number of records to return, default is 25, maximum is 100. (format: int32)
+  --parameters-answering-date-start: string # Oral Questions Time where the answering date has been set on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
+  --parameters-answering-date-end: string # Oral Questions Time where the answering date has been set on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
+  --parameters-deadline-date-start: string # Oral Questions Time where the deadline date has been set on or after the date provided. Date format YYYY-MM-DD. (format: date-time)
+  --parameters-deadline-date-end: string # Oral Questions Time where the deadline date has been set on or before the date provided. Date format YYYY-MM-DD. (format: date-time)
+  --parameters-oral-question-time-id: int # Identifier of the OQT (format: int32)
+  --parameters-answering-body-ids: list # Which answering body is to respond. A list of answering bodies can be found <a target="_blank" href="http://data.parliament.uk/membersdataplatform/services/mnis/referencedata/AnsweringBodies/">here</a>.
+  --parameters-skip: int # The number of records to skip from the first, default is 0. (format: int32)
+  --parameters-take: int # The number of records to return, default is 25, maximum is 100. (format: int32)
 ]: nothing -> record<Errors: list<string>, PagingInfo: record<GlobalStatusCounts: list<record>, GlobalTotal: int, Skip: int, StatusCounts: list<record>, Take: int, Total: int>, Response: table<Answer: string, AnsweredWhen: string, AnsweringBody: string, AnsweringBodyId: int, AnsweringMinister: record, AnsweringMinisterId: int, AnsweringMinisterTitle: string, AskingMember: record, AskingMemberId: int, DueForAnswer: string, Id: int, QuestionText: string, QuestionType: string, TabledWhen: string, UIN: int>, StatusCode: string, Success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "parameters.answeringDateStart" $parametersansweringDateStart "scalar") (serialize-qp "parameters.answeringDateEnd" $parametersansweringDateEnd "scalar") (serialize-qp "parameters.deadlineDateStart" $parametersdeadlineDateStart "scalar") (serialize-qp "parameters.deadlineDateEnd" $parametersdeadlineDateEnd "scalar") (serialize-qp "parameters.oralQuestionTimeId" $parametersoralQuestionTimeId "scalar") (serialize-qp "parameters.answeringBodyIds" $parametersansweringBodyIds "multi") (serialize-qp "parameters.skip" $parametersskip "scalar") (serialize-qp "parameters.take" $parameterstake "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "parameters.answeringDateStart" $parameters_answering_date_start "scalar") (serialize-qp "parameters.answeringDateEnd" $parameters_answering_date_end "scalar") (serialize-qp "parameters.deadlineDateStart" $parameters_deadline_date_start "scalar") (serialize-qp "parameters.deadlineDateEnd" $parameters_deadline_date_end "scalar") (serialize-qp "parameters.oralQuestionTimeId" $parameters_oral_question_time_id "scalar") (serialize-qp "parameters.answeringBodyIds" $parameters_answering_body_ids "multi") (serialize-qp "parameters.skip" $parameters_skip "scalar") (serialize-qp "parameters.take" $parameters_take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/oralquestiontimes/list" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

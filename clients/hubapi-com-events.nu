@@ -71,7 +71,7 @@ def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "events-events get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "events-events get-page" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /events/v3/events
 # operationId: get-/events/v3/events_getPage
-export def "events-events get" [
+export def "events-events get-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,11 +104,11 @@ export def "events-events get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --occurredAfter: string # The starting time as an ISO 8601 timestamp. (format: date-time)
-  --occurredBefore: string # The ending time as an ISO 8601 timestamp. (format: date-time)
-  --objectType: string # The type of object being selected. Valid values are hubspot named object types (e.g. `contact`).
-  --objectId: int # The id of the selected object. If not present, then the `objectProperty` parameter is required. (format: int64)
-  --eventType: string # Limits the response to the specified event type.  For example `&eventType=e_visited_page` returns only `e_visited_page` events.  If not present all event types are returned.
+  --occurred-after: string # The starting time as an ISO 8601 timestamp. (format: date-time)
+  --occurred-before: string # The ending time as an ISO 8601 timestamp. (format: date-time)
+  --object-type: string # The type of object being selected. Valid values are hubspot named object types (e.g. `contact`).
+  --object-id: int # The id of the selected object. If not present, then the `objectProperty` parameter is required. (format: int64)
+  --event-type: string # Limits the response to the specified event type.  For example `&eventType=e_visited_page` returns only `e_visited_page` events.  If not present all event types are returned.
   --after: string # An additional parameter that may be used to get the next `limit` set of results.
   --before: string
   --limit: int # The maximum number of events to return, defaults to 20. (format: int32)
@@ -116,7 +116,7 @@ export def "events-events get" [
 ]: nothing -> record<paging: record<next: record<after: string, link: string>>, results: table<eventType: string, id: string, objectId: string, objectType: string, occurredAt: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "occurredAfter" $occurredAfter "scalar") (serialize-qp "occurredBefore" $occurredBefore "scalar") (serialize-qp "objectType" $objectType "scalar") (serialize-qp "objectId" $objectId "scalar") (serialize-qp "eventType" $eventType "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "objectType" $object_type "scalar") (serialize-qp "objectId" $object_id "scalar") (serialize-qp "eventType" $event_type "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/events/v3/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

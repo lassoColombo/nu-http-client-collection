@@ -71,7 +71,7 @@ def expand-completer [] { ["children"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-management-management-groups List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-management-management-groups list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Management/managementGroups
 # operationId: ManagementGroups_List
-export def "providers-microsoft-management-management-groups List" [
+export def "providers-microsoft-management-management-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,8 +120,8 @@ export def "providers-microsoft-management-management-groups List" [
 #
 # GET /providers/Microsoft.Management/managementGroups/{groupId}
 # operationId: ManagementGroups_Get
-export def "providers-microsoft-management-management-groups Get" [
-  groupId: string
+export def "providers-microsoft-management-management-groups get" [
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "providers-microsoft-management-management-groups Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar") (serialize-qp "$recurse" $recurse "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Management/managementGroups/($groupId)" $qp)
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/providers/Microsoft.Management/managementGroups/{group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +147,7 @@ export def "providers-microsoft-management-management-groups Get" [
 #
 # GET /providers/Microsoft.Management/operations
 # operationId: Operations_List
-export def "providers-microsoft-management-operations List" [
+export def "providers-microsoft-management-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

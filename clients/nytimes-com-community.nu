@@ -172,11 +172,11 @@ export def "user-content-userjson user-content-user-json" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userID: int
+  --user-id: int
 ]: nothing -> record<copyright: string, debug: record<version: float>, results: record<api_timestamp: string, comments: list<record>, totalCommentsFound: int, totalCommentsReturned: int>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userID" $userID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userID" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user-content/user.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

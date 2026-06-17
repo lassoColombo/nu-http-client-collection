@@ -127,7 +127,7 @@ export def "info get" [
 ]: nothing -> record<data: record<description: string, formats: list<string>, output_fields_by_format: record, properties: record>, errors: table<code: string, detail: string, id: string, links: record, meta: record, source: record, status: string, title: string>, included: table<attributes: record, id: string, links: record, meta: record, relationships: record, type: string>, jsonapi: record<meta: record, version: string>, links: record<first: any, last: any, next: any, prev: any, related: any, self: any>, meta: record<api_version: string, data_available: int, data_returned: int, implementation: record<homepage: any, issue_tracker: any, maintainer: record, name: string, source_url: any, version: string>, last_id: string, more_data_available: bool, provider: record<description: string, homepage: any, name: string, prefix: string>, query: record<representation: string>, response_message: string, schema: any, time_stamp: string, warnings: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/info/($entry)")
+  let full_url = (build-url $base ({entry: $entry} | format pattern "/info/{entry}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,7 +228,7 @@ export def "references get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "response_format" $response_format "scalar") (serialize-qp "email_address" $email_address "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "api_hint" $api_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/references/($entry_id)" $qp)
+  let full_url = (build-url $base ({entry_id: $entry_id} | format pattern "/references/{entry_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,7 +293,7 @@ export def "structures get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "response_format" $response_format "scalar") (serialize-qp "email_address" $email_address "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "api_hint" $api_hint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/structures/($entry_id)" $qp)
+  let full_url = (build-url $base ({entry_id: $entry_id} | format pattern "/structures/{entry_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

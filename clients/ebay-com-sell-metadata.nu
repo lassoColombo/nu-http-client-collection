@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 # GET /country/{countryCode}/sales_tax_jurisdiction
 # operationId: getSalesTaxJurisdictions
 export def "country-sales-tax-jurisdiction get" [
-  countryCode: string
+  country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,7 +106,7 @@ export def "country-sales-tax-jurisdiction get" [
 ]: nothing -> record<salesTaxJurisdictions: table<salesTaxJurisdictionId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/country/($countryCode)/sales_tax_jurisdiction")
+  let full_url = (build-url $base ({country_code: $country_code} | format pattern "/country/{country_code}/sales_tax_jurisdiction"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +131,7 @@ export def "marketplace-get-automotive-parts-compatibility-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketplace/($marketplace_id)/get_automotive_parts_compatibility_policies" $qp)
+  let full_url = (build-url $base ({marketplace_id: $marketplace_id} | format pattern "/marketplace/{marketplace_id}/get_automotive_parts_compatibility_policies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -156,7 +156,7 @@ export def "marketplace-get-extended-producer-responsibility-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketplace/($marketplace_id)/get_extended_producer_responsibility_policies" $qp)
+  let full_url = (build-url $base ({marketplace_id: $marketplace_id} | format pattern "/marketplace/{marketplace_id}/get_extended_producer_responsibility_policies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +179,7 @@ export def "marketplace-get-hazardous-materials-labels get" [
 ]: nothing -> record<pictograms: table<pictogramDescription: string, pictogramId: string, pictogramUrl: string>, signalWords: table<signalWordDescription: string, signalWordId: string>, statements: table<statementDescription: string, statementId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/marketplace/($marketplace_id)/get_hazardous_materials_labels")
+  let full_url = (build-url $base ({marketplace_id: $marketplace_id} | format pattern "/marketplace/{marketplace_id}/get_hazardous_materials_labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,7 +204,7 @@ export def "marketplace-get-item-condition-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketplace/($marketplace_id)/get_item_condition_policies" $qp)
+  let full_url = (build-url $base ({marketplace_id: $marketplace_id} | format pattern "/marketplace/{marketplace_id}/get_item_condition_policies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,7 +229,7 @@ export def "marketplace-get-listing-structure-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketplace/($marketplace_id)/get_listing_structure_policies" $qp)
+  let full_url = (build-url $base ({marketplace_id: $marketplace_id} | format pattern "/marketplace/{marketplace_id}/get_listing_structure_policies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,7 +254,7 @@ export def "marketplace-get-negotiated-price-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketplace/($marketplace_id)/get_negotiated_price_policies" $qp)
+  let full_url = (build-url $base ({marketplace_id: $marketplace_id} | format pattern "/marketplace/{marketplace_id}/get_negotiated_price_policies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,7 +279,7 @@ export def "marketplace-get-return-policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/marketplace/($marketplace_id)/get_return_policies" $qp)
+  let full_url = (build-url $base ({marketplace_id: $marketplace_id} | format pattern "/marketplace/{marketplace_id}/get_return_policies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

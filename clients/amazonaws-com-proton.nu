@@ -66,95 +66,95 @@ def base-url-completer [] { ["http://proton.us-east-1.amazonaws.com" "http://pro
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AwsProton20200720.AcceptEnvironmentAccountConnection"] }
-def X-Amz-Target-completer-1 [] { ["AwsProton20200720.CancelComponentDeployment"] }
-def X-Amz-Target-completer-2 [] { ["AwsProton20200720.CancelEnvironmentDeployment"] }
-def X-Amz-Target-completer-3 [] { ["AwsProton20200720.CancelServiceInstanceDeployment"] }
-def X-Amz-Target-completer-4 [] { ["AwsProton20200720.CancelServicePipelineDeployment"] }
-def X-Amz-Target-completer-5 [] { ["AwsProton20200720.CreateComponent"] }
-def X-Amz-Target-completer-6 [] { ["AwsProton20200720.CreateEnvironment"] }
-def X-Amz-Target-completer-7 [] { ["AwsProton20200720.CreateEnvironmentAccountConnection"] }
-def X-Amz-Target-completer-8 [] { ["AwsProton20200720.CreateEnvironmentTemplate"] }
-def X-Amz-Target-completer-9 [] { ["AwsProton20200720.CreateEnvironmentTemplateVersion"] }
-def X-Amz-Target-completer-10 [] { ["AwsProton20200720.CreateRepository"] }
-def X-Amz-Target-completer-11 [] { ["AwsProton20200720.CreateService"] }
-def X-Amz-Target-completer-12 [] { ["AwsProton20200720.CreateServiceInstance"] }
-def X-Amz-Target-completer-13 [] { ["AwsProton20200720.CreateServiceSyncConfig"] }
-def X-Amz-Target-completer-14 [] { ["AwsProton20200720.CreateServiceTemplate"] }
-def X-Amz-Target-completer-15 [] { ["AwsProton20200720.CreateServiceTemplateVersion"] }
-def X-Amz-Target-completer-16 [] { ["AwsProton20200720.CreateTemplateSyncConfig"] }
-def X-Amz-Target-completer-17 [] { ["AwsProton20200720.DeleteComponent"] }
-def X-Amz-Target-completer-18 [] { ["AwsProton20200720.DeleteEnvironment"] }
-def X-Amz-Target-completer-19 [] { ["AwsProton20200720.DeleteEnvironmentAccountConnection"] }
-def X-Amz-Target-completer-20 [] { ["AwsProton20200720.DeleteEnvironmentTemplate"] }
-def X-Amz-Target-completer-21 [] { ["AwsProton20200720.DeleteEnvironmentTemplateVersion"] }
-def X-Amz-Target-completer-22 [] { ["AwsProton20200720.DeleteRepository"] }
-def X-Amz-Target-completer-23 [] { ["AwsProton20200720.DeleteService"] }
-def X-Amz-Target-completer-24 [] { ["AwsProton20200720.DeleteServiceSyncConfig"] }
-def X-Amz-Target-completer-25 [] { ["AwsProton20200720.DeleteServiceTemplate"] }
-def X-Amz-Target-completer-26 [] { ["AwsProton20200720.DeleteServiceTemplateVersion"] }
-def X-Amz-Target-completer-27 [] { ["AwsProton20200720.DeleteTemplateSyncConfig"] }
-def X-Amz-Target-completer-28 [] { ["AwsProton20200720.GetAccountSettings"] }
-def X-Amz-Target-completer-29 [] { ["AwsProton20200720.GetComponent"] }
-def X-Amz-Target-completer-30 [] { ["AwsProton20200720.GetEnvironment"] }
-def X-Amz-Target-completer-31 [] { ["AwsProton20200720.GetEnvironmentAccountConnection"] }
-def X-Amz-Target-completer-32 [] { ["AwsProton20200720.GetEnvironmentTemplate"] }
-def X-Amz-Target-completer-33 [] { ["AwsProton20200720.GetEnvironmentTemplateVersion"] }
-def X-Amz-Target-completer-34 [] { ["AwsProton20200720.GetRepository"] }
-def X-Amz-Target-completer-35 [] { ["AwsProton20200720.GetRepositorySyncStatus"] }
-def X-Amz-Target-completer-36 [] { ["AwsProton20200720.GetResourcesSummary"] }
-def X-Amz-Target-completer-37 [] { ["AwsProton20200720.GetService"] }
-def X-Amz-Target-completer-38 [] { ["AwsProton20200720.GetServiceInstance"] }
-def X-Amz-Target-completer-39 [] { ["AwsProton20200720.GetServiceInstanceSyncStatus"] }
-def X-Amz-Target-completer-40 [] { ["AwsProton20200720.GetServiceSyncBlockerSummary"] }
-def X-Amz-Target-completer-41 [] { ["AwsProton20200720.GetServiceSyncConfig"] }
-def X-Amz-Target-completer-42 [] { ["AwsProton20200720.GetServiceTemplate"] }
-def X-Amz-Target-completer-43 [] { ["AwsProton20200720.GetServiceTemplateVersion"] }
-def X-Amz-Target-completer-44 [] { ["AwsProton20200720.GetTemplateSyncConfig"] }
-def X-Amz-Target-completer-45 [] { ["AwsProton20200720.GetTemplateSyncStatus"] }
-def X-Amz-Target-completer-46 [] { ["AwsProton20200720.ListComponentOutputs"] }
-def X-Amz-Target-completer-47 [] { ["AwsProton20200720.ListComponentProvisionedResources"] }
-def X-Amz-Target-completer-48 [] { ["AwsProton20200720.ListComponents"] }
-def X-Amz-Target-completer-49 [] { ["AwsProton20200720.ListEnvironmentAccountConnections"] }
-def X-Amz-Target-completer-50 [] { ["AwsProton20200720.ListEnvironmentOutputs"] }
-def X-Amz-Target-completer-51 [] { ["AwsProton20200720.ListEnvironmentProvisionedResources"] }
-def X-Amz-Target-completer-52 [] { ["AwsProton20200720.ListEnvironmentTemplateVersions"] }
-def X-Amz-Target-completer-53 [] { ["AwsProton20200720.ListEnvironmentTemplates"] }
-def X-Amz-Target-completer-54 [] { ["AwsProton20200720.ListEnvironments"] }
-def X-Amz-Target-completer-55 [] { ["AwsProton20200720.ListRepositories"] }
-def X-Amz-Target-completer-56 [] { ["AwsProton20200720.ListRepositorySyncDefinitions"] }
-def X-Amz-Target-completer-57 [] { ["AwsProton20200720.ListServiceInstanceOutputs"] }
-def X-Amz-Target-completer-58 [] { ["AwsProton20200720.ListServiceInstanceProvisionedResources"] }
-def X-Amz-Target-completer-59 [] { ["AwsProton20200720.ListServiceInstances"] }
-def X-Amz-Target-completer-60 [] { ["AwsProton20200720.ListServicePipelineOutputs"] }
-def X-Amz-Target-completer-61 [] { ["AwsProton20200720.ListServicePipelineProvisionedResources"] }
-def X-Amz-Target-completer-62 [] { ["AwsProton20200720.ListServiceTemplateVersions"] }
-def X-Amz-Target-completer-63 [] { ["AwsProton20200720.ListServiceTemplates"] }
-def X-Amz-Target-completer-64 [] { ["AwsProton20200720.ListServices"] }
-def X-Amz-Target-completer-65 [] { ["AwsProton20200720.ListTagsForResource"] }
-def X-Amz-Target-completer-66 [] { ["AwsProton20200720.NotifyResourceDeploymentStatusChange"] }
-def X-Amz-Target-completer-67 [] { ["AwsProton20200720.RejectEnvironmentAccountConnection"] }
-def X-Amz-Target-completer-68 [] { ["AwsProton20200720.TagResource"] }
-def X-Amz-Target-completer-69 [] { ["AwsProton20200720.UntagResource"] }
-def X-Amz-Target-completer-70 [] { ["AwsProton20200720.UpdateAccountSettings"] }
-def X-Amz-Target-completer-71 [] { ["AwsProton20200720.UpdateComponent"] }
-def X-Amz-Target-completer-72 [] { ["AwsProton20200720.UpdateEnvironment"] }
-def X-Amz-Target-completer-73 [] { ["AwsProton20200720.UpdateEnvironmentAccountConnection"] }
-def X-Amz-Target-completer-74 [] { ["AwsProton20200720.UpdateEnvironmentTemplate"] }
-def X-Amz-Target-completer-75 [] { ["AwsProton20200720.UpdateEnvironmentTemplateVersion"] }
-def X-Amz-Target-completer-76 [] { ["AwsProton20200720.UpdateService"] }
-def X-Amz-Target-completer-77 [] { ["AwsProton20200720.UpdateServiceInstance"] }
-def X-Amz-Target-completer-78 [] { ["AwsProton20200720.UpdateServicePipeline"] }
-def X-Amz-Target-completer-79 [] { ["AwsProton20200720.UpdateServiceSyncBlocker"] }
-def X-Amz-Target-completer-80 [] { ["AwsProton20200720.UpdateServiceSyncConfig"] }
-def X-Amz-Target-completer-81 [] { ["AwsProton20200720.UpdateServiceTemplate"] }
-def X-Amz-Target-completer-82 [] { ["AwsProton20200720.UpdateServiceTemplateVersion"] }
-def X-Amz-Target-completer-83 [] { ["AwsProton20200720.UpdateTemplateSyncConfig"] }
+def x-amz-target-completer [] { ["AwsProton20200720.AcceptEnvironmentAccountConnection"] }
+def x-amz-target-completer-1 [] { ["AwsProton20200720.CancelComponentDeployment"] }
+def x-amz-target-completer-2 [] { ["AwsProton20200720.CancelEnvironmentDeployment"] }
+def x-amz-target-completer-3 [] { ["AwsProton20200720.CancelServiceInstanceDeployment"] }
+def x-amz-target-completer-4 [] { ["AwsProton20200720.CancelServicePipelineDeployment"] }
+def x-amz-target-completer-5 [] { ["AwsProton20200720.CreateComponent"] }
+def x-amz-target-completer-6 [] { ["AwsProton20200720.CreateEnvironment"] }
+def x-amz-target-completer-7 [] { ["AwsProton20200720.CreateEnvironmentAccountConnection"] }
+def x-amz-target-completer-8 [] { ["AwsProton20200720.CreateEnvironmentTemplate"] }
+def x-amz-target-completer-9 [] { ["AwsProton20200720.CreateEnvironmentTemplateVersion"] }
+def x-amz-target-completer-10 [] { ["AwsProton20200720.CreateRepository"] }
+def x-amz-target-completer-11 [] { ["AwsProton20200720.CreateService"] }
+def x-amz-target-completer-12 [] { ["AwsProton20200720.CreateServiceInstance"] }
+def x-amz-target-completer-13 [] { ["AwsProton20200720.CreateServiceSyncConfig"] }
+def x-amz-target-completer-14 [] { ["AwsProton20200720.CreateServiceTemplate"] }
+def x-amz-target-completer-15 [] { ["AwsProton20200720.CreateServiceTemplateVersion"] }
+def x-amz-target-completer-16 [] { ["AwsProton20200720.CreateTemplateSyncConfig"] }
+def x-amz-target-completer-17 [] { ["AwsProton20200720.DeleteComponent"] }
+def x-amz-target-completer-18 [] { ["AwsProton20200720.DeleteEnvironment"] }
+def x-amz-target-completer-19 [] { ["AwsProton20200720.DeleteEnvironmentAccountConnection"] }
+def x-amz-target-completer-20 [] { ["AwsProton20200720.DeleteEnvironmentTemplate"] }
+def x-amz-target-completer-21 [] { ["AwsProton20200720.DeleteEnvironmentTemplateVersion"] }
+def x-amz-target-completer-22 [] { ["AwsProton20200720.DeleteRepository"] }
+def x-amz-target-completer-23 [] { ["AwsProton20200720.DeleteService"] }
+def x-amz-target-completer-24 [] { ["AwsProton20200720.DeleteServiceSyncConfig"] }
+def x-amz-target-completer-25 [] { ["AwsProton20200720.DeleteServiceTemplate"] }
+def x-amz-target-completer-26 [] { ["AwsProton20200720.DeleteServiceTemplateVersion"] }
+def x-amz-target-completer-27 [] { ["AwsProton20200720.DeleteTemplateSyncConfig"] }
+def x-amz-target-completer-28 [] { ["AwsProton20200720.GetAccountSettings"] }
+def x-amz-target-completer-29 [] { ["AwsProton20200720.GetComponent"] }
+def x-amz-target-completer-30 [] { ["AwsProton20200720.GetEnvironment"] }
+def x-amz-target-completer-31 [] { ["AwsProton20200720.GetEnvironmentAccountConnection"] }
+def x-amz-target-completer-32 [] { ["AwsProton20200720.GetEnvironmentTemplate"] }
+def x-amz-target-completer-33 [] { ["AwsProton20200720.GetEnvironmentTemplateVersion"] }
+def x-amz-target-completer-34 [] { ["AwsProton20200720.GetRepository"] }
+def x-amz-target-completer-35 [] { ["AwsProton20200720.GetRepositorySyncStatus"] }
+def x-amz-target-completer-36 [] { ["AwsProton20200720.GetResourcesSummary"] }
+def x-amz-target-completer-37 [] { ["AwsProton20200720.GetService"] }
+def x-amz-target-completer-38 [] { ["AwsProton20200720.GetServiceInstance"] }
+def x-amz-target-completer-39 [] { ["AwsProton20200720.GetServiceInstanceSyncStatus"] }
+def x-amz-target-completer-40 [] { ["AwsProton20200720.GetServiceSyncBlockerSummary"] }
+def x-amz-target-completer-41 [] { ["AwsProton20200720.GetServiceSyncConfig"] }
+def x-amz-target-completer-42 [] { ["AwsProton20200720.GetServiceTemplate"] }
+def x-amz-target-completer-43 [] { ["AwsProton20200720.GetServiceTemplateVersion"] }
+def x-amz-target-completer-44 [] { ["AwsProton20200720.GetTemplateSyncConfig"] }
+def x-amz-target-completer-45 [] { ["AwsProton20200720.GetTemplateSyncStatus"] }
+def x-amz-target-completer-46 [] { ["AwsProton20200720.ListComponentOutputs"] }
+def x-amz-target-completer-47 [] { ["AwsProton20200720.ListComponentProvisionedResources"] }
+def x-amz-target-completer-48 [] { ["AwsProton20200720.ListComponents"] }
+def x-amz-target-completer-49 [] { ["AwsProton20200720.ListEnvironmentAccountConnections"] }
+def x-amz-target-completer-50 [] { ["AwsProton20200720.ListEnvironmentOutputs"] }
+def x-amz-target-completer-51 [] { ["AwsProton20200720.ListEnvironmentProvisionedResources"] }
+def x-amz-target-completer-52 [] { ["AwsProton20200720.ListEnvironmentTemplateVersions"] }
+def x-amz-target-completer-53 [] { ["AwsProton20200720.ListEnvironmentTemplates"] }
+def x-amz-target-completer-54 [] { ["AwsProton20200720.ListEnvironments"] }
+def x-amz-target-completer-55 [] { ["AwsProton20200720.ListRepositories"] }
+def x-amz-target-completer-56 [] { ["AwsProton20200720.ListRepositorySyncDefinitions"] }
+def x-amz-target-completer-57 [] { ["AwsProton20200720.ListServiceInstanceOutputs"] }
+def x-amz-target-completer-58 [] { ["AwsProton20200720.ListServiceInstanceProvisionedResources"] }
+def x-amz-target-completer-59 [] { ["AwsProton20200720.ListServiceInstances"] }
+def x-amz-target-completer-60 [] { ["AwsProton20200720.ListServicePipelineOutputs"] }
+def x-amz-target-completer-61 [] { ["AwsProton20200720.ListServicePipelineProvisionedResources"] }
+def x-amz-target-completer-62 [] { ["AwsProton20200720.ListServiceTemplateVersions"] }
+def x-amz-target-completer-63 [] { ["AwsProton20200720.ListServiceTemplates"] }
+def x-amz-target-completer-64 [] { ["AwsProton20200720.ListServices"] }
+def x-amz-target-completer-65 [] { ["AwsProton20200720.ListTagsForResource"] }
+def x-amz-target-completer-66 [] { ["AwsProton20200720.NotifyResourceDeploymentStatusChange"] }
+def x-amz-target-completer-67 [] { ["AwsProton20200720.RejectEnvironmentAccountConnection"] }
+def x-amz-target-completer-68 [] { ["AwsProton20200720.TagResource"] }
+def x-amz-target-completer-69 [] { ["AwsProton20200720.UntagResource"] }
+def x-amz-target-completer-70 [] { ["AwsProton20200720.UpdateAccountSettings"] }
+def x-amz-target-completer-71 [] { ["AwsProton20200720.UpdateComponent"] }
+def x-amz-target-completer-72 [] { ["AwsProton20200720.UpdateEnvironment"] }
+def x-amz-target-completer-73 [] { ["AwsProton20200720.UpdateEnvironmentAccountConnection"] }
+def x-amz-target-completer-74 [] { ["AwsProton20200720.UpdateEnvironmentTemplate"] }
+def x-amz-target-completer-75 [] { ["AwsProton20200720.UpdateEnvironmentTemplateVersion"] }
+def x-amz-target-completer-76 [] { ["AwsProton20200720.UpdateService"] }
+def x-amz-target-completer-77 [] { ["AwsProton20200720.UpdateServiceInstance"] }
+def x-amz-target-completer-78 [] { ["AwsProton20200720.UpdateServicePipeline"] }
+def x-amz-target-completer-79 [] { ["AwsProton20200720.UpdateServiceSyncBlocker"] }
+def x-amz-target-completer-80 [] { ["AwsProton20200720.UpdateServiceSyncConfig"] }
+def x-amz-target-completer-81 [] { ["AwsProton20200720.UpdateServiceTemplate"] }
+def x-amz-target-completer-82 [] { ["AwsProton20200720.UpdateServiceTemplateVersion"] }
+def x-amz-target-completer-83 [] { ["AwsProton20200720.UpdateTemplateSyncConfig"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-proton20200720-accept-environment-account-connection AcceptEnvironmentAccountConnection" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-proton20200720-accept-environment-account-connection post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -178,7 +178,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AwsProton20200720.AcceptEnvironmentAccountConnection
 # operationId: AcceptEnvironmentAccountConnection
-export def "x-amz-target-aws-proton20200720-accept-environment-account-connection AcceptEnvironmentAccountConnection" [
+export def "x-amz-target-aws-proton20200720-accept-environment-account-connection post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,23 +187,23 @@ export def "x-amz-target-aws-proton20200720-accept-environment-account-connectio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
   id: any
 ]: any -> record<environmentAccountConnection: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, environmentAccountId: record, environmentName: record, id: record, lastModifiedAt: record, managementAccountId: record, requestedAt: record, roleArn: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.AcceptEnvironmentAccountConnection")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,7 +214,7 @@ export def "x-amz-target-aws-proton20200720-accept-environment-account-connectio
 #
 # POST /#X-Amz-Target=AwsProton20200720.CancelComponentDeployment
 # operationId: CancelComponentDeployment
-export def "x-amz-target-aws-proton20200720-cancel-component-deployment CancelComponentDeployment" [
+export def "x-amz-target-aws-proton20200720-cancel-component-deployment cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,23 +223,23 @@ export def "x-amz-target-aws-proton20200720-cancel-component-deployment CancelCo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  componentName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  component_name: any
 ]: any -> record<component: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, description: record, environmentName: record, lastClientRequestToken: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, lastModifiedAt: record, name: record, serviceInstanceName: record, serviceName: record, serviceSpec: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CancelComponentDeployment")
-  let body = {componentName: $componentName} | compact
+  let body = {"componentName": $component_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,7 +250,7 @@ export def "x-amz-target-aws-proton20200720-cancel-component-deployment CancelCo
 #
 # POST /#X-Amz-Target=AwsProton20200720.CancelEnvironmentDeployment
 # operationId: CancelEnvironmentDeployment
-export def "x-amz-target-aws-proton20200720-cancel-environment-deployment CancelEnvironmentDeployment" [
+export def "x-amz-target-aws-proton20200720-cancel-environment-deployment cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,23 +259,23 @@ export def "x-amz-target-aws-proton20200720-cancel-environment-deployment Cancel
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  environmentName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  environment_name: any
 ]: any -> record<environment: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, description: record, environmentAccountConnectionId: record, environmentAccountId: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, name: record, protonServiceRoleArn: record, provisioning: record, provisioningRepository: record<arn: record, branch: record, name: record, provider: record>, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CancelEnvironmentDeployment")
-  let body = {environmentName: $environmentName} | compact
+  let body = {"environmentName": $environment_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,7 +286,7 @@ export def "x-amz-target-aws-proton20200720-cancel-environment-deployment Cancel
 #
 # POST /#X-Amz-Target=AwsProton20200720.CancelServiceInstanceDeployment
 # operationId: CancelServiceInstanceDeployment
-export def "x-amz-target-aws-proton20200720-cancel-service-instance-deployment CancelServiceInstanceDeployment" [
+export def "x-amz-target-aws-proton20200720-cancel-service-instance-deployment cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,24 +295,24 @@ export def "x-amz-target-aws-proton20200720-cancel-service-instance-deployment C
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  serviceInstanceName: any
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  service_instance_name: any
+  service_name: any
 ]: any -> record<serviceInstance: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, environmentName: record, lastClientRequestToken: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, name: record, serviceName: record, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CancelServiceInstanceDeployment")
-  let body = {serviceInstanceName: $serviceInstanceName, serviceName: $serviceName} | compact
+  let body = {"serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -323,7 +323,7 @@ export def "x-amz-target-aws-proton20200720-cancel-service-instance-deployment C
 #
 # POST /#X-Amz-Target=AwsProton20200720.CancelServicePipelineDeployment
 # operationId: CancelServicePipelineDeployment
-export def "x-amz-target-aws-proton20200720-cancel-service-pipeline-deployment CancelServicePipelineDeployment" [
+export def "x-amz-target-aws-proton20200720-cancel-service-pipeline-deployment cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,23 +332,23 @@ export def "x-amz-target-aws-proton20200720-cancel-service-pipeline-deployment C
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  service_name: any
 ]: any -> record<pipeline: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CancelServicePipelineDeployment")
-  let body = {serviceName: $serviceName} | compact
+  let body = {"serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -359,7 +359,7 @@ export def "x-amz-target-aws-proton20200720-cancel-service-pipeline-deployment C
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateComponent
 # operationId: CreateComponent
-export def "x-amz-target-aws-proton20200720-create-component CreateComponent" [
+export def "x-amz-target-aws-proton20200720-create-component create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,32 +368,32 @@ export def "x-amz-target-aws-proton20200720-create-component CreateComponent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  --clientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  --client-token: any
   --description: any
-  --environmentName: any
+  --environment-name: any
   manifest: any
   name: any
-  --serviceInstanceName: any
-  --serviceName: any
-  --serviceSpec: any
+  --service-instance-name: any
+  --service-name: any
+  --service-spec: any
   --tags: any
-  templateFile: any
+  template_file: any
 ]: any -> record<component: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, description: record, environmentName: record, lastClientRequestToken: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, lastModifiedAt: record, name: record, serviceInstanceName: record, serviceName: record, serviceSpec: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateComponent")
-  let body = {clientToken: $clientToken, description: $description, environmentName: $environmentName, manifest: $manifest, name: $name, serviceInstanceName: $serviceInstanceName, serviceName: $serviceName, serviceSpec: $serviceSpec, tags: $tags, templateFile: $templateFile} | compact
+  let body = {"clientToken": $client_token, "description": $description, "environmentName": $environment_name, "manifest": $manifest, "name": $name, "serviceInstanceName": $service_instance_name, "serviceName": $service_name, "serviceSpec": $service_spec, "tags": $tags, "templateFile": $template_file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +404,7 @@ export def "x-amz-target-aws-proton20200720-create-component CreateComponent" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateEnvironment
 # operationId: CreateEnvironment
-export def "x-amz-target-aws-proton20200720-create-environment CreateEnvironment" [
+export def "x-amz-target-aws-proton20200720-create-environment create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,34 +413,34 @@ export def "x-amz-target-aws-proton20200720-create-environment CreateEnvironment
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --codebuildRoleArn: any
-  --componentRoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --codebuild-role-arn: any
+  --component-role-arn: any
   --description: any
-  --environmentAccountConnectionId: any
+  --environment-account-connection-id: any
   name: any
-  --protonServiceRoleArn: any
-  --provisioningRepository: any
+  --proton-service-role-arn: any
+  --provisioning-repository: any
   spec: any
   --tags: any
-  templateMajorVersion: any
-  --templateMinorVersion: any
-  templateName: any
+  template_major_version: any
+  --template-minor-version: any
+  template_name: any
 ]: any -> record<environment: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, description: record, environmentAccountConnectionId: record, environmentAccountId: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, name: record, protonServiceRoleArn: record, provisioning: record, provisioningRepository: record<arn: record, branch: record, name: record, provider: record>, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateEnvironment")
-  let body = {codebuildRoleArn: $codebuildRoleArn, componentRoleArn: $componentRoleArn, description: $description, environmentAccountConnectionId: $environmentAccountConnectionId, name: $name, protonServiceRoleArn: $protonServiceRoleArn, provisioningRepository: $provisioningRepository, spec: $spec, tags: $tags, templateMajorVersion: $templateMajorVersion, templateMinorVersion: $templateMinorVersion, templateName: $templateName} | compact
+  let body = {"codebuildRoleArn": $codebuild_role_arn, "componentRoleArn": $component_role_arn, "description": $description, "environmentAccountConnectionId": $environment_account_connection_id, "name": $name, "protonServiceRoleArn": $proton_service_role_arn, "provisioningRepository": $provisioning_repository, "spec": $spec, "tags": $tags, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -451,7 +451,7 @@ export def "x-amz-target-aws-proton20200720-create-environment CreateEnvironment
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateEnvironmentAccountConnection
 # operationId: CreateEnvironmentAccountConnection
-export def "x-amz-target-aws-proton20200720-create-environment-account-connection CreateEnvironmentAccountConnection" [
+export def "x-amz-target-aws-proton20200720-create-environment-account-connection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,29 +460,29 @@ export def "x-amz-target-aws-proton20200720-create-environment-account-connectio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  --clientToken: any
-  --codebuildRoleArn: any
-  --componentRoleArn: any
-  environmentName: any
-  managementAccountId: any
-  --roleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  --client-token: any
+  --codebuild-role-arn: any
+  --component-role-arn: any
+  environment_name: any
+  management_account_id: any
+  --role-arn: any
   --tags: any
 ]: any -> record<environmentAccountConnection: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, environmentAccountId: record, environmentName: record, id: record, lastModifiedAt: record, managementAccountId: record, requestedAt: record, roleArn: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateEnvironmentAccountConnection")
-  let body = {clientToken: $clientToken, codebuildRoleArn: $codebuildRoleArn, componentRoleArn: $componentRoleArn, environmentName: $environmentName, managementAccountId: $managementAccountId, roleArn: $roleArn, tags: $tags} | compact
+  let body = {"clientToken": $client_token, "codebuildRoleArn": $codebuild_role_arn, "componentRoleArn": $component_role_arn, "environmentName": $environment_name, "managementAccountId": $management_account_id, "roleArn": $role_arn, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -493,7 +493,7 @@ export def "x-amz-target-aws-proton20200720-create-environment-account-connectio
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateEnvironmentTemplate
 # operationId: CreateEnvironmentTemplate
-export def "x-amz-target-aws-proton20200720-create-environment-template CreateEnvironmentTemplate" [
+export def "x-amz-target-aws-proton20200720-create-environment-template create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,17 +502,17 @@ export def "x-amz-target-aws-proton20200720-create-environment-template CreateEn
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
   --description: any
-  --displayName: any
-  --encryptionKey: any
+  --display-name: any
+  --encryption-key: any
   name: any
   --provisioning: any
   --tags: any
@@ -521,9 +521,9 @@ export def "x-amz-target-aws-proton20200720-create-environment-template CreateEn
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateEnvironmentTemplate")
-  let body = {description: $description, displayName: $displayName, encryptionKey: $encryptionKey, name: $name, provisioning: $provisioning, tags: $tags} | compact
+  let body = {"description": $description, "displayName": $display_name, "encryptionKey": $encryption_key, "name": $name, "provisioning": $provisioning, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -534,7 +534,7 @@ export def "x-amz-target-aws-proton20200720-create-environment-template CreateEn
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateEnvironmentTemplateVersion
 # operationId: CreateEnvironmentTemplateVersion
-export def "x-amz-target-aws-proton20200720-create-environment-template-version CreateEnvironmentTemplateVersion" [
+export def "x-amz-target-aws-proton20200720-create-environment-template-version create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,28 +543,28 @@ export def "x-amz-target-aws-proton20200720-create-environment-template-version 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  --clientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  --client-token: any
   --description: any
-  --majorVersion: any
+  --major-version: any
   --body-source: any
   --tags: any
-  templateName: any
+  template_name: any
 ]: any -> record<environmentTemplateVersion: record<arn: record, createdAt: record, description: record, lastModifiedAt: record, majorVersion: record, minorVersion: record, recommendedMinorVersion: record, schema: record, status: record, statusMessage: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateEnvironmentTemplateVersion")
-  let body = {clientToken: $clientToken, description: $description, majorVersion: $majorVersion, source: $body_source, tags: $tags, templateName: $templateName} | compact
+  let body = {"clientToken": $client_token, "description": $description, "majorVersion": $major_version, "source": $body_source, "tags": $tags, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -575,7 +575,7 @@ export def "x-amz-target-aws-proton20200720-create-environment-template-version 
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateRepository
 # operationId: CreateRepository
-export def "x-amz-target-aws-proton20200720-create-repository CreateRepository" [
+export def "x-amz-target-aws-proton20200720-create-repository create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,16 +584,16 @@ export def "x-amz-target-aws-proton20200720-create-repository CreateRepository" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  connectionArn: any
-  --encryptionKey: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  connection_arn: any
+  --encryption-key: any
   name: any
   provider: any
   --tags: any
@@ -602,9 +602,9 @@ export def "x-amz-target-aws-proton20200720-create-repository CreateRepository" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateRepository")
-  let body = {connectionArn: $connectionArn, encryptionKey: $encryptionKey, name: $name, provider: $provider, tags: $tags} | compact
+  let body = {"connectionArn": $connection_arn, "encryptionKey": $encryption_key, "name": $name, "provider": $provider, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -615,7 +615,7 @@ export def "x-amz-target-aws-proton20200720-create-repository CreateRepository" 
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateService
 # operationId: CreateService
-export def "x-amz-target-aws-proton20200720-create-service CreateService" [
+export def "x-amz-target-aws-proton20200720-create-service create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,32 +624,32 @@ export def "x-amz-target-aws-proton20200720-create-service CreateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  --branchName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  --branch-name: any
   --description: any
   name: any
-  --repositoryConnectionArn: any
-  --repositoryId: any
+  --repository-connection-arn: any
+  --repository-id: any
   spec: any
   --tags: any
-  templateMajorVersion: any
-  --templateMinorVersion: any
-  templateName: any
+  template_major_version: any
+  --template-minor-version: any
+  template_name: any
 ]: any -> record<service: record<arn: record, branchName: record, createdAt: record, description: record, lastModifiedAt: record, name: record, pipeline: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>, repositoryConnectionArn: record, repositoryId: record, spec: record, status: record, statusMessage: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateService")
-  let body = {branchName: $branchName, description: $description, name: $name, repositoryConnectionArn: $repositoryConnectionArn, repositoryId: $repositoryId, spec: $spec, tags: $tags, templateMajorVersion: $templateMajorVersion, templateMinorVersion: $templateMinorVersion, templateName: $templateName} | compact
+  let body = {"branchName": $branch_name, "description": $description, "name": $name, "repositoryConnectionArn": $repository_connection_arn, "repositoryId": $repository_id, "spec": $spec, "tags": $tags, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -660,7 +660,7 @@ export def "x-amz-target-aws-proton20200720-create-service CreateService" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateServiceInstance
 # operationId: CreateServiceInstance
-export def "x-amz-target-aws-proton20200720-create-service-instance CreateServiceInstance" [
+export def "x-amz-target-aws-proton20200720-create-service-instance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -669,29 +669,29 @@ export def "x-amz-target-aws-proton20200720-create-service-instance CreateServic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  --clientToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  --client-token: any
   name: any
-  serviceName: any
+  service_name: any
   spec: any
   --tags: any
-  --templateMajorVersion: any
-  --templateMinorVersion: any
+  --template-major-version: any
+  --template-minor-version: any
 ]: any -> record<serviceInstance: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, environmentName: record, lastClientRequestToken: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, name: record, serviceName: record, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateServiceInstance")
-  let body = {clientToken: $clientToken, name: $name, serviceName: $serviceName, spec: $spec, tags: $tags, templateMajorVersion: $templateMajorVersion, templateMinorVersion: $templateMinorVersion} | compact
+  let body = {"clientToken": $client_token, "name": $name, "serviceName": $service_name, "spec": $spec, "tags": $tags, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -702,7 +702,7 @@ export def "x-amz-target-aws-proton20200720-create-service-instance CreateServic
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateServiceSyncConfig
 # operationId: CreateServiceSyncConfig
-export def "x-amz-target-aws-proton20200720-create-service-sync-config CreateServiceSyncConfig" [
+export def "x-amz-target-aws-proton20200720-create-service-sync-config create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,27 +711,27 @@ export def "x-amz-target-aws-proton20200720-create-service-sync-config CreateSer
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
   branch: any
-  filePath: any
-  repositoryName: any
-  repositoryProvider: any
-  serviceName: any
+  file_path: any
+  repository_name: any
+  repository_provider: any
+  service_name: any
 ]: any -> record<serviceSyncConfig: record<branch: record, filePath: record, repositoryName: record, repositoryProvider: record, serviceName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateServiceSyncConfig")
-  let body = {branch: $branch, filePath: $filePath, repositoryName: $repositoryName, repositoryProvider: $repositoryProvider, serviceName: $serviceName} | compact
+  let body = {"branch": $branch, "filePath": $file_path, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -742,7 +742,7 @@ export def "x-amz-target-aws-proton20200720-create-service-sync-config CreateSer
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateServiceTemplate
 # operationId: CreateServiceTemplate
-export def "x-amz-target-aws-proton20200720-create-service-template CreateServiceTemplate" [
+export def "x-amz-target-aws-proton20200720-create-service-template create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -751,28 +751,28 @@ export def "x-amz-target-aws-proton20200720-create-service-template CreateServic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
   --description: any
-  --displayName: any
-  --encryptionKey: any
+  --display-name: any
+  --encryption-key: any
   name: any
-  --pipelineProvisioning: any
+  --pipeline-provisioning: any
   --tags: any
 ]: any -> record<serviceTemplate: record<arn: record, createdAt: record, description: record, displayName: record, encryptionKey: record, lastModifiedAt: record, name: record, pipelineProvisioning: record, recommendedVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateServiceTemplate")
-  let body = {description: $description, displayName: $displayName, encryptionKey: $encryptionKey, name: $name, pipelineProvisioning: $pipelineProvisioning, tags: $tags} | compact
+  let body = {"description": $description, "displayName": $display_name, "encryptionKey": $encryption_key, "name": $name, "pipelineProvisioning": $pipeline_provisioning, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,7 +783,7 @@ export def "x-amz-target-aws-proton20200720-create-service-template CreateServic
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateServiceTemplateVersion
 # operationId: CreateServiceTemplateVersion
-export def "x-amz-target-aws-proton20200720-create-service-template-version CreateServiceTemplateVersion" [
+export def "x-amz-target-aws-proton20200720-create-service-template-version create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,30 +792,30 @@ export def "x-amz-target-aws-proton20200720-create-service-template-version Crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  --clientToken: any
-  compatibleEnvironmentTemplates: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  --client-token: any
+  compatible_environment_templates: any
   --description: any
-  --majorVersion: any
+  --major-version: any
   --body-source: any
-  --supportedComponentSources: any
+  --supported-component-sources: any
   --tags: any
-  templateName: any
+  template_name: any
 ]: any -> record<serviceTemplateVersion: record<arn: record, compatibleEnvironmentTemplates: record, createdAt: record, description: record, lastModifiedAt: record, majorVersion: record, minorVersion: record, recommendedMinorVersion: record, schema: record, status: record, statusMessage: record, supportedComponentSources: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateServiceTemplateVersion")
-  let body = {clientToken: $clientToken, compatibleEnvironmentTemplates: $compatibleEnvironmentTemplates, description: $description, majorVersion: $majorVersion, source: $body_source, supportedComponentSources: $supportedComponentSources, tags: $tags, templateName: $templateName} | compact
+  let body = {"clientToken": $client_token, "compatibleEnvironmentTemplates": $compatible_environment_templates, "description": $description, "majorVersion": $major_version, "source": $body_source, "supportedComponentSources": $supported_component_sources, "tags": $tags, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -826,7 +826,7 @@ export def "x-amz-target-aws-proton20200720-create-service-template-version Crea
 #
 # POST /#X-Amz-Target=AwsProton20200720.CreateTemplateSyncConfig
 # operationId: CreateTemplateSyncConfig
-export def "x-amz-target-aws-proton20200720-create-template-sync-config CreateTemplateSyncConfig" [
+export def "x-amz-target-aws-proton20200720-create-template-sync-config create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,28 +835,28 @@ export def "x-amz-target-aws-proton20200720-create-template-sync-config CreateTe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
   branch: any
-  repositoryName: any
-  repositoryProvider: any
+  repository_name: any
+  repository_provider: any
   --subdirectory: any
-  templateName: any
-  templateType: any
+  template_name: any
+  template_type: any
 ]: any -> record<templateSyncConfig: record<branch: record, repositoryName: record, repositoryProvider: record, subdirectory: record, templateName: record, templateType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.CreateTemplateSyncConfig")
-  let body = {branch: $branch, repositoryName: $repositoryName, repositoryProvider: $repositoryProvider, subdirectory: $subdirectory, templateName: $templateName, templateType: $templateType} | compact
+  let body = {"branch": $branch, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "subdirectory": $subdirectory, "templateName": $template_name, "templateType": $template_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -867,7 +867,7 @@ export def "x-amz-target-aws-proton20200720-create-template-sync-config CreateTe
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteComponent
 # operationId: DeleteComponent
-export def "x-amz-target-aws-proton20200720-delete-component DeleteComponent" [
+export def "x-amz-target-aws-proton20200720-delete-component delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,23 +876,23 @@ export def "x-amz-target-aws-proton20200720-delete-component DeleteComponent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
   name: any
 ]: any -> record<component: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, description: record, environmentName: record, lastClientRequestToken: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, lastModifiedAt: record, name: record, serviceInstanceName: record, serviceName: record, serviceSpec: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteComponent")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -903,7 +903,7 @@ export def "x-amz-target-aws-proton20200720-delete-component DeleteComponent" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteEnvironment
 # operationId: DeleteEnvironment
-export def "x-amz-target-aws-proton20200720-delete-environment DeleteEnvironment" [
+export def "x-amz-target-aws-proton20200720-delete-environment delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -912,23 +912,23 @@ export def "x-amz-target-aws-proton20200720-delete-environment DeleteEnvironment
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
   name: any
 ]: any -> record<environment: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, description: record, environmentAccountConnectionId: record, environmentAccountId: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, name: record, protonServiceRoleArn: record, provisioning: record, provisioningRepository: record<arn: record, branch: record, name: record, provider: record>, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteEnvironment")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -939,7 +939,7 @@ export def "x-amz-target-aws-proton20200720-delete-environment DeleteEnvironment
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteEnvironmentAccountConnection
 # operationId: DeleteEnvironmentAccountConnection
-export def "x-amz-target-aws-proton20200720-delete-environment-account-connection DeleteEnvironmentAccountConnection" [
+export def "x-amz-target-aws-proton20200720-delete-environment-account-connection delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -948,23 +948,23 @@ export def "x-amz-target-aws-proton20200720-delete-environment-account-connectio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
   id: any
 ]: any -> record<environmentAccountConnection: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, environmentAccountId: record, environmentName: record, id: record, lastModifiedAt: record, managementAccountId: record, requestedAt: record, roleArn: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteEnvironmentAccountConnection")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -975,7 +975,7 @@ export def "x-amz-target-aws-proton20200720-delete-environment-account-connectio
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteEnvironmentTemplate
 # operationId: DeleteEnvironmentTemplate
-export def "x-amz-target-aws-proton20200720-delete-environment-template DeleteEnvironmentTemplate" [
+export def "x-amz-target-aws-proton20200720-delete-environment-template delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,23 +984,23 @@ export def "x-amz-target-aws-proton20200720-delete-environment-template DeleteEn
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
   name: any
 ]: any -> record<environmentTemplate: record<arn: record, createdAt: record, description: record, displayName: record, encryptionKey: record, lastModifiedAt: record, name: record, provisioning: record, recommendedVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteEnvironmentTemplate")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1011,7 +1011,7 @@ export def "x-amz-target-aws-proton20200720-delete-environment-template DeleteEn
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteEnvironmentTemplateVersion
 # operationId: DeleteEnvironmentTemplateVersion
-export def "x-amz-target-aws-proton20200720-delete-environment-template-version DeleteEnvironmentTemplateVersion" [
+export def "x-amz-target-aws-proton20200720-delete-environment-template-version delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,25 +1020,25 @@ export def "x-amz-target-aws-proton20200720-delete-environment-template-version 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  majorVersion: any
-  minorVersion: any
-  templateName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  major_version: any
+  minor_version: any
+  template_name: any
 ]: any -> record<environmentTemplateVersion: record<arn: record, createdAt: record, description: record, lastModifiedAt: record, majorVersion: record, minorVersion: record, recommendedMinorVersion: record, schema: record, status: record, statusMessage: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteEnvironmentTemplateVersion")
-  let body = {majorVersion: $majorVersion, minorVersion: $minorVersion, templateName: $templateName} | compact
+  let body = {"majorVersion": $major_version, "minorVersion": $minor_version, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1049,7 +1049,7 @@ export def "x-amz-target-aws-proton20200720-delete-environment-template-version 
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteRepository
 # operationId: DeleteRepository
-export def "x-amz-target-aws-proton20200720-delete-repository DeleteRepository" [
+export def "x-amz-target-aws-proton20200720-delete-repository delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1058,14 +1058,14 @@ export def "x-amz-target-aws-proton20200720-delete-repository DeleteRepository" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
   name: any
   provider: any
 ]: any -> record<repository: record<arn: record, connectionArn: record, encryptionKey: record, name: record, provider: record>> {
@@ -1073,9 +1073,9 @@ export def "x-amz-target-aws-proton20200720-delete-repository DeleteRepository" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteRepository")
-  let body = {name: $name, provider: $provider} | compact
+  let body = {"name": $name, "provider": $provider} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1086,7 +1086,7 @@ export def "x-amz-target-aws-proton20200720-delete-repository DeleteRepository" 
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteService
 # operationId: DeleteService
-export def "x-amz-target-aws-proton20200720-delete-service DeleteService" [
+export def "x-amz-target-aws-proton20200720-delete-service delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1095,23 +1095,23 @@ export def "x-amz-target-aws-proton20200720-delete-service DeleteService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
   name: any
 ]: any -> record<service: record<arn: record, branchName: record, createdAt: record, description: record, lastModifiedAt: record, name: record, pipeline: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>, repositoryConnectionArn: record, repositoryId: record, spec: record, status: record, statusMessage: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteService")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1122,7 +1122,7 @@ export def "x-amz-target-aws-proton20200720-delete-service DeleteService" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteServiceSyncConfig
 # operationId: DeleteServiceSyncConfig
-export def "x-amz-target-aws-proton20200720-delete-service-sync-config DeleteServiceSyncConfig" [
+export def "x-amz-target-aws-proton20200720-delete-service-sync-config delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,23 +1131,23 @@ export def "x-amz-target-aws-proton20200720-delete-service-sync-config DeleteSer
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  service_name: any
 ]: any -> record<serviceSyncConfig: record<branch: record, filePath: record, repositoryName: record, repositoryProvider: record, serviceName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteServiceSyncConfig")
-  let body = {serviceName: $serviceName} | compact
+  let body = {"serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1158,7 +1158,7 @@ export def "x-amz-target-aws-proton20200720-delete-service-sync-config DeleteSer
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteServiceTemplate
 # operationId: DeleteServiceTemplate
-export def "x-amz-target-aws-proton20200720-delete-service-template DeleteServiceTemplate" [
+export def "x-amz-target-aws-proton20200720-delete-service-template delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,23 +1167,23 @@ export def "x-amz-target-aws-proton20200720-delete-service-template DeleteServic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
   name: any
 ]: any -> record<serviceTemplate: record<arn: record, createdAt: record, description: record, displayName: record, encryptionKey: record, lastModifiedAt: record, name: record, pipelineProvisioning: record, recommendedVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteServiceTemplate")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1194,7 +1194,7 @@ export def "x-amz-target-aws-proton20200720-delete-service-template DeleteServic
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteServiceTemplateVersion
 # operationId: DeleteServiceTemplateVersion
-export def "x-amz-target-aws-proton20200720-delete-service-template-version DeleteServiceTemplateVersion" [
+export def "x-amz-target-aws-proton20200720-delete-service-template-version delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1203,25 +1203,25 @@ export def "x-amz-target-aws-proton20200720-delete-service-template-version Dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  majorVersion: any
-  minorVersion: any
-  templateName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  major_version: any
+  minor_version: any
+  template_name: any
 ]: any -> record<serviceTemplateVersion: record<arn: record, compatibleEnvironmentTemplates: record, createdAt: record, description: record, lastModifiedAt: record, majorVersion: record, minorVersion: record, recommendedMinorVersion: record, schema: record, status: record, statusMessage: record, supportedComponentSources: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteServiceTemplateVersion")
-  let body = {majorVersion: $majorVersion, minorVersion: $minorVersion, templateName: $templateName} | compact
+  let body = {"majorVersion": $major_version, "minorVersion": $minor_version, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1232,7 +1232,7 @@ export def "x-amz-target-aws-proton20200720-delete-service-template-version Dele
 #
 # POST /#X-Amz-Target=AwsProton20200720.DeleteTemplateSyncConfig
 # operationId: DeleteTemplateSyncConfig
-export def "x-amz-target-aws-proton20200720-delete-template-sync-config DeleteTemplateSyncConfig" [
+export def "x-amz-target-aws-proton20200720-delete-template-sync-config delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1241,24 +1241,24 @@ export def "x-amz-target-aws-proton20200720-delete-template-sync-config DeleteTe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  templateName: any
-  templateType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  template_name: any
+  template_type: any
 ]: any -> record<templateSyncConfig: record<branch: record, repositoryName: record, repositoryProvider: record, subdirectory: record, templateName: record, templateType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.DeleteTemplateSyncConfig")
-  let body = {templateName: $templateName, templateType: $templateType} | compact
+  let body = {"templateName": $template_name, "templateType": $template_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1269,7 +1269,7 @@ export def "x-amz-target-aws-proton20200720-delete-template-sync-config DeleteTe
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetAccountSettings
 # operationId: GetAccountSettings
-export def "x-amz-target-aws-proton20200720-get-account-settings GetAccountSettings" [
+export def "x-amz-target-aws-proton20200720-get-account-settings get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1278,14 +1278,14 @@ export def "x-amz-target-aws-proton20200720-get-account-settings GetAccountSetti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
   --body: record
 ]: any -> record<accountSettings: record<pipelineCodebuildRoleArn: record, pipelineProvisioningRepository: record<arn: record, branch: record, name: record, provider: record>, pipelineServiceRoleArn: record>> {
   let input = $in
@@ -1293,7 +1293,7 @@ export def "x-amz-target-aws-proton20200720-get-account-settings GetAccountSetti
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetAccountSettings")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1304,7 +1304,7 @@ export def "x-amz-target-aws-proton20200720-get-account-settings GetAccountSetti
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetComponent
 # operationId: GetComponent
-export def "x-amz-target-aws-proton20200720-get-component GetComponent" [
+export def "x-amz-target-aws-proton20200720-get-component get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1313,23 +1313,23 @@ export def "x-amz-target-aws-proton20200720-get-component GetComponent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
   name: any
 ]: any -> record<component: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, description: record, environmentName: record, lastClientRequestToken: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, lastModifiedAt: record, name: record, serviceInstanceName: record, serviceName: record, serviceSpec: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetComponent")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1340,7 +1340,7 @@ export def "x-amz-target-aws-proton20200720-get-component GetComponent" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetEnvironment
 # operationId: GetEnvironment
-export def "x-amz-target-aws-proton20200720-get-environment GetEnvironment" [
+export def "x-amz-target-aws-proton20200720-get-environment get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1349,23 +1349,23 @@ export def "x-amz-target-aws-proton20200720-get-environment GetEnvironment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
   name: any
 ]: any -> record<environment: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, description: record, environmentAccountConnectionId: record, environmentAccountId: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, name: record, protonServiceRoleArn: record, provisioning: record, provisioningRepository: record<arn: record, branch: record, name: record, provider: record>, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetEnvironment")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1376,7 +1376,7 @@ export def "x-amz-target-aws-proton20200720-get-environment GetEnvironment" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetEnvironmentAccountConnection
 # operationId: GetEnvironmentAccountConnection
-export def "x-amz-target-aws-proton20200720-get-environment-account-connection GetEnvironmentAccountConnection" [
+export def "x-amz-target-aws-proton20200720-get-environment-account-connection get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1385,23 +1385,23 @@ export def "x-amz-target-aws-proton20200720-get-environment-account-connection G
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
   id: any
 ]: any -> record<environmentAccountConnection: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, environmentAccountId: record, environmentName: record, id: record, lastModifiedAt: record, managementAccountId: record, requestedAt: record, roleArn: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetEnvironmentAccountConnection")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1412,7 +1412,7 @@ export def "x-amz-target-aws-proton20200720-get-environment-account-connection G
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetEnvironmentTemplate
 # operationId: GetEnvironmentTemplate
-export def "x-amz-target-aws-proton20200720-get-environment-template GetEnvironmentTemplate" [
+export def "x-amz-target-aws-proton20200720-get-environment-template get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1421,23 +1421,23 @@ export def "x-amz-target-aws-proton20200720-get-environment-template GetEnvironm
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
   name: any
 ]: any -> record<environmentTemplate: record<arn: record, createdAt: record, description: record, displayName: record, encryptionKey: record, lastModifiedAt: record, name: record, provisioning: record, recommendedVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetEnvironmentTemplate")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1448,7 +1448,7 @@ export def "x-amz-target-aws-proton20200720-get-environment-template GetEnvironm
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetEnvironmentTemplateVersion
 # operationId: GetEnvironmentTemplateVersion
-export def "x-amz-target-aws-proton20200720-get-environment-template-version GetEnvironmentTemplateVersion" [
+export def "x-amz-target-aws-proton20200720-get-environment-template-version get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1457,25 +1457,25 @@ export def "x-amz-target-aws-proton20200720-get-environment-template-version Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  majorVersion: any
-  minorVersion: any
-  templateName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  major_version: any
+  minor_version: any
+  template_name: any
 ]: any -> record<environmentTemplateVersion: record<arn: record, createdAt: record, description: record, lastModifiedAt: record, majorVersion: record, minorVersion: record, recommendedMinorVersion: record, schema: record, status: record, statusMessage: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetEnvironmentTemplateVersion")
-  let body = {majorVersion: $majorVersion, minorVersion: $minorVersion, templateName: $templateName} | compact
+  let body = {"majorVersion": $major_version, "minorVersion": $minor_version, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1486,7 +1486,7 @@ export def "x-amz-target-aws-proton20200720-get-environment-template-version Get
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetRepository
 # operationId: GetRepository
-export def "x-amz-target-aws-proton20200720-get-repository GetRepository" [
+export def "x-amz-target-aws-proton20200720-get-repository get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1495,14 +1495,14 @@ export def "x-amz-target-aws-proton20200720-get-repository GetRepository" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
   name: any
   provider: any
 ]: any -> record<repository: record<arn: record, connectionArn: record, encryptionKey: record, name: record, provider: record>> {
@@ -1510,9 +1510,9 @@ export def "x-amz-target-aws-proton20200720-get-repository GetRepository" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetRepository")
-  let body = {name: $name, provider: $provider} | compact
+  let body = {"name": $name, "provider": $provider} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1523,7 +1523,7 @@ export def "x-amz-target-aws-proton20200720-get-repository GetRepository" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetRepositorySyncStatus
 # operationId: GetRepositorySyncStatus
-export def "x-amz-target-aws-proton20200720-get-repository-sync-status GetRepositorySyncStatus" [
+export def "x-amz-target-aws-proton20200720-get-repository-sync-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1532,26 +1532,26 @@ export def "x-amz-target-aws-proton20200720-get-repository-sync-status GetReposi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
   branch: any
-  repositoryName: any
-  repositoryProvider: any
-  syncType: any
+  repository_name: any
+  repository_provider: any
+  sync_type: any
 ]: any -> record<latestSync: record<events: record, startedAt: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetRepositorySyncStatus")
-  let body = {branch: $branch, repositoryName: $repositoryName, repositoryProvider: $repositoryProvider, syncType: $syncType} | compact
+  let body = {"branch": $branch, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "syncType": $sync_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1562,7 +1562,7 @@ export def "x-amz-target-aws-proton20200720-get-repository-sync-status GetReposi
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetResourcesSummary
 # operationId: GetResourcesSummary
-export def "x-amz-target-aws-proton20200720-get-resources-summary GetResourcesSummary" [
+export def "x-amz-target-aws-proton20200720-get-resources-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1571,14 +1571,14 @@ export def "x-amz-target-aws-proton20200720-get-resources-summary GetResourcesSu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
   --body: record
 ]: any -> record<counts: record<components: record<behindMajor: record, behindMinor: record, failed: record, total: record, upToDate: record>, environmentTemplates: record<behindMajor: record, behindMinor: record, failed: record, total: record, upToDate: record>, environments: record<behindMajor: record, behindMinor: record, failed: record, total: record, upToDate: record>, pipelines: record<behindMajor: record, behindMinor: record, failed: record, total: record, upToDate: record>, serviceInstances: record<behindMajor: record, behindMinor: record, failed: record, total: record, upToDate: record>, serviceTemplates: record<behindMajor: record, behindMinor: record, failed: record, total: record, upToDate: record>, services: record<behindMajor: record, behindMinor: record, failed: record, total: record, upToDate: record>>> {
   let input = $in
@@ -1586,7 +1586,7 @@ export def "x-amz-target-aws-proton20200720-get-resources-summary GetResourcesSu
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetResourcesSummary")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1597,7 +1597,7 @@ export def "x-amz-target-aws-proton20200720-get-resources-summary GetResourcesSu
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetService
 # operationId: GetService
-export def "x-amz-target-aws-proton20200720-get-service GetService" [
+export def "x-amz-target-aws-proton20200720-get-service get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1606,23 +1606,23 @@ export def "x-amz-target-aws-proton20200720-get-service GetService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
   name: any
 ]: any -> record<service: record<arn: record, branchName: record, createdAt: record, description: record, lastModifiedAt: record, name: record, pipeline: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>, repositoryConnectionArn: record, repositoryId: record, spec: record, status: record, statusMessage: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetService")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1633,7 +1633,7 @@ export def "x-amz-target-aws-proton20200720-get-service GetService" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetServiceInstance
 # operationId: GetServiceInstance
-export def "x-amz-target-aws-proton20200720-get-service-instance GetServiceInstance" [
+export def "x-amz-target-aws-proton20200720-get-service-instance get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,24 +1642,24 @@ export def "x-amz-target-aws-proton20200720-get-service-instance GetServiceInsta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
   name: any
-  serviceName: any
+  service_name: any
 ]: any -> record<serviceInstance: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, environmentName: record, lastClientRequestToken: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, name: record, serviceName: record, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetServiceInstance")
-  let body = {name: $name, serviceName: $serviceName} | compact
+  let body = {"name": $name, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1670,7 +1670,7 @@ export def "x-amz-target-aws-proton20200720-get-service-instance GetServiceInsta
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetServiceInstanceSyncStatus
 # operationId: GetServiceInstanceSyncStatus
-export def "x-amz-target-aws-proton20200720-get-service-instance-sync-status GetServiceInstanceSyncStatus" [
+export def "x-amz-target-aws-proton20200720-get-service-instance-sync-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1679,24 +1679,24 @@ export def "x-amz-target-aws-proton20200720-get-service-instance-sync-status Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  serviceInstanceName: any
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  service_instance_name: any
+  service_name: any
 ]: any -> record<desiredState: record<branch: record, directory: record, repositoryName: record, repositoryProvider: record, sha: record>, latestSuccessfulSync: record<events: record, initialRevision: record<branch: record, directory: record, repositoryName: record, repositoryProvider: record, sha: record>, startedAt: record, status: record, target: record, targetRevision: record<branch: record, directory: record, repositoryName: record, repositoryProvider: record, sha: record>>, latestSync: record<events: record, initialRevision: record<branch: record, directory: record, repositoryName: record, repositoryProvider: record, sha: record>, startedAt: record, status: record, target: record, targetRevision: record<branch: record, directory: record, repositoryName: record, repositoryProvider: record, sha: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetServiceInstanceSyncStatus")
-  let body = {serviceInstanceName: $serviceInstanceName, serviceName: $serviceName} | compact
+  let body = {"serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1707,7 +1707,7 @@ export def "x-amz-target-aws-proton20200720-get-service-instance-sync-status Get
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetServiceSyncBlockerSummary
 # operationId: GetServiceSyncBlockerSummary
-export def "x-amz-target-aws-proton20200720-get-service-sync-blocker-summary GetServiceSyncBlockerSummary" [
+export def "x-amz-target-aws-proton20200720-get-service-sync-blocker-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1716,24 +1716,24 @@ export def "x-amz-target-aws-proton20200720-get-service-sync-blocker-summary Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  --serviceInstanceName: any
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  --service-instance-name: any
+  service_name: any
 ]: any -> record<serviceSyncBlockerSummary: record<latestBlockers: record, serviceInstanceName: record, serviceName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetServiceSyncBlockerSummary")
-  let body = {serviceInstanceName: $serviceInstanceName, serviceName: $serviceName} | compact
+  let body = {"serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1744,7 +1744,7 @@ export def "x-amz-target-aws-proton20200720-get-service-sync-blocker-summary Get
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetServiceSyncConfig
 # operationId: GetServiceSyncConfig
-export def "x-amz-target-aws-proton20200720-get-service-sync-config GetServiceSyncConfig" [
+export def "x-amz-target-aws-proton20200720-get-service-sync-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1753,23 +1753,23 @@ export def "x-amz-target-aws-proton20200720-get-service-sync-config GetServiceSy
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  service_name: any
 ]: any -> record<serviceSyncConfig: record<branch: record, filePath: record, repositoryName: record, repositoryProvider: record, serviceName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetServiceSyncConfig")
-  let body = {serviceName: $serviceName} | compact
+  let body = {"serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1780,7 +1780,7 @@ export def "x-amz-target-aws-proton20200720-get-service-sync-config GetServiceSy
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetServiceTemplate
 # operationId: GetServiceTemplate
-export def "x-amz-target-aws-proton20200720-get-service-template GetServiceTemplate" [
+export def "x-amz-target-aws-proton20200720-get-service-template get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,23 +1789,23 @@ export def "x-amz-target-aws-proton20200720-get-service-template GetServiceTempl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
   name: any
 ]: any -> record<serviceTemplate: record<arn: record, createdAt: record, description: record, displayName: record, encryptionKey: record, lastModifiedAt: record, name: record, pipelineProvisioning: record, recommendedVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetServiceTemplate")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1816,7 +1816,7 @@ export def "x-amz-target-aws-proton20200720-get-service-template GetServiceTempl
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetServiceTemplateVersion
 # operationId: GetServiceTemplateVersion
-export def "x-amz-target-aws-proton20200720-get-service-template-version GetServiceTemplateVersion" [
+export def "x-amz-target-aws-proton20200720-get-service-template-version get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1825,25 +1825,25 @@ export def "x-amz-target-aws-proton20200720-get-service-template-version GetServ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  majorVersion: any
-  minorVersion: any
-  templateName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  major_version: any
+  minor_version: any
+  template_name: any
 ]: any -> record<serviceTemplateVersion: record<arn: record, compatibleEnvironmentTemplates: record, createdAt: record, description: record, lastModifiedAt: record, majorVersion: record, minorVersion: record, recommendedMinorVersion: record, schema: record, status: record, statusMessage: record, supportedComponentSources: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetServiceTemplateVersion")
-  let body = {majorVersion: $majorVersion, minorVersion: $minorVersion, templateName: $templateName} | compact
+  let body = {"majorVersion": $major_version, "minorVersion": $minor_version, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1854,7 +1854,7 @@ export def "x-amz-target-aws-proton20200720-get-service-template-version GetServ
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetTemplateSyncConfig
 # operationId: GetTemplateSyncConfig
-export def "x-amz-target-aws-proton20200720-get-template-sync-config GetTemplateSyncConfig" [
+export def "x-amz-target-aws-proton20200720-get-template-sync-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1863,24 +1863,24 @@ export def "x-amz-target-aws-proton20200720-get-template-sync-config GetTemplate
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  templateName: any
-  templateType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  template_name: any
+  template_type: any
 ]: any -> record<templateSyncConfig: record<branch: record, repositoryName: record, repositoryProvider: record, subdirectory: record, templateName: record, templateType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetTemplateSyncConfig")
-  let body = {templateName: $templateName, templateType: $templateType} | compact
+  let body = {"templateName": $template_name, "templateType": $template_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1891,7 +1891,7 @@ export def "x-amz-target-aws-proton20200720-get-template-sync-config GetTemplate
 #
 # POST /#X-Amz-Target=AwsProton20200720.GetTemplateSyncStatus
 # operationId: GetTemplateSyncStatus
-export def "x-amz-target-aws-proton20200720-get-template-sync-status GetTemplateSyncStatus" [
+export def "x-amz-target-aws-proton20200720-get-template-sync-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1900,25 +1900,25 @@ export def "x-amz-target-aws-proton20200720-get-template-sync-status GetTemplate
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  templateName: any
-  templateType: any
-  templateVersion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  template_name: any
+  template_type: any
+  template_version: any
 ]: any -> record<desiredState: record<branch: record, directory: record, repositoryName: record, repositoryProvider: record, sha: record>, latestSuccessfulSync: record<events: record, initialRevision: record<branch: record, directory: record, repositoryName: record, repositoryProvider: record, sha: record>, startedAt: record, status: record, target: record, targetRevision: record<branch: record, directory: record, repositoryName: record, repositoryProvider: record, sha: record>>, latestSync: record<events: record, initialRevision: record<branch: record, directory: record, repositoryName: record, repositoryProvider: record, sha: record>, startedAt: record, status: record, target: record, targetRevision: record<branch: record, directory: record, repositoryName: record, repositoryProvider: record, sha: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.GetTemplateSyncStatus")
-  let body = {templateName: $templateName, templateType: $templateType, templateVersion: $templateVersion} | compact
+  let body = {"templateName": $template_name, "templateType": $template_type, "templateVersion": $template_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1929,7 +1929,7 @@ export def "x-amz-target-aws-proton20200720-get-template-sync-status GetTemplate
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListComponentOutputs
 # operationId: ListComponentOutputs
-export def "x-amz-target-aws-proton20200720-list-component-outputs ListComponentOutputs" [
+export def "x-amz-target-aws-proton20200720-list-component-outputs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1938,26 +1938,26 @@ export def "x-amz-target-aws-proton20200720-list-component-outputs ListComponent
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  componentName: any
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  component_name: any
+  --next-token: any
 ]: any -> record<nextToken: record, outputs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListComponentOutputs" $qp)
-  let body = {componentName: $componentName, nextToken: $nextToken} | compact
+  let body = {"componentName": $component_name, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1968,7 +1968,7 @@ export def "x-amz-target-aws-proton20200720-list-component-outputs ListComponent
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListComponentProvisionedResources
 # operationId: ListComponentProvisionedResources
-export def "x-amz-target-aws-proton20200720-list-component-provisioned-resources ListComponentProvisionedResources" [
+export def "x-amz-target-aws-proton20200720-list-component-provisioned-resources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1977,26 +1977,26 @@ export def "x-amz-target-aws-proton20200720-list-component-provisioned-resources
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  componentName: any
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  component_name: any
+  --next-token: any
 ]: any -> record<nextToken: record, provisionedResources: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListComponentProvisionedResources" $qp)
-  let body = {componentName: $componentName, nextToken: $nextToken} | compact
+  let body = {"componentName": $component_name, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2007,7 +2007,7 @@ export def "x-amz-target-aws-proton20200720-list-component-provisioned-resources
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListComponents
 # operationId: ListComponents
-export def "x-amz-target-aws-proton20200720-list-components ListComponents" [
+export def "x-amz-target-aws-proton20200720-list-components list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2016,30 +2016,30 @@ export def "x-amz-target-aws-proton20200720-list-components ListComponents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  --environmentName: any
-  --maxResults: any
-  --nextToken: any
-  --serviceInstanceName: any
-  --serviceName: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  --environment-name: any
+  --max-results: any
+  --next-token: any
+  --service-instance-name: any
+  --service-name: any
 ]: any -> record<components: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListComponents" $qp)
-  let body = {environmentName: $environmentName, maxResults: $maxResults, nextToken: $nextToken, serviceInstanceName: $serviceInstanceName, serviceName: $serviceName} | compact
+  let body = {"environmentName": $environment_name, "maxResults": $max_results, "nextToken": $next_token, "serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2050,7 +2050,7 @@ export def "x-amz-target-aws-proton20200720-list-components ListComponents" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListEnvironmentAccountConnections
 # operationId: ListEnvironmentAccountConnections
-export def "x-amz-target-aws-proton20200720-list-environment-account-connections ListEnvironmentAccountConnections" [
+export def "x-amz-target-aws-proton20200720-list-environment-account-connections list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2059,30 +2059,30 @@ export def "x-amz-target-aws-proton20200720-list-environment-account-connections
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  --environmentName: any
-  --maxResults: any
-  --nextToken: any
-  requestedBy: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  --environment-name: any
+  --max-results: any
+  --next-token: any
+  requested_by: any
   --statuses: any
 ]: any -> record<environmentAccountConnections: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListEnvironmentAccountConnections" $qp)
-  let body = {environmentName: $environmentName, maxResults: $maxResults, nextToken: $nextToken, requestedBy: $requestedBy, statuses: $statuses} | compact
+  let body = {"environmentName": $environment_name, "maxResults": $max_results, "nextToken": $next_token, "requestedBy": $requested_by, "statuses": $statuses} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2093,7 +2093,7 @@ export def "x-amz-target-aws-proton20200720-list-environment-account-connections
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListEnvironmentOutputs
 # operationId: ListEnvironmentOutputs
-export def "x-amz-target-aws-proton20200720-list-environment-outputs ListEnvironmentOutputs" [
+export def "x-amz-target-aws-proton20200720-list-environment-outputs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2102,26 +2102,26 @@ export def "x-amz-target-aws-proton20200720-list-environment-outputs ListEnviron
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  environmentName: any
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  environment_name: any
+  --next-token: any
 ]: any -> record<nextToken: record, outputs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListEnvironmentOutputs" $qp)
-  let body = {environmentName: $environmentName, nextToken: $nextToken} | compact
+  let body = {"environmentName": $environment_name, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2132,7 +2132,7 @@ export def "x-amz-target-aws-proton20200720-list-environment-outputs ListEnviron
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListEnvironmentProvisionedResources
 # operationId: ListEnvironmentProvisionedResources
-export def "x-amz-target-aws-proton20200720-list-environment-provisioned-resources ListEnvironmentProvisionedResources" [
+export def "x-amz-target-aws-proton20200720-list-environment-provisioned-resources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2141,26 +2141,26 @@ export def "x-amz-target-aws-proton20200720-list-environment-provisioned-resourc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  environmentName: any
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  environment_name: any
+  --next-token: any
 ]: any -> record<nextToken: record, provisionedResources: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListEnvironmentProvisionedResources" $qp)
-  let body = {environmentName: $environmentName, nextToken: $nextToken} | compact
+  let body = {"environmentName": $environment_name, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2171,7 +2171,7 @@ export def "x-amz-target-aws-proton20200720-list-environment-provisioned-resourc
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListEnvironmentTemplateVersions
 # operationId: ListEnvironmentTemplateVersions
-export def "x-amz-target-aws-proton20200720-list-environment-template-versions ListEnvironmentTemplateVersions" [
+export def "x-amz-target-aws-proton20200720-list-environment-template-versions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2180,29 +2180,29 @@ export def "x-amz-target-aws-proton20200720-list-environment-template-versions L
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  --majorVersion: any
-  --maxResults: any
-  --nextToken: any
-  templateName: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  --major-version: any
+  --max-results: any
+  --next-token: any
+  template_name: any
 ]: any -> record<nextToken: record, templateVersions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListEnvironmentTemplateVersions" $qp)
-  let body = {majorVersion: $majorVersion, maxResults: $maxResults, nextToken: $nextToken, templateName: $templateName} | compact
+  let body = {"majorVersion": $major_version, "maxResults": $max_results, "nextToken": $next_token, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2213,7 +2213,7 @@ export def "x-amz-target-aws-proton20200720-list-environment-template-versions L
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListEnvironmentTemplates
 # operationId: ListEnvironmentTemplates
-export def "x-amz-target-aws-proton20200720-list-environment-templates ListEnvironmentTemplates" [
+export def "x-amz-target-aws-proton20200720-list-environment-templates list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2222,27 +2222,27 @@ export def "x-amz-target-aws-proton20200720-list-environment-templates ListEnvir
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  --maxResults: any
-  --nextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  --max-results: any
+  --next-token: any
 ]: any -> record<nextToken: record, templates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListEnvironmentTemplates" $qp)
-  let body = {maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2253,7 +2253,7 @@ export def "x-amz-target-aws-proton20200720-list-environment-templates ListEnvir
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListEnvironments
 # operationId: ListEnvironments
-export def "x-amz-target-aws-proton20200720-list-environments ListEnvironments" [
+export def "x-amz-target-aws-proton20200720-list-environments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2262,28 +2262,28 @@ export def "x-amz-target-aws-proton20200720-list-environments ListEnvironments" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  --environmentTemplates: any
-  --maxResults: any
-  --nextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  --environment-templates: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<environments: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListEnvironments" $qp)
-  let body = {environmentTemplates: $environmentTemplates, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"environmentTemplates": $environment_templates, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2294,7 +2294,7 @@ export def "x-amz-target-aws-proton20200720-list-environments ListEnvironments" 
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListRepositories
 # operationId: ListRepositories
-export def "x-amz-target-aws-proton20200720-list-repositories ListRepositories" [
+export def "x-amz-target-aws-proton20200720-list-repositories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2303,27 +2303,27 @@ export def "x-amz-target-aws-proton20200720-list-repositories ListRepositories" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  --maxResults: any
-  --nextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  --max-results: any
+  --next-token: any
 ]: any -> record<nextToken: record, repositories: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListRepositories" $qp)
-  let body = {maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2334,7 +2334,7 @@ export def "x-amz-target-aws-proton20200720-list-repositories ListRepositories" 
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListRepositorySyncDefinitions
 # operationId: ListRepositorySyncDefinitions
-export def "x-amz-target-aws-proton20200720-list-repository-sync-definitions ListRepositorySyncDefinitions" [
+export def "x-amz-target-aws-proton20200720-list-repository-sync-definitions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2343,28 +2343,28 @@ export def "x-amz-target-aws-proton20200720-list-repository-sync-definitions Lis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  --nextToken: any
-  repositoryName: any
-  repositoryProvider: any
-  syncType: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  --next-token: any
+  repository_name: any
+  repository_provider: any
+  sync_type: any
 ]: any -> record<nextToken: record, syncDefinitions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListRepositorySyncDefinitions" $qp)
-  let body = {nextToken: $nextToken, repositoryName: $repositoryName, repositoryProvider: $repositoryProvider, syncType: $syncType} | compact
+  let body = {"nextToken": $next_token, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "syncType": $sync_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2375,7 +2375,7 @@ export def "x-amz-target-aws-proton20200720-list-repository-sync-definitions Lis
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListServiceInstanceOutputs
 # operationId: ListServiceInstanceOutputs
-export def "x-amz-target-aws-proton20200720-list-service-instance-outputs ListServiceInstanceOutputs" [
+export def "x-amz-target-aws-proton20200720-list-service-instance-outputs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2384,27 +2384,27 @@ export def "x-amz-target-aws-proton20200720-list-service-instance-outputs ListSe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  --nextToken: any
-  serviceInstanceName: any
-  serviceName: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  --next-token: any
+  service_instance_name: any
+  service_name: any
 ]: any -> record<nextToken: record, outputs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListServiceInstanceOutputs" $qp)
-  let body = {nextToken: $nextToken, serviceInstanceName: $serviceInstanceName, serviceName: $serviceName} | compact
+  let body = {"nextToken": $next_token, "serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2415,7 +2415,7 @@ export def "x-amz-target-aws-proton20200720-list-service-instance-outputs ListSe
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListServiceInstanceProvisionedResources
 # operationId: ListServiceInstanceProvisionedResources
-export def "x-amz-target-aws-proton20200720-list-service-instance-provisioned-resources ListServiceInstanceProvisionedResources" [
+export def "x-amz-target-aws-proton20200720-list-service-instance-provisioned-resources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2424,27 +2424,27 @@ export def "x-amz-target-aws-proton20200720-list-service-instance-provisioned-re
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  --nextToken: any
-  serviceInstanceName: any
-  serviceName: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  --next-token: any
+  service_instance_name: any
+  service_name: any
 ]: any -> record<nextToken: record, provisionedResources: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListServiceInstanceProvisionedResources" $qp)
-  let body = {nextToken: $nextToken, serviceInstanceName: $serviceInstanceName, serviceName: $serviceName} | compact
+  let body = {"nextToken": $next_token, "serviceInstanceName": $service_instance_name, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2455,7 +2455,7 @@ export def "x-amz-target-aws-proton20200720-list-service-instance-provisioned-re
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListServiceInstances
 # operationId: ListServiceInstances
-export def "x-amz-target-aws-proton20200720-list-service-instances ListServiceInstances" [
+export def "x-amz-target-aws-proton20200720-list-service-instances list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2464,31 +2464,31 @@ export def "x-amz-target-aws-proton20200720-list-service-instances ListServiceIn
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
   --filters: any
-  --maxResults: any
-  --nextToken: any
-  --serviceName: any
-  --sortBy: any
-  --sortOrder: any
+  --max-results: any
+  --next-token: any
+  --service-name: any
+  --sort-by: any
+  --sort-order: any
 ]: any -> record<nextToken: record, serviceInstances: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListServiceInstances" $qp)
-  let body = {filters: $filters, maxResults: $maxResults, nextToken: $nextToken, serviceName: $serviceName, sortBy: $sortBy, sortOrder: $sortOrder} | compact
+  let body = {"filters": $filters, "maxResults": $max_results, "nextToken": $next_token, "serviceName": $service_name, "sortBy": $sort_by, "sortOrder": $sort_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2499,7 +2499,7 @@ export def "x-amz-target-aws-proton20200720-list-service-instances ListServiceIn
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListServicePipelineOutputs
 # operationId: ListServicePipelineOutputs
-export def "x-amz-target-aws-proton20200720-list-service-pipeline-outputs ListServicePipelineOutputs" [
+export def "x-amz-target-aws-proton20200720-list-service-pipeline-outputs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2508,26 +2508,26 @@ export def "x-amz-target-aws-proton20200720-list-service-pipeline-outputs ListSe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  --nextToken: any
-  serviceName: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  --next-token: any
+  service_name: any
 ]: any -> record<nextToken: record, outputs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListServicePipelineOutputs" $qp)
-  let body = {nextToken: $nextToken, serviceName: $serviceName} | compact
+  let body = {"nextToken": $next_token, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2538,7 +2538,7 @@ export def "x-amz-target-aws-proton20200720-list-service-pipeline-outputs ListSe
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListServicePipelineProvisionedResources
 # operationId: ListServicePipelineProvisionedResources
-export def "x-amz-target-aws-proton20200720-list-service-pipeline-provisioned-resources ListServicePipelineProvisionedResources" [
+export def "x-amz-target-aws-proton20200720-list-service-pipeline-provisioned-resources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2547,26 +2547,26 @@ export def "x-amz-target-aws-proton20200720-list-service-pipeline-provisioned-re
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  --nextToken: any
-  serviceName: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  --next-token: any
+  service_name: any
 ]: any -> record<nextToken: record, provisionedResources: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListServicePipelineProvisionedResources" $qp)
-  let body = {nextToken: $nextToken, serviceName: $serviceName} | compact
+  let body = {"nextToken": $next_token, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2577,7 +2577,7 @@ export def "x-amz-target-aws-proton20200720-list-service-pipeline-provisioned-re
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListServiceTemplateVersions
 # operationId: ListServiceTemplateVersions
-export def "x-amz-target-aws-proton20200720-list-service-template-versions ListServiceTemplateVersions" [
+export def "x-amz-target-aws-proton20200720-list-service-template-versions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2586,29 +2586,29 @@ export def "x-amz-target-aws-proton20200720-list-service-template-versions ListS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  --majorVersion: any
-  --maxResults: any
-  --nextToken: any
-  templateName: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  --major-version: any
+  --max-results: any
+  --next-token: any
+  template_name: any
 ]: any -> record<nextToken: record, templateVersions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListServiceTemplateVersions" $qp)
-  let body = {majorVersion: $majorVersion, maxResults: $maxResults, nextToken: $nextToken, templateName: $templateName} | compact
+  let body = {"majorVersion": $major_version, "maxResults": $max_results, "nextToken": $next_token, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2619,7 +2619,7 @@ export def "x-amz-target-aws-proton20200720-list-service-template-versions ListS
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListServiceTemplates
 # operationId: ListServiceTemplates
-export def "x-amz-target-aws-proton20200720-list-service-templates ListServiceTemplates" [
+export def "x-amz-target-aws-proton20200720-list-service-templates list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2628,27 +2628,27 @@ export def "x-amz-target-aws-proton20200720-list-service-templates ListServiceTe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-63
-  --maxResults: any
-  --nextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-63
+  --max-results: any
+  --next-token: any
 ]: any -> record<nextToken: record, templates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListServiceTemplates" $qp)
-  let body = {maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2659,7 +2659,7 @@ export def "x-amz-target-aws-proton20200720-list-service-templates ListServiceTe
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListServices
 # operationId: ListServices
-export def "x-amz-target-aws-proton20200720-list-services ListServices" [
+export def "x-amz-target-aws-proton20200720-list-services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2668,27 +2668,27 @@ export def "x-amz-target-aws-proton20200720-list-services ListServices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-64
-  --maxResults: any
-  --nextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-64
+  --max-results: any
+  --next-token: any
 ]: any -> record<nextToken: record, services: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListServices" $qp)
-  let body = {maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2699,7 +2699,7 @@ export def "x-amz-target-aws-proton20200720-list-services ListServices" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-aws-proton20200720-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-aws-proton20200720-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2708,28 +2708,28 @@ export def "x-amz-target-aws-proton20200720-list-tags-for-resource ListTagsForRe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-65
-  --maxResults: any
-  --nextToken: any
-  resourceArn: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-65
+  --max-results: any
+  --next-token: any
+  resource_arn: any
 ]: any -> record<nextToken: record, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.ListTagsForResource" $qp)
-  let body = {maxResults: $maxResults, nextToken: $nextToken, resourceArn: $resourceArn} | compact
+  let body = {"maxResults": $max_results, "nextToken": $next_token, "resourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2740,7 +2740,7 @@ export def "x-amz-target-aws-proton20200720-list-tags-for-resource ListTagsForRe
 #
 # POST /#X-Amz-Target=AwsProton20200720.NotifyResourceDeploymentStatusChange
 # operationId: NotifyResourceDeploymentStatusChange
-export def "x-amz-target-aws-proton20200720-notify-resource-deployment-status-change NotifyResourceDeploymentStatusChange" [
+export def "x-amz-target-aws-proton20200720-notify-resource-deployment-status-change post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2749,27 +2749,27 @@ export def "x-amz-target-aws-proton20200720-notify-resource-deployment-status-ch
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-66
-  --deploymentId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-66
+  --deployment-id: any
   --outputs: any
-  resourceArn: any
+  resource_arn: any
   --status: any
-  --statusMessage: any
+  --status-message: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.NotifyResourceDeploymentStatusChange")
-  let body = {deploymentId: $deploymentId, outputs: $outputs, resourceArn: $resourceArn, status: $status, statusMessage: $statusMessage} | compact
+  let body = {"deploymentId": $deployment_id, "outputs": $outputs, "resourceArn": $resource_arn, "status": $status, "statusMessage": $status_message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2780,7 +2780,7 @@ export def "x-amz-target-aws-proton20200720-notify-resource-deployment-status-ch
 #
 # POST /#X-Amz-Target=AwsProton20200720.RejectEnvironmentAccountConnection
 # operationId: RejectEnvironmentAccountConnection
-export def "x-amz-target-aws-proton20200720-reject-environment-account-connection RejectEnvironmentAccountConnection" [
+export def "x-amz-target-aws-proton20200720-reject-environment-account-connection reject" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2789,23 +2789,23 @@ export def "x-amz-target-aws-proton20200720-reject-environment-account-connectio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-67
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-67
   id: any
 ]: any -> record<environmentAccountConnection: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, environmentAccountId: record, environmentName: record, id: record, lastModifiedAt: record, managementAccountId: record, requestedAt: record, roleArn: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.RejectEnvironmentAccountConnection")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2816,7 +2816,7 @@ export def "x-amz-target-aws-proton20200720-reject-environment-account-connectio
 #
 # POST /#X-Amz-Target=AwsProton20200720.TagResource
 # operationId: TagResource
-export def "x-amz-target-aws-proton20200720-tag-resource TagResource" [
+export def "x-amz-target-aws-proton20200720-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2825,24 +2825,24 @@ export def "x-amz-target-aws-proton20200720-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-68
-  resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-68
+  resource_arn: any
   tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.TagResource")
-  let body = {resourceArn: $resourceArn, tags: $tags} | compact
+  let body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2853,7 +2853,7 @@ export def "x-amz-target-aws-proton20200720-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-aws-proton20200720-untag-resource UntagResource" [
+export def "x-amz-target-aws-proton20200720-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2862,24 +2862,24 @@ export def "x-amz-target-aws-proton20200720-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-69
-  resourceArn: any
-  tagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-69
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UntagResource")
-  let body = {resourceArn: $resourceArn, tagKeys: $tagKeys} | compact
+  let body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2890,7 +2890,7 @@ export def "x-amz-target-aws-proton20200720-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateAccountSettings
 # operationId: UpdateAccountSettings
-export def "x-amz-target-aws-proton20200720-update-account-settings UpdateAccountSettings" [
+export def "x-amz-target-aws-proton20200720-update-account-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2899,26 +2899,26 @@ export def "x-amz-target-aws-proton20200720-update-account-settings UpdateAccoun
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-70
-  --deletePipelineProvisioningRepository: any
-  --pipelineCodebuildRoleArn: any
-  --pipelineProvisioningRepository: any
-  --pipelineServiceRoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-70
+  --delete-pipeline-provisioning-repository: any
+  --pipeline-codebuild-role-arn: any
+  --pipeline-provisioning-repository: any
+  --pipeline-service-role-arn: any
 ]: any -> record<accountSettings: record<pipelineCodebuildRoleArn: record, pipelineProvisioningRepository: record<arn: record, branch: record, name: record, provider: record>, pipelineServiceRoleArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateAccountSettings")
-  let body = {deletePipelineProvisioningRepository: $deletePipelineProvisioningRepository, pipelineCodebuildRoleArn: $pipelineCodebuildRoleArn, pipelineProvisioningRepository: $pipelineProvisioningRepository, pipelineServiceRoleArn: $pipelineServiceRoleArn} | compact
+  let body = {"deletePipelineProvisioningRepository": $delete_pipeline_provisioning_repository, "pipelineCodebuildRoleArn": $pipeline_codebuild_role_arn, "pipelineProvisioningRepository": $pipeline_provisioning_repository, "pipelineServiceRoleArn": $pipeline_service_role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2929,7 +2929,7 @@ export def "x-amz-target-aws-proton20200720-update-account-settings UpdateAccoun
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateComponent
 # operationId: UpdateComponent
-export def "x-amz-target-aws-proton20200720-update-component UpdateComponent" [
+export def "x-amz-target-aws-proton20200720-update-component update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2938,30 +2938,30 @@ export def "x-amz-target-aws-proton20200720-update-component UpdateComponent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-71
-  --clientToken: any
-  deploymentType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-71
+  --client-token: any
+  deployment_type: any
   --description: any
   name: any
-  --serviceInstanceName: any
-  --serviceName: any
-  --serviceSpec: any
-  --templateFile: any
+  --service-instance-name: any
+  --service-name: any
+  --service-spec: any
+  --template-file: any
 ]: any -> record<component: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, description: record, environmentName: record, lastClientRequestToken: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, lastModifiedAt: record, name: record, serviceInstanceName: record, serviceName: record, serviceSpec: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateComponent")
-  let body = {clientToken: $clientToken, deploymentType: $deploymentType, description: $description, name: $name, serviceInstanceName: $serviceInstanceName, serviceName: $serviceName, serviceSpec: $serviceSpec, templateFile: $templateFile} | compact
+  let body = {"clientToken": $client_token, "deploymentType": $deployment_type, "description": $description, "name": $name, "serviceInstanceName": $service_instance_name, "serviceName": $service_name, "serviceSpec": $service_spec, "templateFile": $template_file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2972,7 +2972,7 @@ export def "x-amz-target-aws-proton20200720-update-component UpdateComponent" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateEnvironment
 # operationId: UpdateEnvironment
-export def "x-amz-target-aws-proton20200720-update-environment UpdateEnvironment" [
+export def "x-amz-target-aws-proton20200720-update-environment update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2981,33 +2981,33 @@ export def "x-amz-target-aws-proton20200720-update-environment UpdateEnvironment
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-72
-  --codebuildRoleArn: any
-  --componentRoleArn: any
-  deploymentType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-72
+  --codebuild-role-arn: any
+  --component-role-arn: any
+  deployment_type: any
   --description: any
-  --environmentAccountConnectionId: any
+  --environment-account-connection-id: any
   name: any
-  --protonServiceRoleArn: any
-  --provisioningRepository: any
+  --proton-service-role-arn: any
+  --provisioning-repository: any
   --spec: any
-  --templateMajorVersion: any
-  --templateMinorVersion: any
+  --template-major-version: any
+  --template-minor-version: any
 ]: any -> record<environment: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, description: record, environmentAccountConnectionId: record, environmentAccountId: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, name: record, protonServiceRoleArn: record, provisioning: record, provisioningRepository: record<arn: record, branch: record, name: record, provider: record>, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateEnvironment")
-  let body = {codebuildRoleArn: $codebuildRoleArn, componentRoleArn: $componentRoleArn, deploymentType: $deploymentType, description: $description, environmentAccountConnectionId: $environmentAccountConnectionId, name: $name, protonServiceRoleArn: $protonServiceRoleArn, provisioningRepository: $provisioningRepository, spec: $spec, templateMajorVersion: $templateMajorVersion, templateMinorVersion: $templateMinorVersion} | compact
+  let body = {"codebuildRoleArn": $codebuild_role_arn, "componentRoleArn": $component_role_arn, "deploymentType": $deployment_type, "description": $description, "environmentAccountConnectionId": $environment_account_connection_id, "name": $name, "protonServiceRoleArn": $proton_service_role_arn, "provisioningRepository": $provisioning_repository, "spec": $spec, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3018,7 +3018,7 @@ export def "x-amz-target-aws-proton20200720-update-environment UpdateEnvironment
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateEnvironmentAccountConnection
 # operationId: UpdateEnvironmentAccountConnection
-export def "x-amz-target-aws-proton20200720-update-environment-account-connection UpdateEnvironmentAccountConnection" [
+export def "x-amz-target-aws-proton20200720-update-environment-account-connection update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3027,26 +3027,26 @@ export def "x-amz-target-aws-proton20200720-update-environment-account-connectio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-73
-  --codebuildRoleArn: any
-  --componentRoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-73
+  --codebuild-role-arn: any
+  --component-role-arn: any
   id: any
-  --roleArn: any
+  --role-arn: any
 ]: any -> record<environmentAccountConnection: record<arn: record, codebuildRoleArn: record, componentRoleArn: record, environmentAccountId: record, environmentName: record, id: record, lastModifiedAt: record, managementAccountId: record, requestedAt: record, roleArn: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateEnvironmentAccountConnection")
-  let body = {codebuildRoleArn: $codebuildRoleArn, componentRoleArn: $componentRoleArn, id: $id, roleArn: $roleArn} | compact
+  let body = {"codebuildRoleArn": $codebuild_role_arn, "componentRoleArn": $component_role_arn, "id": $id, "roleArn": $role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3057,7 +3057,7 @@ export def "x-amz-target-aws-proton20200720-update-environment-account-connectio
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateEnvironmentTemplate
 # operationId: UpdateEnvironmentTemplate
-export def "x-amz-target-aws-proton20200720-update-environment-template UpdateEnvironmentTemplate" [
+export def "x-amz-target-aws-proton20200720-update-environment-template update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3066,25 +3066,25 @@ export def "x-amz-target-aws-proton20200720-update-environment-template UpdateEn
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-74
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-74
   --description: any
-  --displayName: any
+  --display-name: any
   name: any
 ]: any -> record<environmentTemplate: record<arn: record, createdAt: record, description: record, displayName: record, encryptionKey: record, lastModifiedAt: record, name: record, provisioning: record, recommendedVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateEnvironmentTemplate")
-  let body = {description: $description, displayName: $displayName, name: $name} | compact
+  let body = {"description": $description, "displayName": $display_name, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3095,7 +3095,7 @@ export def "x-amz-target-aws-proton20200720-update-environment-template UpdateEn
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateEnvironmentTemplateVersion
 # operationId: UpdateEnvironmentTemplateVersion
-export def "x-amz-target-aws-proton20200720-update-environment-template-version UpdateEnvironmentTemplateVersion" [
+export def "x-amz-target-aws-proton20200720-update-environment-template-version update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3104,27 +3104,27 @@ export def "x-amz-target-aws-proton20200720-update-environment-template-version 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-75
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-75
   --description: any
-  majorVersion: any
-  minorVersion: any
+  major_version: any
+  minor_version: any
   --status: any
-  templateName: any
+  template_name: any
 ]: any -> record<environmentTemplateVersion: record<arn: record, createdAt: record, description: record, lastModifiedAt: record, majorVersion: record, minorVersion: record, recommendedMinorVersion: record, schema: record, status: record, statusMessage: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateEnvironmentTemplateVersion")
-  let body = {description: $description, majorVersion: $majorVersion, minorVersion: $minorVersion, status: $status, templateName: $templateName} | compact
+  let body = {"description": $description, "majorVersion": $major_version, "minorVersion": $minor_version, "status": $status, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3135,7 +3135,7 @@ export def "x-amz-target-aws-proton20200720-update-environment-template-version 
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateService
 # operationId: UpdateService
-export def "x-amz-target-aws-proton20200720-update-service UpdateService" [
+export def "x-amz-target-aws-proton20200720-update-service update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3144,14 +3144,14 @@ export def "x-amz-target-aws-proton20200720-update-service UpdateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-76
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-76
   --description: any
   name: any
   --spec: any
@@ -3160,9 +3160,9 @@ export def "x-amz-target-aws-proton20200720-update-service UpdateService" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateService")
-  let body = {description: $description, name: $name, spec: $spec} | compact
+  let body = {"description": $description, "name": $name, "spec": $spec} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3173,7 +3173,7 @@ export def "x-amz-target-aws-proton20200720-update-service UpdateService" [
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateServiceInstance
 # operationId: UpdateServiceInstance
-export def "x-amz-target-aws-proton20200720-update-service-instance UpdateServiceInstance" [
+export def "x-amz-target-aws-proton20200720-update-service-instance update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3182,29 +3182,29 @@ export def "x-amz-target-aws-proton20200720-update-service-instance UpdateServic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-77
-  --clientToken: any
-  deploymentType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-77
+  --client-token: any
+  deployment_type: any
   name: any
-  serviceName: any
+  service_name: any
   --spec: any
-  --templateMajorVersion: any
-  --templateMinorVersion: any
+  --template-major-version: any
+  --template-minor-version: any
 ]: any -> record<serviceInstance: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, environmentName: record, lastClientRequestToken: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, name: record, serviceName: record, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateServiceInstance")
-  let body = {clientToken: $clientToken, deploymentType: $deploymentType, name: $name, serviceName: $serviceName, spec: $spec, templateMajorVersion: $templateMajorVersion, templateMinorVersion: $templateMinorVersion} | compact
+  let body = {"clientToken": $client_token, "deploymentType": $deployment_type, "name": $name, "serviceName": $service_name, "spec": $spec, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3215,7 +3215,7 @@ export def "x-amz-target-aws-proton20200720-update-service-instance UpdateServic
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateServicePipeline
 # operationId: UpdateServicePipeline
-export def "x-amz-target-aws-proton20200720-update-service-pipeline UpdateServicePipeline" [
+export def "x-amz-target-aws-proton20200720-update-service-pipeline update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3224,27 +3224,27 @@ export def "x-amz-target-aws-proton20200720-update-service-pipeline UpdateServic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-78
-  deploymentType: any
-  serviceName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-78
+  deployment_type: any
+  service_name: any
   spec: any
-  --templateMajorVersion: any
-  --templateMinorVersion: any
+  --template-major-version: any
+  --template-minor-version: any
 ]: any -> record<pipeline: record<arn: record, createdAt: record, deploymentStatus: record, deploymentStatusMessage: record, lastDeploymentAttemptedAt: record, lastDeploymentSucceededAt: record, spec: record, templateMajorVersion: record, templateMinorVersion: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateServicePipeline")
-  let body = {deploymentType: $deploymentType, serviceName: $serviceName, spec: $spec, templateMajorVersion: $templateMajorVersion, templateMinorVersion: $templateMinorVersion} | compact
+  let body = {"deploymentType": $deployment_type, "serviceName": $service_name, "spec": $spec, "templateMajorVersion": $template_major_version, "templateMinorVersion": $template_minor_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3255,7 +3255,7 @@ export def "x-amz-target-aws-proton20200720-update-service-pipeline UpdateServic
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateServiceSyncBlocker
 # operationId: UpdateServiceSyncBlocker
-export def "x-amz-target-aws-proton20200720-update-service-sync-blocker UpdateServiceSyncBlocker" [
+export def "x-amz-target-aws-proton20200720-update-service-sync-blocker update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3264,24 +3264,24 @@ export def "x-amz-target-aws-proton20200720-update-service-sync-blocker UpdateSe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-79
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-79
   id: any
-  resolvedReason: any
+  resolved_reason: any
 ]: any -> record<serviceInstanceName: record, serviceName: record, serviceSyncBlocker: record<contexts: record, createdAt: record, createdReason: record, id: record, resolvedAt: record, resolvedReason: record, status: record, type: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateServiceSyncBlocker")
-  let body = {id: $id, resolvedReason: $resolvedReason} | compact
+  let body = {"id": $id, "resolvedReason": $resolved_reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3292,7 +3292,7 @@ export def "x-amz-target-aws-proton20200720-update-service-sync-blocker UpdateSe
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateServiceSyncConfig
 # operationId: UpdateServiceSyncConfig
-export def "x-amz-target-aws-proton20200720-update-service-sync-config UpdateServiceSyncConfig" [
+export def "x-amz-target-aws-proton20200720-update-service-sync-config update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3301,27 +3301,27 @@ export def "x-amz-target-aws-proton20200720-update-service-sync-config UpdateSer
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-80
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-80
   branch: any
-  filePath: any
-  repositoryName: any
-  repositoryProvider: any
-  serviceName: any
+  file_path: any
+  repository_name: any
+  repository_provider: any
+  service_name: any
 ]: any -> record<serviceSyncConfig: record<branch: record, filePath: record, repositoryName: record, repositoryProvider: record, serviceName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateServiceSyncConfig")
-  let body = {branch: $branch, filePath: $filePath, repositoryName: $repositoryName, repositoryProvider: $repositoryProvider, serviceName: $serviceName} | compact
+  let body = {"branch": $branch, "filePath": $file_path, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3332,7 +3332,7 @@ export def "x-amz-target-aws-proton20200720-update-service-sync-config UpdateSer
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateServiceTemplate
 # operationId: UpdateServiceTemplate
-export def "x-amz-target-aws-proton20200720-update-service-template UpdateServiceTemplate" [
+export def "x-amz-target-aws-proton20200720-update-service-template update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3341,25 +3341,25 @@ export def "x-amz-target-aws-proton20200720-update-service-template UpdateServic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-81
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-81
   --description: any
-  --displayName: any
+  --display-name: any
   name: any
 ]: any -> record<serviceTemplate: record<arn: record, createdAt: record, description: record, displayName: record, encryptionKey: record, lastModifiedAt: record, name: record, pipelineProvisioning: record, recommendedVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateServiceTemplate")
-  let body = {description: $description, displayName: $displayName, name: $name} | compact
+  let body = {"description": $description, "displayName": $display_name, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3370,7 +3370,7 @@ export def "x-amz-target-aws-proton20200720-update-service-template UpdateServic
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateServiceTemplateVersion
 # operationId: UpdateServiceTemplateVersion
-export def "x-amz-target-aws-proton20200720-update-service-template-version UpdateServiceTemplateVersion" [
+export def "x-amz-target-aws-proton20200720-update-service-template-version update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3379,29 +3379,29 @@ export def "x-amz-target-aws-proton20200720-update-service-template-version Upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-82
-  --compatibleEnvironmentTemplates: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-82
+  --compatible-environment-templates: any
   --description: any
-  majorVersion: any
-  minorVersion: any
+  major_version: any
+  minor_version: any
   --status: any
-  --supportedComponentSources: any
-  templateName: any
+  --supported-component-sources: any
+  template_name: any
 ]: any -> record<serviceTemplateVersion: record<arn: record, compatibleEnvironmentTemplates: record, createdAt: record, description: record, lastModifiedAt: record, majorVersion: record, minorVersion: record, recommendedMinorVersion: record, schema: record, status: record, statusMessage: record, supportedComponentSources: record, templateName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateServiceTemplateVersion")
-  let body = {compatibleEnvironmentTemplates: $compatibleEnvironmentTemplates, description: $description, majorVersion: $majorVersion, minorVersion: $minorVersion, status: $status, supportedComponentSources: $supportedComponentSources, templateName: $templateName} | compact
+  let body = {"compatibleEnvironmentTemplates": $compatible_environment_templates, "description": $description, "majorVersion": $major_version, "minorVersion": $minor_version, "status": $status, "supportedComponentSources": $supported_component_sources, "templateName": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3412,7 +3412,7 @@ export def "x-amz-target-aws-proton20200720-update-service-template-version Upda
 #
 # POST /#X-Amz-Target=AwsProton20200720.UpdateTemplateSyncConfig
 # operationId: UpdateTemplateSyncConfig
-export def "x-amz-target-aws-proton20200720-update-template-sync-config UpdateTemplateSyncConfig" [
+export def "x-amz-target-aws-proton20200720-update-template-sync-config update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3421,28 +3421,28 @@ export def "x-amz-target-aws-proton20200720-update-template-sync-config UpdateTe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-83
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-83
   branch: any
-  repositoryName: any
-  repositoryProvider: any
+  repository_name: any
+  repository_provider: any
   --subdirectory: any
-  templateName: any
-  templateType: any
+  template_name: any
+  template_type: any
 ]: any -> record<templateSyncConfig: record<branch: record, repositoryName: record, repositoryProvider: record, subdirectory: record, templateName: record, templateType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AwsProton20200720.UpdateTemplateSyncConfig")
-  let body = {branch: $branch, repositoryName: $repositoryName, repositoryProvider: $repositoryProvider, subdirectory: $subdirectory, templateName: $templateName, templateType: $templateType} | compact
+  let body = {"branch": $branch, "repositoryName": $repository_name, "repositoryProvider": $repository_provider, "subdirectory": $subdirectory, "templateName": $template_name, "templateType": $template_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

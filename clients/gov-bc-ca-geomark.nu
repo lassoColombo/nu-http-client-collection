@@ -65,10 +65,10 @@ def base-url-completer [] { ["https://apps.gov.bc.ca/pub/geomark" "https://test.
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def resultFormat-completer [] { ["geojson" "gml" "gpkg" "json" "kml" "kmz" "shp" "shpz" "wkt" "xml"] }
-def allowOverlap-completer [] { ["false" "true"] }
-def bufferJoin-completer [] { ["BEVEL" "MITRE" "ROUND"] }
-def bufferCap-completer [] { ["FLAT" "ROUND" "SQUARE"] }
+def result-format-completer [] { ["geojson" "gml" "gpkg" "json" "kml" "kmz" "shp" "shpz" "wkt" "xml"] }
+def allow-overlap-completer [] { ["false" "true"] }
+def buffer-join-completer [] { ["BEVEL" "MITRE" "ROUND"] }
+def buffer-cap-completer [] { ["FLAT" "ROUND" "SQUARE"] }
 def format-completer [] { ["geojson" "gml" "gpkg" "json" "kml" "kmz" "shp" "shpz" "wkt" "xml"] }
 def multiple-completer [] { ["false" "true"] }
 def srid-completer [] { ["26907" "26908" "26909" "26910" "26911" "3005" "3857" "4326"] }
@@ -108,21 +108,21 @@ export def "geomarks-copy post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --geomarkUrl: string # One or more geomark URLs or identifiers to create the new geomark from. (e.g. https://apps.gov.bc.ca/pub/geomark/geomarks/gm-abcdefghijklmnopqrstuv0bcislands)
-  --resultFormat: string@resultFormat-completer # The file format the geomark info resource should be returned using. (e.g. json)
-  --allowOverlap: oneof<nothing, bool> # Select this option to allow overlapping geometries (default: false)
+  --geomark-url: string # One or more geomark URLs or identifiers to create the new geomark from. (e.g. https://apps.gov.bc.ca/pub/geomark/geomarks/gm-abcdefghijklmnopqrstuv0bcislands)
+  --result-format: string@result-format-completer # The file format the geomark info resource should be returned using. (e.g. json)
+  --allow-overlap: oneof<nothing, bool> # Select this option to allow overlapping geometries (default: false)
   --callback: string # The callback function a JSON result format would be wrapped in to support Ajax requests.
-  --redirectUrl: string # The optional external URL to redirect the user to when the geomark is created rather than showing the geomark info page. The geomarkId and geomarkUrl query string parameters will be added to the redirectUrl so that the target application gets a reference to the geomark.
-  --failureRedirectUrl: string # The url to redirect if the geomark could not be created. The URL will include a <fieldName>_Error parameter with the error message for the field that caused the error.
-  --bufferMetres: int # The amount to buffer the geometry in metres, must only contain numerical digits (e.g 10). Leave blank and no buffer will be added to input geometries. If blank then any Point, LineString, MultiPoint and MultiLineString geometries will be ignored.
-  --bufferJoin: string@bufferJoin-completer # If bufferMetres is specified, The style of buffer to use for joins between the line segments for lines and polygons. (default: ROUND)
-  --bufferCap: string@bufferCap-completer # If bufferMetres is specified, The style of buffer to use at the ends of a buffered line. (default: ROUND)
-  --bufferMitreLimit: int # If bufferMetres is specified, the maximum ratio of distance from the original geometry to a mitre buffer point and the buffer amount. If the ratio is greater than this a bevel will be used instead. This prevents infinite distances when the angle between the two lines at a join is small. Must be > 0. (default: 5)
-  --bufferSegments: int # If bufferMetres is specified, the number of line segments used in each quadrant to approximate the curve for round end-cap and join styles. Must be > 0. (default: 8)
+  --redirect-url: string # The optional external URL to redirect the user to when the geomark is created rather than showing the geomark info page. The geomarkId and geomarkUrl query string parameters will be added to the redirectUrl so that the target application gets a reference to the geomark.
+  --failure-redirect-url: string # The url to redirect if the geomark could not be created. The URL will include a <fieldName>_Error parameter with the error message for the field that caused the error.
+  --buffer-metres: int # The amount to buffer the geometry in metres, must only contain numerical digits (e.g 10). Leave blank and no buffer will be added to input geometries. If blank then any Point, LineString, MultiPoint and MultiLineString geometries will be ignored.
+  --buffer-join: string@buffer-join-completer # If bufferMetres is specified, The style of buffer to use for joins between the line segments for lines and polygons. (default: ROUND)
+  --buffer-cap: string@buffer-cap-completer # If bufferMetres is specified, The style of buffer to use at the ends of a buffered line. (default: ROUND)
+  --buffer-mitre-limit: int # If bufferMetres is specified, the maximum ratio of distance from the original geometry to a mitre buffer point and the buffer amount. If the ratio is greater than this a bevel will be used instead. This prevents infinite distances when the angle between the two lines at a join is small. Must be > 0. (default: 5)
+  --buffer-segments: int # If bufferMetres is specified, the number of line segments used in each quadrant to approximate the curve for round end-cap and join styles. Must be > 0. (default: 8)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "geomarkUrl" $geomarkUrl "scalar") (serialize-qp "resultFormat" $resultFormat "scalar") (serialize-qp "allowOverlap" $allowOverlap "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "redirectUrl" $redirectUrl "scalar") (serialize-qp "failureRedirectUrl" $failureRedirectUrl "scalar") (serialize-qp "bufferMetres" $bufferMetres "scalar") (serialize-qp "bufferJoin" $bufferJoin "scalar") (serialize-qp "bufferCap" $bufferCap "scalar") (serialize-qp "bufferMitreLimit" $bufferMitreLimit "scalar") (serialize-qp "bufferSegments" $bufferSegments "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "geomarkUrl" $geomark_url "scalar") (serialize-qp "resultFormat" $result_format "scalar") (serialize-qp "allowOverlap" $allow_overlap "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "redirectUrl" $redirect_url "scalar") (serialize-qp "failureRedirectUrl" $failure_redirect_url "scalar") (serialize-qp "bufferMetres" $buffer_metres "scalar") (serialize-qp "bufferJoin" $buffer_join "scalar") (serialize-qp "bufferCap" $buffer_cap "scalar") (serialize-qp "bufferMitreLimit" $buffer_mitre_limit "scalar") (serialize-qp "bufferSegments" $buffer_segments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geomarks/copy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -141,26 +141,26 @@ export def "geomarks-new post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowOverlap: oneof<nothing, bool> # When multiple=true select this option to allow overlapping geometries (default: false)
+  --allow-overlap: oneof<nothing, bool> # When multiple=true select this option to allow overlapping geometries (default: false)
   --body-body: string # The binary or character content representing the geometry or geometries
-  --bufferCap: string@bufferCap-completer # If bufferMetres is specified, The style of buffer to use at the ends of a buffered line. (default: ROUND)
-  --bufferJoin: string@bufferJoin-completer # If bufferMetres is specified, The style of buffer to use for joins between the line segments for lines and polygons. (default: ROUND)
-  --bufferMetres: int # The amount to buffer the geometry in metres, must only contain numerical digits (e.g 10). Leave blank and no buffer will be added to input geometries. If blank then any Point, LineString, MultiPoint and MultiLineString geometries will be ignored.
-  --bufferMitreLimit: int # If bufferMetres is specified, the maximum ratio of distance from the original geometry to a mitre buffer point and the buffer amount. If the ratio is greater than this a bevel will be used instead. This prevents infinite distances when the angle between the two lines at a join is small. Must be > 0. (default: 5)
-  --bufferSegments: int # If bufferMetres is specified, the number of line segments used in each quadrant to approximate the curve for round end-cap and join styles. Must be > 0. (default: 8)
+  --buffer-cap: string@buffer-cap-completer # If bufferMetres is specified, The style of buffer to use at the ends of a buffered line. (default: ROUND)
+  --buffer-join: string@buffer-join-completer # If bufferMetres is specified, The style of buffer to use for joins between the line segments for lines and polygons. (default: ROUND)
+  --buffer-metres: int # The amount to buffer the geometry in metres, must only contain numerical digits (e.g 10). Leave blank and no buffer will be added to input geometries. If blank then any Point, LineString, MultiPoint and MultiLineString geometries will be ignored.
+  --buffer-mitre-limit: int # If bufferMetres is specified, the maximum ratio of distance from the original geometry to a mitre buffer point and the buffer amount. If the ratio is greater than this a bevel will be used instead. This prevents infinite distances when the angle between the two lines at a join is small. Must be > 0. (default: 5)
+  --buffer-segments: int # If bufferMetres is specified, the number of line segments used in each quadrant to approximate the curve for round end-cap and join styles. Must be > 0. (default: 8)
   --callback: string # The callback function a JSON result format would be wrapped in to support Ajax requests.
-  --failureRedirectUrl: string # The url to redirect if the geomark could not be created. The URL will include a <fieldName>_Error parameter with the error message for the field that caused the error.
+  --failure-redirect-url: string # The url to redirect if the geomark could not be created. The URL will include a <fieldName>_Error parameter with the error message for the field that caused the error.
   --format: string@format-completer # The file format name extension of the input geometry.
   --multiple: oneof<nothing, bool> # Boolean flag indicating if multiple geometries are to be used for the geomark (true) or only a single geometry from the first geometry (false). (default: false)
-  --redirectUrl: string # The optional external URL to redirect the user to when the geomark is created rather than showing the geomark info page. The geomarkId and geomarkUrl query string parameters will be added to the redirectUrl so that the target application gets a reference to the geomark.
-  --resultFormat: string@resultFormat-completer # The file format the geomark info resource should be returned using.
+  --redirect-url: string # The optional external URL to redirect the user to when the geomark is created rather than showing the geomark info page. The geomarkId and geomarkUrl query string parameters will be added to the redirectUrl so that the target application gets a reference to the geomark.
+  --result-format: string@result-format-completer # The file format the geomark info resource should be returned using.
   --srid: int@srid-completer # The srid of the coordinate system the input geometries are in. If the file includes a coordinate system definition that will be used. (default: 4326)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/geomarks/new")
-  let body = {allowOverlap: $allowOverlap, body: $body_body, bufferCap: $bufferCap, bufferJoin: $bufferJoin, bufferMetres: $bufferMetres, bufferMitreLimit: $bufferMitreLimit, bufferSegments: $bufferSegments, callback: $callback, failureRedirectUrl: $failureRedirectUrl, format: $format, multiple: $multiple, redirectUrl: $redirectUrl, resultFormat: $resultFormat, srid: $srid} | compact
+  let body = {"allowOverlap": $allow_overlap, "body": $body_body, "bufferCap": $buffer_cap, "bufferJoin": $buffer_join, "bufferMetres": $buffer_metres, "bufferMitreLimit": $buffer_mitre_limit, "bufferSegments": $buffer_segments, "callback": $callback, "failureRedirectUrl": $failure_redirect_url, "format": $format, "multiple": $multiple, "redirectUrl": $redirect_url, "resultFormat": $result_format, "srid": $srid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -171,8 +171,8 @@ export def "geomarks-new post" [
 #
 # GET /geomarks/{geomarkId}.{fileFormatExtension}
 export def "geomarks get" [
-  geomarkId: string
-  fileFormatExtension: string
+  geomark_id: string
+  file_format_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "geomarks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "srid" $srid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/geomarks/($geomarkId).($fileFormatExtension)" $qp)
+  let full_url = (build-url $base ({geomark_id: $geomark_id, file_format_extension: $file_format_extension} | format pattern "/geomarks/{geomark_id}.{file_format_extension}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,8 +196,8 @@ export def "geomarks get" [
 #
 # GET /geomarks/{geomarkId}/boundingBox.{fileFormatExtension}
 export def "geomarks-bounding-box-file-format-extension get" [
-  geomarkId: string
-  fileFormatExtension: string
+  geomark_id: string
+  file_format_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "geomarks-bounding-box-file-format-extension get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "srid" $srid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/geomarks/($geomarkId)/boundingBox.($fileFormatExtension)" $qp)
+  let full_url = (build-url $base ({geomark_id: $geomark_id, file_format_extension: $file_format_extension} | format pattern "/geomarks/{geomark_id}/boundingBox.{file_format_extension}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,8 +221,8 @@ export def "geomarks-bounding-box-file-format-extension get" [
 #
 # GET /geomarks/{geomarkId}/feature.{fileFormatExtension}
 export def "geomarks-feature-file-format-extension get" [
-  geomarkId: string
-  fileFormatExtension: string
+  geomark_id: string
+  file_format_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "geomarks-feature-file-format-extension get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "srid" $srid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/geomarks/($geomarkId)/feature.($fileFormatExtension)" $qp)
+  let full_url = (build-url $base ({geomark_id: $geomark_id, file_format_extension: $file_format_extension} | format pattern "/geomarks/{geomark_id}/feature.{file_format_extension}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,8 +246,8 @@ export def "geomarks-feature-file-format-extension get" [
 #
 # GET /geomarks/{geomarkId}/parts.{fileFormatExtension}
 export def "geomarks-parts-file-format-extension get" [
-  geomarkId: string
-  fileFormatExtension: string
+  geomark_id: string
+  file_format_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "geomarks-parts-file-format-extension get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "srid" $srid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/geomarks/($geomarkId)/parts.($fileFormatExtension)" $qp)
+  let full_url = (build-url $base ({geomark_id: $geomark_id, file_format_extension: $file_format_extension} | format pattern "/geomarks/{geomark_id}/parts.{file_format_extension}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -271,8 +271,8 @@ export def "geomarks-parts-file-format-extension get" [
 #
 # GET /geomarks/{geomarkId}/point.{fileFormatExtension}
 export def "geomarks-point-file-format-extension get" [
-  geomarkId: string
-  fileFormatExtension: string
+  geomark_id: string
+  file_format_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "geomarks-point-file-format-extension get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "srid" $srid "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/geomarks/($geomarkId)/point.($fileFormatExtension)" $qp)
+  let full_url = (build-url $base ({geomark_id: $geomark_id, file_format_extension: $file_format_extension} | format pattern "/geomarks/{geomark_id}/point.{file_format_extension}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

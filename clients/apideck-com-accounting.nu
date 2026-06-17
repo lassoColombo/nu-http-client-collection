@@ -215,7 +215,7 @@ export def "accounting-bills billsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting/bills" $qp)
-  let body = {balance: $balance, bill_date: $bill_date, bill_number: $bill_number, currency: $currency, currency_rate: $currency_rate, deposit: $deposit, due_date: $due_date, ledger_account: $ledger_account, line_items: $line_items, notes: $notes, paid_date: $paid_date, po_number: $po_number, reference: $reference, row_version: $row_version, status: $status, sub_total: $sub_total, supplier: $supplier, tax_code: $tax_code, tax_inclusive: $tax_inclusive, terms: $terms, total: $total, total_tax: $total_tax} | compact
+  let body = {"balance": $balance, "bill_date": $bill_date, "bill_number": $bill_number, "currency": $currency, "currency_rate": $currency_rate, "deposit": $deposit, "due_date": $due_date, "ledger_account": $ledger_account, "line_items": $line_items, "notes": $notes, "paid_date": $paid_date, "po_number": $po_number, "reference": $reference, "row_version": $row_version, "status": $status, "sub_total": $sub_total, "supplier": $supplier, "tax_code": $tax_code, "tax_inclusive": $tax_inclusive, "terms": $terms, "total": $total, "total_tax": $total_tax} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -246,7 +246,7 @@ export def "accounting-bills billsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/bills/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/bills/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -277,7 +277,7 @@ export def "accounting-bills billsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/bills/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/bills/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -333,8 +333,8 @@ export def "accounting-bills billsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/bills/($id)" $qp)
-  let body = {balance: $balance, bill_date: $bill_date, bill_number: $bill_number, currency: $currency, currency_rate: $currency_rate, deposit: $deposit, due_date: $due_date, ledger_account: $ledger_account, line_items: $line_items, notes: $notes, paid_date: $paid_date, po_number: $po_number, reference: $reference, row_version: $row_version, status: $status, sub_total: $sub_total, supplier: $supplier, tax_code: $tax_code, tax_inclusive: $tax_inclusive, terms: $terms, total: $total, total_tax: $total_tax} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/bills/{id}") $qp)
+  let body = {"balance": $balance, "bill_date": $bill_date, "bill_number": $bill_number, "currency": $currency, "currency_rate": $currency_rate, "deposit": $deposit, "due_date": $due_date, "ledger_account": $ledger_account, "line_items": $line_items, "notes": $notes, "paid_date": $paid_date, "po_number": $po_number, "reference": $reference, "row_version": $row_version, "status": $status, "sub_total": $sub_total, "supplier": $supplier, "tax_code": $tax_code, "tax_inclusive": $tax_inclusive, "terms": $terms, "total": $total, "total_tax": $total_tax} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -455,7 +455,7 @@ export def "accounting-credit-notes creditNotesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting/credit-notes" $qp)
-  let body = {account: $account, allocations: $allocations, balance: $balance, currency: $currency, currency_rate: $currency_rate, customer: $customer, date_issued: $date_issued, date_paid: $date_paid, line_items: $line_items, note: $note, number: $number, reference: $reference, remaining_credit: $remaining_credit, row_version: $row_version, status: $status, sub_total: $sub_total, tax_code: $tax_code, tax_inclusive: $tax_inclusive, terms: $terms, total_amount: $total_amount, total_tax: $total_tax, type: $type} | compact
+  let body = {"account": $account, "allocations": $allocations, "balance": $balance, "currency": $currency, "currency_rate": $currency_rate, "customer": $customer, "date_issued": $date_issued, "date_paid": $date_paid, "line_items": $line_items, "note": $note, "number": $number, "reference": $reference, "remaining_credit": $remaining_credit, "row_version": $row_version, "status": $status, "sub_total": $sub_total, "tax_code": $tax_code, "tax_inclusive": $tax_inclusive, "terms": $terms, "total_amount": $total_amount, "total_tax": $total_tax, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -486,7 +486,7 @@ export def "accounting-credit-notes creditNotesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/credit-notes/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/credit-notes/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -517,7 +517,7 @@ export def "accounting-credit-notes creditNotesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/credit-notes/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/credit-notes/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -574,8 +574,8 @@ export def "accounting-credit-notes creditNotesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/credit-notes/($id)" $qp)
-  let body = {account: $account, allocations: $allocations, balance: $balance, currency: $currency, currency_rate: $currency_rate, customer: $customer, date_issued: $date_issued, date_paid: $date_paid, line_items: $line_items, note: $note, number: $number, reference: $reference, remaining_credit: $remaining_credit, row_version: $row_version, status: $status, sub_total: $sub_total, tax_code: $tax_code, tax_inclusive: $tax_inclusive, terms: $terms, total_amount: $total_amount, total_tax: $total_tax, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/credit-notes/{id}") $qp)
+  let body = {"account": $account, "allocations": $allocations, "balance": $balance, "currency": $currency, "currency_rate": $currency_rate, "customer": $customer, "date_issued": $date_issued, "date_paid": $date_paid, "line_items": $line_items, "note": $note, "number": $number, "reference": $reference, "remaining_credit": $remaining_credit, "row_version": $row_version, "status": $status, "sub_total": $sub_total, "tax_code": $tax_code, "tax_inclusive": $tax_inclusive, "terms": $terms, "total_amount": $total_amount, "total_tax": $total_tax, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -672,7 +672,7 @@ export def "accounting-customers customersAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting/customers" $qp)
-  let body = {account: $account, addresses: $addresses, bank_accounts: $bank_accounts, company_name: $company_name, currency: $currency, display_id: $display_id, display_name: $display_name, emails: $emails, first_name: $first_name, individual: $individual, last_name: $last_name, middle_name: $middle_name, notes: $notes, parent: $parent, phone_numbers: $phone_numbers, project: $project, row_version: $row_version, status: $status, suffix: $suffix, tax_number: $tax_number, tax_rate: $tax_rate, title: $title, websites: $websites} | compact
+  let body = {"account": $account, "addresses": $addresses, "bank_accounts": $bank_accounts, "company_name": $company_name, "currency": $currency, "display_id": $display_id, "display_name": $display_name, "emails": $emails, "first_name": $first_name, "individual": $individual, "last_name": $last_name, "middle_name": $middle_name, "notes": $notes, "parent": $parent, "phone_numbers": $phone_numbers, "project": $project, "row_version": $row_version, "status": $status, "suffix": $suffix, "tax_number": $tax_number, "tax_rate": $tax_rate, "title": $title, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -703,7 +703,7 @@ export def "accounting-customers customersDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/customers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/customers/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -734,7 +734,7 @@ export def "accounting-customers customersOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/customers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/customers/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -796,8 +796,8 @@ export def "accounting-customers customersUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/customers/($id)" $qp)
-  let body = {account: $account, addresses: $addresses, bank_accounts: $bank_accounts, company_name: $company_name, currency: $currency, display_id: $display_id, display_name: $display_name, emails: $emails, first_name: $first_name, individual: $individual, last_name: $last_name, middle_name: $middle_name, notes: $notes, parent: $parent, phone_numbers: $phone_numbers, project: $project, row_version: $row_version, status: $status, suffix: $suffix, tax_number: $tax_number, tax_rate: $tax_rate, title: $title, websites: $websites} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/customers/{id}") $qp)
+  let body = {"account": $account, "addresses": $addresses, "bank_accounts": $bank_accounts, "company_name": $company_name, "currency": $currency, "display_id": $display_id, "display_name": $display_name, "emails": $emails, "first_name": $first_name, "individual": $individual, "last_name": $last_name, "middle_name": $middle_name, "notes": $notes, "parent": $parent, "phone_numbers": $phone_numbers, "project": $project, "row_version": $row_version, "status": $status, "suffix": $suffix, "tax_number": $tax_number, "tax_rate": $tax_rate, "title": $title, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -886,7 +886,7 @@ export def "accounting-invoice-items invoiceItemsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting/invoice-items" $qp)
-  let body = {active: $active, asset_account: $asset_account, code: $code, description: $description, expense_account: $expense_account, income_account: $income_account, inventory_date: $inventory_date, name: $name, purchase_details: $purchase_details, purchased: $purchased, quantity: $quantity, row_version: $row_version, sales_details: $sales_details, sold: $sold, taxable: $taxable, tracked: $tracked, type: $type, unit_price: $unit_price} | compact
+  let body = {"active": $active, "asset_account": $asset_account, "code": $code, "description": $description, "expense_account": $expense_account, "income_account": $income_account, "inventory_date": $inventory_date, "name": $name, "purchase_details": $purchase_details, "purchased": $purchased, "quantity": $quantity, "row_version": $row_version, "sales_details": $sales_details, "sold": $sold, "taxable": $taxable, "tracked": $tracked, "type": $type, "unit_price": $unit_price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -917,7 +917,7 @@ export def "accounting-invoice-items invoiceItemsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/invoice-items/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/invoice-items/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -948,7 +948,7 @@ export def "accounting-invoice-items invoiceItemsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/invoice-items/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/invoice-items/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1002,8 +1002,8 @@ export def "accounting-invoice-items invoiceItemsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/invoice-items/($id)" $qp)
-  let body = {active: $active, asset_account: $asset_account, code: $code, description: $description, expense_account: $expense_account, income_account: $income_account, inventory_date: $inventory_date, name: $name, purchase_details: $purchase_details, purchased: $purchased, quantity: $quantity, row_version: $row_version, sales_details: $sales_details, sold: $sold, taxable: $taxable, tracked: $tracked, type: $type, unit_price: $unit_price} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/invoice-items/{id}") $qp)
+  let body = {"active": $active, "asset_account": $asset_account, "code": $code, "description": $description, "expense_account": $expense_account, "income_account": $income_account, "inventory_date": $inventory_date, "name": $name, "purchase_details": $purchase_details, "purchased": $purchased, "quantity": $quantity, "row_version": $row_version, "sales_details": $sales_details, "sold": $sold, "taxable": $taxable, "tracked": $tracked, "type": $type, "unit_price": $unit_price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1101,7 +1101,7 @@ export def "accounting-invoices invoicesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting/invoices" $qp)
-  let body = {balance: $balance, billing_address: $billing_address, currency: $currency, currency_rate: $currency_rate, customer: $customer, customer_memo: $customer_memo, deposit: $deposit, discount_amount: $discount_amount, discount_percentage: $discount_percentage, due_date: $due_date, invoice_date: $invoice_date, invoice_sent: $invoice_sent, line_items: $line_items, number: $number, po_number: $po_number, reference: $reference, row_version: $row_version, shipping_address: $shipping_address, source_document_url: $source_document_url, status: $status, sub_total: $sub_total, tax_code: $tax_code, tax_inclusive: $tax_inclusive, template_id: $template_id, terms: $terms, total: $total, total_tax: $total_tax, type: $type} | compact
+  let body = {"balance": $balance, "billing_address": $billing_address, "currency": $currency, "currency_rate": $currency_rate, "customer": $customer, "customer_memo": $customer_memo, "deposit": $deposit, "discount_amount": $discount_amount, "discount_percentage": $discount_percentage, "due_date": $due_date, "invoice_date": $invoice_date, "invoice_sent": $invoice_sent, "line_items": $line_items, "number": $number, "po_number": $po_number, "reference": $reference, "row_version": $row_version, "shipping_address": $shipping_address, "source_document_url": $source_document_url, "status": $status, "sub_total": $sub_total, "tax_code": $tax_code, "tax_inclusive": $tax_inclusive, "template_id": $template_id, "terms": $terms, "total": $total, "total_tax": $total_tax, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1132,7 +1132,7 @@ export def "accounting-invoices invoicesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/invoices/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/invoices/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1163,7 +1163,7 @@ export def "accounting-invoices invoicesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/invoices/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/invoices/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1226,8 +1226,8 @@ export def "accounting-invoices invoicesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/invoices/($id)" $qp)
-  let body = {balance: $balance, billing_address: $billing_address, currency: $currency, currency_rate: $currency_rate, customer: $customer, customer_memo: $customer_memo, deposit: $deposit, discount_amount: $discount_amount, discount_percentage: $discount_percentage, due_date: $due_date, invoice_date: $invoice_date, invoice_sent: $invoice_sent, line_items: $line_items, number: $number, po_number: $po_number, reference: $reference, row_version: $row_version, shipping_address: $shipping_address, source_document_url: $source_document_url, status: $status, sub_total: $sub_total, tax_code: $tax_code, tax_inclusive: $tax_inclusive, template_id: $template_id, terms: $terms, total: $total, total_tax: $total_tax, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/invoices/{id}") $qp)
+  let body = {"balance": $balance, "billing_address": $billing_address, "currency": $currency, "currency_rate": $currency_rate, "customer": $customer, "customer_memo": $customer_memo, "deposit": $deposit, "discount_amount": $discount_amount, "discount_percentage": $discount_percentage, "due_date": $due_date, "invoice_date": $invoice_date, "invoice_sent": $invoice_sent, "line_items": $line_items, "number": $number, "po_number": $po_number, "reference": $reference, "row_version": $row_version, "shipping_address": $shipping_address, "source_document_url": $source_document_url, "status": $status, "sub_total": $sub_total, "tax_code": $tax_code, "tax_inclusive": $tax_inclusive, "template_id": $template_id, "terms": $terms, "total": $total, "total_tax": $total_tax, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1301,7 +1301,7 @@ export def "accounting-journal-entries journalEntriesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting/journal-entries" $qp)
-  let body = {currency: $currency, currency_rate: $currency_rate, journal_symbol: $journal_symbol, line_items: $line_items, memo: $memo, posted_at: $posted_at, row_version: $row_version, title: $title} | compact
+  let body = {"currency": $currency, "currency_rate": $currency_rate, "journal_symbol": $journal_symbol, "line_items": $line_items, "memo": $memo, "posted_at": $posted_at, "row_version": $row_version, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1332,7 +1332,7 @@ export def "accounting-journal-entries journalEntriesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/journal-entries/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/journal-entries/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1363,7 +1363,7 @@ export def "accounting-journal-entries journalEntriesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/journal-entries/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/journal-entries/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1403,8 +1403,8 @@ export def "accounting-journal-entries journalEntriesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/journal-entries/($id)" $qp)
-  let body = {currency: $currency, currency_rate: $currency_rate, journal_symbol: $journal_symbol, line_items: $line_items, memo: $memo, posted_at: $posted_at, row_version: $row_version, title: $title} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/journal-entries/{id}") $qp)
+  let body = {"currency": $currency, "currency_rate": $currency_rate, "journal_symbol": $journal_symbol, "line_items": $line_items, "memo": $memo, "posted_at": $posted_at, "row_version": $row_version, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1496,7 +1496,7 @@ export def "accounting-ledger-accounts ledgerAccountsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting/ledger-accounts" $qp)
-  let body = {active: $active, bank_account: $bank_account, classification: $classification, code: $code, currency: $currency, current_balance: $current_balance, description: $description, display_id: $display_id, fully_qualified_name: $fully_qualified_name, header: $header, last_reconciliation_date: $last_reconciliation_date, level: $level, name: $name, nominal_code: $nominal_code, opening_balance: $opening_balance, parent_account: $parent_account, row_version: $row_version, status: $status, sub_account: $sub_account, sub_type: $sub_type, tax_rate: $tax_rate, tax_type: $tax_type, type: $type} | compact
+  let body = {"active": $active, "bank_account": $bank_account, "classification": $classification, "code": $code, "currency": $currency, "current_balance": $current_balance, "description": $description, "display_id": $display_id, "fully_qualified_name": $fully_qualified_name, "header": $header, "last_reconciliation_date": $last_reconciliation_date, "level": $level, "name": $name, "nominal_code": $nominal_code, "opening_balance": $opening_balance, "parent_account": $parent_account, "row_version": $row_version, "status": $status, "sub_account": $sub_account, "sub_type": $sub_type, "tax_rate": $tax_rate, "tax_type": $tax_type, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1527,7 +1527,7 @@ export def "accounting-ledger-accounts ledgerAccountsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/ledger-accounts/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/ledger-accounts/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1558,7 +1558,7 @@ export def "accounting-ledger-accounts ledgerAccountsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/ledger-accounts/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/ledger-accounts/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1616,8 +1616,8 @@ export def "accounting-ledger-accounts ledgerAccountsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/ledger-accounts/($id)" $qp)
-  let body = {active: $active, bank_account: $bank_account, classification: $classification, code: $code, currency: $currency, current_balance: $current_balance, description: $description, display_id: $display_id, fully_qualified_name: $fully_qualified_name, header: $header, last_reconciliation_date: $last_reconciliation_date, level: $level, name: $name, nominal_code: $nominal_code, opening_balance: $opening_balance, parent_account: $parent_account, row_version: $row_version, status: $status, sub_account: $sub_account, sub_type: $sub_type, tax_rate: $tax_rate, tax_type: $tax_type, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/ledger-accounts/{id}") $qp)
+  let body = {"active": $active, "bank_account": $bank_account, "classification": $classification, "code": $code, "currency": $currency, "current_balance": $current_balance, "description": $description, "display_id": $display_id, "fully_qualified_name": $fully_qualified_name, "header": $header, "last_reconciliation_date": $last_reconciliation_date, "level": $level, "name": $name, "nominal_code": $nominal_code, "opening_balance": $opening_balance, "parent_account": $parent_account, "row_version": $row_version, "status": $status, "sub_account": $sub_account, "sub_type": $sub_type, "tax_rate": $tax_rate, "tax_type": $tax_type, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1708,7 +1708,7 @@ export def "accounting-payments paymentsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting/payments" $qp)
-  let body = {account: $account, accounts_receivable_account_id: $accounts_receivable_account_id, accounts_receivable_account_type: $accounts_receivable_account_type, allocations: $allocations, currency: $currency, currency_rate: $currency_rate, customer: $customer, display_id: $display_id, note: $note, payment_method: $payment_method, payment_method_id: $payment_method_id, payment_method_reference: $payment_method_reference, reconciled: $reconciled, reference: $reference, row_version: $row_version, status: $status, supplier: $supplier, total_amount: $total_amount, transaction_date: $transaction_date, type: $type} | compact
+  let body = {"account": $account, "accounts_receivable_account_id": $accounts_receivable_account_id, "accounts_receivable_account_type": $accounts_receivable_account_type, "allocations": $allocations, "currency": $currency, "currency_rate": $currency_rate, "customer": $customer, "display_id": $display_id, "note": $note, "payment_method": $payment_method, "payment_method_id": $payment_method_id, "payment_method_reference": $payment_method_reference, "reconciled": $reconciled, "reference": $reference, "row_version": $row_version, "status": $status, "supplier": $supplier, "total_amount": $total_amount, "transaction_date": $transaction_date, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1739,7 +1739,7 @@ export def "accounting-payments paymentsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/payments/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/payments/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1770,7 +1770,7 @@ export def "accounting-payments paymentsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/payments/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/payments/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1827,8 +1827,8 @@ export def "accounting-payments paymentsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/payments/($id)" $qp)
-  let body = {account: $account, accounts_receivable_account_id: $accounts_receivable_account_id, accounts_receivable_account_type: $accounts_receivable_account_type, allocations: $allocations, currency: $currency, currency_rate: $currency_rate, customer: $customer, display_id: $display_id, note: $note, payment_method: $payment_method, payment_method_id: $payment_method_id, payment_method_reference: $payment_method_reference, reconciled: $reconciled, reference: $reference, row_version: $row_version, status: $status, supplier: $supplier, total_amount: $total_amount, transaction_date: $transaction_date, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/payments/{id}") $qp)
+  let body = {"account": $account, "accounts_receivable_account_id": $accounts_receivable_account_id, "accounts_receivable_account_type": $accounts_receivable_account_type, "allocations": $allocations, "currency": $currency, "currency_rate": $currency_rate, "customer": $customer, "display_id": $display_id, "note": $note, "payment_method": $payment_method, "payment_method_id": $payment_method_id, "payment_method_reference": $payment_method_reference, "reconciled": $reconciled, "reference": $reference, "row_version": $row_version, "status": $status, "supplier": $supplier, "total_amount": $total_amount, "transaction_date": $transaction_date, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1954,7 +1954,7 @@ export def "accounting-suppliers suppliersAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting/suppliers" $qp)
-  let body = {account: $account, addresses: $addresses, bank_accounts: $bank_accounts, company_name: $company_name, currency: $currency, display_id: $display_id, display_name: $display_name, emails: $emails, first_name: $first_name, individual: $individual, last_name: $last_name, middle_name: $middle_name, notes: $notes, phone_numbers: $phone_numbers, row_version: $row_version, status: $status, suffix: $suffix, tax_number: $tax_number, tax_rate: $tax_rate, title: $title, websites: $websites} | compact
+  let body = {"account": $account, "addresses": $addresses, "bank_accounts": $bank_accounts, "company_name": $company_name, "currency": $currency, "display_id": $display_id, "display_name": $display_name, "emails": $emails, "first_name": $first_name, "individual": $individual, "last_name": $last_name, "middle_name": $middle_name, "notes": $notes, "phone_numbers": $phone_numbers, "row_version": $row_version, "status": $status, "suffix": $suffix, "tax_number": $tax_number, "tax_rate": $tax_rate, "title": $title, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1985,7 +1985,7 @@ export def "accounting-suppliers suppliersDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/suppliers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/suppliers/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2016,7 +2016,7 @@ export def "accounting-suppliers suppliersOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/suppliers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/suppliers/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2075,8 +2075,8 @@ export def "accounting-suppliers suppliersUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/suppliers/($id)" $qp)
-  let body = {account: $account, addresses: $addresses, bank_accounts: $bank_accounts, company_name: $company_name, currency: $currency, display_id: $display_id, display_name: $display_name, emails: $emails, first_name: $first_name, individual: $individual, last_name: $last_name, middle_name: $middle_name, notes: $notes, phone_numbers: $phone_numbers, row_version: $row_version, status: $status, suffix: $suffix, tax_number: $tax_number, tax_rate: $tax_rate, title: $title, websites: $websites} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/suppliers/{id}") $qp)
+  let body = {"account": $account, "addresses": $addresses, "bank_accounts": $bank_accounts, "company_name": $company_name, "currency": $currency, "display_id": $display_id, "display_name": $display_name, "emails": $emails, "first_name": $first_name, "individual": $individual, "last_name": $last_name, "middle_name": $middle_name, "notes": $notes, "phone_numbers": $phone_numbers, "row_version": $row_version, "status": $status, "suffix": $suffix, "tax_number": $tax_number, "tax_rate": $tax_rate, "title": $title, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2157,7 +2157,7 @@ export def "accounting-tax-rates taxRatesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounting/tax-rates" $qp)
-  let body = {code: $code, components: $components, description: $description, effective_tax_rate: $effective_tax_rate, id: $id, name: $name, original_tax_rate_id: $original_tax_rate_id, report_tax_type: $report_tax_type, row_version: $row_version, status: $status, tax_payable_account_id: $tax_payable_account_id, tax_remitted_account_id: $tax_remitted_account_id, total_tax_rate: $total_tax_rate, type: $type} | compact
+  let body = {"code": $code, "components": $components, "description": $description, "effective_tax_rate": $effective_tax_rate, "id": $id, "name": $name, "original_tax_rate_id": $original_tax_rate_id, "report_tax_type": $report_tax_type, "row_version": $row_version, "status": $status, "tax_payable_account_id": $tax_payable_account_id, "tax_remitted_account_id": $tax_remitted_account_id, "total_tax_rate": $total_tax_rate, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2188,7 +2188,7 @@ export def "accounting-tax-rates taxRatesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/tax-rates/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/tax-rates/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2219,7 +2219,7 @@ export def "accounting-tax-rates taxRatesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/tax-rates/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/tax-rates/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2265,8 +2265,8 @@ export def "accounting-tax-rates taxRatesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounting/tax-rates/($id)" $qp)
-  let body = {code: $code, components: $components, description: $description, effective_tax_rate: $effective_tax_rate, id: $body_id, name: $name, original_tax_rate_id: $original_tax_rate_id, report_tax_type: $report_tax_type, row_version: $row_version, status: $status, tax_payable_account_id: $tax_payable_account_id, tax_remitted_account_id: $tax_remitted_account_id, total_tax_rate: $total_tax_rate, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounting/tax-rates/{id}") $qp)
+  let body = {"code": $code, "components": $components, "description": $description, "effective_tax_rate": $effective_tax_rate, "id": $body_id, "name": $name, "original_tax_rate_id": $original_tax_rate_id, "report_tax_type": $report_tax_type, "row_version": $row_version, "status": $status, "tax_payable_account_id": $tax_payable_account_id, "tax_remitted_account_id": $tax_remitted_account_id, "total_tax_rate": $total_tax_rate, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

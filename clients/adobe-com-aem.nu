@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cqactionshtml post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cqactionshtml create-cq-actions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 # POST /.cqactions.html
 #
 # operationId: postCqActions
-export def "cqactionshtml post" [
+export def "cqactionshtml create-cq-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,12 +101,12 @@ export def "cqactionshtml post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorizableId: string
+  --authorizable-id: string
   --changelog: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authorizableId" $authorizableId "scalar") (serialize-qp "changelog" $changelog "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authorizableId" $authorizable_id "scalar") (serialize-qp "changelog" $changelog "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/.cqactions.html" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -116,7 +116,7 @@ export def "cqactionshtml post" [
 # POST /apps/system/config/com.adobe.granite.auth.saml.SamlAuthenticationHandler.config
 #
 # operationId: postConfigAdobeGraniteSamlAuthenticationHandler
-export def "apps-system-config-comadobegraniteauthsaml-saml-authentication-handlerconfig post" [
+export def "apps-system-config-comadobegraniteauthsaml-saml-authentication-handlerconfig create-config-adobe-granite-saml-authentication-handler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,58 +125,58 @@ export def "apps-system-config-comadobegraniteauthsaml-saml-authentication-handl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keyStorePassword: string
-  --keyStorePasswordTypeHint: string
-  --serviceranking: int
-  --servicerankingTypeHint: string
-  --idpHttpRedirect: oneof<nothing, bool>
-  --idpHttpRedirectTypeHint: string
-  --createUser: oneof<nothing, bool>
-  --createUserTypeHint: string
-  --defaultRedirectUrl: string
-  --defaultRedirectUrlTypeHint: string
-  --userIDAttribute: string
-  --userIDAttributeTypeHint: string
-  --defaultGroups: list
-  --defaultGroupsTypeHint: string
-  --idpCertAlias: string
-  --idpCertAliasTypeHint: string
-  --addGroupMemberships: oneof<nothing, bool>
-  --addGroupMembershipsTypeHint: string
+  --key-store-password: string
+  --key-store-password-type-hint: string
+  --service-ranking: int
+  --service-ranking-type-hint: string
+  --idp-http-redirect: oneof<nothing, bool>
+  --idp-http-redirect-type-hint: string
+  --create-user: oneof<nothing, bool>
+  --create-user-type-hint: string
+  --default-redirect-url: string
+  --default-redirect-url-type-hint: string
+  --user-id-attribute: string
+  --user-id-attribute-type-hint: string
+  --default-groups: list
+  --default-groups-type-hint: string
+  --idp-cert-alias: string
+  --idp-cert-alias-type-hint: string
+  --add-group-memberships: oneof<nothing, bool>
+  --add-group-memberships-type-hint: string
   --path: list
-  --pathTypeHint: string
-  --synchronizeAttributes: list
-  --synchronizeAttributesTypeHint: string
-  --clockTolerance: int
-  --clockToleranceTypeHint: string
-  --groupMembershipAttribute: string
-  --groupMembershipAttributeTypeHint: string
-  --idpUrl: string
-  --idpUrlTypeHint: string
-  --logoutUrl: string
-  --logoutUrlTypeHint: string
-  --serviceProviderEntityId: string
-  --serviceProviderEntityIdTypeHint: string
-  --assertionConsumerServiceURL: string
-  --assertionConsumerServiceURLTypeHint: string
-  --handleLogout: oneof<nothing, bool>
-  --handleLogoutTypeHint: string
-  --spPrivateKeyAlias: string
-  --spPrivateKeyAliasTypeHint: string
-  --useEncryption: oneof<nothing, bool>
-  --useEncryptionTypeHint: string
-  --nameIdFormat: string
-  --nameIdFormatTypeHint: string
-  --digestMethod: string
-  --digestMethodTypeHint: string
-  --signatureMethod: string
-  --signatureMethodTypeHint: string
-  --userIntermediatePath: string
-  --userIntermediatePathTypeHint: string
+  --path-type-hint: string
+  --synchronize-attributes: list
+  --synchronize-attributes-type-hint: string
+  --clock-tolerance: int
+  --clock-tolerance-type-hint: string
+  --group-membership-attribute: string
+  --group-membership-attribute-type-hint: string
+  --idp-url: string
+  --idp-url-type-hint: string
+  --logout-url: string
+  --logout-url-type-hint: string
+  --service-provider-entity-id: string
+  --service-provider-entity-id-type-hint: string
+  --assertion-consumer-service-url: string
+  --assertion-consumer-service-url-type-hint: string
+  --handle-logout: oneof<nothing, bool>
+  --handle-logout-type-hint: string
+  --sp-private-key-alias: string
+  --sp-private-key-alias-type-hint: string
+  --use-encryption: oneof<nothing, bool>
+  --use-encryption-type-hint: string
+  --name-id-format: string
+  --name-id-format-type-hint: string
+  --digest-method: string
+  --digest-method-type-hint: string
+  --signature-method: string
+  --signature-method-type-hint: string
+  --user-intermediate-path: string
+  --user-intermediate-path-type-hint: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keyStorePassword" $keyStorePassword "scalar") (serialize-qp "keyStorePassword@TypeHint" $keyStorePasswordTypeHint "scalar") (serialize-qp "service.ranking" $serviceranking "scalar") (serialize-qp "service.ranking@TypeHint" $servicerankingTypeHint "scalar") (serialize-qp "idpHttpRedirect" $idpHttpRedirect "scalar") (serialize-qp "idpHttpRedirect@TypeHint" $idpHttpRedirectTypeHint "scalar") (serialize-qp "createUser" $createUser "scalar") (serialize-qp "createUser@TypeHint" $createUserTypeHint "scalar") (serialize-qp "defaultRedirectUrl" $defaultRedirectUrl "scalar") (serialize-qp "defaultRedirectUrl@TypeHint" $defaultRedirectUrlTypeHint "scalar") (serialize-qp "userIDAttribute" $userIDAttribute "scalar") (serialize-qp "userIDAttribute@TypeHint" $userIDAttributeTypeHint "scalar") (serialize-qp "defaultGroups" $defaultGroups "multi") (serialize-qp "defaultGroups@TypeHint" $defaultGroupsTypeHint "scalar") (serialize-qp "idpCertAlias" $idpCertAlias "scalar") (serialize-qp "idpCertAlias@TypeHint" $idpCertAliasTypeHint "scalar") (serialize-qp "addGroupMemberships" $addGroupMemberships "scalar") (serialize-qp "addGroupMemberships@TypeHint" $addGroupMembershipsTypeHint "scalar") (serialize-qp "path" $path "multi") (serialize-qp "path@TypeHint" $pathTypeHint "scalar") (serialize-qp "synchronizeAttributes" $synchronizeAttributes "multi") (serialize-qp "synchronizeAttributes@TypeHint" $synchronizeAttributesTypeHint "scalar") (serialize-qp "clockTolerance" $clockTolerance "scalar") (serialize-qp "clockTolerance@TypeHint" $clockToleranceTypeHint "scalar") (serialize-qp "groupMembershipAttribute" $groupMembershipAttribute "scalar") (serialize-qp "groupMembershipAttribute@TypeHint" $groupMembershipAttributeTypeHint "scalar") (serialize-qp "idpUrl" $idpUrl "scalar") (serialize-qp "idpUrl@TypeHint" $idpUrlTypeHint "scalar") (serialize-qp "logoutUrl" $logoutUrl "scalar") (serialize-qp "logoutUrl@TypeHint" $logoutUrlTypeHint "scalar") (serialize-qp "serviceProviderEntityId" $serviceProviderEntityId "scalar") (serialize-qp "serviceProviderEntityId@TypeHint" $serviceProviderEntityIdTypeHint "scalar") (serialize-qp "assertionConsumerServiceURL" $assertionConsumerServiceURL "scalar") (serialize-qp "assertionConsumerServiceURL@TypeHint" $assertionConsumerServiceURLTypeHint "scalar") (serialize-qp "handleLogout" $handleLogout "scalar") (serialize-qp "handleLogout@TypeHint" $handleLogoutTypeHint "scalar") (serialize-qp "spPrivateKeyAlias" $spPrivateKeyAlias "scalar") (serialize-qp "spPrivateKeyAlias@TypeHint" $spPrivateKeyAliasTypeHint "scalar") (serialize-qp "useEncryption" $useEncryption "scalar") (serialize-qp "useEncryption@TypeHint" $useEncryptionTypeHint "scalar") (serialize-qp "nameIdFormat" $nameIdFormat "scalar") (serialize-qp "nameIdFormat@TypeHint" $nameIdFormatTypeHint "scalar") (serialize-qp "digestMethod" $digestMethod "scalar") (serialize-qp "digestMethod@TypeHint" $digestMethodTypeHint "scalar") (serialize-qp "signatureMethod" $signatureMethod "scalar") (serialize-qp "signatureMethod@TypeHint" $signatureMethodTypeHint "scalar") (serialize-qp "userIntermediatePath" $userIntermediatePath "scalar") (serialize-qp "userIntermediatePath@TypeHint" $userIntermediatePathTypeHint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "keyStorePassword" $key_store_password "scalar") (serialize-qp "keyStorePassword@TypeHint" $key_store_password_type_hint "scalar") (serialize-qp "service.ranking" $service_ranking "scalar") (serialize-qp "service.ranking@TypeHint" $service_ranking_type_hint "scalar") (serialize-qp "idpHttpRedirect" $idp_http_redirect "scalar") (serialize-qp "idpHttpRedirect@TypeHint" $idp_http_redirect_type_hint "scalar") (serialize-qp "createUser" $create_user "scalar") (serialize-qp "createUser@TypeHint" $create_user_type_hint "scalar") (serialize-qp "defaultRedirectUrl" $default_redirect_url "scalar") (serialize-qp "defaultRedirectUrl@TypeHint" $default_redirect_url_type_hint "scalar") (serialize-qp "userIDAttribute" $user_id_attribute "scalar") (serialize-qp "userIDAttribute@TypeHint" $user_id_attribute_type_hint "scalar") (serialize-qp "defaultGroups" $default_groups "multi") (serialize-qp "defaultGroups@TypeHint" $default_groups_type_hint "scalar") (serialize-qp "idpCertAlias" $idp_cert_alias "scalar") (serialize-qp "idpCertAlias@TypeHint" $idp_cert_alias_type_hint "scalar") (serialize-qp "addGroupMemberships" $add_group_memberships "scalar") (serialize-qp "addGroupMemberships@TypeHint" $add_group_memberships_type_hint "scalar") (serialize-qp "path" $path "multi") (serialize-qp "path@TypeHint" $path_type_hint "scalar") (serialize-qp "synchronizeAttributes" $synchronize_attributes "multi") (serialize-qp "synchronizeAttributes@TypeHint" $synchronize_attributes_type_hint "scalar") (serialize-qp "clockTolerance" $clock_tolerance "scalar") (serialize-qp "clockTolerance@TypeHint" $clock_tolerance_type_hint "scalar") (serialize-qp "groupMembershipAttribute" $group_membership_attribute "scalar") (serialize-qp "groupMembershipAttribute@TypeHint" $group_membership_attribute_type_hint "scalar") (serialize-qp "idpUrl" $idp_url "scalar") (serialize-qp "idpUrl@TypeHint" $idp_url_type_hint "scalar") (serialize-qp "logoutUrl" $logout_url "scalar") (serialize-qp "logoutUrl@TypeHint" $logout_url_type_hint "scalar") (serialize-qp "serviceProviderEntityId" $service_provider_entity_id "scalar") (serialize-qp "serviceProviderEntityId@TypeHint" $service_provider_entity_id_type_hint "scalar") (serialize-qp "assertionConsumerServiceURL" $assertion_consumer_service_url "scalar") (serialize-qp "assertionConsumerServiceURL@TypeHint" $assertion_consumer_service_url_type_hint "scalar") (serialize-qp "handleLogout" $handle_logout "scalar") (serialize-qp "handleLogout@TypeHint" $handle_logout_type_hint "scalar") (serialize-qp "spPrivateKeyAlias" $sp_private_key_alias "scalar") (serialize-qp "spPrivateKeyAlias@TypeHint" $sp_private_key_alias_type_hint "scalar") (serialize-qp "useEncryption" $use_encryption "scalar") (serialize-qp "useEncryption@TypeHint" $use_encryption_type_hint "scalar") (serialize-qp "nameIdFormat" $name_id_format "scalar") (serialize-qp "nameIdFormat@TypeHint" $name_id_format_type_hint "scalar") (serialize-qp "digestMethod" $digest_method "scalar") (serialize-qp "digestMethod@TypeHint" $digest_method_type_hint "scalar") (serialize-qp "signatureMethod" $signature_method "scalar") (serialize-qp "signatureMethod@TypeHint" $signature_method_type_hint "scalar") (serialize-qp "userIntermediatePath" $user_intermediate_path "scalar") (serialize-qp "userIntermediatePath@TypeHint" $user_intermediate_path_type_hint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/system/config/com.adobe.granite.auth.saml.SamlAuthenticationHandler.config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -186,7 +186,7 @@ export def "apps-system-config-comadobegraniteauthsaml-saml-authentication-handl
 # POST /apps/system/config/com.shinesolutions.aem.passwordreset.Activator
 #
 # operationId: postConfigAemPasswordReset
-export def "apps-system-config-comshinesolutionsaempasswordreset-activator post" [
+export def "apps-system-config-comshinesolutionsaempasswordreset-activator create-config-aem-password-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,12 +195,12 @@ export def "apps-system-config-comshinesolutionsaempasswordreset-activator post"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pwdresetauthorizables: list
-  --pwdresetauthorizablesTypeHint: string
+  --pwdreset-authorizables: list
+  --pwdreset-authorizables-type-hint: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pwdreset.authorizables" $pwdresetauthorizables "multi") (serialize-qp "pwdreset.authorizables@TypeHint" $pwdresetauthorizablesTypeHint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pwdreset.authorizables" $pwdreset_authorizables "multi") (serialize-qp "pwdreset.authorizables@TypeHint" $pwdreset_authorizables_type_hint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/system/config/com.shinesolutions.aem.passwordreset.Activator" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -210,7 +210,7 @@ export def "apps-system-config-comshinesolutionsaempasswordreset-activator post"
 # POST /apps/system/config/com.shinesolutions.healthcheck.hc.impl.ActiveBundleHealthCheck
 #
 # operationId: postConfigAemHealthCheckServlet
-export def "apps-system-config-comshinesolutionshealthcheckhcimpl-active-bundle-health-check post" [
+export def "apps-system-config-comshinesolutionshealthcheckhcimpl-active-bundle-health-check create-config-aem-health-check-servlet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,12 +219,12 @@ export def "apps-system-config-comshinesolutionshealthcheckhcimpl-active-bundle-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --bundlesignored: list
-  --bundlesignoredTypeHint: string
+  --bundles-ignored: list
+  --bundles-ignored-type-hint: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "bundles.ignored" $bundlesignored "multi") (serialize-qp "bundles.ignored@TypeHint" $bundlesignoredTypeHint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "bundles.ignored" $bundles_ignored "multi") (serialize-qp "bundles.ignored@TypeHint" $bundles_ignored_type_hint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/system/config/com.shinesolutions.healthcheck.hc.impl.ActiveBundleHealthCheck" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -234,7 +234,7 @@ export def "apps-system-config-comshinesolutionshealthcheckhcimpl-active-bundle-
 # POST /apps/system/config/org.apache.felix.http
 #
 # operationId: postConfigApacheFelixJettyBasedHttpService
-export def "apps-system-config-orgapachefelixhttp post" [
+export def "apps-system-config-orgapachefelixhttp create-config-apache-felix-jetty-based-http-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,30 +243,30 @@ export def "apps-system-config-orgapachefelixhttp post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orgapachefelixhttpsnio: oneof<nothing, bool>
-  --orgapachefelixhttpsnioTypeHint: string
-  --orgapachefelixhttpskeystore: string
-  --orgapachefelixhttpskeystoreTypeHint: string
-  --orgapachefelixhttpskeystorepassword: string
-  --orgapachefelixhttpskeystorepasswordTypeHint: string
-  --orgapachefelixhttpskeystorekey: string
-  --orgapachefelixhttpskeystorekeyTypeHint: string
-  --orgapachefelixhttpskeystorekeypassword: string
-  --orgapachefelixhttpskeystorekeypasswordTypeHint: string
-  --orgapachefelixhttpstruststore: string
-  --orgapachefelixhttpstruststoreTypeHint: string
-  --orgapachefelixhttpstruststorepassword: string
-  --orgapachefelixhttpstruststorepasswordTypeHint: string
-  --orgapachefelixhttpsclientcertificate: string
-  --orgapachefelixhttpsclientcertificateTypeHint: string
-  --orgapachefelixhttpsenable: oneof<nothing, bool>
-  --orgapachefelixhttpsenableTypeHint: string
-  --orgosgiservicehttpportsecure: string
-  --orgosgiservicehttpportsecureTypeHint: string
+  --org-apache-felix-https-nio: oneof<nothing, bool>
+  --org-apache-felix-https-nio-type-hint: string
+  --org-apache-felix-https-keystore: string
+  --org-apache-felix-https-keystore-type-hint: string
+  --org-apache-felix-https-keystore-password: string
+  --org-apache-felix-https-keystore-password-type-hint: string
+  --org-apache-felix-https-keystore-key: string
+  --org-apache-felix-https-keystore-key-type-hint: string
+  --org-apache-felix-https-keystore-key-password: string
+  --org-apache-felix-https-keystore-key-password-type-hint: string
+  --org-apache-felix-https-truststore: string
+  --org-apache-felix-https-truststore-type-hint: string
+  --org-apache-felix-https-truststore-password: string
+  --org-apache-felix-https-truststore-password-type-hint: string
+  --org-apache-felix-https-clientcertificate: string
+  --org-apache-felix-https-clientcertificate-type-hint: string
+  --org-apache-felix-https-enable: oneof<nothing, bool>
+  --org-apache-felix-https-enable-type-hint: string
+  --org-osgi-service-http-port-secure: string
+  --org-osgi-service-http-port-secure-type-hint: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "org.apache.felix.https.nio" $orgapachefelixhttpsnio "scalar") (serialize-qp "org.apache.felix.https.nio@TypeHint" $orgapachefelixhttpsnioTypeHint "scalar") (serialize-qp "org.apache.felix.https.keystore" $orgapachefelixhttpskeystore "scalar") (serialize-qp "org.apache.felix.https.keystore@TypeHint" $orgapachefelixhttpskeystoreTypeHint "scalar") (serialize-qp "org.apache.felix.https.keystore.password" $orgapachefelixhttpskeystorepassword "scalar") (serialize-qp "org.apache.felix.https.keystore.password@TypeHint" $orgapachefelixhttpskeystorepasswordTypeHint "scalar") (serialize-qp "org.apache.felix.https.keystore.key" $orgapachefelixhttpskeystorekey "scalar") (serialize-qp "org.apache.felix.https.keystore.key@TypeHint" $orgapachefelixhttpskeystorekeyTypeHint "scalar") (serialize-qp "org.apache.felix.https.keystore.key.password" $orgapachefelixhttpskeystorekeypassword "scalar") (serialize-qp "org.apache.felix.https.keystore.key.password@TypeHint" $orgapachefelixhttpskeystorekeypasswordTypeHint "scalar") (serialize-qp "org.apache.felix.https.truststore" $orgapachefelixhttpstruststore "scalar") (serialize-qp "org.apache.felix.https.truststore@TypeHint" $orgapachefelixhttpstruststoreTypeHint "scalar") (serialize-qp "org.apache.felix.https.truststore.password" $orgapachefelixhttpstruststorepassword "scalar") (serialize-qp "org.apache.felix.https.truststore.password@TypeHint" $orgapachefelixhttpstruststorepasswordTypeHint "scalar") (serialize-qp "org.apache.felix.https.clientcertificate" $orgapachefelixhttpsclientcertificate "scalar") (serialize-qp "org.apache.felix.https.clientcertificate@TypeHint" $orgapachefelixhttpsclientcertificateTypeHint "scalar") (serialize-qp "org.apache.felix.https.enable" $orgapachefelixhttpsenable "scalar") (serialize-qp "org.apache.felix.https.enable@TypeHint" $orgapachefelixhttpsenableTypeHint "scalar") (serialize-qp "org.osgi.service.http.port.secure" $orgosgiservicehttpportsecure "scalar") (serialize-qp "org.osgi.service.http.port.secure@TypeHint" $orgosgiservicehttpportsecureTypeHint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "org.apache.felix.https.nio" $org_apache_felix_https_nio "scalar") (serialize-qp "org.apache.felix.https.nio@TypeHint" $org_apache_felix_https_nio_type_hint "scalar") (serialize-qp "org.apache.felix.https.keystore" $org_apache_felix_https_keystore "scalar") (serialize-qp "org.apache.felix.https.keystore@TypeHint" $org_apache_felix_https_keystore_type_hint "scalar") (serialize-qp "org.apache.felix.https.keystore.password" $org_apache_felix_https_keystore_password "scalar") (serialize-qp "org.apache.felix.https.keystore.password@TypeHint" $org_apache_felix_https_keystore_password_type_hint "scalar") (serialize-qp "org.apache.felix.https.keystore.key" $org_apache_felix_https_keystore_key "scalar") (serialize-qp "org.apache.felix.https.keystore.key@TypeHint" $org_apache_felix_https_keystore_key_type_hint "scalar") (serialize-qp "org.apache.felix.https.keystore.key.password" $org_apache_felix_https_keystore_key_password "scalar") (serialize-qp "org.apache.felix.https.keystore.key.password@TypeHint" $org_apache_felix_https_keystore_key_password_type_hint "scalar") (serialize-qp "org.apache.felix.https.truststore" $org_apache_felix_https_truststore "scalar") (serialize-qp "org.apache.felix.https.truststore@TypeHint" $org_apache_felix_https_truststore_type_hint "scalar") (serialize-qp "org.apache.felix.https.truststore.password" $org_apache_felix_https_truststore_password "scalar") (serialize-qp "org.apache.felix.https.truststore.password@TypeHint" $org_apache_felix_https_truststore_password_type_hint "scalar") (serialize-qp "org.apache.felix.https.clientcertificate" $org_apache_felix_https_clientcertificate "scalar") (serialize-qp "org.apache.felix.https.clientcertificate@TypeHint" $org_apache_felix_https_clientcertificate_type_hint "scalar") (serialize-qp "org.apache.felix.https.enable" $org_apache_felix_https_enable "scalar") (serialize-qp "org.apache.felix.https.enable@TypeHint" $org_apache_felix_https_enable_type_hint "scalar") (serialize-qp "org.osgi.service.http.port.secure" $org_osgi_service_http_port_secure "scalar") (serialize-qp "org.osgi.service.http.port.secure@TypeHint" $org_osgi_service_http_port_secure_type_hint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/system/config/org.apache.felix.http" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -276,7 +276,7 @@ export def "apps-system-config-orgapachefelixhttp post" [
 # POST /apps/system/config/org.apache.http.proxyconfigurator.config
 #
 # operationId: postConfigApacheHttpComponentsProxyConfiguration
-export def "apps-system-config-orgapachehttpproxyconfiguratorconfig post" [
+export def "apps-system-config-orgapachehttpproxyconfiguratorconfig create-config-apache-http-components-proxy-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,22 +285,22 @@ export def "apps-system-config-orgapachehttpproxyconfiguratorconfig post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --proxyhost: string
-  --proxyhostTypeHint: string
-  --proxyport: int
-  --proxyportTypeHint: string
-  --proxyexceptions: list
-  --proxyexceptionsTypeHint: string
-  --proxyenabled: oneof<nothing, bool>
-  --proxyenabledTypeHint: string
-  --proxyuser: string
-  --proxyuserTypeHint: string
-  --proxypassword: string
-  --proxypasswordTypeHint: string
+  --proxy-host: string
+  --proxy-host-type-hint: string
+  --proxy-port: int
+  --proxy-port-type-hint: string
+  --proxy-exceptions: list
+  --proxy-exceptions-type-hint: string
+  --proxy-enabled: oneof<nothing, bool>
+  --proxy-enabled-type-hint: string
+  --proxy-user: string
+  --proxy-user-type-hint: string
+  --proxy-password: string
+  --proxy-password-type-hint: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "proxy.host" $proxyhost "scalar") (serialize-qp "proxy.host@TypeHint" $proxyhostTypeHint "scalar") (serialize-qp "proxy.port" $proxyport "scalar") (serialize-qp "proxy.port@TypeHint" $proxyportTypeHint "scalar") (serialize-qp "proxy.exceptions" $proxyexceptions "multi") (serialize-qp "proxy.exceptions@TypeHint" $proxyexceptionsTypeHint "scalar") (serialize-qp "proxy.enabled" $proxyenabled "scalar") (serialize-qp "proxy.enabled@TypeHint" $proxyenabledTypeHint "scalar") (serialize-qp "proxy.user" $proxyuser "scalar") (serialize-qp "proxy.user@TypeHint" $proxyuserTypeHint "scalar") (serialize-qp "proxy.password" $proxypassword "scalar") (serialize-qp "proxy.password@TypeHint" $proxypasswordTypeHint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "proxy.host" $proxy_host "scalar") (serialize-qp "proxy.host@TypeHint" $proxy_host_type_hint "scalar") (serialize-qp "proxy.port" $proxy_port "scalar") (serialize-qp "proxy.port@TypeHint" $proxy_port_type_hint "scalar") (serialize-qp "proxy.exceptions" $proxy_exceptions "multi") (serialize-qp "proxy.exceptions@TypeHint" $proxy_exceptions_type_hint "scalar") (serialize-qp "proxy.enabled" $proxy_enabled "scalar") (serialize-qp "proxy.enabled@TypeHint" $proxy_enabled_type_hint "scalar") (serialize-qp "proxy.user" $proxy_user "scalar") (serialize-qp "proxy.user@TypeHint" $proxy_user_type_hint "scalar") (serialize-qp "proxy.password" $proxy_password "scalar") (serialize-qp "proxy.password@TypeHint" $proxy_password_type_hint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/system/config/org.apache.http.proxyconfigurator.config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -310,7 +310,7 @@ export def "apps-system-config-orgapachehttpproxyconfiguratorconfig post" [
 # POST /apps/system/config/org.apache.sling.jcr.davex.impl.servlets.SlingDavExServlet
 #
 # operationId: postConfigApacheSlingDavExServlet
-export def "apps-system-config-orgapacheslingjcrdaveximplservlets-sling-dav-ex-servlet post" [
+export def "apps-system-config-orgapacheslingjcrdaveximplservlets-sling-dav-ex-servlet create-config-apache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,13 +320,13 @@ export def "apps-system-config-orgapacheslingjcrdaveximplservlets-sling-dav-ex-s
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alias: string
-  --aliasTypeHint: string
-  --davcreate-absolute-uri: oneof<nothing, bool>
-  --davcreate-absolute-uriTypeHint: string
+  --alias-type-hint: string
+  --dav-create-absolute-uri: oneof<nothing, bool>
+  --dav-create-absolute-uri-type-hint: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alias" $alias "scalar") (serialize-qp "alias@TypeHint" $aliasTypeHint "scalar") (serialize-qp "dav.create-absolute-uri" $davcreate_absolute_uri "scalar") (serialize-qp "dav.create-absolute-uri@TypeHint" $davcreate_absolute_uriTypeHint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "alias" $alias "scalar") (serialize-qp "alias@TypeHint" $alias_type_hint "scalar") (serialize-qp "dav.create-absolute-uri" $dav_create_absolute_uri "scalar") (serialize-qp "dav.create-absolute-uri@TypeHint" $dav_create_absolute_uri_type_hint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/system/config/org.apache.sling.jcr.davex.impl.servlets.SlingDavExServlet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -336,7 +336,7 @@ export def "apps-system-config-orgapacheslingjcrdaveximplservlets-sling-dav-ex-s
 # POST /apps/system/config/org.apache.sling.security.impl.ReferrerFilter
 #
 # operationId: postConfigApacheSlingReferrerFilter
-export def "apps-system-config-orgapacheslingsecurityimpl-referrer-filter post" [
+export def "apps-system-config-orgapacheslingsecurityimpl-referrer-filter create-config-apache-sling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,18 +345,18 @@ export def "apps-system-config-orgapacheslingsecurityimpl-referrer-filter post" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowempty: oneof<nothing, bool>
-  --allowemptyTypeHint: string
-  --allowhosts: string
-  --allowhostsTypeHint: string
-  --allowhostsregexp: string
-  --allowhostsregexpTypeHint: string
-  --filtermethods: string
-  --filtermethodsTypeHint: string
+  --allow-empty: oneof<nothing, bool>
+  --allow-empty-type-hint: string
+  --allow-hosts: string
+  --allow-hosts-type-hint: string
+  --allow-hosts-regexp: string
+  --allow-hosts-regexp-type-hint: string
+  --filter-methods: string
+  --filter-methods-type-hint: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allow.empty" $allowempty "scalar") (serialize-qp "allow.empty@TypeHint" $allowemptyTypeHint "scalar") (serialize-qp "allow.hosts" $allowhosts "scalar") (serialize-qp "allow.hosts@TypeHint" $allowhostsTypeHint "scalar") (serialize-qp "allow.hosts.regexp" $allowhostsregexp "scalar") (serialize-qp "allow.hosts.regexp@TypeHint" $allowhostsregexpTypeHint "scalar") (serialize-qp "filter.methods" $filtermethods "scalar") (serialize-qp "filter.methods@TypeHint" $filtermethodsTypeHint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "allow.empty" $allow_empty "scalar") (serialize-qp "allow.empty@TypeHint" $allow_empty_type_hint "scalar") (serialize-qp "allow.hosts" $allow_hosts "scalar") (serialize-qp "allow.hosts@TypeHint" $allow_hosts_type_hint "scalar") (serialize-qp "allow.hosts.regexp" $allow_hosts_regexp "scalar") (serialize-qp "allow.hosts.regexp@TypeHint" $allow_hosts_regexp_type_hint "scalar") (serialize-qp "filter.methods" $filter_methods "scalar") (serialize-qp "filter.methods@TypeHint" $filter_methods_type_hint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/system/config/org.apache.sling.security.impl.ReferrerFilter" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,7 +366,7 @@ export def "apps-system-config-orgapacheslingsecurityimpl-referrer-filter post" 
 # POST /apps/system/config/org.apache.sling.servlets.get.DefaultGetServlet
 #
 # operationId: postConfigApacheSlingGetServlet
-export def "apps-system-config-orgapacheslingservletsget-default-get-servlet post" [
+export def "apps-system-config-orgapacheslingservletsget-default-get-servlet create-config-apache-sling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,18 +375,18 @@ export def "apps-system-config-orgapacheslingservletsget-default-get-servlet pos
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jsonmaximumresults: string
-  --jsonmaximumresultsTypeHint: string
-  --enablehtml: oneof<nothing, bool>
-  --enablehtmlTypeHint: string
-  --enabletxt: oneof<nothing, bool>
-  --enabletxtTypeHint: string
-  --enablexml: oneof<nothing, bool>
-  --enablexmlTypeHint: string
+  --json-maximumresults: string
+  --json-maximumresults-type-hint: string
+  --enable-html: oneof<nothing, bool>
+  --enable-html-type-hint: string
+  --enable-txt: oneof<nothing, bool>
+  --enable-txt-type-hint: string
+  --enable-xml: oneof<nothing, bool>
+  --enable-xml-type-hint: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "json.maximumresults" $jsonmaximumresults "scalar") (serialize-qp "json.maximumresults@TypeHint" $jsonmaximumresultsTypeHint "scalar") (serialize-qp "enable.html" $enablehtml "scalar") (serialize-qp "enable.html@TypeHint" $enablehtmlTypeHint "scalar") (serialize-qp "enable.txt" $enabletxt "scalar") (serialize-qp "enable.txt@TypeHint" $enabletxtTypeHint "scalar") (serialize-qp "enable.xml" $enablexml "scalar") (serialize-qp "enable.xml@TypeHint" $enablexmlTypeHint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "json.maximumresults" $json_maximumresults "scalar") (serialize-qp "json.maximumresults@TypeHint" $json_maximumresults_type_hint "scalar") (serialize-qp "enable.html" $enable_html "scalar") (serialize-qp "enable.html@TypeHint" $enable_html_type_hint "scalar") (serialize-qp "enable.txt" $enable_txt "scalar") (serialize-qp "enable.txt@TypeHint" $enable_txt_type_hint "scalar") (serialize-qp "enable.xml" $enable_xml "scalar") (serialize-qp "enable.xml@TypeHint" $enable_xml_type_hint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps/system/config/org.apache.sling.servlets.get.DefaultGetServlet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -396,8 +396,8 @@ export def "apps-system-config-orgapacheslingservletsget-default-get-servlet pos
 # POST /apps/system/config/{configNodeName}
 #
 # operationId: postConfigProperty
-export def "apps-system-config post" [
-  configNodeName: string
+export def "apps-system-config create-config-property" [
+  config_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -409,7 +409,7 @@ export def "apps-system-config post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/system/config/($configNodeName)")
+  let full_url = (build-url $base ({config_node_name: $config_node_name} | format pattern "/apps/system/config/{config_node_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,7 +418,7 @@ export def "apps-system-config post" [
 # GET /bin/querybuilder.json
 #
 # operationId: getQuery
-export def "bin-querybuilderjson get" [
+export def "bin-querybuilderjson get-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,13 +428,13 @@ export def "bin-querybuilderjson get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --path: string
-  --plimit: float
+  --p-limit: float
   --1-property: string
-  --1-propertyvalue: string
+  --1-property-value: string
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $plimit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_propertyvalue "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $p_limit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_property_value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bin/querybuilder.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -444,7 +444,7 @@ export def "bin-querybuilderjson get" [
 # POST /bin/querybuilder.json
 #
 # operationId: postQuery
-export def "bin-querybuilderjson post" [
+export def "bin-querybuilderjson create-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,13 +454,13 @@ export def "bin-querybuilderjson post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --path: string
-  --plimit: float
+  --p-limit: float
   --1-property: string
-  --1-propertyvalue: string
+  --1-property-value: string
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $plimit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_propertyvalue "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $p_limit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_property_value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bin/querybuilder.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -470,7 +470,7 @@ export def "bin-querybuilderjson post" [
 # POST /crx/explorer/ui/setpassword.jsp
 #
 # operationId: postSetPassword
-export def "crx-explorer-ui-setpasswordjsp post" [
+export def "crx-explorer-ui-setpasswordjsp create-set-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -495,7 +495,7 @@ export def "crx-explorer-ui-setpasswordjsp post" [
 # GET /crx/packmgr/installstatus.jsp
 #
 # operationId: getInstallStatus
-export def "crx-packmgr-installstatusjsp get" [
+export def "crx-packmgr-installstatusjsp get-install-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,7 +516,7 @@ export def "crx-packmgr-installstatusjsp get" [
 # POST /crx/packmgr/service.jsp
 #
 # operationId: postPackageService
-export def "crx-packmgr-servicejsp post" [
+export def "crx-packmgr-servicejsp create-package-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "crx-packmgr-servicejsp post" [
 # POST /crx/packmgr/service/.json/{path}
 #
 # operationId: postPackageServiceJson
-export def "crx-packmgr-service-json post" [
+export def "crx-packmgr-service-json create-package" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,9 +550,9 @@ export def "crx-packmgr-service-json post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --cmd: string
-  --groupName: string
-  --packageName: string
-  --packageVersion: string
+  --group-name: string
+  --package-name: string
+  --package-version: string
   --charset: string
   --force: oneof<nothing, bool>
   --recursive: oneof<nothing, bool>
@@ -561,9 +561,9 @@ export def "crx-packmgr-service-json post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "groupName" $groupName "scalar") (serialize-qp "packageName" $packageName "scalar") (serialize-qp "packageVersion" $packageVersion "scalar") (serialize-qp "_charset_" $charset "scalar") (serialize-qp "force" $force "scalar") (serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crx/packmgr/service/.json/($path)" $qp)
-  let body = {package: $package} | compact
+  let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "groupName" $group_name "scalar") (serialize-qp "packageName" $package_name "scalar") (serialize-qp "packageVersion" $package_version "scalar") (serialize-qp "_charset_" $charset "scalar") (serialize-qp "force" $force "scalar") (serialize-qp "recursive" $recursive "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({path: $path} | format pattern "/crx/packmgr/service/.json/{path}") $qp)
+  let body = {"package": $package} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -573,7 +573,7 @@ export def "crx-packmgr-service-json post" [
 # GET /crx/packmgr/service/script.html
 #
 # operationId: getPackageManagerServlet
-export def "crx-packmgr-service-scripthtml get" [
+export def "crx-packmgr-service-scripthtml get-package-manager-servlet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "crx-packmgr-service-scripthtml get" [
 # POST /crx/packmgr/update.jsp
 #
 # operationId: postPackageUpdate
-export def "crx-packmgr-updatejsp post" [
+export def "crx-packmgr-updatejsp create-package-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,8 +603,8 @@ export def "crx-packmgr-updatejsp post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --groupName: string
-  --packageName: string
+  --group-name: string
+  --package-name: string
   --version: string
   --path: string
   --filter: string
@@ -612,7 +612,7 @@ export def "crx-packmgr-updatejsp post" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupName" $groupName "scalar") (serialize-qp "packageName" $packageName "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "_charset_" $charset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupName" $group_name "scalar") (serialize-qp "packageName" $package_name "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "_charset_" $charset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crx/packmgr/update.jsp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -622,7 +622,7 @@ export def "crx-packmgr-updatejsp post" [
 # GET /crx/server/crx.default/jcr:root/.1.json
 #
 # operationId: getCrxdeStatus
-export def "crx-server-crxdefault-jcr-root-1json get" [
+export def "crx-server-crxdefault-jcr-root-1json get-crxde-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "etc-packages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/etc/packages/($group)/($name)-($version).zip")
+  let full_url = (build-url $base ({group: $group, name: $name, version: $version} | format pattern "/etc/packages/{group}/{name}-{version}.zip"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -667,7 +667,7 @@ export def "etc-packages get" [
 # GET /etc/packages/{group}/{name}-{version}.zip/jcr:content/vlt:definition/filter.tidy.2.json
 #
 # operationId: getPackageFilter
-export def "etc-packages-jcr-content-vlt-definition-filtertidy2json get" [
+export def "etc-packages-jcr-content-vlt-definition-filtertidy2json get-package-filter" [
   group: string
   name: string
   version: string
@@ -682,7 +682,7 @@ export def "etc-packages-jcr-content-vlt-definition-filtertidy2json get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/etc/packages/($group)/($name)-($version).zip/jcr:content/vlt:definition/filter.tidy.2.json")
+  let full_url = (build-url $base ({group: $group, name: $name, version: $version} | format pattern "/etc/packages/{group}/{name}-{version}.zip/jcr:content/vlt:definition/filter.tidy.2.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -704,7 +704,7 @@ export def "etc-replication-agents-runmode-1json get" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/etc/replication/agents.($runmode).-1.json")
+  let full_url = (build-url $base ({runmode: $runmode} | format pattern "/etc/replication/agents.{runmode}.-1.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -727,7 +727,7 @@ export def "etc-replication-agents-runmode delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/etc/replication/agents.($runmode)/($name)")
+  let full_url = (build-url $base ({runmode: $runmode, name: $name} | format pattern "/etc/replication/agents.{runmode}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -750,7 +750,7 @@ export def "etc-replication-agents-runmode get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/etc/replication/agents.($runmode)/($name)")
+  let full_url = (build-url $base ({runmode: $runmode, name: $name} | format pattern "/etc/replication/agents.{runmode}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -759,7 +759,7 @@ export def "etc-replication-agents-runmode get" [
 # POST /etc/replication/agents.{runmode}/{name}
 #
 # operationId: postAgent
-export def "etc-replication-agents-runmode post" [
+export def "etc-replication-agents-runmode create" [
   runmode: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -770,61 +770,61 @@ export def "etc-replication-agents-runmode post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jcr:contentcq:distribute: oneof<nothing, bool>
-  --jcr:contentcq:distributeTypeHint: string
-  --jcr:contentcq:name: string
-  --jcr:contentcq:template: string
-  --jcr:contentenabled: oneof<nothing, bool>
-  --jcr:contentjcr:description: string
-  --jcr:contentjcr:lastModified: string
-  --jcr:contentjcr:lastModifiedBy: string
-  --jcr:contentjcr:mixinTypes: string
-  --jcr:contentjcr:title: string
-  --jcr:contentlogLevel: string
-  --jcr:contentnoStatusUpdate: oneof<nothing, bool>
-  --jcr:contentnoVersioning: oneof<nothing, bool>
-  --jcr:contentprotocolConnectTimeout: float
-  --jcr:contentprotocolHTTPConnectionClosed: oneof<nothing, bool>
-  --jcr:contentprotocolHTTPExpired: string
-  --jcr:contentprotocolHTTPHeaders: list
-  --jcr:contentprotocolHTTPHeadersTypeHint: string
-  --jcr:contentprotocolHTTPMethod: string
-  --jcr:contentprotocolHTTPSRelaxed: oneof<nothing, bool>
-  --jcr:contentprotocolInterface: string
-  --jcr:contentprotocolSocketTimeout: float
-  --jcr:contentprotocolVersion: string
-  --jcr:contentproxyNTLMDomain: string
-  --jcr:contentproxyNTLMHost: string
-  --jcr:contentproxyHost: string
-  --jcr:contentproxyPassword: string
-  --jcr:contentproxyPort: float
-  --jcr:contentproxyUser: string
-  --jcr:contentqueueBatchMaxSize: float
-  --jcr:contentqueueBatchMode: string
-  --jcr:contentqueueBatchWaitTime: float
-  --jcr:contentretryDelay: string
-  --jcr:contentreverseReplication: oneof<nothing, bool>
-  --jcr:contentserializationType: string
-  --jcr:contentsling:resourceType: string
-  --jcr:contentssl: string
-  --jcr:contenttransportNTLMDomain: string
-  --jcr:contenttransportNTLMHost: string
-  --jcr:contenttransportPassword: string
-  --jcr:contenttransportUri: string
-  --jcr:contenttransportUser: string
-  --jcr:contenttriggerDistribute: oneof<nothing, bool>
-  --jcr:contenttriggerModified: oneof<nothing, bool>
-  --jcr:contenttriggerOnOffTime: oneof<nothing, bool>
-  --jcr:contenttriggerReceive: oneof<nothing, bool>
-  --jcr:contenttriggerSpecific: oneof<nothing, bool>
-  --jcr:contentuserId: string
-  --jcr:primaryType: string
-  --:operation: string
+  --jcr-content-cq-distribute: oneof<nothing, bool>
+  --jcr-content-cq-distribute-type-hint: string
+  --jcr-content-cq-name: string
+  --jcr-content-cq-template: string
+  --jcr-content-enabled: oneof<nothing, bool>
+  --jcr-content-jcr-description: string
+  --jcr-content-jcr-last-modified: string
+  --jcr-content-jcr-last-modified-by: string
+  --jcr-content-jcr-mixin-types: string
+  --jcr-content-jcr-title: string
+  --jcr-content-log-level: string
+  --jcr-content-no-status-update: oneof<nothing, bool>
+  --jcr-content-no-versioning: oneof<nothing, bool>
+  --jcr-content-protocol-connect-timeout: float
+  --jcr-content-protocol-http-connection-closed: oneof<nothing, bool>
+  --jcr-content-protocol-http-expired: string
+  --jcr-content-protocol-http-headers: list
+  --jcr-content-protocol-http-headers-type-hint: string
+  --jcr-content-protocol-http-method: string
+  --jcr-content-protocol-https-relaxed: oneof<nothing, bool>
+  --jcr-content-protocol-interface: string
+  --jcr-content-protocol-socket-timeout: float
+  --jcr-content-protocol-version: string
+  --jcr-content-proxy-ntlm-domain: string
+  --jcr-content-proxy-ntlm-host: string
+  --jcr-content-proxy-host: string
+  --jcr-content-proxy-password: string
+  --jcr-content-proxy-port: float
+  --jcr-content-proxy-user: string
+  --jcr-content-queue-batch-max-size: float
+  --jcr-content-queue-batch-mode: string
+  --jcr-content-queue-batch-wait-time: float
+  --jcr-content-retry-delay: string
+  --jcr-content-reverse-replication: oneof<nothing, bool>
+  --jcr-content-serialization-type: string
+  --jcr-content-sling-resource-type: string
+  --jcr-content-ssl: string
+  --jcr-content-transport-ntlm-domain: string
+  --jcr-content-transport-ntlm-host: string
+  --jcr-content-transport-password: string
+  --jcr-content-transport-uri: string
+  --jcr-content-transport-user: string
+  --jcr-content-trigger-distribute: oneof<nothing, bool>
+  --jcr-content-trigger-modified: oneof<nothing, bool>
+  --jcr-content-trigger-on-off-time: oneof<nothing, bool>
+  --jcr-content-trigger-receive: oneof<nothing, bool>
+  --jcr-content-trigger-specific: oneof<nothing, bool>
+  --jcr-content-user-id: string
+  --jcr-primary-type: string
+  --operation: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jcr:content/cq:distribute" $jcr:contentcq:distribute "scalar") (serialize-qp "jcr:content/cq:distribute@TypeHint" $jcr:contentcq:distributeTypeHint "scalar") (serialize-qp "jcr:content/cq:name" $jcr:contentcq:name "scalar") (serialize-qp "jcr:content/cq:template" $jcr:contentcq:template "scalar") (serialize-qp "jcr:content/enabled" $jcr:contentenabled "scalar") (serialize-qp "jcr:content/jcr:description" $jcr:contentjcr:description "scalar") (serialize-qp "jcr:content/jcr:lastModified" $jcr:contentjcr:lastModified "scalar") (serialize-qp "jcr:content/jcr:lastModifiedBy" $jcr:contentjcr:lastModifiedBy "scalar") (serialize-qp "jcr:content/jcr:mixinTypes" $jcr:contentjcr:mixinTypes "scalar") (serialize-qp "jcr:content/jcr:title" $jcr:contentjcr:title "scalar") (serialize-qp "jcr:content/logLevel" $jcr:contentlogLevel "scalar") (serialize-qp "jcr:content/noStatusUpdate" $jcr:contentnoStatusUpdate "scalar") (serialize-qp "jcr:content/noVersioning" $jcr:contentnoVersioning "scalar") (serialize-qp "jcr:content/protocolConnectTimeout" $jcr:contentprotocolConnectTimeout "scalar") (serialize-qp "jcr:content/protocolHTTPConnectionClosed" $jcr:contentprotocolHTTPConnectionClosed "scalar") (serialize-qp "jcr:content/protocolHTTPExpired" $jcr:contentprotocolHTTPExpired "scalar") (serialize-qp "jcr:content/protocolHTTPHeaders" $jcr:contentprotocolHTTPHeaders "multi") (serialize-qp "jcr:content/protocolHTTPHeaders@TypeHint" $jcr:contentprotocolHTTPHeadersTypeHint "scalar") (serialize-qp "jcr:content/protocolHTTPMethod" $jcr:contentprotocolHTTPMethod "scalar") (serialize-qp "jcr:content/protocolHTTPSRelaxed" $jcr:contentprotocolHTTPSRelaxed "scalar") (serialize-qp "jcr:content/protocolInterface" $jcr:contentprotocolInterface "scalar") (serialize-qp "jcr:content/protocolSocketTimeout" $jcr:contentprotocolSocketTimeout "scalar") (serialize-qp "jcr:content/protocolVersion" $jcr:contentprotocolVersion "scalar") (serialize-qp "jcr:content/proxyNTLMDomain" $jcr:contentproxyNTLMDomain "scalar") (serialize-qp "jcr:content/proxyNTLMHost" $jcr:contentproxyNTLMHost "scalar") (serialize-qp "jcr:content/proxyHost" $jcr:contentproxyHost "scalar") (serialize-qp "jcr:content/proxyPassword" $jcr:contentproxyPassword "scalar") (serialize-qp "jcr:content/proxyPort" $jcr:contentproxyPort "scalar") (serialize-qp "jcr:content/proxyUser" $jcr:contentproxyUser "scalar") (serialize-qp "jcr:content/queueBatchMaxSize" $jcr:contentqueueBatchMaxSize "scalar") (serialize-qp "jcr:content/queueBatchMode" $jcr:contentqueueBatchMode "scalar") (serialize-qp "jcr:content/queueBatchWaitTime" $jcr:contentqueueBatchWaitTime "scalar") (serialize-qp "jcr:content/retryDelay" $jcr:contentretryDelay "scalar") (serialize-qp "jcr:content/reverseReplication" $jcr:contentreverseReplication "scalar") (serialize-qp "jcr:content/serializationType" $jcr:contentserializationType "scalar") (serialize-qp "jcr:content/sling:resourceType" $jcr:contentsling:resourceType "scalar") (serialize-qp "jcr:content/ssl" $jcr:contentssl "scalar") (serialize-qp "jcr:content/transportNTLMDomain" $jcr:contenttransportNTLMDomain "scalar") (serialize-qp "jcr:content/transportNTLMHost" $jcr:contenttransportNTLMHost "scalar") (serialize-qp "jcr:content/transportPassword" $jcr:contenttransportPassword "scalar") (serialize-qp "jcr:content/transportUri" $jcr:contenttransportUri "scalar") (serialize-qp "jcr:content/transportUser" $jcr:contenttransportUser "scalar") (serialize-qp "jcr:content/triggerDistribute" $jcr:contenttriggerDistribute "scalar") (serialize-qp "jcr:content/triggerModified" $jcr:contenttriggerModified "scalar") (serialize-qp "jcr:content/triggerOnOffTime" $jcr:contenttriggerOnOffTime "scalar") (serialize-qp "jcr:content/triggerReceive" $jcr:contenttriggerReceive "scalar") (serialize-qp "jcr:content/triggerSpecific" $jcr:contenttriggerSpecific "scalar") (serialize-qp "jcr:content/userId" $jcr:contentuserId "scalar") (serialize-qp "jcr:primaryType" $jcr:primaryType "scalar") (serialize-qp ":operation" $:operation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/etc/replication/agents.($runmode)/($name)" $qp)
+  let qp = [(serialize-qp "jcr:content/cq:distribute" $jcr_content_cq_distribute "scalar") (serialize-qp "jcr:content/cq:distribute@TypeHint" $jcr_content_cq_distribute_type_hint "scalar") (serialize-qp "jcr:content/cq:name" $jcr_content_cq_name "scalar") (serialize-qp "jcr:content/cq:template" $jcr_content_cq_template "scalar") (serialize-qp "jcr:content/enabled" $jcr_content_enabled "scalar") (serialize-qp "jcr:content/jcr:description" $jcr_content_jcr_description "scalar") (serialize-qp "jcr:content/jcr:lastModified" $jcr_content_jcr_last_modified "scalar") (serialize-qp "jcr:content/jcr:lastModifiedBy" $jcr_content_jcr_last_modified_by "scalar") (serialize-qp "jcr:content/jcr:mixinTypes" $jcr_content_jcr_mixin_types "scalar") (serialize-qp "jcr:content/jcr:title" $jcr_content_jcr_title "scalar") (serialize-qp "jcr:content/logLevel" $jcr_content_log_level "scalar") (serialize-qp "jcr:content/noStatusUpdate" $jcr_content_no_status_update "scalar") (serialize-qp "jcr:content/noVersioning" $jcr_content_no_versioning "scalar") (serialize-qp "jcr:content/protocolConnectTimeout" $jcr_content_protocol_connect_timeout "scalar") (serialize-qp "jcr:content/protocolHTTPConnectionClosed" $jcr_content_protocol_http_connection_closed "scalar") (serialize-qp "jcr:content/protocolHTTPExpired" $jcr_content_protocol_http_expired "scalar") (serialize-qp "jcr:content/protocolHTTPHeaders" $jcr_content_protocol_http_headers "multi") (serialize-qp "jcr:content/protocolHTTPHeaders@TypeHint" $jcr_content_protocol_http_headers_type_hint "scalar") (serialize-qp "jcr:content/protocolHTTPMethod" $jcr_content_protocol_http_method "scalar") (serialize-qp "jcr:content/protocolHTTPSRelaxed" $jcr_content_protocol_https_relaxed "scalar") (serialize-qp "jcr:content/protocolInterface" $jcr_content_protocol_interface "scalar") (serialize-qp "jcr:content/protocolSocketTimeout" $jcr_content_protocol_socket_timeout "scalar") (serialize-qp "jcr:content/protocolVersion" $jcr_content_protocol_version "scalar") (serialize-qp "jcr:content/proxyNTLMDomain" $jcr_content_proxy_ntlm_domain "scalar") (serialize-qp "jcr:content/proxyNTLMHost" $jcr_content_proxy_ntlm_host "scalar") (serialize-qp "jcr:content/proxyHost" $jcr_content_proxy_host "scalar") (serialize-qp "jcr:content/proxyPassword" $jcr_content_proxy_password "scalar") (serialize-qp "jcr:content/proxyPort" $jcr_content_proxy_port "scalar") (serialize-qp "jcr:content/proxyUser" $jcr_content_proxy_user "scalar") (serialize-qp "jcr:content/queueBatchMaxSize" $jcr_content_queue_batch_max_size "scalar") (serialize-qp "jcr:content/queueBatchMode" $jcr_content_queue_batch_mode "scalar") (serialize-qp "jcr:content/queueBatchWaitTime" $jcr_content_queue_batch_wait_time "scalar") (serialize-qp "jcr:content/retryDelay" $jcr_content_retry_delay "scalar") (serialize-qp "jcr:content/reverseReplication" $jcr_content_reverse_replication "scalar") (serialize-qp "jcr:content/serializationType" $jcr_content_serialization_type "scalar") (serialize-qp "jcr:content/sling:resourceType" $jcr_content_sling_resource_type "scalar") (serialize-qp "jcr:content/ssl" $jcr_content_ssl "scalar") (serialize-qp "jcr:content/transportNTLMDomain" $jcr_content_transport_ntlm_domain "scalar") (serialize-qp "jcr:content/transportNTLMHost" $jcr_content_transport_ntlm_host "scalar") (serialize-qp "jcr:content/transportPassword" $jcr_content_transport_password "scalar") (serialize-qp "jcr:content/transportUri" $jcr_content_transport_uri "scalar") (serialize-qp "jcr:content/transportUser" $jcr_content_transport_user "scalar") (serialize-qp "jcr:content/triggerDistribute" $jcr_content_trigger_distribute "scalar") (serialize-qp "jcr:content/triggerModified" $jcr_content_trigger_modified "scalar") (serialize-qp "jcr:content/triggerOnOffTime" $jcr_content_trigger_on_off_time "scalar") (serialize-qp "jcr:content/triggerReceive" $jcr_content_trigger_receive "scalar") (serialize-qp "jcr:content/triggerSpecific" $jcr_content_trigger_specific "scalar") (serialize-qp "jcr:content/userId" $jcr_content_user_id "scalar") (serialize-qp "jcr:primaryType" $jcr_primary_type "scalar") (serialize-qp ":operation" $operation "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({runmode: $runmode, name: $name} | format pattern "/etc/replication/agents.{runmode}/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -833,7 +833,7 @@ export def "etc-replication-agents-runmode post" [
 # POST /etc/truststore
 #
 # operationId: postTruststorePKCS12
-export def "etc-truststore post" [
+export def "etc-truststore create-truststore-pkcs12" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,13 +842,13 @@ export def "etc-truststore post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --truststorep12: string # format: binary
+  --truststore-p12: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/etc/truststore")
-  let body = {truststore.p12: $truststorep12} | compact
+  let body = {"truststore.p12": $truststore_p12} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -879,7 +879,7 @@ export def "etc-truststore-truststorep12 get" [
 # GET /libs/granite/core/content/login.html
 #
 # operationId: getLoginPage
-export def "libs-granite-core-content-loginhtml get" [
+export def "libs-granite-core-content-loginhtml get-login-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,7 +900,7 @@ export def "libs-granite-core-content-loginhtml get" [
 # POST /libs/granite/security/post/authorizables
 #
 # operationId: postAuthorizables
-export def "libs-granite-security-post-authorizables post" [
+export def "libs-granite-security-post-authorizables create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -909,16 +909,16 @@ export def "libs-granite-security-post-authorizables post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authorizableId: string
-  --intermediatePath: string
-  --createUser: string
-  --createGroup: string
-  --rep:password: string
-  --profilegivenName: string
+  --authorizable-id: string
+  --intermediate-path: string
+  --create-user: string
+  --create-group: string
+  --rep-password: string
+  --profile-given-name: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authorizableId" $authorizableId "scalar") (serialize-qp "intermediatePath" $intermediatePath "scalar") (serialize-qp "createUser" $createUser "scalar") (serialize-qp "createGroup" $createGroup "scalar") (serialize-qp "rep:password" $rep:password "scalar") (serialize-qp "profile/givenName" $profilegivenName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "authorizableId" $authorizable_id "scalar") (serialize-qp "intermediatePath" $intermediate_path "scalar") (serialize-qp "createUser" $create_user "scalar") (serialize-qp "createGroup" $create_group "scalar") (serialize-qp "rep:password" $rep_password "scalar") (serialize-qp "profile/givenName" $profile_given_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/libs/granite/security/post/authorizables" $qp)
   let accept_val = "text/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -937,21 +937,21 @@ export def "libs-granite-security-post-ssl-setuphtml sslSetup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --keystorePassword: string
-  --keystorePasswordConfirm: string
-  --truststorePassword: string
-  --truststorePasswordConfirm: string
-  --httpsHostname: string
-  --httpsPort: string
-  --certificateFile: string # format: binary
-  --privatekeyFile: string # format: binary
+  --keystore-password: string
+  --keystore-password-confirm: string
+  --truststore-password: string
+  --truststore-password-confirm: string
+  --https-hostname: string
+  --https-port: string
+  --certificate-file: string # format: binary
+  --privatekey-file: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keystorePassword" $keystorePassword "scalar") (serialize-qp "keystorePasswordConfirm" $keystorePasswordConfirm "scalar") (serialize-qp "truststorePassword" $truststorePassword "scalar") (serialize-qp "truststorePasswordConfirm" $truststorePasswordConfirm "scalar") (serialize-qp "httpsHostname" $httpsHostname "scalar") (serialize-qp "httpsPort" $httpsPort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "keystorePassword" $keystore_password "scalar") (serialize-qp "keystorePasswordConfirm" $keystore_password_confirm "scalar") (serialize-qp "truststorePassword" $truststore_password "scalar") (serialize-qp "truststorePasswordConfirm" $truststore_password_confirm "scalar") (serialize-qp "httpsHostname" $https_hostname "scalar") (serialize-qp "httpsPort" $https_port "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/libs/granite/security/post/sslSetup.html" $qp)
-  let body = {certificateFile: $certificateFile, privatekeyFile: $privatekeyFile} | compact
+  let body = {"certificateFile": $certificate_file, "privatekeyFile": $privatekey_file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -961,7 +961,7 @@ export def "libs-granite-security-post-ssl-setuphtml sslSetup" [
 # POST /libs/granite/security/post/truststore
 #
 # operationId: postTruststore
-export def "libs-granite-security-post-truststore post" [
+export def "libs-granite-security-post-truststore create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,19 +970,19 @@ export def "libs-granite-security-post-truststore post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --:operation: string
-  --newPassword: string
-  --rePassword: string
-  --keyStoreType: string
-  --removeAlias: string
+  --operation: string
+  --new-password: string
+  --re-password: string
+  --key-store-type: string
+  --remove-alias: string
   --certificate: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp ":operation" $:operation "scalar") (serialize-qp "newPassword" $newPassword "scalar") (serialize-qp "rePassword" $rePassword "scalar") (serialize-qp "keyStoreType" $keyStoreType "scalar") (serialize-qp "removeAlias" $removeAlias "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp ":operation" $operation "scalar") (serialize-qp "newPassword" $new_password "scalar") (serialize-qp "rePassword" $re_password "scalar") (serialize-qp "keyStoreType" $key_store_type "scalar") (serialize-qp "removeAlias" $remove_alias "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/libs/granite/security/post/truststore" $qp)
-  let body = {certificate: $certificate} | compact
+  let body = {"certificate": $certificate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -992,7 +992,7 @@ export def "libs-granite-security-post-truststore post" [
 # GET /libs/granite/security/truststore.json
 #
 # operationId: getTruststoreInfo
-export def "libs-granite-security-truststorejson get" [
+export def "libs-granite-security-truststorejson get-truststore-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,7 +1013,7 @@ export def "libs-granite-security-truststorejson get" [
 # POST /libs/replication/treeactivation.html
 #
 # operationId: postTreeActivation
-export def "libs-replication-treeactivationhtml post" [
+export def "libs-replication-treeactivationhtml create-tree-activation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,7 +1039,7 @@ export def "libs-replication-treeactivationhtml post" [
 # POST /system/console/bundles/{name}
 #
 # operationId: postBundle
-export def "system-console-bundles post" [
+export def "system-console-bundles create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1054,7 +1054,7 @@ export def "system-console-bundles post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/system/console/bundles/($name)" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/system/console/bundles/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1063,7 +1063,7 @@ export def "system-console-bundles post" [
 # GET /system/console/bundles/{name}.json
 #
 # operationId: getBundleInfo
-export def "system-console-bundles get" [
+export def "system-console-bundles get-bundle-info" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1076,7 +1076,7 @@ export def "system-console-bundles get" [
 ]: nothing -> record<data: table<category: string, fragment: bool, id: int, name: string, props: list, state: string, stateRaw: int, symbolicName: string, version: string>, s: list<int>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/system/console/bundles/($name).json")
+  let full_url = (build-url $base ({name: $name} | format pattern "/system/console/bundles/{name}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1106,7 +1106,7 @@ export def "system-console-config-mgr get" [
 # POST /system/console/configMgr/com.adobe.granite.auth.saml.SamlAuthenticationHandler
 #
 # operationId: postSamlConfiguration
-export def "system-console-config-mgr-comadobegraniteauthsaml-saml-authentication-handler post" [
+export def "system-console-config-mgr-comadobegraniteauthsaml-saml-authentication-handler create-saml-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1121,34 +1121,34 @@ export def "system-console-config-mgr-comadobegraniteauthsaml-saml-authenticatio
   --action: string
   --location: string
   --path: list
-  --serviceranking: int
-  --idpUrl: string
-  --idpCertAlias: string
-  --idpHttpRedirect: oneof<nothing, bool>
-  --serviceProviderEntityId: string
-  --assertionConsumerServiceURL: string
-  --spPrivateKeyAlias: string
-  --keyStorePassword: string
-  --defaultRedirectUrl: string
-  --userIDAttribute: string
-  --useEncryption: oneof<nothing, bool>
-  --createUser: oneof<nothing, bool>
-  --addGroupMemberships: oneof<nothing, bool>
-  --groupMembershipAttribute: string
-  --defaultGroups: list
-  --nameIdFormat: string
-  --synchronizeAttributes: list
-  --handleLogout: oneof<nothing, bool>
-  --logoutUrl: string
-  --clockTolerance: int
-  --digestMethod: string
-  --signatureMethod: string
-  --userIntermediatePath: string
+  --service-ranking: int
+  --idp-url: string
+  --idp-cert-alias: string
+  --idp-http-redirect: oneof<nothing, bool>
+  --service-provider-entity-id: string
+  --assertion-consumer-service-url: string
+  --sp-private-key-alias: string
+  --key-store-password: string
+  --default-redirect-url: string
+  --user-id-attribute: string
+  --use-encryption: oneof<nothing, bool>
+  --create-user: oneof<nothing, bool>
+  --add-group-memberships: oneof<nothing, bool>
+  --group-membership-attribute: string
+  --default-groups: list
+  --name-id-format: string
+  --synchronize-attributes: list
+  --handle-logout: oneof<nothing, bool>
+  --logout-url: string
+  --clock-tolerance: int
+  --digest-method: string
+  --signature-method: string
+  --user-intermediate-path: string
   --propertylist: list
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "post" $post "scalar") (serialize-qp "apply" $apply "scalar") (serialize-qp "delete" $delete "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "$location" $location "scalar") (serialize-qp "path" $path "multi") (serialize-qp "service.ranking" $serviceranking "scalar") (serialize-qp "idpUrl" $idpUrl "scalar") (serialize-qp "idpCertAlias" $idpCertAlias "scalar") (serialize-qp "idpHttpRedirect" $idpHttpRedirect "scalar") (serialize-qp "serviceProviderEntityId" $serviceProviderEntityId "scalar") (serialize-qp "assertionConsumerServiceURL" $assertionConsumerServiceURL "scalar") (serialize-qp "spPrivateKeyAlias" $spPrivateKeyAlias "scalar") (serialize-qp "keyStorePassword" $keyStorePassword "scalar") (serialize-qp "defaultRedirectUrl" $defaultRedirectUrl "scalar") (serialize-qp "userIDAttribute" $userIDAttribute "scalar") (serialize-qp "useEncryption" $useEncryption "scalar") (serialize-qp "createUser" $createUser "scalar") (serialize-qp "addGroupMemberships" $addGroupMemberships "scalar") (serialize-qp "groupMembershipAttribute" $groupMembershipAttribute "scalar") (serialize-qp "defaultGroups" $defaultGroups "multi") (serialize-qp "nameIdFormat" $nameIdFormat "scalar") (serialize-qp "synchronizeAttributes" $synchronizeAttributes "multi") (serialize-qp "handleLogout" $handleLogout "scalar") (serialize-qp "logoutUrl" $logoutUrl "scalar") (serialize-qp "clockTolerance" $clockTolerance "scalar") (serialize-qp "digestMethod" $digestMethod "scalar") (serialize-qp "signatureMethod" $signatureMethod "scalar") (serialize-qp "userIntermediatePath" $userIntermediatePath "scalar") (serialize-qp "propertylist" $propertylist "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "post" $post "scalar") (serialize-qp "apply" $apply "scalar") (serialize-qp "delete" $delete "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "$location" $location "scalar") (serialize-qp "path" $path "multi") (serialize-qp "service.ranking" $service_ranking "scalar") (serialize-qp "idpUrl" $idp_url "scalar") (serialize-qp "idpCertAlias" $idp_cert_alias "scalar") (serialize-qp "idpHttpRedirect" $idp_http_redirect "scalar") (serialize-qp "serviceProviderEntityId" $service_provider_entity_id "scalar") (serialize-qp "assertionConsumerServiceURL" $assertion_consumer_service_url "scalar") (serialize-qp "spPrivateKeyAlias" $sp_private_key_alias "scalar") (serialize-qp "keyStorePassword" $key_store_password "scalar") (serialize-qp "defaultRedirectUrl" $default_redirect_url "scalar") (serialize-qp "userIDAttribute" $user_id_attribute "scalar") (serialize-qp "useEncryption" $use_encryption "scalar") (serialize-qp "createUser" $create_user "scalar") (serialize-qp "addGroupMemberships" $add_group_memberships "scalar") (serialize-qp "groupMembershipAttribute" $group_membership_attribute "scalar") (serialize-qp "defaultGroups" $default_groups "multi") (serialize-qp "nameIdFormat" $name_id_format "scalar") (serialize-qp "synchronizeAttributes" $synchronize_attributes "multi") (serialize-qp "handleLogout" $handle_logout "scalar") (serialize-qp "logoutUrl" $logout_url "scalar") (serialize-qp "clockTolerance" $clock_tolerance "scalar") (serialize-qp "digestMethod" $digest_method "scalar") (serialize-qp "signatureMethod" $signature_method "scalar") (serialize-qp "userIntermediatePath" $user_intermediate_path "scalar") (serialize-qp "propertylist" $propertylist "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/system/console/configMgr/com.adobe.granite.auth.saml.SamlAuthenticationHandler" $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1158,7 +1158,7 @@ export def "system-console-config-mgr-comadobegraniteauthsaml-saml-authenticatio
 # POST /system/console/jmx/com.adobe.granite:type=Repository/op/{action}
 #
 # operationId: postJmxRepository
-export def "system-console-jmx-comadobegranite-type-repository-op post" [
+export def "system-console-jmx-comadobegranite-type-repository-op create" [
   action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1171,7 +1171,7 @@ export def "system-console-jmx-comadobegranite-type-repository-op post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/system/console/jmx/com.adobe.granite:type=Repository/op/($action)")
+  let full_url = (build-url $base ({action: $action} | format pattern "/system/console/jmx/com.adobe.granite:type=Repository/op/{action}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1180,7 +1180,7 @@ export def "system-console-jmx-comadobegranite-type-repository-op post" [
 # GET /system/console/status-productinfo.json
 #
 # operationId: getAemProductInfo
-export def "system-console-status-productinfojson get" [
+export def "system-console-status-productinfojson get-aem-product-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,7 +1201,7 @@ export def "system-console-status-productinfojson get" [
 # GET /system/health
 #
 # operationId: getAemHealthCheck
-export def "system-health get" [
+export def "system-health get-aem-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1211,11 +1211,11 @@ export def "system-health get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: string
-  --combineTagsOr: oneof<nothing, bool>
+  --combine-tags-or: oneof<nothing, bool>
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "combineTagsOr" $combineTagsOr "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "combineTagsOr" $combine_tags_or "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/system/health" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1225,9 +1225,9 @@ export def "system-health get" [
 # POST /{intermediatePath}/{authorizableId}.ks.html
 #
 # operationId: postAuthorizableKeystore
-export def "sling post-by-intermediatePath-authorizableId" [
-  intermediatePath: string
-  authorizableId: string
+export def "sling create-authorizable-keystore" [
+  intermediate_path: string
+  authorizable_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1236,25 +1236,25 @@ export def "sling post-by-intermediatePath-authorizableId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --:operation: string
-  --currentPassword: string
-  --newPassword: string
-  --rePassword: string
-  --keyPassword: string
-  --keyStorePass: string
+  --operation: string
+  --current-password: string
+  --new-password: string
+  --re-password: string
+  --key-password: string
+  --key-store-pass: string
   --alias: string
-  --newAlias: string
-  --removeAlias: string
+  --new-alias: string
+  --remove-alias: string
   --cert-chain: string # format: binary
-  --keyStore: string # format: binary
+  --key-store: string # format: binary
   --pk: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp ":operation" $:operation "scalar") (serialize-qp "currentPassword" $currentPassword "scalar") (serialize-qp "newPassword" $newPassword "scalar") (serialize-qp "rePassword" $rePassword "scalar") (serialize-qp "keyPassword" $keyPassword "scalar") (serialize-qp "keyStorePass" $keyStorePass "scalar") (serialize-qp "alias" $alias "scalar") (serialize-qp "newAlias" $newAlias "scalar") (serialize-qp "removeAlias" $removeAlias "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($intermediatePath)/($authorizableId).ks.html" $qp)
-  let body = {cert-chain: $cert_chain, keyStore: $keyStore, pk: $pk} | compact
+  let qp = [(serialize-qp ":operation" $operation "scalar") (serialize-qp "currentPassword" $current_password "scalar") (serialize-qp "newPassword" $new_password "scalar") (serialize-qp "rePassword" $re_password "scalar") (serialize-qp "keyPassword" $key_password "scalar") (serialize-qp "keyStorePass" $key_store_pass "scalar") (serialize-qp "alias" $alias "scalar") (serialize-qp "newAlias" $new_alias "scalar") (serialize-qp "removeAlias" $remove_alias "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({intermediate_path: $intermediate_path, authorizable_id: $authorizable_id} | format pattern "/{intermediate_path}/{authorizable_id}.ks.html") $qp)
+  let body = {"cert-chain": $cert_chain, "keyStore": $key_store, "pk": $pk} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1264,9 +1264,9 @@ export def "sling post-by-intermediatePath-authorizableId" [
 # GET /{intermediatePath}/{authorizableId}.ks.json
 #
 # operationId: getAuthorizableKeystore
-export def "sling get-by-intermediatePath-authorizableId" [
-  intermediatePath: string
-  authorizableId: string
+export def "sling get-authorizable-keystore" [
+  intermediate_path: string
+  authorizable_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1278,7 +1278,7 @@ export def "sling get-by-intermediatePath-authorizableId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($intermediatePath)/($authorizableId).ks.json")
+  let full_url = (build-url $base ({intermediate_path: $intermediate_path, authorizable_id: $authorizable_id} | format pattern "/{intermediate_path}/{authorizable_id}.ks.json"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1288,8 +1288,8 @@ export def "sling get-by-intermediatePath-authorizableId" [
 #
 # operationId: getKeystore
 export def "keystore-storep12 get" [
-  intermediatePath: string
-  authorizableId: string
+  intermediate_path: string
+  authorizable_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,7 +1301,7 @@ export def "keystore-storep12 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($intermediatePath)/($authorizableId)/keystore/store.p12")
+  let full_url = (build-url $base ({intermediate_path: $intermediate_path, authorizable_id: $authorizable_id} | format pattern "/{intermediate_path}/{authorizable_id}/keystore/store.p12"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1310,7 +1310,7 @@ export def "keystore-storep12 get" [
 # POST /{path}/
 #
 # operationId: postPath
-export def "sling post-by-path" [
+export def "sling create" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1320,13 +1320,13 @@ export def "sling post-by-path" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jcr:primaryType: string
-  --:name: string
+  --jcr-primary-type: string
+  --name: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jcr:primaryType" $jcr:primaryType "scalar") (serialize-qp ":name" $:name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($path)/" $qp)
+  let qp = [(serialize-qp "jcr:primaryType" $jcr_primary_type "scalar") (serialize-qp ":name" $name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({path: $path} | format pattern "/{path}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1335,7 +1335,7 @@ export def "sling post-by-path" [
 # DELETE /{path}/{name}
 #
 # operationId: deleteNode
-export def "sling delete" [
+export def "sling delete-node" [
   path: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1349,7 +1349,7 @@ export def "sling delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($path)/($name)")
+  let full_url = (build-url $base ({path: $path, name: $name} | format pattern "/{path}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1358,7 +1358,7 @@ export def "sling delete" [
 # GET /{path}/{name}
 #
 # operationId: getNode
-export def "sling get-by-path-name" [
+export def "sling get-node" [
   path: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1372,7 +1372,7 @@ export def "sling get-by-path-name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($path)/($name)")
+  let full_url = (build-url $base ({path: $path, name: $name} | format pattern "/{path}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1381,7 +1381,7 @@ export def "sling get-by-path-name" [
 # POST /{path}/{name}
 #
 # operationId: postNode
-export def "sling post-by-path-name" [
+export def "sling create-node" [
   path: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1392,16 +1392,16 @@ export def "sling post-by-path-name" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --:operation: string
-  --deleteAuthorizable: string
+  --operation: string
+  --delete-authorizable: string
   --file: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp ":operation" $:operation "scalar") (serialize-qp "deleteAuthorizable" $deleteAuthorizable "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($path)/($name)" $qp)
-  let body = {file: $file} | compact
+  let qp = [(serialize-qp ":operation" $operation "scalar") (serialize-qp "deleteAuthorizable" $delete_authorizable "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({path: $path, name: $name} | format pattern "/{path}/{name}") $qp)
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1411,7 +1411,7 @@ export def "sling post-by-path-name" [
 # POST /{path}/{name}.rw.html
 #
 # operationId: postNodeRw
-export def "sling post-by-path-name-1" [
+export def "sling create-node-rw" [
   path: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1422,12 +1422,12 @@ export def "sling post-by-path-name-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --addMembers: string
+  --add-members: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "addMembers" $addMembers "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($path)/($name).rw.html" $qp)
+  let qp = [(serialize-qp "addMembers" $add_members "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({path: $path, name: $name} | format pattern "/{path}/{name}.rw.html") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

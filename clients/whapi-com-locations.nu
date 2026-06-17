@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "address-lookup addressLookup" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "address-lookup create-ress" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /address/lookup/
 # operationId: addressLookup
-export def "address-lookup addressLookup" [
+export def "address-lookup create-ress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,12 +102,12 @@ export def "address-lookup addressLookup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --houseNum: string # House number or name of the address.
-  --postCode: string # Postcode of the address, no spaces required.
+  --house-num: string # House number or name of the address.
+  --post-code: string # Postcode of the address, no spaces required.
 ]: nothing -> record<addresses: table<city: string, county: string, fullAddress: string, postCode: string, street: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "houseNum" $houseNum "scalar") (serialize-qp "postCode" $postCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "houseNum" $house_num "scalar") (serialize-qp "postCode" $post_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/address/lookup/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -118,7 +118,7 @@ export def "address-lookup addressLookup" [
 #
 # GET /countries/
 # operationId: getCountries
-export def "countries list" [
+export def "countries get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,8 +140,8 @@ export def "countries list" [
 #
 # GET /countries/{countryCode}
 # operationId: getCountry
-export def "countries get" [
-  countryCode: string
+export def "countries get-country" [
+  country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +153,7 @@ export def "countries get" [
 ]: nothing -> record<code: string, currencyCode: string, dialCode: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/countries/($countryCode)")
+  let full_url = (build-url $base ({country_code: $country_code} | format pattern "/countries/{country_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +163,7 @@ export def "countries get" [
 #
 # GET /currencies/
 # operationId: getCurrencies
-export def "currencies list" [
+export def "currencies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,8 +185,8 @@ export def "currencies list" [
 #
 # GET /currencies/{currencyCode}
 # operationId: getCurrency
-export def "currencies get" [
-  currencyCode: string
+export def "currencies get-currency" [
+  currency_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "currencies get" [
 ]: nothing -> record<code: string, exchangeRate: float, maxDeposit: float, maxWithdrawal: float, minDeposit: float, minWithdrawal: float, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/currencies/($currencyCode)")
+  let full_url = (build-url $base ({currency_code: $currency_code} | format pattern "/currencies/{currency_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -65,8 +65,8 @@ def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def TotalVotesCastComparator-completer [] { ["EqualTo" "GreaterThan" "GreaterThanOrEqualTo" "LessThan" "LessThanOrEqualTo"] }
-def MajorityComparator-completer [] { ["EqualTo" "GreaterThan" "GreaterThanOrEqualTo" "LessThan" "LessThanOrEqualTo"] }
+def total-votes-cast-comparator-completer [] { ["EqualTo" "GreaterThan" "GreaterThanOrEqualTo" "LessThan" "LessThanOrEqualTo"] }
+def majority-comparator-completer [] { ["EqualTo" "GreaterThan" "GreaterThanOrEqualTo" "LessThan" "LessThanOrEqualTo"] }
 def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 
 # List all available API commands with their parameters
@@ -105,20 +105,20 @@ export def "data-divisions-groupedbyparty get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --SearchTerm: string # Divisions containing search term within title or number (nullable)
-  --MemberId: int # Divisions returning Member with Member ID voting records (nullable, format: int32)
-  --IncludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
-  --StartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
-  --EndDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
-  --DivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
-  --TotalVotesCastComparator: string@TotalVotesCastComparator-completer # comparison operator to use
-  --TotalVotesCastValueToCompare: int # value to compare to with the operator provided (format: int32)
-  --MajorityComparator: string@MajorityComparator-completer # comparison operator to use
-  --MajorityValueToCompare: int # value to compare to with the operator provided (format: int32)
+  --search-term: string # Divisions containing search term within title or number (nullable)
+  --member-id: int # Divisions returning Member with Member ID voting records (nullable, format: int32)
+  --include-when-member-was-teller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
+  --start-date: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --end-date: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --division-number: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
+  --total-votes-cast-comparator: string@total-votes-cast-comparator-completer # comparison operator to use
+  --total-votes-cast-value-to-compare: int # value to compare to with the operator provided (format: int32)
+  --majority-comparator: string@majority-comparator-completer # comparison operator to use
+  --majority-value-to-compare: int # value to compare to with the operator provided (format: int32)
 ]: nothing -> record<content: table<partyName: string, voteCount: int>, contentCount: int, date: string, divisionId: int, notContent: table<partyName: string, voteCount: int>, notContentCount: int, number: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "SearchTerm" $SearchTerm "scalar") (serialize-qp "MemberId" $MemberId "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $IncludeWhenMemberWasTeller "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "DivisionNumber" $DivisionNumber "scalar") (serialize-qp "TotalVotesCast.Comparator" $TotalVotesCastComparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $TotalVotesCastValueToCompare "scalar") (serialize-qp "Majority.Comparator" $MajorityComparator "scalar") (serialize-qp "Majority.ValueToCompare" $MajorityValueToCompare "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "SearchTerm" $search_term "scalar") (serialize-qp "MemberId" $member_id "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $include_when_member_was_teller "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "DivisionNumber" $division_number "scalar") (serialize-qp "TotalVotesCast.Comparator" $total_votes_cast_comparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $total_votes_cast_value_to_compare "scalar") (serialize-qp "Majority.Comparator" $majority_comparator "scalar") (serialize-qp "Majority.ValueToCompare" $majority_value_to_compare "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/Divisions/groupedbyparty" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -138,22 +138,22 @@ export def "data-divisions-membervoting get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --MemberId: int # Id number of a Member whose voting records are to be returned (format: int32)
-  --SearchTerm: string # Divisions containing search term within title or number (nullable)
-  --IncludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
-  --StartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
-  --EndDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
-  --DivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
-  --TotalVotesCastComparator: string@TotalVotesCastComparator-completer # comparison operator to use
-  --TotalVotesCastValueToCompare: int # value to compare to with the operator provided (format: int32)
-  --MajorityComparator: string@MajorityComparator-completer # comparison operator to use
-  --MajorityValueToCompare: int # value to compare to with the operator provided (format: int32)
+  --member-id: int # Id number of a Member whose voting records are to be returned (format: int32)
+  --search-term: string # Divisions containing search term within title or number (nullable)
+  --include-when-member-was-teller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
+  --start-date: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --end-date: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --division-number: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
+  --total-votes-cast-comparator: string@total-votes-cast-comparator-completer # comparison operator to use
+  --total-votes-cast-value-to-compare: int # value to compare to with the operator provided (format: int32)
+  --majority-comparator: string@majority-comparator-completer # comparison operator to use
+  --majority-value-to-compare: int # value to compare to with the operator provided (format: int32)
   --skip: int # The number of records to skip. Must be a positive integer. Default is 0 (format: int32, default: 0)
   --take: int # The number of records to return per page. Must be more than 0. Default is 25 (format: int32, default: 25)
 ]: nothing -> record<memberId: int, memberWasContent: bool, memberWasTeller: bool, publishedDivision: record<amendmentMotionNotes: string, authoritativeContentCount: int, authoritativeNotContentCount: int, contentTellers: list<record>, contents: list<record>, date: string, divisionHadTellers: bool, divisionId: int, divisionWasExclusivelyRemote: bool, isGovernmentContent: bool, isGovernmentWin: bool, isHouse: bool, isWhipped: bool, memberContentCount: int, memberNotContentCount: int, notContentTellers: list<record>, notContents: list<record>, notes: string, number: int, remoteVotingEnd: string, remoteVotingStart: string, sponsoringMemberId: int, tellerContentCount: int, tellerNotContentCount: int, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MemberId" $MemberId "scalar") (serialize-qp "SearchTerm" $SearchTerm "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $IncludeWhenMemberWasTeller "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "DivisionNumber" $DivisionNumber "scalar") (serialize-qp "TotalVotesCast.Comparator" $TotalVotesCastComparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $TotalVotesCastValueToCompare "scalar") (serialize-qp "Majority.Comparator" $MajorityComparator "scalar") (serialize-qp "Majority.ValueToCompare" $MajorityValueToCompare "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MemberId" $member_id "scalar") (serialize-qp "SearchTerm" $search_term "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $include_when_member_was_teller "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "DivisionNumber" $division_number "scalar") (serialize-qp "TotalVotesCast.Comparator" $total_votes_cast_comparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $total_votes_cast_value_to_compare "scalar") (serialize-qp "Majority.Comparator" $majority_comparator "scalar") (serialize-qp "Majority.ValueToCompare" $majority_value_to_compare "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/Divisions/membervoting" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -173,22 +173,22 @@ export def "data-divisions-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --SearchTerm: string # Divisions containing search term within title or number (nullable)
-  --MemberId: int # Divisions returning Member with Member ID voting records (nullable, format: int32)
-  --IncludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
-  --StartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
-  --EndDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
-  --DivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
-  --TotalVotesCastComparator: string@TotalVotesCastComparator-completer # comparison operator to use
-  --TotalVotesCastValueToCompare: int # value to compare to with the operator provided (format: int32)
-  --MajorityComparator: string@MajorityComparator-completer # comparison operator to use
-  --MajorityValueToCompare: int # value to compare to with the operator provided (format: int32)
+  --search-term: string # Divisions containing search term within title or number (nullable)
+  --member-id: int # Divisions returning Member with Member ID voting records (nullable, format: int32)
+  --include-when-member-was-teller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
+  --start-date: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --end-date: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --division-number: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
+  --total-votes-cast-comparator: string@total-votes-cast-comparator-completer # comparison operator to use
+  --total-votes-cast-value-to-compare: int # value to compare to with the operator provided (format: int32)
+  --majority-comparator: string@majority-comparator-completer # comparison operator to use
+  --majority-value-to-compare: int # value to compare to with the operator provided (format: int32)
   --skip: int # The number of records to skip. Must be a positive integer. Default is 0 (format: int32, default: 0)
   --take: int # The number of records to return per page. Must be more than 0. Default is 25 (format: int32, default: 25)
 ]: nothing -> table<amendmentMotionNotes: string, authoritativeContentCount: int, authoritativeNotContentCount: int, contentTellers: list<record>, contents: list<record>, date: string, divisionHadTellers: bool, divisionId: int, divisionWasExclusivelyRemote: bool, isGovernmentContent: bool, isGovernmentWin: bool, isHouse: bool, isWhipped: bool, memberContentCount: int, memberNotContentCount: int, notContentTellers: list<record>, notContents: list<record>, notes: string, number: int, remoteVotingEnd: string, remoteVotingStart: string, sponsoringMemberId: int, tellerContentCount: int, tellerNotContentCount: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "SearchTerm" $SearchTerm "scalar") (serialize-qp "MemberId" $MemberId "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $IncludeWhenMemberWasTeller "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "DivisionNumber" $DivisionNumber "scalar") (serialize-qp "TotalVotesCast.Comparator" $TotalVotesCastComparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $TotalVotesCastValueToCompare "scalar") (serialize-qp "Majority.Comparator" $MajorityComparator "scalar") (serialize-qp "Majority.ValueToCompare" $MajorityValueToCompare "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "SearchTerm" $search_term "scalar") (serialize-qp "MemberId" $member_id "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $include_when_member_was_teller "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "DivisionNumber" $division_number "scalar") (serialize-qp "TotalVotesCast.Comparator" $total_votes_cast_comparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $total_votes_cast_value_to_compare "scalar") (serialize-qp "Majority.Comparator" $majority_comparator "scalar") (serialize-qp "Majority.ValueToCompare" $majority_value_to_compare "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/Divisions/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,20 +208,20 @@ export def "data-divisions-search-total-results get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --SearchTerm: string # Divisions containing search term within title or number (nullable)
-  --MemberId: int # Divisions returning Member with Member ID voting records (nullable, format: int32)
-  --IncludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
-  --StartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
-  --EndDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
-  --DivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
-  --TotalVotesCastComparator: string@TotalVotesCastComparator-completer # comparison operator to use
-  --TotalVotesCastValueToCompare: int # value to compare to with the operator provided (format: int32)
-  --MajorityComparator: string@MajorityComparator-completer # comparison operator to use
-  --MajorityValueToCompare: int # value to compare to with the operator provided (format: int32)
+  --search-term: string # Divisions containing search term within title or number (nullable)
+  --member-id: int # Divisions returning Member with Member ID voting records (nullable, format: int32)
+  --include-when-member-was-teller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
+  --start-date: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --end-date: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --division-number: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
+  --total-votes-cast-comparator: string@total-votes-cast-comparator-completer # comparison operator to use
+  --total-votes-cast-value-to-compare: int # value to compare to with the operator provided (format: int32)
+  --majority-comparator: string@majority-comparator-completer # comparison operator to use
+  --majority-value-to-compare: int # value to compare to with the operator provided (format: int32)
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "SearchTerm" $SearchTerm "scalar") (serialize-qp "MemberId" $MemberId "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $IncludeWhenMemberWasTeller "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "DivisionNumber" $DivisionNumber "scalar") (serialize-qp "TotalVotesCast.Comparator" $TotalVotesCastComparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $TotalVotesCastValueToCompare "scalar") (serialize-qp "Majority.Comparator" $MajorityComparator "scalar") (serialize-qp "Majority.ValueToCompare" $MajorityValueToCompare "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "SearchTerm" $search_term "scalar") (serialize-qp "MemberId" $member_id "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $include_when_member_was_teller "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "DivisionNumber" $division_number "scalar") (serialize-qp "TotalVotesCast.Comparator" $total_votes_cast_comparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $total_votes_cast_value_to_compare "scalar") (serialize-qp "Majority.Comparator" $majority_comparator "scalar") (serialize-qp "Majority.ValueToCompare" $majority_value_to_compare "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/data/Divisions/searchTotalResults" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,7 +232,7 @@ export def "data-divisions-search-total-results get" [
 #
 # GET /data/Divisions/{divisionId}
 export def "data-divisions get" [
-  divisionId: int
+  division_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "data-divisions get" [
 ]: nothing -> record<amendmentMotionNotes: string, authoritativeContentCount: int, authoritativeNotContentCount: int, contentTellers: table<listAs: string, memberFrom: string, memberId: int, name: string, party: string, partyAbbreviation: string, partyColour: string, partyIsMainParty: bool>, contents: table<listAs: string, memberFrom: string, memberId: int, name: string, party: string, partyAbbreviation: string, partyColour: string, partyIsMainParty: bool>, date: string, divisionHadTellers: bool, divisionId: int, divisionWasExclusivelyRemote: bool, isGovernmentContent: bool, isGovernmentWin: bool, isHouse: bool, isWhipped: bool, memberContentCount: int, memberNotContentCount: int, notContentTellers: table<listAs: string, memberFrom: string, memberId: int, name: string, party: string, partyAbbreviation: string, partyColour: string, partyIsMainParty: bool>, notContents: table<listAs: string, memberFrom: string, memberId: int, name: string, party: string, partyAbbreviation: string, partyColour: string, partyIsMainParty: bool>, notes: string, number: int, remoteVotingEnd: string, remoteVotingStart: string, sponsoringMemberId: int, tellerContentCount: int, tellerNotContentCount: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/Divisions/($divisionId)")
+  let full_url = (build-url $base ({division_id: $division_id} | format pattern "/data/Divisions/{division_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

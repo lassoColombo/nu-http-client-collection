@@ -66,48 +66,48 @@ def base-url-completer [] { ["http://swf.us-east-1.amazonaws.com" "http://swf.us
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["SimpleWorkflowService.CountClosedWorkflowExecutions"] }
-def X-Amz-Target-completer-1 [] { ["SimpleWorkflowService.CountOpenWorkflowExecutions"] }
-def X-Amz-Target-completer-2 [] { ["SimpleWorkflowService.CountPendingActivityTasks"] }
-def X-Amz-Target-completer-3 [] { ["SimpleWorkflowService.CountPendingDecisionTasks"] }
-def X-Amz-Target-completer-4 [] { ["SimpleWorkflowService.DeprecateActivityType"] }
-def X-Amz-Target-completer-5 [] { ["SimpleWorkflowService.DeprecateDomain"] }
-def X-Amz-Target-completer-6 [] { ["SimpleWorkflowService.DeprecateWorkflowType"] }
-def X-Amz-Target-completer-7 [] { ["SimpleWorkflowService.DescribeActivityType"] }
-def X-Amz-Target-completer-8 [] { ["SimpleWorkflowService.DescribeDomain"] }
-def X-Amz-Target-completer-9 [] { ["SimpleWorkflowService.DescribeWorkflowExecution"] }
-def X-Amz-Target-completer-10 [] { ["SimpleWorkflowService.DescribeWorkflowType"] }
-def X-Amz-Target-completer-11 [] { ["SimpleWorkflowService.GetWorkflowExecutionHistory"] }
-def X-Amz-Target-completer-12 [] { ["SimpleWorkflowService.ListActivityTypes"] }
-def X-Amz-Target-completer-13 [] { ["SimpleWorkflowService.ListClosedWorkflowExecutions"] }
-def X-Amz-Target-completer-14 [] { ["SimpleWorkflowService.ListDomains"] }
-def X-Amz-Target-completer-15 [] { ["SimpleWorkflowService.ListOpenWorkflowExecutions"] }
-def X-Amz-Target-completer-16 [] { ["SimpleWorkflowService.ListTagsForResource"] }
-def X-Amz-Target-completer-17 [] { ["SimpleWorkflowService.ListWorkflowTypes"] }
-def X-Amz-Target-completer-18 [] { ["SimpleWorkflowService.PollForActivityTask"] }
-def X-Amz-Target-completer-19 [] { ["SimpleWorkflowService.PollForDecisionTask"] }
-def X-Amz-Target-completer-20 [] { ["SimpleWorkflowService.RecordActivityTaskHeartbeat"] }
-def X-Amz-Target-completer-21 [] { ["SimpleWorkflowService.RegisterActivityType"] }
-def X-Amz-Target-completer-22 [] { ["SimpleWorkflowService.RegisterDomain"] }
-def X-Amz-Target-completer-23 [] { ["SimpleWorkflowService.RegisterWorkflowType"] }
-def X-Amz-Target-completer-24 [] { ["SimpleWorkflowService.RequestCancelWorkflowExecution"] }
-def X-Amz-Target-completer-25 [] { ["SimpleWorkflowService.RespondActivityTaskCanceled"] }
-def X-Amz-Target-completer-26 [] { ["SimpleWorkflowService.RespondActivityTaskCompleted"] }
-def X-Amz-Target-completer-27 [] { ["SimpleWorkflowService.RespondActivityTaskFailed"] }
-def X-Amz-Target-completer-28 [] { ["SimpleWorkflowService.RespondDecisionTaskCompleted"] }
-def X-Amz-Target-completer-29 [] { ["SimpleWorkflowService.SignalWorkflowExecution"] }
-def X-Amz-Target-completer-30 [] { ["SimpleWorkflowService.StartWorkflowExecution"] }
-def X-Amz-Target-completer-31 [] { ["SimpleWorkflowService.TagResource"] }
-def X-Amz-Target-completer-32 [] { ["SimpleWorkflowService.TerminateWorkflowExecution"] }
-def X-Amz-Target-completer-33 [] { ["SimpleWorkflowService.UndeprecateActivityType"] }
-def X-Amz-Target-completer-34 [] { ["SimpleWorkflowService.UndeprecateDomain"] }
-def X-Amz-Target-completer-35 [] { ["SimpleWorkflowService.UndeprecateWorkflowType"] }
-def X-Amz-Target-completer-36 [] { ["SimpleWorkflowService.UntagResource"] }
+def x-amz-target-completer [] { ["SimpleWorkflowService.CountClosedWorkflowExecutions"] }
+def x-amz-target-completer-1 [] { ["SimpleWorkflowService.CountOpenWorkflowExecutions"] }
+def x-amz-target-completer-2 [] { ["SimpleWorkflowService.CountPendingActivityTasks"] }
+def x-amz-target-completer-3 [] { ["SimpleWorkflowService.CountPendingDecisionTasks"] }
+def x-amz-target-completer-4 [] { ["SimpleWorkflowService.DeprecateActivityType"] }
+def x-amz-target-completer-5 [] { ["SimpleWorkflowService.DeprecateDomain"] }
+def x-amz-target-completer-6 [] { ["SimpleWorkflowService.DeprecateWorkflowType"] }
+def x-amz-target-completer-7 [] { ["SimpleWorkflowService.DescribeActivityType"] }
+def x-amz-target-completer-8 [] { ["SimpleWorkflowService.DescribeDomain"] }
+def x-amz-target-completer-9 [] { ["SimpleWorkflowService.DescribeWorkflowExecution"] }
+def x-amz-target-completer-10 [] { ["SimpleWorkflowService.DescribeWorkflowType"] }
+def x-amz-target-completer-11 [] { ["SimpleWorkflowService.GetWorkflowExecutionHistory"] }
+def x-amz-target-completer-12 [] { ["SimpleWorkflowService.ListActivityTypes"] }
+def x-amz-target-completer-13 [] { ["SimpleWorkflowService.ListClosedWorkflowExecutions"] }
+def x-amz-target-completer-14 [] { ["SimpleWorkflowService.ListDomains"] }
+def x-amz-target-completer-15 [] { ["SimpleWorkflowService.ListOpenWorkflowExecutions"] }
+def x-amz-target-completer-16 [] { ["SimpleWorkflowService.ListTagsForResource"] }
+def x-amz-target-completer-17 [] { ["SimpleWorkflowService.ListWorkflowTypes"] }
+def x-amz-target-completer-18 [] { ["SimpleWorkflowService.PollForActivityTask"] }
+def x-amz-target-completer-19 [] { ["SimpleWorkflowService.PollForDecisionTask"] }
+def x-amz-target-completer-20 [] { ["SimpleWorkflowService.RecordActivityTaskHeartbeat"] }
+def x-amz-target-completer-21 [] { ["SimpleWorkflowService.RegisterActivityType"] }
+def x-amz-target-completer-22 [] { ["SimpleWorkflowService.RegisterDomain"] }
+def x-amz-target-completer-23 [] { ["SimpleWorkflowService.RegisterWorkflowType"] }
+def x-amz-target-completer-24 [] { ["SimpleWorkflowService.RequestCancelWorkflowExecution"] }
+def x-amz-target-completer-25 [] { ["SimpleWorkflowService.RespondActivityTaskCanceled"] }
+def x-amz-target-completer-26 [] { ["SimpleWorkflowService.RespondActivityTaskCompleted"] }
+def x-amz-target-completer-27 [] { ["SimpleWorkflowService.RespondActivityTaskFailed"] }
+def x-amz-target-completer-28 [] { ["SimpleWorkflowService.RespondDecisionTaskCompleted"] }
+def x-amz-target-completer-29 [] { ["SimpleWorkflowService.SignalWorkflowExecution"] }
+def x-amz-target-completer-30 [] { ["SimpleWorkflowService.StartWorkflowExecution"] }
+def x-amz-target-completer-31 [] { ["SimpleWorkflowService.TagResource"] }
+def x-amz-target-completer-32 [] { ["SimpleWorkflowService.TerminateWorkflowExecution"] }
+def x-amz-target-completer-33 [] { ["SimpleWorkflowService.UndeprecateActivityType"] }
+def x-amz-target-completer-34 [] { ["SimpleWorkflowService.UndeprecateDomain"] }
+def x-amz-target-completer-35 [] { ["SimpleWorkflowService.UndeprecateWorkflowType"] }
+def x-amz-target-completer-36 [] { ["SimpleWorkflowService.UntagResource"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-simple-workflow-service-count-closed-workflow-executions CountClosedWorkflowExecutions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-simple-workflow-service-count-closed-workflow-executions post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.CountClosedWorkflowExecutions
 # operationId: CountClosedWorkflowExecutions
-export def "x-amz-target-simple-workflow-service-count-closed-workflow-executions CountClosedWorkflowExecutions" [
+export def "x-amz-target-simple-workflow-service-count-closed-workflow-executions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,29 +140,29 @@ export def "x-amz-target-simple-workflow-service-count-closed-workflow-execution
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
   domain: any
-  --startTimeFilter: any
-  --closeTimeFilter: any
-  --executionFilter: any
-  --typeFilter: any
-  --tagFilter: any
-  --closeStatusFilter: any
+  --start-time-filter: any
+  --close-time-filter: any
+  --execution-filter: any
+  --type-filter: any
+  --tag-filter: any
+  --close-status-filter: any
 ]: any -> record<count: record, truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.CountClosedWorkflowExecutions")
-  let body = {domain: $domain, startTimeFilter: $startTimeFilter, closeTimeFilter: $closeTimeFilter, executionFilter: $executionFilter, typeFilter: $typeFilter, tagFilter: $tagFilter, closeStatusFilter: $closeStatusFilter} | compact
+  let body = {"domain": $domain, "startTimeFilter": $start_time_filter, "closeTimeFilter": $close_time_filter, "executionFilter": $execution_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "closeStatusFilter": $close_status_filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -173,7 +173,7 @@ export def "x-amz-target-simple-workflow-service-count-closed-workflow-execution
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.CountOpenWorkflowExecutions
 # operationId: CountOpenWorkflowExecutions
-export def "x-amz-target-simple-workflow-service-count-open-workflow-executions CountOpenWorkflowExecutions" [
+export def "x-amz-target-simple-workflow-service-count-open-workflow-executions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,27 +182,27 @@ export def "x-amz-target-simple-workflow-service-count-open-workflow-executions 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
   domain: any
-  startTimeFilter: any
-  --typeFilter: any
-  --tagFilter: any
-  --executionFilter: any
+  start_time_filter: any
+  --type-filter: any
+  --tag-filter: any
+  --execution-filter: any
 ]: any -> record<count: record, truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.CountOpenWorkflowExecutions")
-  let body = {domain: $domain, startTimeFilter: $startTimeFilter, typeFilter: $typeFilter, tagFilter: $tagFilter, executionFilter: $executionFilter} | compact
+  let body = {"domain": $domain, "startTimeFilter": $start_time_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "executionFilter": $execution_filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,7 +213,7 @@ export def "x-amz-target-simple-workflow-service-count-open-workflow-executions 
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.CountPendingActivityTasks
 # operationId: CountPendingActivityTasks
-export def "x-amz-target-simple-workflow-service-count-pending-activity-tasks CountPendingActivityTasks" [
+export def "x-amz-target-simple-workflow-service-count-pending-activity-tasks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,24 +222,24 @@ export def "x-amz-target-simple-workflow-service-count-pending-activity-tasks Co
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
   domain: any
-  taskList: any
+  task_list: any
 ]: any -> record<count: record, truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.CountPendingActivityTasks")
-  let body = {domain: $domain, taskList: $taskList} | compact
+  let body = {"domain": $domain, "taskList": $task_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,7 +250,7 @@ export def "x-amz-target-simple-workflow-service-count-pending-activity-tasks Co
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.CountPendingDecisionTasks
 # operationId: CountPendingDecisionTasks
-export def "x-amz-target-simple-workflow-service-count-pending-decision-tasks CountPendingDecisionTasks" [
+export def "x-amz-target-simple-workflow-service-count-pending-decision-tasks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,24 +259,24 @@ export def "x-amz-target-simple-workflow-service-count-pending-decision-tasks Co
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
   domain: any
-  taskList: any
+  task_list: any
 ]: any -> record<count: record, truncated: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.CountPendingDecisionTasks")
-  let body = {domain: $domain, taskList: $taskList} | compact
+  let body = {"domain": $domain, "taskList": $task_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -287,7 +287,7 @@ export def "x-amz-target-simple-workflow-service-count-pending-decision-tasks Co
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.DeprecateActivityType
 # operationId: DeprecateActivityType
-export def "x-amz-target-simple-workflow-service-deprecate-activity-type DeprecateActivityType" [
+export def "x-amz-target-simple-workflow-service-deprecate-activity-type post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,24 +296,24 @@ export def "x-amz-target-simple-workflow-service-deprecate-activity-type Depreca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
   domain: any
-  activityType: any
+  activity_type: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.DeprecateActivityType")
-  let body = {domain: $domain, activityType: $activityType} | compact
+  let body = {"domain": $domain, "activityType": $activity_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,7 +324,7 @@ export def "x-amz-target-simple-workflow-service-deprecate-activity-type Depreca
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.DeprecateDomain
 # operationId: DeprecateDomain
-export def "x-amz-target-simple-workflow-service-deprecate-domain DeprecateDomain" [
+export def "x-amz-target-simple-workflow-service-deprecate-domain post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,23 +333,23 @@ export def "x-amz-target-simple-workflow-service-deprecate-domain DeprecateDomai
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
   name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.DeprecateDomain")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -360,7 +360,7 @@ export def "x-amz-target-simple-workflow-service-deprecate-domain DeprecateDomai
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.DeprecateWorkflowType
 # operationId: DeprecateWorkflowType
-export def "x-amz-target-simple-workflow-service-deprecate-workflow-type DeprecateWorkflowType" [
+export def "x-amz-target-simple-workflow-service-deprecate-workflow-type post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,24 +369,24 @@ export def "x-amz-target-simple-workflow-service-deprecate-workflow-type Depreca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
   domain: any
-  workflowType: any
+  workflow_type: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.DeprecateWorkflowType")
-  let body = {domain: $domain, workflowType: $workflowType} | compact
+  let body = {"domain": $domain, "workflowType": $workflow_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,7 +397,7 @@ export def "x-amz-target-simple-workflow-service-deprecate-workflow-type Depreca
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.DescribeActivityType
 # operationId: DescribeActivityType
-export def "x-amz-target-simple-workflow-service-describe-activity-type DescribeActivityType" [
+export def "x-amz-target-simple-workflow-service-describe-activity-type post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,24 +406,24 @@ export def "x-amz-target-simple-workflow-service-describe-activity-type Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
   domain: any
-  activityType: any
+  activity_type: any
 ]: any -> record<typeInfo: record<activityType: record<name: record, version: record>, status: record, description: record, creationDate: record, deprecationDate: record>, configuration: record<defaultTaskStartToCloseTimeout: record, defaultTaskHeartbeatTimeout: record, defaultTaskList: record<name: record>, defaultTaskPriority: record, defaultTaskScheduleToStartTimeout: record, defaultTaskScheduleToCloseTimeout: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.DescribeActivityType")
-  let body = {domain: $domain, activityType: $activityType} | compact
+  let body = {"domain": $domain, "activityType": $activity_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -434,7 +434,7 @@ export def "x-amz-target-simple-workflow-service-describe-activity-type Describe
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.DescribeDomain
 # operationId: DescribeDomain
-export def "x-amz-target-simple-workflow-service-describe-domain DescribeDomain" [
+export def "x-amz-target-simple-workflow-service-describe-domain post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,23 +443,23 @@ export def "x-amz-target-simple-workflow-service-describe-domain DescribeDomain"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
   name: any
 ]: any -> record<domainInfo: record<name: record, status: record, description: record, arn: record>, configuration: record<workflowExecutionRetentionPeriodInDays: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.DescribeDomain")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -470,7 +470,7 @@ export def "x-amz-target-simple-workflow-service-describe-domain DescribeDomain"
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.DescribeWorkflowExecution
 # operationId: DescribeWorkflowExecution
-export def "x-amz-target-simple-workflow-service-describe-workflow-execution DescribeWorkflowExecution" [
+export def "x-amz-target-simple-workflow-service-describe-workflow-execution post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,14 +479,14 @@ export def "x-amz-target-simple-workflow-service-describe-workflow-execution Des
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
   domain: any
   execution: any
 ]: any -> record<executionInfo: record<execution: record<workflowId: record, runId: record>, workflowType: record<name: record, version: record>, startTimestamp: record, closeTimestamp: record, executionStatus: record, closeStatus: record, parent: record<workflowId: record, runId: record>, tagList: record, cancelRequested: record>, executionConfiguration: record<taskStartToCloseTimeout: record, executionStartToCloseTimeout: record, taskList: record<name: record>, taskPriority: record, childPolicy: record, lambdaRole: record>, openCounts: record<openActivityTasks: record, openDecisionTasks: record, openTimers: record, openChildWorkflowExecutions: record, openLambdaFunctions: record>, latestActivityTaskTimestamp: record, latestExecutionContext: record> {
@@ -494,9 +494,9 @@ export def "x-amz-target-simple-workflow-service-describe-workflow-execution Des
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.DescribeWorkflowExecution")
-  let body = {domain: $domain, execution: $execution} | compact
+  let body = {"domain": $domain, "execution": $execution} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,7 +507,7 @@ export def "x-amz-target-simple-workflow-service-describe-workflow-execution Des
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.DescribeWorkflowType
 # operationId: DescribeWorkflowType
-export def "x-amz-target-simple-workflow-service-describe-workflow-type DescribeWorkflowType" [
+export def "x-amz-target-simple-workflow-service-describe-workflow-type post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,24 +516,24 @@ export def "x-amz-target-simple-workflow-service-describe-workflow-type Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
   domain: any
-  workflowType: any
+  workflow_type: any
 ]: any -> record<typeInfo: record<workflowType: record<name: record, version: record>, status: record, description: record, creationDate: record, deprecationDate: record>, configuration: record<defaultTaskStartToCloseTimeout: record, defaultExecutionStartToCloseTimeout: record, defaultTaskList: record<name: record>, defaultTaskPriority: record, defaultChildPolicy: record, defaultLambdaRole: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.DescribeWorkflowType")
-  let body = {domain: $domain, workflowType: $workflowType} | compact
+  let body = {"domain": $domain, "workflowType": $workflow_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -544,7 +544,7 @@ export def "x-amz-target-simple-workflow-service-describe-workflow-type Describe
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.GetWorkflowExecutionHistory
 # operationId: GetWorkflowExecutionHistory
-export def "x-amz-target-simple-workflow-service-get-workflow-execution-history GetWorkflowExecutionHistory" [
+export def "x-amz-target-simple-workflow-service-get-workflow-execution-history get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,30 +553,30 @@ export def "x-amz-target-simple-workflow-service-get-workflow-execution-history 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maximumPageSize: string # Pagination limit
-  --nextPageToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
+  --maximum-page-size: string # Pagination limit
+  --next-page-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
   domain: any
   execution: any
-  --nextPageToken: any
-  --maximumPageSize: any
-  --reverseOrder: any
+  --next-page-token: any
+  --maximum-page-size: any
+  --reverse-order: any
 ]: any -> record<events: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maximumPageSize" $maximumPageSize "scalar") (serialize-qp "nextPageToken" $nextPageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.GetWorkflowExecutionHistory" $qp)
-  let body = {domain: $domain, execution: $execution, nextPageToken: $nextPageToken, maximumPageSize: $maximumPageSize, reverseOrder: $reverseOrder} | compact
+  let body = {"domain": $domain, "execution": $execution, "nextPageToken": $next_page_token, "maximumPageSize": $maximum_page_size, "reverseOrder": $reverse_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -587,7 +587,7 @@ export def "x-amz-target-simple-workflow-service-get-workflow-execution-history 
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.ListActivityTypes
 # operationId: ListActivityTypes
-export def "x-amz-target-simple-workflow-service-list-activity-types ListActivityTypes" [
+export def "x-amz-target-simple-workflow-service-list-activity-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -596,31 +596,31 @@ export def "x-amz-target-simple-workflow-service-list-activity-types ListActivit
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maximumPageSize: string # Pagination limit
-  --nextPageToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
+  --maximum-page-size: string # Pagination limit
+  --next-page-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
   domain: any
   --name: any
-  registrationStatus: any
-  --nextPageToken: any
-  --maximumPageSize: any
-  --reverseOrder: any
+  registration_status: any
+  --next-page-token: any
+  --maximum-page-size: any
+  --reverse-order: any
 ]: any -> record<typeInfos: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maximumPageSize" $maximumPageSize "scalar") (serialize-qp "nextPageToken" $nextPageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.ListActivityTypes" $qp)
-  let body = {domain: $domain, name: $name, registrationStatus: $registrationStatus, nextPageToken: $nextPageToken, maximumPageSize: $maximumPageSize, reverseOrder: $reverseOrder} | compact
+  let body = {"domain": $domain, "name": $name, "registrationStatus": $registration_status, "nextPageToken": $next_page_token, "maximumPageSize": $maximum_page_size, "reverseOrder": $reverse_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -631,7 +631,7 @@ export def "x-amz-target-simple-workflow-service-list-activity-types ListActivit
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.ListClosedWorkflowExecutions
 # operationId: ListClosedWorkflowExecutions
-export def "x-amz-target-simple-workflow-service-list-closed-workflow-executions ListClosedWorkflowExecutions" [
+export def "x-amz-target-simple-workflow-service-list-closed-workflow-executions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,35 +640,35 @@ export def "x-amz-target-simple-workflow-service-list-closed-workflow-executions
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maximumPageSize: string # Pagination limit
-  --nextPageToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
+  --maximum-page-size: string # Pagination limit
+  --next-page-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
   domain: any
-  --startTimeFilter: any
-  --closeTimeFilter: any
-  --executionFilter: any
-  --closeStatusFilter: any
-  --typeFilter: any
-  --tagFilter: any
-  --nextPageToken: any
-  --maximumPageSize: any
-  --reverseOrder: any
+  --start-time-filter: any
+  --close-time-filter: any
+  --execution-filter: any
+  --close-status-filter: any
+  --type-filter: any
+  --tag-filter: any
+  --next-page-token: any
+  --maximum-page-size: any
+  --reverse-order: any
 ]: any -> record<executionInfos: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maximumPageSize" $maximumPageSize "scalar") (serialize-qp "nextPageToken" $nextPageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.ListClosedWorkflowExecutions" $qp)
-  let body = {domain: $domain, startTimeFilter: $startTimeFilter, closeTimeFilter: $closeTimeFilter, executionFilter: $executionFilter, closeStatusFilter: $closeStatusFilter, typeFilter: $typeFilter, tagFilter: $tagFilter, nextPageToken: $nextPageToken, maximumPageSize: $maximumPageSize, reverseOrder: $reverseOrder} | compact
+  let body = {"domain": $domain, "startTimeFilter": $start_time_filter, "closeTimeFilter": $close_time_filter, "executionFilter": $execution_filter, "closeStatusFilter": $close_status_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "nextPageToken": $next_page_token, "maximumPageSize": $maximum_page_size, "reverseOrder": $reverse_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -679,7 +679,7 @@ export def "x-amz-target-simple-workflow-service-list-closed-workflow-executions
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.ListDomains
 # operationId: ListDomains
-export def "x-amz-target-simple-workflow-service-list-domains ListDomains" [
+export def "x-amz-target-simple-workflow-service-list-domains list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -688,29 +688,29 @@ export def "x-amz-target-simple-workflow-service-list-domains ListDomains" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maximumPageSize: string # Pagination limit
-  --nextPageToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  --nextPageToken: any
-  registrationStatus: any
-  --maximumPageSize: any
-  --reverseOrder: any
+  --maximum-page-size: string # Pagination limit
+  --next-page-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  --next-page-token: any
+  registration_status: any
+  --maximum-page-size: any
+  --reverse-order: any
 ]: any -> record<domainInfos: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maximumPageSize" $maximumPageSize "scalar") (serialize-qp "nextPageToken" $nextPageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.ListDomains" $qp)
-  let body = {nextPageToken: $nextPageToken, registrationStatus: $registrationStatus, maximumPageSize: $maximumPageSize, reverseOrder: $reverseOrder} | compact
+  let body = {"nextPageToken": $next_page_token, "registrationStatus": $registration_status, "maximumPageSize": $maximum_page_size, "reverseOrder": $reverse_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -721,7 +721,7 @@ export def "x-amz-target-simple-workflow-service-list-domains ListDomains" [
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.ListOpenWorkflowExecutions
 # operationId: ListOpenWorkflowExecutions
-export def "x-amz-target-simple-workflow-service-list-open-workflow-executions ListOpenWorkflowExecutions" [
+export def "x-amz-target-simple-workflow-service-list-open-workflow-executions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,33 +730,33 @@ export def "x-amz-target-simple-workflow-service-list-open-workflow-executions L
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maximumPageSize: string # Pagination limit
-  --nextPageToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
+  --maximum-page-size: string # Pagination limit
+  --next-page-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
   domain: any
-  startTimeFilter: any
-  --typeFilter: any
-  --tagFilter: any
-  --nextPageToken: any
-  --maximumPageSize: any
-  --reverseOrder: any
-  --executionFilter: any
+  start_time_filter: any
+  --type-filter: any
+  --tag-filter: any
+  --next-page-token: any
+  --maximum-page-size: any
+  --reverse-order: any
+  --execution-filter: any
 ]: any -> record<executionInfos: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maximumPageSize" $maximumPageSize "scalar") (serialize-qp "nextPageToken" $nextPageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.ListOpenWorkflowExecutions" $qp)
-  let body = {domain: $domain, startTimeFilter: $startTimeFilter, typeFilter: $typeFilter, tagFilter: $tagFilter, nextPageToken: $nextPageToken, maximumPageSize: $maximumPageSize, reverseOrder: $reverseOrder, executionFilter: $executionFilter} | compact
+  let body = {"domain": $domain, "startTimeFilter": $start_time_filter, "typeFilter": $type_filter, "tagFilter": $tag_filter, "nextPageToken": $next_page_token, "maximumPageSize": $maximum_page_size, "reverseOrder": $reverse_order, "executionFilter": $execution_filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -767,7 +767,7 @@ export def "x-amz-target-simple-workflow-service-list-open-workflow-executions L
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-simple-workflow-service-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-simple-workflow-service-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,23 +776,23 @@ export def "x-amz-target-simple-workflow-service-list-tags-for-resource ListTags
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  resource_arn: any
 ]: any -> record<tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.ListTagsForResource")
-  let body = {resourceArn: $resourceArn} | compact
+  let body = {"resourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -803,7 +803,7 @@ export def "x-amz-target-simple-workflow-service-list-tags-for-resource ListTags
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.ListWorkflowTypes
 # operationId: ListWorkflowTypes
-export def "x-amz-target-simple-workflow-service-list-workflow-types ListWorkflowTypes" [
+export def "x-amz-target-simple-workflow-service-list-workflow-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,31 +812,31 @@ export def "x-amz-target-simple-workflow-service-list-workflow-types ListWorkflo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maximumPageSize: string # Pagination limit
-  --nextPageToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
+  --maximum-page-size: string # Pagination limit
+  --next-page-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
   domain: any
   --name: any
-  registrationStatus: any
-  --nextPageToken: any
-  --maximumPageSize: any
-  --reverseOrder: any
+  registration_status: any
+  --next-page-token: any
+  --maximum-page-size: any
+  --reverse-order: any
 ]: any -> record<typeInfos: record, nextPageToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maximumPageSize" $maximumPageSize "scalar") (serialize-qp "nextPageToken" $nextPageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.ListWorkflowTypes" $qp)
-  let body = {domain: $domain, name: $name, registrationStatus: $registrationStatus, nextPageToken: $nextPageToken, maximumPageSize: $maximumPageSize, reverseOrder: $reverseOrder} | compact
+  let body = {"domain": $domain, "name": $name, "registrationStatus": $registration_status, "nextPageToken": $next_page_token, "maximumPageSize": $maximum_page_size, "reverseOrder": $reverse_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -847,7 +847,7 @@ export def "x-amz-target-simple-workflow-service-list-workflow-types ListWorkflo
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.PollForActivityTask
 # operationId: PollForActivityTask
-export def "x-amz-target-simple-workflow-service-poll-for-activity-task PollForActivityTask" [
+export def "x-amz-target-simple-workflow-service-poll-for-activity-task post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,25 +856,25 @@ export def "x-amz-target-simple-workflow-service-poll-for-activity-task PollForA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
   domain: any
-  taskList: any
+  task_list: any
   --identity: any
 ]: any -> record<taskToken: record, activityId: record, startedEventId: record, workflowExecution: record<workflowId: record, runId: record>, activityType: record<name: record, version: record>, input: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.PollForActivityTask")
-  let body = {domain: $domain, taskList: $taskList, identity: $identity} | compact
+  let body = {"domain": $domain, "taskList": $task_list, "identity": $identity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -885,7 +885,7 @@ export def "x-amz-target-simple-workflow-service-poll-for-activity-task PollForA
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.PollForDecisionTask
 # operationId: PollForDecisionTask
-export def "x-amz-target-simple-workflow-service-poll-for-decision-task PollForDecisionTask" [
+export def "x-amz-target-simple-workflow-service-poll-for-decision-task post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,31 +894,31 @@ export def "x-amz-target-simple-workflow-service-poll-for-decision-task PollForD
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maximumPageSize: string # Pagination limit
-  --nextPageToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
+  --maximum-page-size: string # Pagination limit
+  --next-page-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
   domain: any
-  taskList: any
+  task_list: any
   --identity: any
-  --nextPageToken: any
-  --maximumPageSize: any
-  --reverseOrder: any
+  --next-page-token: any
+  --maximum-page-size: any
+  --reverse-order: any
 ]: any -> record<taskToken: record, startedEventId: record, workflowExecution: record<workflowId: record, runId: record>, workflowType: record<name: record, version: record>, events: record, nextPageToken: record, previousStartedEventId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maximumPageSize" $maximumPageSize "scalar") (serialize-qp "nextPageToken" $nextPageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maximumPageSize" $maximum_page_size "scalar") (serialize-qp "nextPageToken" $next_page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.PollForDecisionTask" $qp)
-  let body = {domain: $domain, taskList: $taskList, identity: $identity, nextPageToken: $nextPageToken, maximumPageSize: $maximumPageSize, reverseOrder: $reverseOrder} | compact
+  let body = {"domain": $domain, "taskList": $task_list, "identity": $identity, "nextPageToken": $next_page_token, "maximumPageSize": $maximum_page_size, "reverseOrder": $reverse_order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -929,7 +929,7 @@ export def "x-amz-target-simple-workflow-service-poll-for-decision-task PollForD
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.RecordActivityTaskHeartbeat
 # operationId: RecordActivityTaskHeartbeat
-export def "x-amz-target-simple-workflow-service-record-activity-task-heartbeat RecordActivityTaskHeartbeat" [
+export def "x-amz-target-simple-workflow-service-record-activity-task-heartbeat post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -938,24 +938,24 @@ export def "x-amz-target-simple-workflow-service-record-activity-task-heartbeat 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  taskToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  task_token: any
   --details: any
 ]: any -> record<cancelRequested: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.RecordActivityTaskHeartbeat")
-  let body = {taskToken: $taskToken, details: $details} | compact
+  let body = {"taskToken": $task_token, "details": $details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -966,7 +966,7 @@ export def "x-amz-target-simple-workflow-service-record-activity-task-heartbeat 
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.RegisterActivityType
 # operationId: RegisterActivityType
-export def "x-amz-target-simple-workflow-service-register-activity-type RegisterActivityType" [
+export def "x-amz-target-simple-workflow-service-register-activity-type create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -975,32 +975,32 @@ export def "x-amz-target-simple-workflow-service-register-activity-type Register
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
   domain: any
   name: any
   version: any
   --description: any
-  --defaultTaskStartToCloseTimeout: any
-  --defaultTaskHeartbeatTimeout: any
-  --defaultTaskList: any
-  --defaultTaskPriority: any
-  --defaultTaskScheduleToStartTimeout: any
-  --defaultTaskScheduleToCloseTimeout: any
+  --default-task-start-to-close-timeout: any
+  --default-task-heartbeat-timeout: any
+  --default-task-list: any
+  --default-task-priority: any
+  --default-task-schedule-to-start-timeout: any
+  --default-task-schedule-to-close-timeout: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.RegisterActivityType")
-  let body = {domain: $domain, name: $name, version: $version, description: $description, defaultTaskStartToCloseTimeout: $defaultTaskStartToCloseTimeout, defaultTaskHeartbeatTimeout: $defaultTaskHeartbeatTimeout, defaultTaskList: $defaultTaskList, defaultTaskPriority: $defaultTaskPriority, defaultTaskScheduleToStartTimeout: $defaultTaskScheduleToStartTimeout, defaultTaskScheduleToCloseTimeout: $defaultTaskScheduleToCloseTimeout} | compact
+  let body = {"domain": $domain, "name": $name, "version": $version, "description": $description, "defaultTaskStartToCloseTimeout": $default_task_start_to_close_timeout, "defaultTaskHeartbeatTimeout": $default_task_heartbeat_timeout, "defaultTaskList": $default_task_list, "defaultTaskPriority": $default_task_priority, "defaultTaskScheduleToStartTimeout": $default_task_schedule_to_start_timeout, "defaultTaskScheduleToCloseTimeout": $default_task_schedule_to_close_timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1011,7 +1011,7 @@ export def "x-amz-target-simple-workflow-service-register-activity-type Register
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.RegisterDomain
 # operationId: RegisterDomain
-export def "x-amz-target-simple-workflow-service-register-domain RegisterDomain" [
+export def "x-amz-target-simple-workflow-service-register-domain create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,26 +1020,26 @@ export def "x-amz-target-simple-workflow-service-register-domain RegisterDomain"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
   name: any
   --description: any
-  workflowExecutionRetentionPeriodInDays: any
+  workflow_execution_retention_period_in_days: any
   --tags: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.RegisterDomain")
-  let body = {name: $name, description: $description, workflowExecutionRetentionPeriodInDays: $workflowExecutionRetentionPeriodInDays, tags: $tags} | compact
+  let body = {"name": $name, "description": $description, "workflowExecutionRetentionPeriodInDays": $workflow_execution_retention_period_in_days, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1050,7 +1050,7 @@ export def "x-amz-target-simple-workflow-service-register-domain RegisterDomain"
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.RegisterWorkflowType
 # operationId: RegisterWorkflowType
-export def "x-amz-target-simple-workflow-service-register-workflow-type RegisterWorkflowType" [
+export def "x-amz-target-simple-workflow-service-register-workflow-type create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,32 +1059,32 @@ export def "x-amz-target-simple-workflow-service-register-workflow-type Register
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
   domain: any
   name: any
   version: any
   --description: any
-  --defaultTaskStartToCloseTimeout: any
-  --defaultExecutionStartToCloseTimeout: any
-  --defaultTaskList: any
-  --defaultTaskPriority: any
-  --defaultChildPolicy: any
-  --defaultLambdaRole: any
+  --default-task-start-to-close-timeout: any
+  --default-execution-start-to-close-timeout: any
+  --default-task-list: any
+  --default-task-priority: any
+  --default-child-policy: any
+  --default-lambda-role: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.RegisterWorkflowType")
-  let body = {domain: $domain, name: $name, version: $version, description: $description, defaultTaskStartToCloseTimeout: $defaultTaskStartToCloseTimeout, defaultExecutionStartToCloseTimeout: $defaultExecutionStartToCloseTimeout, defaultTaskList: $defaultTaskList, defaultTaskPriority: $defaultTaskPriority, defaultChildPolicy: $defaultChildPolicy, defaultLambdaRole: $defaultLambdaRole} | compact
+  let body = {"domain": $domain, "name": $name, "version": $version, "description": $description, "defaultTaskStartToCloseTimeout": $default_task_start_to_close_timeout, "defaultExecutionStartToCloseTimeout": $default_execution_start_to_close_timeout, "defaultTaskList": $default_task_list, "defaultTaskPriority": $default_task_priority, "defaultChildPolicy": $default_child_policy, "defaultLambdaRole": $default_lambda_role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1095,7 +1095,7 @@ export def "x-amz-target-simple-workflow-service-register-workflow-type Register
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.RequestCancelWorkflowExecution
 # operationId: RequestCancelWorkflowExecution
-export def "x-amz-target-simple-workflow-service-request-cancel-workflow-execution RequestCancelWorkflowExecution" [
+export def "x-amz-target-simple-workflow-service-request-cancel-workflow-execution request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,25 +1104,25 @@ export def "x-amz-target-simple-workflow-service-request-cancel-workflow-executi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
   domain: any
-  workflowId: any
-  --runId: any
+  workflow_id: any
+  --run-id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.RequestCancelWorkflowExecution")
-  let body = {domain: $domain, workflowId: $workflowId, runId: $runId} | compact
+  let body = {"domain": $domain, "workflowId": $workflow_id, "runId": $run_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1133,7 +1133,7 @@ export def "x-amz-target-simple-workflow-service-request-cancel-workflow-executi
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.RespondActivityTaskCanceled
 # operationId: RespondActivityTaskCanceled
-export def "x-amz-target-simple-workflow-service-respond-activity-task-canceled RespondActivityTaskCanceled" [
+export def "x-amz-target-simple-workflow-service-respond-activity-task-canceled post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,24 +1142,24 @@ export def "x-amz-target-simple-workflow-service-respond-activity-task-canceled 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  taskToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  task_token: any
   --details: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.RespondActivityTaskCanceled")
-  let body = {taskToken: $taskToken, details: $details} | compact
+  let body = {"taskToken": $task_token, "details": $details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1170,7 +1170,7 @@ export def "x-amz-target-simple-workflow-service-respond-activity-task-canceled 
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.RespondActivityTaskCompleted
 # operationId: RespondActivityTaskCompleted
-export def "x-amz-target-simple-workflow-service-respond-activity-task-completed RespondActivityTaskCompleted" [
+export def "x-amz-target-simple-workflow-service-respond-activity-task-completed post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,24 +1179,24 @@ export def "x-amz-target-simple-workflow-service-respond-activity-task-completed
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  taskToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  task_token: any
   --result: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.RespondActivityTaskCompleted")
-  let body = {taskToken: $taskToken, result: $result} | compact
+  let body = {"taskToken": $task_token, "result": $result} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1207,7 +1207,7 @@ export def "x-amz-target-simple-workflow-service-respond-activity-task-completed
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.RespondActivityTaskFailed
 # operationId: RespondActivityTaskFailed
-export def "x-amz-target-simple-workflow-service-respond-activity-task-failed RespondActivityTaskFailed" [
+export def "x-amz-target-simple-workflow-service-respond-activity-task-failed post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1216,15 +1216,15 @@ export def "x-amz-target-simple-workflow-service-respond-activity-task-failed Re
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  taskToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  task_token: any
   --reason: any
   --details: any
 ]: any -> any {
@@ -1232,9 +1232,9 @@ export def "x-amz-target-simple-workflow-service-respond-activity-task-failed Re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.RespondActivityTaskFailed")
-  let body = {taskToken: $taskToken, reason: $reason, details: $details} | compact
+  let body = {"taskToken": $task_token, "reason": $reason, "details": $details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1245,7 +1245,7 @@ export def "x-amz-target-simple-workflow-service-respond-activity-task-failed Re
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.RespondDecisionTaskCompleted
 # operationId: RespondDecisionTaskCompleted
-export def "x-amz-target-simple-workflow-service-respond-decision-task-completed RespondDecisionTaskCompleted" [
+export def "x-amz-target-simple-workflow-service-respond-decision-task-completed post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,25 +1254,25 @@ export def "x-amz-target-simple-workflow-service-respond-decision-task-completed
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  taskToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  task_token: any
   --decisions: any
-  --executionContext: any
+  --execution-context: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.RespondDecisionTaskCompleted")
-  let body = {taskToken: $taskToken, decisions: $decisions, executionContext: $executionContext} | compact
+  let body = {"taskToken": $task_token, "decisions": $decisions, "executionContext": $execution_context} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1283,7 +1283,7 @@ export def "x-amz-target-simple-workflow-service-respond-decision-task-completed
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.SignalWorkflowExecution
 # operationId: SignalWorkflowExecution
-export def "x-amz-target-simple-workflow-service-signal-workflow-execution SignalWorkflowExecution" [
+export def "x-amz-target-simple-workflow-service-signal-workflow-execution post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,27 +1292,27 @@ export def "x-amz-target-simple-workflow-service-signal-workflow-execution Signa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
   domain: any
-  workflowId: any
-  --runId: any
-  signalName: any
+  workflow_id: any
+  --run-id: any
+  signal_name: any
   --input: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.SignalWorkflowExecution")
-  let body = {domain: $domain, workflowId: $workflowId, runId: $runId, signalName: $signalName, input: $input} | compact
+  let body = {"domain": $domain, "workflowId": $workflow_id, "runId": $run_id, "signalName": $signal_name, "input": $input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1323,7 +1323,7 @@ export def "x-amz-target-simple-workflow-service-signal-workflow-execution Signa
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.StartWorkflowExecution
 # operationId: StartWorkflowExecution
-export def "x-amz-target-simple-workflow-service-start-workflow-execution StartWorkflowExecution" [
+export def "x-amz-target-simple-workflow-service-start-workflow-execution start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1332,33 +1332,33 @@ export def "x-amz-target-simple-workflow-service-start-workflow-execution StartW
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
   domain: any
-  workflowId: any
-  workflowType: any
-  --taskList: any
-  --taskPriority: any
+  workflow_id: any
+  workflow_type: any
+  --task-list: any
+  --task-priority: any
   --input: any
-  --executionStartToCloseTimeout: any
-  --tagList: any
-  --taskStartToCloseTimeout: any
-  --childPolicy: any
-  --lambdaRole: any
+  --execution-start-to-close-timeout: any
+  --tag-list: any
+  --task-start-to-close-timeout: any
+  --child-policy: any
+  --lambda-role: any
 ]: any -> record<runId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.StartWorkflowExecution")
-  let body = {domain: $domain, workflowId: $workflowId, workflowType: $workflowType, taskList: $taskList, taskPriority: $taskPriority, input: $input, executionStartToCloseTimeout: $executionStartToCloseTimeout, tagList: $tagList, taskStartToCloseTimeout: $taskStartToCloseTimeout, childPolicy: $childPolicy, lambdaRole: $lambdaRole} | compact
+  let body = {"domain": $domain, "workflowId": $workflow_id, "workflowType": $workflow_type, "taskList": $task_list, "taskPriority": $task_priority, "input": $input, "executionStartToCloseTimeout": $execution_start_to_close_timeout, "tagList": $tag_list, "taskStartToCloseTimeout": $task_start_to_close_timeout, "childPolicy": $child_policy, "lambdaRole": $lambda_role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1369,7 +1369,7 @@ export def "x-amz-target-simple-workflow-service-start-workflow-execution StartW
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.TagResource
 # operationId: TagResource
-export def "x-amz-target-simple-workflow-service-tag-resource TagResource" [
+export def "x-amz-target-simple-workflow-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1378,24 +1378,24 @@ export def "x-amz-target-simple-workflow-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  resource_arn: any
   tags: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.TagResource")
-  let body = {resourceArn: $resourceArn, tags: $tags} | compact
+  let body = {"resourceArn": $resource_arn, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1406,7 +1406,7 @@ export def "x-amz-target-simple-workflow-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.TerminateWorkflowExecution
 # operationId: TerminateWorkflowExecution
-export def "x-amz-target-simple-workflow-service-terminate-workflow-execution TerminateWorkflowExecution" [
+export def "x-amz-target-simple-workflow-service-terminate-workflow-execution post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,28 +1415,28 @@ export def "x-amz-target-simple-workflow-service-terminate-workflow-execution Te
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
   domain: any
-  workflowId: any
-  --runId: any
+  workflow_id: any
+  --run-id: any
   --reason: any
   --details: any
-  --childPolicy: any
+  --child-policy: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.TerminateWorkflowExecution")
-  let body = {domain: $domain, workflowId: $workflowId, runId: $runId, reason: $reason, details: $details, childPolicy: $childPolicy} | compact
+  let body = {"domain": $domain, "workflowId": $workflow_id, "runId": $run_id, "reason": $reason, "details": $details, "childPolicy": $child_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1447,7 +1447,7 @@ export def "x-amz-target-simple-workflow-service-terminate-workflow-execution Te
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.UndeprecateActivityType
 # operationId: UndeprecateActivityType
-export def "x-amz-target-simple-workflow-service-undeprecate-activity-type UndeprecateActivityType" [
+export def "x-amz-target-simple-workflow-service-undeprecate-activity-type post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1456,24 +1456,24 @@ export def "x-amz-target-simple-workflow-service-undeprecate-activity-type Undep
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
   domain: any
-  activityType: any
+  activity_type: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.UndeprecateActivityType")
-  let body = {domain: $domain, activityType: $activityType} | compact
+  let body = {"domain": $domain, "activityType": $activity_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1484,7 +1484,7 @@ export def "x-amz-target-simple-workflow-service-undeprecate-activity-type Undep
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.UndeprecateDomain
 # operationId: UndeprecateDomain
-export def "x-amz-target-simple-workflow-service-undeprecate-domain UndeprecateDomain" [
+export def "x-amz-target-simple-workflow-service-undeprecate-domain post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1493,23 +1493,23 @@ export def "x-amz-target-simple-workflow-service-undeprecate-domain UndeprecateD
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
   name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.UndeprecateDomain")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1520,7 +1520,7 @@ export def "x-amz-target-simple-workflow-service-undeprecate-domain UndeprecateD
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.UndeprecateWorkflowType
 # operationId: UndeprecateWorkflowType
-export def "x-amz-target-simple-workflow-service-undeprecate-workflow-type UndeprecateWorkflowType" [
+export def "x-amz-target-simple-workflow-service-undeprecate-workflow-type post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1529,24 +1529,24 @@ export def "x-amz-target-simple-workflow-service-undeprecate-workflow-type Undep
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
   domain: any
-  workflowType: any
+  workflow_type: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.UndeprecateWorkflowType")
-  let body = {domain: $domain, workflowType: $workflowType} | compact
+  let body = {"domain": $domain, "workflowType": $workflow_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1557,7 +1557,7 @@ export def "x-amz-target-simple-workflow-service-undeprecate-workflow-type Undep
 #
 # POST /#X-Amz-Target=SimpleWorkflowService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-simple-workflow-service-untag-resource UntagResource" [
+export def "x-amz-target-simple-workflow-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1566,24 +1566,24 @@ export def "x-amz-target-simple-workflow-service-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  resourceArn: any
-  tagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  resource_arn: any
+  tag_keys: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SimpleWorkflowService.UntagResource")
-  let body = {resourceArn: $resourceArn, tagKeys: $tagKeys} | compact
+  let body = {"resourceArn": $resource_arn, "tagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

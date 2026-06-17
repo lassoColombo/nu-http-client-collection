@@ -115,7 +115,7 @@ export def "add-sticker-to-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addStickerToSet")
-  let body = {emojis: $emojis, mask_position: $mask_position, name: $name, png_sticker: $png_sticker, tgs_sticker: $tgs_sticker, user_id: $user_id} | compact
+  let body = {"emojis": $emojis, "mask_position": $mask_position, "name": $name, "png_sticker": $png_sticker, "tgs_sticker": $tgs_sticker, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -145,7 +145,7 @@ export def "answer-callback-query post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/answerCallbackQuery")
-  let body = {cache_time: $cache_time, callback_query_id: $callback_query_id, show_alert: $show_alert, text: $text, url: $body_url} | compact
+  let body = {"cache_time": $cache_time, "callback_query_id": $callback_query_id, "show_alert": $show_alert, "text": $text, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,7 +177,7 @@ export def "answer-inline-query post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/answerInlineQuery")
-  let body = {cache_time: $cache_time, inline_query_id: $inline_query_id, is_personal: $is_personal, next_offset: $next_offset, results: $results, switch_pm_parameter: $switch_pm_parameter, switch_pm_text: $switch_pm_text} | compact
+  let body = {"cache_time": $cache_time, "inline_query_id": $inline_query_id, "is_personal": $is_personal, "next_offset": $next_offset, "results": $results, "switch_pm_parameter": $switch_pm_parameter, "switch_pm_text": $switch_pm_text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -205,7 +205,7 @@ export def "answer-pre-checkout-query post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/answerPreCheckoutQuery")
-  let body = {error_message: $error_message, ok: $ok, pre_checkout_query_id: $pre_checkout_query_id} | compact
+  let body = {"error_message": $error_message, "ok": $ok, "pre_checkout_query_id": $pre_checkout_query_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,7 +235,7 @@ export def "answer-shipping-query post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/answerShippingQuery")
-  let body = {error_message: $error_message, ok: $ok, shipping_options: $shipping_options, shipping_query_id: $shipping_query_id} | compact
+  let body = {"error_message": $error_message, "ok": $ok, "shipping_options": $shipping_options, "shipping_query_id": $shipping_query_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,7 +293,7 @@ export def "copy-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/copyMessage")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, from_chat_id: $from_chat_id, message_id: $message_id, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "from_chat_id": $from_chat_id, "message_id": $message_id, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -327,7 +327,7 @@ export def "create-new-sticker-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createNewStickerSet")
-  let body = {contains_masks: $contains_masks, emojis: $emojis, mask_position: $mask_position, name: $name, png_sticker: $png_sticker, tgs_sticker: $tgs_sticker, title: $title, user_id: $user_id} | compact
+  let body = {"contains_masks": $contains_masks, "emojis": $emojis, "mask_position": $mask_position, "name": $name, "png_sticker": $png_sticker, "tgs_sticker": $tgs_sticker, "title": $title, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -353,7 +353,7 @@ export def "delete-chat-photo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteChatPhoto")
-  let body = {chat_id: $chat_id} | compact
+  let body = {"chat_id": $chat_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -379,7 +379,7 @@ export def "delete-chat-sticker-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteChatStickerSet")
-  let body = {chat_id: $chat_id} | compact
+  let body = {"chat_id": $chat_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -406,7 +406,7 @@ export def "delete-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteMessage")
-  let body = {chat_id: $chat_id, message_id: $message_id} | compact
+  let body = {"chat_id": $chat_id, "message_id": $message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -432,7 +432,7 @@ export def "delete-sticker-from-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteStickerFromSet")
-  let body = {sticker: $sticker} | compact
+  let body = {"sticker": $sticker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -458,7 +458,7 @@ export def "delete-webhook post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteWebhook")
-  let body = {drop_pending_updates: $drop_pending_updates} | compact
+  let body = {"drop_pending_updates": $drop_pending_updates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -492,7 +492,7 @@ export def "edit-message-caption post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/editMessageCaption")
-  let body = {caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, inline_message_id: $inline_message_id, message_id: $message_id, parse_mode: $parse_mode, reply_markup: $reply_markup} | compact
+  let body = {"caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "inline_message_id": $inline_message_id, "message_id": $message_id, "parse_mode": $parse_mode, "reply_markup": $reply_markup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -527,7 +527,7 @@ export def "edit-message-live-location post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/editMessageLiveLocation")
-  let body = {chat_id: $chat_id, heading: $heading, horizontal_accuracy: $horizontal_accuracy, inline_message_id: $inline_message_id, latitude: $latitude, longitude: $longitude, message_id: $message_id, proximity_alert_radius: $proximity_alert_radius, reply_markup: $reply_markup} | compact
+  let body = {"chat_id": $chat_id, "heading": $heading, "horizontal_accuracy": $horizontal_accuracy, "inline_message_id": $inline_message_id, "latitude": $latitude, "longitude": $longitude, "message_id": $message_id, "proximity_alert_radius": $proximity_alert_radius, "reply_markup": $reply_markup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -558,7 +558,7 @@ export def "edit-message-media post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/editMessageMedia")
-  let body = {chat_id: $chat_id, inline_message_id: $inline_message_id, media: $media, message_id: $message_id, reply_markup: $reply_markup} | compact
+  let body = {"chat_id": $chat_id, "inline_message_id": $inline_message_id, "media": $media, "message_id": $message_id, "reply_markup": $reply_markup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -588,7 +588,7 @@ export def "edit-message-reply-markup post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/editMessageReplyMarkup")
-  let body = {chat_id: $chat_id, inline_message_id: $inline_message_id, message_id: $message_id, reply_markup: $reply_markup} | compact
+  let body = {"chat_id": $chat_id, "inline_message_id": $inline_message_id, "message_id": $message_id, "reply_markup": $reply_markup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,7 +623,7 @@ export def "edit-message-text post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/editMessageText")
-  let body = {chat_id: $chat_id, disable_web_page_preview: $disable_web_page_preview, entities: $entities, inline_message_id: $inline_message_id, message_id: $message_id, parse_mode: $parse_mode, reply_markup: $reply_markup, text: $text} | compact
+  let body = {"chat_id": $chat_id, "disable_web_page_preview": $disable_web_page_preview, "entities": $entities, "inline_message_id": $inline_message_id, "message_id": $message_id, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -649,7 +649,7 @@ export def "export-chat-invite-link post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exportChatInviteLink")
-  let body = {chat_id: $chat_id} | compact
+  let body = {"chat_id": $chat_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -678,7 +678,7 @@ export def "forward-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/forwardMessage")
-  let body = {chat_id: $chat_id, disable_notification: $disable_notification, from_chat_id: $from_chat_id, message_id: $message_id} | compact
+  let body = {"chat_id": $chat_id, "disable_notification": $disable_notification, "from_chat_id": $from_chat_id, "message_id": $message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -704,7 +704,7 @@ export def "get-chat post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getChat")
-  let body = {chat_id: $chat_id} | compact
+  let body = {"chat_id": $chat_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -730,7 +730,7 @@ export def "get-chat-administrators post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getChatAdministrators")
-  let body = {chat_id: $chat_id} | compact
+  let body = {"chat_id": $chat_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -757,7 +757,7 @@ export def "get-chat-member post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getChatMember")
-  let body = {chat_id: $chat_id, user_id: $user_id} | compact
+  let body = {"chat_id": $chat_id, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,7 +783,7 @@ export def "get-chat-members-count post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getChatMembersCount")
-  let body = {chat_id: $chat_id} | compact
+  let body = {"chat_id": $chat_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -809,7 +809,7 @@ export def "get-file post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getFile")
-  let body = {file_id: $file_id} | compact
+  let body = {"file_id": $file_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -838,7 +838,7 @@ export def "get-game-high-scores post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getGameHighScores")
-  let body = {chat_id: $chat_id, inline_message_id: $inline_message_id, message_id: $message_id, user_id: $user_id} | compact
+  let body = {"chat_id": $chat_id, "inline_message_id": $inline_message_id, "message_id": $message_id, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -908,7 +908,7 @@ export def "get-sticker-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getStickerSet")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -937,7 +937,7 @@ export def "get-updates post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getUpdates")
-  let body = {allowed_updates: $allowed_updates, limit: $limit, offset: $offset, timeout: $timeout} | compact
+  let body = {"allowed_updates": $allowed_updates, "limit": $limit, "offset": $offset, "timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -965,7 +965,7 @@ export def "get-user-profile-photos post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getUserProfilePhotos")
-  let body = {limit: $limit, offset: $offset, user_id: $user_id} | compact
+  let body = {"limit": $limit, "offset": $offset, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1015,7 +1015,7 @@ export def "kick-chat-member post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kickChatMember")
-  let body = {chat_id: $chat_id, until_date: $until_date, user_id: $user_id} | compact
+  let body = {"chat_id": $chat_id, "until_date": $until_date, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1041,7 +1041,7 @@ export def "leave-chat post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/leaveChat")
-  let body = {chat_id: $chat_id} | compact
+  let body = {"chat_id": $chat_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1091,7 +1091,7 @@ export def "pin-chat-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pinChatMessage")
-  let body = {chat_id: $chat_id, disable_notification: $disable_notification, message_id: $message_id} | compact
+  let body = {"chat_id": $chat_id, "disable_notification": $disable_notification, "message_id": $message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1127,7 +1127,7 @@ export def "promote-chat-member post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/promoteChatMember")
-  let body = {can_change_info: $can_change_info, can_delete_messages: $can_delete_messages, can_edit_messages: $can_edit_messages, can_invite_users: $can_invite_users, can_pin_messages: $can_pin_messages, can_post_messages: $can_post_messages, can_promote_members: $can_promote_members, can_restrict_members: $can_restrict_members, chat_id: $chat_id, is_anonymous: $is_anonymous, user_id: $user_id} | compact
+  let body = {"can_change_info": $can_change_info, "can_delete_messages": $can_delete_messages, "can_edit_messages": $can_edit_messages, "can_invite_users": $can_invite_users, "can_pin_messages": $can_pin_messages, "can_post_messages": $can_post_messages, "can_promote_members": $can_promote_members, "can_restrict_members": $can_restrict_members, "chat_id": $chat_id, "is_anonymous": $is_anonymous, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1157,7 +1157,7 @@ export def "restrict-chat-member post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restrictChatMember")
-  let body = {chat_id: $chat_id, permissions: $permissions, until_date: $until_date, user_id: $user_id} | compact
+  let body = {"chat_id": $chat_id, "permissions": $permissions, "until_date": $until_date, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1196,7 +1196,7 @@ export def "send-animation post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendAnimation")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, animation: $animation, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, duration: $duration, height: $height, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, thumb: $thumb, width: $width} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "animation": $animation, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "duration": $duration, "height": $height, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "thumb": $thumb, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1235,7 +1235,7 @@ export def "send-audio post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendAudio")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, audio: $audio, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, duration: $duration, parse_mode: $parse_mode, performer: $performer, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, thumb: $thumb, title: $title} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "audio": $audio, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "duration": $duration, "parse_mode": $parse_mode, "performer": $performer, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "thumb": $thumb, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1262,7 +1262,7 @@ export def "send-chat-action post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendChatAction")
-  let body = {action: $action, chat_id: $chat_id} | compact
+  let body = {"action": $action, "chat_id": $chat_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1296,7 +1296,7 @@ export def "send-contact post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendContact")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, first_name: $first_name, last_name: $last_name, phone_number: $phone_number, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, vcard: $vcard} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "first_name": $first_name, "last_name": $last_name, "phone_number": $phone_number, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "vcard": $vcard} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1327,7 +1327,7 @@ export def "send-dice post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendDice")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, emoji: $emoji, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "emoji": $emoji, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1364,7 +1364,7 @@ export def "send-document post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendDocument")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_content_type_detection: $disable_content_type_detection, disable_notification: $disable_notification, document: $document, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, thumb: $thumb} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_content_type_detection": $disable_content_type_detection, "disable_notification": $disable_notification, "document": $document, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "thumb": $thumb} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1396,7 +1396,7 @@ export def "send-game post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendGame")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, game_short_name: $game_short_name, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "game_short_name": $game_short_name, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1447,7 +1447,7 @@ export def "send-invoice post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendInvoice")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, currency: $currency, description: $description, disable_notification: $disable_notification, is_flexible: $is_flexible, need_email: $need_email, need_name: $need_name, need_phone_number: $need_phone_number, need_shipping_address: $need_shipping_address, payload: $payload, photo_height: $photo_height, photo_size: $photo_size, photo_url: $photo_url, photo_width: $photo_width, prices: $prices, provider_data: $provider_data, provider_token: $provider_token, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, send_email_to_provider: $send_email_to_provider, send_phone_number_to_provider: $send_phone_number_to_provider, start_parameter: $start_parameter, title: $title} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "currency": $currency, "description": $description, "disable_notification": $disable_notification, "is_flexible": $is_flexible, "need_email": $need_email, "need_name": $need_name, "need_phone_number": $need_phone_number, "need_shipping_address": $need_shipping_address, "payload": $payload, "photo_height": $photo_height, "photo_size": $photo_size, "photo_url": $photo_url, "photo_width": $photo_width, "prices": $prices, "provider_data": $provider_data, "provider_token": $provider_token, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "send_email_to_provider": $send_email_to_provider, "send_phone_number_to_provider": $send_phone_number_to_provider, "start_parameter": $start_parameter, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1483,7 +1483,7 @@ export def "send-location post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendLocation")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, heading: $heading, horizontal_accuracy: $horizontal_accuracy, latitude: $latitude, live_period: $live_period, longitude: $longitude, proximity_alert_radius: $proximity_alert_radius, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "heading": $heading, "horizontal_accuracy": $horizontal_accuracy, "latitude": $latitude, "live_period": $live_period, "longitude": $longitude, "proximity_alert_radius": $proximity_alert_radius, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1513,7 +1513,7 @@ export def "send-media-group post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendMediaGroup")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, media: $media, reply_to_message_id: $reply_to_message_id} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "media": $media, "reply_to_message_id": $reply_to_message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1548,7 +1548,7 @@ export def "send-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendMessage")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, disable_web_page_preview: $disable_web_page_preview, entities: $entities, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, text: $text} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "disable_web_page_preview": $disable_web_page_preview, "entities": $entities, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1583,7 +1583,7 @@ export def "send-photo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendPhoto")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, parse_mode: $parse_mode, photo: $photo, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "parse_mode": $parse_mode, "photo": $photo, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1626,7 +1626,7 @@ export def "send-poll post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendPoll")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, allows_multiple_answers: $allows_multiple_answers, chat_id: $chat_id, close_date: $close_date, correct_option_id: $correct_option_id, disable_notification: $disable_notification, explanation: $explanation, explanation_entities: $explanation_entities, explanation_parse_mode: $explanation_parse_mode, is_anonymous: $is_anonymous, is_closed: $is_closed, open_period: $open_period, options: $options, question: $question, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, type: $type} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "allows_multiple_answers": $allows_multiple_answers, "chat_id": $chat_id, "close_date": $close_date, "correct_option_id": $correct_option_id, "disable_notification": $disable_notification, "explanation": $explanation, "explanation_entities": $explanation_entities, "explanation_parse_mode": $explanation_parse_mode, "is_anonymous": $is_anonymous, "is_closed": $is_closed, "open_period": $open_period, "options": $options, "question": $question, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1657,7 +1657,7 @@ export def "send-sticker post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendSticker")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, sticker: $sticker} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "sticker": $sticker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1695,7 +1695,7 @@ export def "send-venue post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendVenue")
-  let body = {address: $address, allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, foursquare_id: $foursquare_id, foursquare_type: $foursquare_type, google_place_id: $google_place_id, google_place_type: $google_place_type, latitude: $latitude, longitude: $longitude, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, title: $title} | compact
+  let body = {"address": $address, "allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "foursquare_id": $foursquare_id, "foursquare_type": $foursquare_type, "google_place_id": $google_place_id, "google_place_type": $google_place_type, "latitude": $latitude, "longitude": $longitude, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1735,7 +1735,7 @@ export def "send-video post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendVideo")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, duration: $duration, height: $height, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, supports_streaming: $supports_streaming, thumb: $thumb, video: $video, width: $width} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "duration": $duration, "height": $height, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "supports_streaming": $supports_streaming, "thumb": $thumb, "video": $video, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1769,7 +1769,7 @@ export def "send-video-note post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendVideoNote")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, chat_id: $chat_id, disable_notification: $disable_notification, duration: $duration, length: $length, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, thumb: $thumb, video_note: $video_note} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "chat_id": $chat_id, "disable_notification": $disable_notification, "duration": $duration, "length": $length, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "thumb": $thumb, "video_note": $video_note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1805,7 +1805,7 @@ export def "send-voice post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendVoice")
-  let body = {allow_sending_without_reply: $allow_sending_without_reply, caption: $caption, caption_entities: $caption_entities, chat_id: $chat_id, disable_notification: $disable_notification, duration: $duration, parse_mode: $parse_mode, reply_markup: $reply_markup, reply_to_message_id: $reply_to_message_id, voice: $voice} | compact
+  let body = {"allow_sending_without_reply": $allow_sending_without_reply, "caption": $caption, "caption_entities": $caption_entities, "chat_id": $chat_id, "disable_notification": $disable_notification, "duration": $duration, "parse_mode": $parse_mode, "reply_markup": $reply_markup, "reply_to_message_id": $reply_to_message_id, "voice": $voice} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1833,7 +1833,7 @@ export def "set-chat-administrator-custom-title post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatAdministratorCustomTitle")
-  let body = {chat_id: $chat_id, custom_title: $custom_title, user_id: $user_id} | compact
+  let body = {"chat_id": $chat_id, "custom_title": $custom_title, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1860,7 +1860,7 @@ export def "set-chat-description post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatDescription")
-  let body = {chat_id: $chat_id, description: $description} | compact
+  let body = {"chat_id": $chat_id, "description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1888,7 +1888,7 @@ export def "set-chat-permissions post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatPermissions")
-  let body = {chat_id: $chat_id, permissions: $permissions} | compact
+  let body = {"chat_id": $chat_id, "permissions": $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1915,7 +1915,7 @@ export def "set-chat-photo post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatPhoto")
-  let body = {chat_id: $chat_id, photo: $photo} | compact
+  let body = {"chat_id": $chat_id, "photo": $photo} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1942,7 +1942,7 @@ export def "set-chat-sticker-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatStickerSet")
-  let body = {chat_id: $chat_id, sticker_set_name: $sticker_set_name} | compact
+  let body = {"chat_id": $chat_id, "sticker_set_name": $sticker_set_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1969,7 +1969,7 @@ export def "set-chat-title post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setChatTitle")
-  let body = {chat_id: $chat_id, title: $title} | compact
+  let body = {"chat_id": $chat_id, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2001,7 +2001,7 @@ export def "set-game-score post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setGameScore")
-  let body = {chat_id: $chat_id, disable_edit_message: $disable_edit_message, force: $force, inline_message_id: $inline_message_id, message_id: $message_id, score: $score, user_id: $user_id} | compact
+  let body = {"chat_id": $chat_id, "disable_edit_message": $disable_edit_message, "force": $force, "inline_message_id": $inline_message_id, "message_id": $message_id, "score": $score, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2028,7 +2028,7 @@ export def "set-my-commands post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setMyCommands")
-  let body = {commands: $commands} | compact
+  let body = {"commands": $commands} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2055,7 +2055,7 @@ export def "set-passport-data-errors post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setPassportDataErrors")
-  let body = {errors: $errors, user_id: $user_id} | compact
+  let body = {"errors": $errors, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2082,7 +2082,7 @@ export def "set-sticker-position-in-set post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setStickerPositionInSet")
-  let body = {position: $position, sticker: $sticker} | compact
+  let body = {"position": $position, "sticker": $sticker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2110,7 +2110,7 @@ export def "set-sticker-set-thumb post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setStickerSetThumb")
-  let body = {name: $name, thumb: $thumb, user_id: $user_id} | compact
+  let body = {"name": $name, "thumb": $thumb, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2141,7 +2141,7 @@ export def "set-webhook post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setWebhook")
-  let body = {allowed_updates: $allowed_updates, certificate: $certificate, drop_pending_updates: $drop_pending_updates, ip_address: $ip_address, max_connections: $max_connections, url: $body_url} | compact
+  let body = {"allowed_updates": $allowed_updates, "certificate": $certificate, "drop_pending_updates": $drop_pending_updates, "ip_address": $ip_address, "max_connections": $max_connections, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2171,7 +2171,7 @@ export def "stop-message-live-location post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stopMessageLiveLocation")
-  let body = {chat_id: $chat_id, inline_message_id: $inline_message_id, message_id: $message_id, reply_markup: $reply_markup} | compact
+  let body = {"chat_id": $chat_id, "inline_message_id": $inline_message_id, "message_id": $message_id, "reply_markup": $reply_markup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2200,7 +2200,7 @@ export def "stop-poll post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stopPoll")
-  let body = {chat_id: $chat_id, message_id: $message_id, reply_markup: $reply_markup} | compact
+  let body = {"chat_id": $chat_id, "message_id": $message_id, "reply_markup": $reply_markup} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2228,7 +2228,7 @@ export def "unban-chat-member post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unbanChatMember")
-  let body = {chat_id: $chat_id, only_if_banned: $only_if_banned, user_id: $user_id} | compact
+  let body = {"chat_id": $chat_id, "only_if_banned": $only_if_banned, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2254,7 +2254,7 @@ export def "unpin-all-chat-messages post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unpinAllChatMessages")
-  let body = {chat_id: $chat_id} | compact
+  let body = {"chat_id": $chat_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2281,7 +2281,7 @@ export def "unpin-chat-message post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unpinChatMessage")
-  let body = {chat_id: $chat_id, message_id: $message_id} | compact
+  let body = {"chat_id": $chat_id, "message_id": $message_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2308,7 +2308,7 @@ export def "upload-sticker-file post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/uploadStickerFile")
-  let body = {png_sticker: $png_sticker, user_id: $user_id} | compact
+  let body = {"png_sticker": $png_sticker, "user_id": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

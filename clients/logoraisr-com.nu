@@ -106,7 +106,7 @@ export def "previews read" [
 ]: nothing -> record<preview_img_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/previews/($file_id)/")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/previews/{file_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +178,7 @@ export def "projects create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/projects/")
-  let body = {file_id: $file_id, process: $process, project_title: $project_title} | compact
+  let body = {"file_id": $file_id, "process": $process, "project_title": $project_title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -202,7 +202,7 @@ export def "projects read" [
 ]: nothing -> record<created: string, file_id: string, id: int, paypal_payment_id: string, process: record<crop: string, flip: bool, mirror: bool, processing_algorithm: string, resize: string, rotate: int>, process_id: string, project_number: int, project_title: string, result_file_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($project_number)/")
+  let full_url = (build-url $base ({project_number: $project_number} | format pattern "/projects/{project_number}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +250,7 @@ export def "reports create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reports/")
-  let body = {file_id: $file_id, process: $process} | compact
+  let body = {"file_id": $file_id, "process": $process} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,7 +274,7 @@ export def "reports read" [
 ]: nothing -> record<created: string, file_id: string, process_id: int, report_number: int, result: record<colors: list<record>, height: int, number_of_pixel_in_image: int, width: int>, result_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reports/($report_number)/")
+  let full_url = (build-url $base ({report_number: $report_number} | format pattern "/reports/{report_number}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,7 +297,7 @@ export def "results read" [
 ]: nothing -> record<result_file_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/results/($result_file_id)/")
+  let full_url = (build-url $base ({result_file_id: $result_file_id} | format pattern "/results/{result_file_id}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,7 +322,7 @@ export def "uploads create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/uploads/")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

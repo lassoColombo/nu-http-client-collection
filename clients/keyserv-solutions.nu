@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "keys-api-current Current" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "keys-api-current get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -91,7 +91,7 @@ export def commands []: nothing -> table {
 # GET /v1/KeysApi/Current/{serial}
 #
 # operationId: KeysApi_Current
-export def "keys-api-current Current" [
+export def "keys-api-current get" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -104,7 +104,7 @@ export def "keys-api-current Current" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/KeysApi/Current/($serial)")
+  let full_url = (build-url $base ({serial: $serial} | format pattern "/v1/KeysApi/Current/{serial}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -113,7 +113,7 @@ export def "keys-api-current Current" [
 # GET /v1/KeysApi/Custom/{serial}
 #
 # operationId: KeysApi_Custom
-export def "keys-api-custom Custom" [
+export def "keys-api-custom get" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -126,7 +126,7 @@ export def "keys-api-custom Custom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/KeysApi/Custom/($serial)")
+  let full_url = (build-url $base ({serial: $serial} | format pattern "/v1/KeysApi/Custom/{serial}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -135,7 +135,7 @@ export def "keys-api-custom Custom" [
 # GET /v1/KeysApi/Expiry/{serial}
 #
 # operationId: KeysApi_Expiry
-export def "keys-api-expiry Expiry" [
+export def "keys-api-expiry get" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -148,7 +148,7 @@ export def "keys-api-expiry Expiry" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/KeysApi/Expiry/($serial)")
+  let full_url = (build-url $base ({serial: $serial} | format pattern "/v1/KeysApi/Expiry/{serial}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -157,7 +157,7 @@ export def "keys-api-expiry Expiry" [
 # GET /v1/KeysApi/Find/{serial}
 #
 # operationId: KeysApi_Find
-export def "keys-api-find Find" [
+export def "keys-api-find get" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -170,7 +170,7 @@ export def "keys-api-find Find" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/KeysApi/Find/($serial)")
+  let full_url = (build-url $base ({serial: $serial} | format pattern "/v1/KeysApi/Find/{serial}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +179,7 @@ export def "keys-api-find Find" [
 # PATCH /v1/ProductsApi
 #
 # operationId: ProductsApi_PatchProduct
-export def "products-api PatchProduct" [
+export def "products-api update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "products-api PatchProduct" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ProductsApi")
-  let body = {custom: $custom, key: $key, name: $name, serial: $serial} | compact
+  let body = {"custom": $custom, "key": $key, "name": $name, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,7 +207,7 @@ export def "products-api PatchProduct" [
 # POST /v1/ProductsApi
 #
 # operationId: ProductsApi_PatchProduct2
-export def "products-api PatchProduct2" [
+export def "products-api update-product2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "products-api PatchProduct2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ProductsApi")
-  let body = {custom: $custom, key: $key, name: $name, serial: $serial} | compact
+  let body = {"custom": $custom, "key": $key, "name": $name, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,7 +235,7 @@ export def "products-api PatchProduct2" [
 # POST /v1/ProductsApi/Count
 #
 # operationId: ProductsApi_Count
-export def "products-api-count Count" [
+export def "products-api-count post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "products-api-count Count" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ProductsApi/Count")
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -260,7 +260,7 @@ export def "products-api-count Count" [
 # POST /v1/ProductsApi/Find
 #
 # operationId: ProductsApi_Find
-export def "products-api-find Find" [
+export def "products-api-find post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "products-api-find Find" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/ProductsApi/Find" $qp)
-  let body = {key: $key, serial: $serial} | compact
+  let body = {"key": $key, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -288,7 +288,7 @@ export def "products-api-find Find" [
 # POST /v1/ProductsApi/List
 #
 # operationId: ProductsApi_List
-export def "products-api-list List" [
+export def "products-api-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "products-api-list List" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/ProductsApi/List" $qp)
-  let body = {key: $key} | compact
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,7 +315,7 @@ export def "products-api-list List" [
 # POST /v1/ProductsApi/Save
 #
 # operationId: ProductsApi_Save
-export def "products-api-save Save" [
+export def "products-api-save post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "products-api-save Save" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ProductsApi/Save")
-  let body = {custom: $custom, key: $key, name: $name, serial: $serial} | compact
+  let body = {"custom": $custom, "key": $key, "name": $name, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -343,7 +343,7 @@ export def "products-api-save Save" [
 # DELETE /v1/ProductsApi/{serial}
 #
 # operationId: ProductsApi_DeleteProduct
-export def "products-api DeleteProduct" [
+export def "products-api delete" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,12 +353,12 @@ export def "products-api DeleteProduct" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/ProductsApi/($serial)")
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let full_url = (build-url $base ({serial: $serial} | format pattern "/v1/ProductsApi/{serial}"))
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -368,7 +368,7 @@ export def "products-api DeleteProduct" [
 # POST /v1/ProductsApi/{serial}
 #
 # operationId: ProductsApi_DeleteProduct2
-export def "products-api DeleteProduct2" [
+export def "products-api delete-product2" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,12 +378,12 @@ export def "products-api DeleteProduct2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Api-Key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/ProductsApi/($serial)")
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let full_url = (build-url $base ({serial: $serial} | format pattern "/v1/ProductsApi/{serial}"))
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -393,7 +393,7 @@ export def "products-api DeleteProduct2" [
 # POST /v1/SubscriptionsApi
 #
 # operationId: SubscriptionsApi_PutSubscription2
-export def "subscriptions-api PutSubscription2" [
+export def "subscriptions-api update-subscription2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,20 +403,20 @@ export def "subscriptions-api PutSubscription2" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string
-  --callbackOnModify: oneof<nothing, bool> # nullable
-  --callbackUrl: string # nullable, format: uri
+  --callback-on-modify: oneof<nothing, bool> # nullable
+  --callback-url: string # nullable, format: uri
   --custom: any # nullable
   --frequency: string
   --key: string # format: guid
   --name: string # nullable
   --serial: string # format: guid
-  --startFrom: string # nullable
+  --start-from: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/SubscriptionsApi")
-  let body = {action: $action, callbackOnModify: $callbackOnModify, callbackUrl: $callbackUrl, custom: $custom, frequency: $frequency, key: $key, name: $name, serial: $serial, startFrom: $startFrom} | compact
+  let body = {"action": $action, "callbackOnModify": $callback_on_modify, "callbackUrl": $callback_url, "custom": $custom, "frequency": $frequency, "key": $key, "name": $name, "serial": $serial, "startFrom": $start_from} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -426,7 +426,7 @@ export def "subscriptions-api PutSubscription2" [
 # PUT /v1/SubscriptionsApi
 #
 # operationId: SubscriptionsApi_PutSubscription
-export def "subscriptions-api PutSubscription" [
+export def "subscriptions-api update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,20 +436,20 @@ export def "subscriptions-api PutSubscription" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string
-  --callbackOnModify: oneof<nothing, bool> # nullable
-  --callbackUrl: string # nullable, format: uri
+  --callback-on-modify: oneof<nothing, bool> # nullable
+  --callback-url: string # nullable, format: uri
   --custom: any # nullable
   --frequency: string
   --key: string # format: guid
   --name: string # nullable
   --serial: string # format: guid
-  --startFrom: string # nullable
+  --start-from: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/SubscriptionsApi")
-  let body = {action: $action, callbackOnModify: $callbackOnModify, callbackUrl: $callbackUrl, custom: $custom, frequency: $frequency, key: $key, name: $name, serial: $serial, startFrom: $startFrom} | compact
+  let body = {"action": $action, "callbackOnModify": $callback_on_modify, "callbackUrl": $callback_url, "custom": $custom, "frequency": $frequency, "key": $key, "name": $name, "serial": $serial, "startFrom": $start_from} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -459,7 +459,7 @@ export def "subscriptions-api PutSubscription" [
 # POST /v1/SubscriptionsApi/Count
 #
 # operationId: SubscriptionsApi_Count
-export def "subscriptions-api-count Count" [
+export def "subscriptions-api-count post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "subscriptions-api-count Count" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/SubscriptionsApi/Count")
-  let body = {key: $key, serial: $serial} | compact
+  let body = {"key": $key, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -485,7 +485,7 @@ export def "subscriptions-api-count Count" [
 # PATCH /v1/SubscriptionsApi/Disable
 #
 # operationId: SubscriptionsApi_Disable
-export def "subscriptions-api-disable Disable" [
+export def "subscriptions-api-disable disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "subscriptions-api-disable Disable" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/SubscriptionsApi/Disable")
-  let body = {key: $key, serial: $serial} | compact
+  let body = {"key": $key, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -511,7 +511,7 @@ export def "subscriptions-api-disable Disable" [
 # POST /v1/SubscriptionsApi/Disable
 #
 # operationId: SubscriptionsApi_Disable2
-export def "subscriptions-api-disable Disable2" [
+export def "subscriptions-api-disable post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,7 +527,7 @@ export def "subscriptions-api-disable Disable2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/SubscriptionsApi/Disable")
-  let body = {key: $key, serial: $serial} | compact
+  let body = {"key": $key, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -537,7 +537,7 @@ export def "subscriptions-api-disable Disable2" [
 # PATCH /v1/SubscriptionsApi/Enable
 #
 # operationId: SubscriptionsApi_Enable
-export def "subscriptions-api-enable Enable" [
+export def "subscriptions-api-enable enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "subscriptions-api-enable Enable" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/SubscriptionsApi/Enable")
-  let body = {key: $key, serial: $serial} | compact
+  let body = {"key": $key, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -563,7 +563,7 @@ export def "subscriptions-api-enable Enable" [
 # POST /v1/SubscriptionsApi/Enable
 #
 # operationId: SubscriptionsApi_Enable2
-export def "subscriptions-api-enable Enable2" [
+export def "subscriptions-api-enable post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,7 +579,7 @@ export def "subscriptions-api-enable Enable2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/SubscriptionsApi/Enable")
-  let body = {key: $key, serial: $serial} | compact
+  let body = {"key": $key, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -589,7 +589,7 @@ export def "subscriptions-api-enable Enable2" [
 # POST /v1/SubscriptionsApi/Find
 #
 # operationId: SubscriptionsApi_Find
-export def "subscriptions-api-find Find" [
+export def "subscriptions-api-find post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,7 +605,7 @@ export def "subscriptions-api-find Find" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/SubscriptionsApi/Find")
-  let body = {key: $key, serial: $serial} | compact
+  let body = {"key": $key, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -615,7 +615,7 @@ export def "subscriptions-api-find Find" [
 # POST /v1/SubscriptionsApi/List
 #
 # operationId: SubscriptionsApi_List
-export def "subscriptions-api-list List" [
+export def "subscriptions-api-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,7 +633,7 @@ export def "subscriptions-api-list List" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/SubscriptionsApi/List" $qp)
-  let body = {key: $key, serial: $serial} | compact
+  let body = {"key": $key, "serial": $serial} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -643,7 +643,7 @@ export def "subscriptions-api-list List" [
 # POST /v1/SubscriptionsApi/Save
 #
 # operationId: SubscriptionsApi_Save
-export def "subscriptions-api-save Save" [
+export def "subscriptions-api-save post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,20 +653,20 @@ export def "subscriptions-api-save Save" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string
-  --callbackOnModify: oneof<nothing, bool> # nullable
-  --callbackUrl: string # nullable, format: uri
+  --callback-on-modify: oneof<nothing, bool> # nullable
+  --callback-url: string # nullable, format: uri
   --custom: any # nullable
   --frequency: string
   --key: string # format: guid
   --name: string # nullable
   --serial: string # format: guid
-  --startFrom: string # nullable
+  --start-from: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/SubscriptionsApi/Save")
-  let body = {action: $action, callbackOnModify: $callbackOnModify, callbackUrl: $callbackUrl, custom: $custom, frequency: $frequency, key: $key, name: $name, serial: $serial, startFrom: $startFrom} | compact
+  let body = {"action": $action, "callbackOnModify": $callback_on_modify, "callbackUrl": $callback_url, "custom": $custom, "frequency": $frequency, "key": $key, "name": $name, "serial": $serial, "startFrom": $start_from} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -676,7 +676,7 @@ export def "subscriptions-api-save Save" [
 # DELETE /v1/SubscriptionsApi/{serial}
 #
 # operationId: SubscriptionsApi_DeleteSubscription
-export def "subscriptions-api DeleteSubscription" [
+export def "subscriptions-api delete" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -687,13 +687,13 @@ export def "subscriptions-api DeleteSubscription" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --keep: oneof<nothing, bool> # nullable
-  --X-Api-Key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keep" $keep "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/SubscriptionsApi/($serial)" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let full_url = (build-url $base ({serial: $serial} | format pattern "/v1/SubscriptionsApi/{serial}") $qp)
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -703,7 +703,7 @@ export def "subscriptions-api DeleteSubscription" [
 # POST /v1/SubscriptionsApi/{serial}
 #
 # operationId: SubscriptionsApi_DeleteSubscription2
-export def "subscriptions-api DeleteSubscription2" [
+export def "subscriptions-api delete-subscription2" [
   serial: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -714,13 +714,13 @@ export def "subscriptions-api DeleteSubscription2" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --keep: oneof<nothing, bool> # nullable
-  --X-Api-Key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keep" $keep "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/SubscriptionsApi/($serial)" $qp)
-  let extra_headers = {"X-Api-Key": $X_Api_Key} | compact
+  let full_url = (build-url $base ({serial: $serial} | format pattern "/v1/SubscriptionsApi/{serial}") $qp)
+  let extra_headers = {"X-Api-Key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -113,7 +113,7 @@ export def commands []: nothing -> table {
 #
 # GET /access-tokens/{accessTokens}
 export def "access-tokens get" [
-  accessTokens: string
+  access_tokens: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +130,7 @@ export def "access-tokens get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/access-tokens/($accessTokens)" $qp)
+  let full_url = (build-url $base ({access_tokens: $access_tokens} | format pattern "/access-tokens/{access_tokens}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -140,7 +140,7 @@ export def "access-tokens get" [
 #
 # GET /access-tokens/{accessTokens}/invalidate
 export def "access-tokens-invalidate get" [
-  accessTokens: string
+  access_tokens: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "access-tokens-invalidate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/access-tokens/($accessTokens)/invalidate" $qp)
+  let full_url = (build-url $base ({access_tokens: $access_tokens} | format pattern "/access-tokens/{access_tokens}/invalidate") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,7 +224,7 @@ export def "answers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/answers/($ids)" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/answers/{ids}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,7 +258,7 @@ export def "answers-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/answers/($ids)/comments" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/answers/{ids}/comments") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,7 +268,7 @@ export def "answers-comments get" [
 #
 # GET /apps/{accessTokens}/de-authenticate
 export def "apps-de-authenticate get" [
-  accessTokens: string
+  access_tokens: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "apps-de-authenticate get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/($accessTokens)/de-authenticate" $qp)
+  let full_url = (build-url $base ({access_tokens: $access_tokens} | format pattern "/apps/{access_tokens}/de-authenticate") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +450,7 @@ export def "badges get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/badges/($ids)" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/badges/{ids}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,7 +480,7 @@ export def "badges-recipients get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/badges/($ids)/recipients" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/badges/{ids}/recipients") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,7 +547,7 @@ export def "comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/comments/($ids)" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/comments/{ids}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -574,7 +574,7 @@ export def "comments-delete post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/comments/($id)/delete" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}/delete") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -602,7 +602,7 @@ export def "comments-edit post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/comments/($id)/edit" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}/edit") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -650,7 +650,7 @@ export def "errors get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/errors/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/errors/{id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -726,7 +726,7 @@ export def "filters get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/filters/($filters)")
+  let full_url = (build-url $base ({filters: $filters} | format pattern "/filters/{filters}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -970,7 +970,7 @@ export def "me-comments list" [
 #
 # GET /me/comments/{toId}
 export def "me-comments get" [
-  toId: int
+  to_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,7 +994,7 @@ export def "me-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/comments/($toId)" $qp)
+  let full_url = (build-url $base ({to_id: $to_id} | format pattern "/me/comments/{to_id}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1566,7 +1566,7 @@ export def "me-tags-top-answers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/tags/($tags)/top-answers" $qp)
+  let full_url = (build-url $base ({tags: $tags} | format pattern "/me/tags/{tags}/top-answers") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1600,7 +1600,7 @@ export def "me-tags-top-questions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/me/tags/($tags)/top-questions" $qp)
+  let full_url = (build-url $base ({tags: $tags} | format pattern "/me/tags/{tags}/top-questions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1829,7 +1829,7 @@ export def "posts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/posts/($ids)" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/posts/{ids}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1863,7 +1863,7 @@ export def "posts-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/posts/($ids)/comments" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/posts/{ids}/comments") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1893,7 +1893,7 @@ export def "posts-revisions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/posts/($ids)/revisions" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/posts/{ids}/revisions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1927,7 +1927,7 @@ export def "posts-suggested-edits get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/posts/($ids)/suggested-edits" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/posts/{ids}/suggested-edits") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1955,7 +1955,7 @@ export def "posts-comments-add post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "body" $qp_body "scalar") (serialize-qp "preview" $preview "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/posts/($id)/comments/add" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/posts/{id}/comments/add") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2152,7 +2152,7 @@ export def "questions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/questions/($ids)" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/questions/{ids}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2186,7 +2186,7 @@ export def "questions-answers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/questions/($ids)/answers" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/questions/{ids}/answers") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2220,7 +2220,7 @@ export def "questions-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/questions/($ids)/comments" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/questions/{ids}/comments") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2254,7 +2254,7 @@ export def "questions-linked get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/questions/($ids)/linked" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/questions/{ids}/linked") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2288,7 +2288,7 @@ export def "questions-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/questions/($ids)/related" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/questions/{ids}/related") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2318,7 +2318,7 @@ export def "questions-timeline get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/questions/($ids)/timeline" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/questions/{ids}/timeline") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2348,7 +2348,7 @@ export def "revisions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/revisions/($ids)" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/revisions/{ids}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2560,7 +2560,7 @@ export def "suggested-edits get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggested-edits/($ids)" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/suggested-edits/{ids}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2723,7 +2723,7 @@ export def "tags-faq get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tags)/faq" $qp)
+  let full_url = (build-url $base ({tags: $tags} | format pattern "/tags/{tags}/faq") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2757,7 +2757,7 @@ export def "tags-info get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tags)/info" $qp)
+  let full_url = (build-url $base ({tags: $tags} | format pattern "/tags/{tags}/info") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2785,7 +2785,7 @@ export def "tags-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tags)/related" $qp)
+  let full_url = (build-url $base ({tags: $tags} | format pattern "/tags/{tags}/related") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2819,7 +2819,7 @@ export def "tags-synonyms get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tags)/synonyms" $qp)
+  let full_url = (build-url $base ({tags: $tags} | format pattern "/tags/{tags}/synonyms") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2847,7 +2847,7 @@ export def "tags-wikis get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tags)/wikis" $qp)
+  let full_url = (build-url $base ({tags: $tags} | format pattern "/tags/{tags}/wikis") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2876,7 +2876,7 @@ export def "tags-top-answerers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tag)/top-answerers/($period)" $qp)
+  let full_url = (build-url $base ({tag: $tag, period: $period} | format pattern "/tags/{tag}/top-answerers/{period}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2905,7 +2905,7 @@ export def "tags-top-askers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($tag)/top-askers/($period)" $qp)
+  let full_url = (build-url $base ({tag: $tag, period: $period} | format pattern "/tags/{tag}/top-askers/{period}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3039,7 +3039,7 @@ export def "users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3073,7 +3073,7 @@ export def "users-answers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/answers" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/answers") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3100,7 +3100,7 @@ export def "users-associated get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/associated" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/associated") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3134,7 +3134,7 @@ export def "users-badges get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/badges" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/badges") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3168,7 +3168,7 @@ export def "users-comments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/comments" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/comments") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3203,7 +3203,7 @@ export def "users-comments get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/comments/($toid)" $qp)
+  let full_url = (build-url $base ({ids: $ids, toid: $toid} | format pattern "/users/{ids}/comments/{toid}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3237,7 +3237,7 @@ export def "users-favorites get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/favorites" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/favorites") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3271,7 +3271,7 @@ export def "users-mentioned get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/mentioned" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/mentioned") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3298,7 +3298,7 @@ export def "users-merges get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/merges" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/merges") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3332,7 +3332,7 @@ export def "users-questions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/questions" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/questions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3366,7 +3366,7 @@ export def "users-questions-featured get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/questions/featured" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/questions/featured") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3400,7 +3400,7 @@ export def "users-questions-no-answers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/questions/no-answers" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/questions/no-answers") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3434,7 +3434,7 @@ export def "users-questions-unaccepted get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/questions/unaccepted" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/questions/unaccepted") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3468,7 +3468,7 @@ export def "users-questions-unanswered get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/questions/unanswered" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/questions/unanswered") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3498,7 +3498,7 @@ export def "users-reputation get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/reputation" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/reputation") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3526,7 +3526,7 @@ export def "users-reputation-history get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/reputation-history" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/reputation-history") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3560,7 +3560,7 @@ export def "users-suggested-edits get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/suggested-edits" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/suggested-edits") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3594,7 +3594,7 @@ export def "users-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/tags" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/tags") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3624,7 +3624,7 @@ export def "users-timeline get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($ids)/timeline" $qp)
+  let full_url = (build-url $base ({ids: $ids} | format pattern "/users/{ids}/timeline") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3652,7 +3652,7 @@ export def "users-inbox get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/inbox" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/inbox") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3681,7 +3681,7 @@ export def "users-inbox-unread get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/inbox/unread" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/inbox/unread") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3709,7 +3709,7 @@ export def "users-notifications get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/notifications" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/notifications") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3737,7 +3737,7 @@ export def "users-notifications-unread get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/notifications/unread" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/notifications/unread") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3765,7 +3765,7 @@ export def "users-privileges get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/privileges" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/privileges") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3793,7 +3793,7 @@ export def "users-reputation-history-full get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/reputation-history/full" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/reputation-history/full") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3828,7 +3828,7 @@ export def "users-tags-top-answers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/tags/($tags)/top-answers" $qp)
+  let full_url = (build-url $base ({id: $id, tags: $tags} | format pattern "/users/{id}/tags/{tags}/top-answers") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3863,7 +3863,7 @@ export def "users-tags-top-questions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order" $order "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "min" $min "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/tags/($tags)/top-questions" $qp)
+  let full_url = (build-url $base ({id: $id, tags: $tags} | format pattern "/users/{id}/tags/{tags}/top-questions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3891,7 +3891,7 @@ export def "users-top-answer-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/top-answer-tags" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/top-answer-tags") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3919,7 +3919,7 @@ export def "users-top-question-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/top-question-tags" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/top-question-tags") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3947,7 +3947,7 @@ export def "users-write-permissions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagesize" $pagesize "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "site" $site "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/write-permissions" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/write-permissions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

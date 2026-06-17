@@ -181,7 +181,7 @@ export def "proxy optionsProxy" [
 #
 # PATCH /proxy
 # operationId: patchProxy
-export def "proxy patch" [
+export def "proxy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "proxy patch" [
 #
 # POST /proxy
 # operationId: postProxy
-export def "proxy post" [
+export def "proxy create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "proxy post" [
 #
 # PUT /proxy
 # operationId: putProxy
-export def "proxy put" [
+export def "proxy update-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

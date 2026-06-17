@@ -71,7 +71,7 @@ def platform-completer [] { ["android" "c4" "ctv" "fm" "freesat" "ios" "p06" "ps
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "4od-episode-list-date Feed" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "4od-episode-list-date get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /4od/episode-list/date/{yyyy}/{mm}/{dd}.atom
 # operationId: 4oD_Browse_by_Date_Feed
-export def "4od-episode-list-date Feed" [
+export def "4od-episode-list-date get" [
   yyyy: string
   mm: string
   dd: string
@@ -112,7 +112,7 @@ export def "4od-episode-list-date Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/4od/episode-list/date/($yyyy)/($mm)/($dd).atom" $qp)
+  let full_url = (build-url $base ({yyyy: $yyyy, mm: $mm, dd: $dd} | format pattern "/4od/episode-list/date/{yyyy}/{mm}/{dd}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,7 +122,7 @@ export def "4od-episode-list-date Feed" [
 #
 # GET /4od/episode-list/popular.atom
 # operationId: 4oD_Most_Popular_Episodes_Feed
-export def "4od-episode-list-popularatom Feed" [
+export def "4od-episode-list-popularatom get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,7 +146,7 @@ export def "4od-episode-list-popularatom Feed" [
 #
 # GET /4od/recently-added/videos.atom
 # operationId: 4oD_Clips_Catch_Up_Feed
-export def "4od-recently-added-videosatom Feed" [
+export def "4od-recently-added-videosatom get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "4od-recently-added-videosatom Feed" [
 #
 # GET /atoz.atom
 # operationId: A_to_Z_Landing_Feed
-export def "atozatom Feed" [
+export def "atozatom get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "atozatom Feed" [
 #
 # GET /atoz/{start_letter}.atom
 # operationId: A_to_Z_Letter_Feed
-export def "atoz Feed" [
+export def "atoz get" [
   start_letter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -209,7 +209,7 @@ export def "atoz Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/atoz/($start_letter).atom" $qp)
+  let full_url = (build-url $base ({start_letter: $start_letter} | format pattern "/atoz/{start_letter}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,7 +219,7 @@ export def "atoz Feed" [
 #
 # GET /atoz/{start_letter}/page-{pageno}.atom
 # operationId: A_to_Z_Letter_Feed(2)
-export def "atoz-page-pageno-atom Feed2" [
+export def "atoz-page-pageno-atom get" [
   start_letter: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -235,7 +235,7 @@ export def "atoz-page-pageno-atom Feed2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/atoz/($start_letter)/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({start_letter: $start_letter, pageno: $pageno} | format pattern "/atoz/{start_letter}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,7 +245,7 @@ export def "atoz-page-pageno-atom Feed2" [
 #
 # GET /brands/4od.atom
 # operationId: 4oD_Title_All_Brands_Feed
-export def "brands-4odatom Feed" [
+export def "brands-4odatom get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "brands-4odatom Feed" [
 #
 # GET /brands/4od/page-{pageno}.atom
 # operationId: 4oD_Title_All_Brands_Feed(2)
-export def "brands-4od-page-pageno-atom Feed2" [
+export def "brands-4od-page-pageno-atom get" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "brands-4od-page-pageno-atom Feed2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/brands/4od/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({pageno: $pageno} | format pattern "/brands/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +294,7 @@ export def "brands-4od-page-pageno-atom Feed2" [
 #
 # GET /brands/4od/popular.atom
 # operationId: 4oD_Popular_All_Brands_Feed
-export def "brands-4od-popularatom Feed" [
+export def "brands-4od-popularatom get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "brands-4od-popularatom Feed" [
 #
 # GET /brands/4od/popular/page-{pageno}.atom
 # operationId: 4oD_Popular_All_Brands_Feed(2)
-export def "brands-4od-popular-page-pageno-atom Feed2" [
+export def "brands-4od-popular-page-pageno-atom get" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +333,7 @@ export def "brands-4od-popular-page-pageno-atom Feed2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/brands/4od/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({pageno: $pageno} | format pattern "/brands/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,7 +343,7 @@ export def "brands-4od-popular-page-pageno-atom Feed2" [
 #
 # GET /brands/popular.atom
 # operationId: Popular_Brands_Feed
-export def "brands-popularatom Feed" [
+export def "brands-popularatom get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "brands-popularatom Feed" [
 #
 # GET /brands/popular/page-{pageno}.atom
 # operationId: Popular_Brands_Feed(2)
-export def "brands-popular-page-pageno-atom Feed2" [
+export def "brands-popular-page-pageno-atom get" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -382,7 +382,7 @@ export def "brands-popular-page-pageno-atom Feed2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/brands/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({pageno: $pageno} | format pattern "/brands/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,7 +392,7 @@ export def "brands-popular-page-pageno-atom Feed2" [
 #
 # GET /categories.atom
 # operationId: Categories_Landing_Feed
-export def "categoriesatom Feed" [
+export def "categoriesatom get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "categoriesatom Feed" [
 #
 # GET /categories/{category}.atom
 # operationId: All_Programmes_by_TX_Date
-export def "categories Date" [
+export def "categories get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +431,7 @@ export def "categories Date" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category).atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -441,7 +441,7 @@ export def "categories Date" [
 #
 # GET /categories/{category}/4od.atom
 # operationId: 4oD_Programmes_by_TX_Date
-export def "categories-4odatom Date" [
+export def "categories-4odatom get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "categories-4odatom Date" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od.atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -466,7 +466,7 @@ export def "categories-4odatom Date" [
 #
 # GET /categories/{category}/4od/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_TX_Date(4)
-export def "categories-4od-page-pageno-atom Date4" [
+export def "categories-4od-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -482,7 +482,7 @@ export def "categories-4od-page-pageno-atom Date4" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -492,7 +492,7 @@ export def "categories-4od-page-pageno-atom Date4" [
 #
 # GET /categories/{category}/4od/popular.atom
 # operationId: Most_Popular_Brands_Feed
-export def "categories-4od-popularatom Feed" [
+export def "categories-4od-popularatom get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "categories-4od-popularatom Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od/popular.atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/4od/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -517,7 +517,7 @@ export def "categories-4od-popularatom Feed" [
 #
 # GET /categories/{category}/4od/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(5)
-export def "categories-4od-popular-page-pageno-atom Feed5" [
+export def "categories-4od-popular-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -533,7 +533,7 @@ export def "categories-4od-popular-page-pageno-atom Feed5" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -543,7 +543,7 @@ export def "categories-4od-popular-page-pageno-atom Feed5" [
 #
 # GET /categories/{category}/4od/title.atom
 # operationId: 4oD_Programmes_by_Title
-export def "categories-4od-titleatom Title" [
+export def "categories-4od-titleatom get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "categories-4od-titleatom Title" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od/title.atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/4od/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -568,7 +568,7 @@ export def "categories-4od-titleatom Title" [
 #
 # GET /categories/{category}/4od/title/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_Title(4)
-export def "categories-4od-title-page-pageno-atom Title4" [
+export def "categories-4od-title-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -584,7 +584,7 @@ export def "categories-4od-title-page-pageno-atom Title4" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/4od/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/4od/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -594,7 +594,7 @@ export def "categories-4od-title-page-pageno-atom Title4" [
 #
 # GET /categories/{category}/channel/{channel}.atom
 # operationId: All_Programmes_by_TX_Date(2)
-export def "categories-channel Date2" [
+export def "categories-channel get" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -610,7 +610,7 @@ export def "categories-channel Date2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel).atom" $qp)
+  let full_url = (build-url $base ({category: $category, channel: $channel} | format pattern "/categories/{category}/channel/{channel}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -620,7 +620,7 @@ export def "categories-channel Date2" [
 #
 # GET /categories/{category}/channel/{channel}/4od.atom
 # operationId: 4oD_Programmes_by_TX_Date(2)
-export def "categories-channel-4odatom Date2" [
+export def "categories-channel-4odatom get" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -636,7 +636,7 @@ export def "categories-channel-4odatom Date2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od.atom" $qp)
+  let full_url = (build-url $base ({category: $category, channel: $channel} | format pattern "/categories/{category}/channel/{channel}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -646,7 +646,7 @@ export def "categories-channel-4odatom Date2" [
 #
 # GET /categories/{category}/channel/{channel}/4od/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_TX_Date(5)
-export def "categories-channel-4od-page-pageno-atom Date5" [
+export def "categories-channel-4od-page-pageno-atom get" [
   category: string
   channel: string
   pageno: int
@@ -663,7 +663,7 @@ export def "categories-channel-4od-page-pageno-atom Date5" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, channel: $channel, pageno: $pageno} | format pattern "/categories/{category}/channel/{channel}/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -673,7 +673,7 @@ export def "categories-channel-4od-page-pageno-atom Date5" [
 #
 # GET /categories/{category}/channel/{channel}/4od/popular.atom
 # operationId: Most_Popular_Brands_Feed(3)
-export def "categories-channel-4od-popularatom Feed3" [
+export def "categories-channel-4od-popularatom get" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -689,7 +689,7 @@ export def "categories-channel-4od-popularatom Feed3" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od/popular.atom" $qp)
+  let full_url = (build-url $base ({category: $category, channel: $channel} | format pattern "/categories/{category}/channel/{channel}/4od/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -699,7 +699,7 @@ export def "categories-channel-4od-popularatom Feed3" [
 #
 # GET /categories/{category}/channel/{channel}/4od/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(7)
-export def "categories-channel-4od-popular-page-pageno-atom Feed7" [
+export def "categories-channel-4od-popular-page-pageno-atom get" [
   category: string
   channel: string
   pageno: int
@@ -716,7 +716,7 @@ export def "categories-channel-4od-popular-page-pageno-atom Feed7" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, channel: $channel, pageno: $pageno} | format pattern "/categories/{category}/channel/{channel}/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -726,7 +726,7 @@ export def "categories-channel-4od-popular-page-pageno-atom Feed7" [
 #
 # GET /categories/{category}/channel/{channel}/4od/title.atom
 # operationId: 4oD_Programmes_by_Title(2)
-export def "categories-channel-4od-titleatom Title2" [
+export def "categories-channel-4od-titleatom get" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -742,7 +742,7 @@ export def "categories-channel-4od-titleatom Title2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od/title.atom" $qp)
+  let full_url = (build-url $base ({category: $category, channel: $channel} | format pattern "/categories/{category}/channel/{channel}/4od/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -752,7 +752,7 @@ export def "categories-channel-4od-titleatom Title2" [
 #
 # GET /categories/{category}/channel/{channel}/4od/title/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_Title(5)
-export def "categories-channel-4od-title-page-pageno-atom Title5" [
+export def "categories-channel-4od-title-page-pageno-atom get" [
   category: string
   channel: string
   pageno: int
@@ -769,7 +769,7 @@ export def "categories-channel-4od-title-page-pageno-atom Title5" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/4od/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, channel: $channel, pageno: $pageno} | format pattern "/categories/{category}/channel/{channel}/4od/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -779,7 +779,7 @@ export def "categories-channel-4od-title-page-pageno-atom Title5" [
 #
 # GET /categories/{category}/channel/{channel}/page-{pageno}.atom
 # operationId: All_Programmes_by_TX_Date(5)
-export def "categories-channel-page-pageno-atom Date5" [
+export def "categories-channel-page-pageno-atom get" [
   category: string
   channel: string
   pageno: int
@@ -796,7 +796,7 @@ export def "categories-channel-page-pageno-atom Date5" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, channel: $channel, pageno: $pageno} | format pattern "/categories/{category}/channel/{channel}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -806,7 +806,7 @@ export def "categories-channel-page-pageno-atom Date5" [
 #
 # GET /categories/{category}/channel/{channel}/title.atom
 # operationId: All_Programmes_by_Title(2)
-export def "categories-channel-titleatom Title2" [
+export def "categories-channel-titleatom get" [
   category: string
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -822,7 +822,7 @@ export def "categories-channel-titleatom Title2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/title.atom" $qp)
+  let full_url = (build-url $base ({category: $category, channel: $channel} | format pattern "/categories/{category}/channel/{channel}/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -832,7 +832,7 @@ export def "categories-channel-titleatom Title2" [
 #
 # GET /categories/{category}/channel/{channel}/title/page-{pageno}.atom
 # operationId: All_Programmes_by_Title(5)
-export def "categories-channel-title-page-pageno-atom Title5" [
+export def "categories-channel-title-page-pageno-atom get" [
   category: string
   channel: string
   pageno: int
@@ -849,7 +849,7 @@ export def "categories-channel-title-page-pageno-atom Title5" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/channel/($channel)/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, channel: $channel, pageno: $pageno} | format pattern "/categories/{category}/channel/{channel}/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -859,7 +859,7 @@ export def "categories-channel-title-page-pageno-atom Title5" [
 #
 # GET /categories/{category}/derived/ad.atom
 # operationId: All_Programmes_by_TX_Date(3)
-export def "categories-derived-adatom Date3" [
+export def "categories-derived-adatom get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -874,7 +874,7 @@ export def "categories-derived-adatom Date3" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad.atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/derived/ad.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -884,7 +884,7 @@ export def "categories-derived-adatom Date3" [
 #
 # GET /categories/{category}/derived/ad/4od.atom
 # operationId: 4oD_Programmes_by_TX_Date(3)
-export def "categories-derived-ad-4odatom Date3" [
+export def "categories-derived-ad-4odatom get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -899,7 +899,7 @@ export def "categories-derived-ad-4odatom Date3" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od.atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/derived/ad/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -909,7 +909,7 @@ export def "categories-derived-ad-4odatom Date3" [
 #
 # GET /categories/{category}/derived/ad/4od/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_TX_Date(6)
-export def "categories-derived-ad-4od-page-pageno-atom Date6" [
+export def "categories-derived-ad-4od-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -925,7 +925,7 @@ export def "categories-derived-ad-4od-page-pageno-atom Date6" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/derived/ad/4od/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -935,7 +935,7 @@ export def "categories-derived-ad-4od-page-pageno-atom Date6" [
 #
 # GET /categories/{category}/derived/ad/4od/popular.atom
 # operationId: Most_Popular_Brands_Feed(4)
-export def "categories-derived-ad-4od-popularatom Feed4" [
+export def "categories-derived-ad-4od-popularatom get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -950,7 +950,7 @@ export def "categories-derived-ad-4od-popularatom Feed4" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od/popular.atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/derived/ad/4od/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -960,7 +960,7 @@ export def "categories-derived-ad-4od-popularatom Feed4" [
 #
 # GET /categories/{category}/derived/ad/4od/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(8)
-export def "categories-derived-ad-4od-popular-page-pageno-atom Feed8" [
+export def "categories-derived-ad-4od-popular-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -976,7 +976,7 @@ export def "categories-derived-ad-4od-popular-page-pageno-atom Feed8" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/derived/ad/4od/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -986,7 +986,7 @@ export def "categories-derived-ad-4od-popular-page-pageno-atom Feed8" [
 #
 # GET /categories/{category}/derived/ad/4od/title.atom
 # operationId: 4oD_Programmes_by_Title(3)
-export def "categories-derived-ad-4od-titleatom Title3" [
+export def "categories-derived-ad-4od-titleatom get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1001,7 +1001,7 @@ export def "categories-derived-ad-4od-titleatom Title3" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od/title.atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/derived/ad/4od/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1011,7 +1011,7 @@ export def "categories-derived-ad-4od-titleatom Title3" [
 #
 # GET /categories/{category}/derived/ad/4od/title/page-{pageno}.atom
 # operationId: 4oD_Programmes_by_Title(6)
-export def "categories-derived-ad-4od-title-page-pageno-atom Title6" [
+export def "categories-derived-ad-4od-title-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1027,7 +1027,7 @@ export def "categories-derived-ad-4od-title-page-pageno-atom Title6" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/4od/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/derived/ad/4od/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,7 +1037,7 @@ export def "categories-derived-ad-4od-title-page-pageno-atom Title6" [
 #
 # GET /categories/{category}/derived/ad/page-{pageno}.atom
 # operationId: All_Programmes_by_TX_Date(6)
-export def "categories-derived-ad-page-pageno-atom Date6" [
+export def "categories-derived-ad-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1053,7 +1053,7 @@ export def "categories-derived-ad-page-pageno-atom Date6" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/derived/ad/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1063,7 +1063,7 @@ export def "categories-derived-ad-page-pageno-atom Date6" [
 #
 # GET /categories/{category}/derived/ad/title.atom
 # operationId: All_Programmes_by_Title(3)
-export def "categories-derived-ad-titleatom Title3" [
+export def "categories-derived-ad-titleatom get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,7 +1078,7 @@ export def "categories-derived-ad-titleatom Title3" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/title.atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/derived/ad/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1088,7 +1088,7 @@ export def "categories-derived-ad-titleatom Title3" [
 #
 # GET /categories/{category}/derived/ad/title/page-{pageno}.atom
 # operationId: All_Programmes_by_Title(6)
-export def "categories-derived-ad-title-page-pageno-atom Title6" [
+export def "categories-derived-ad-title-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1104,7 +1104,7 @@ export def "categories-derived-ad-title-page-pageno-atom Title6" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/derived/ad/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/derived/ad/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1114,7 +1114,7 @@ export def "categories-derived-ad-title-page-pageno-atom Title6" [
 #
 # GET /categories/{category}/page-{pageno}.atom
 # operationId: All_Programmes_by_TX_Date(4)
-export def "categories-page-pageno-atom Date4" [
+export def "categories-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1130,7 +1130,7 @@ export def "categories-page-pageno-atom Date4" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1140,7 +1140,7 @@ export def "categories-page-pageno-atom Date4" [
 #
 # GET /categories/{category}/popular.atom
 # operationId: Most_Popular_Brands_Feed(2)
-export def "categories-popularatom Feed2" [
+export def "categories-popularatom get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1155,7 +1155,7 @@ export def "categories-popularatom Feed2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/popular.atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/popular.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1165,7 +1165,7 @@ export def "categories-popularatom Feed2" [
 #
 # GET /categories/{category}/popular/page-{pageno}.atom
 # operationId: Most_Popular_Brands_Feed(6)
-export def "categories-popular-page-pageno-atom Feed6" [
+export def "categories-popular-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1181,7 +1181,7 @@ export def "categories-popular-page-pageno-atom Feed6" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/popular/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/popular/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1191,7 +1191,7 @@ export def "categories-popular-page-pageno-atom Feed6" [
 #
 # GET /categories/{category}/title.atom
 # operationId: All_Programmes_by_Title
-export def "categories-titleatom Title" [
+export def "categories-titleatom get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1206,7 +1206,7 @@ export def "categories-titleatom Title" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/title.atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/title.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1216,7 +1216,7 @@ export def "categories-titleatom Title" [
 #
 # GET /categories/{category}/title/page-{pageno}.atom
 # operationId: All_Programmes_by_Title(4)
-export def "categories-title-page-pageno-atom Title4" [
+export def "categories-title-page-pageno-atom get" [
   category: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1232,7 +1232,7 @@ export def "categories-title-page-pageno-atom Title4" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/title/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({category: $category, pageno: $pageno} | format pattern "/categories/{category}/title/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1242,7 +1242,7 @@ export def "categories-title-page-pageno-atom Title4" [
 #
 # GET /collections/{collection_name}.atom
 # operationId: Collections_Feed(2)
-export def "collections Feed2" [
+export def "collections get" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1257,7 +1257,7 @@ export def "collections Feed2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collections/($collection_name).atom" $qp)
+  let full_url = (build-url $base ({collection_name: $collection_name} | format pattern "/collections/{collection_name}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1267,7 +1267,7 @@ export def "collections Feed2" [
 #
 # GET /collections/{collection_name}/4od.atom
 # operationId: Collections_Feed
-export def "collections-4odatom Feed" [
+export def "collections-4odatom get" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1282,7 +1282,7 @@ export def "collections-4odatom Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collections/($collection_name)/4od.atom" $qp)
+  let full_url = (build-url $base ({collection_name: $collection_name} | format pattern "/collections/{collection_name}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1292,7 +1292,7 @@ export def "collections-4odatom Feed" [
 #
 # GET /collections/{collection_name}/flattened.atom
 # operationId: Flattened_Collection_Feed(2)
-export def "collections-flattenedatom Feed2" [
+export def "collections-flattenedatom get" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1307,7 +1307,7 @@ export def "collections-flattenedatom Feed2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collections/($collection_name)/flattened.atom" $qp)
+  let full_url = (build-url $base ({collection_name: $collection_name} | format pattern "/collections/{collection_name}/flattened.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1317,7 +1317,7 @@ export def "collections-flattenedatom Feed2" [
 #
 # GET /collections/{collection_name}/flattened/4od.atom
 # operationId: Flattened_Collection_Feed
-export def "collections-flattened-4odatom Feed" [
+export def "collections-flattened-4odatom get" [
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1332,7 +1332,7 @@ export def "collections-flattened-4odatom Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/collections/($collection_name)/flattened/4od.atom" $qp)
+  let full_url = (build-url $base ({collection_name: $collection_name} | format pattern "/collections/{collection_name}/flattened/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1381,7 +1381,7 @@ export def "coming-soon feed2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/coming-soon/($category).atom" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/coming-soon/{category}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1391,7 +1391,7 @@ export def "coming-soon feed2" [
 #
 # GET /programme/{programme-id}.atom
 # operationId: Programme_Feed
-export def "programme Feed" [
+export def "programme get" [
   programme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1406,7 +1406,7 @@ export def "programme Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/programme/($programme_id).atom" $qp)
+  let full_url = (build-url $base ({programme_id: $programme_id} | format pattern "/programme/{programme_id}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1416,7 +1416,7 @@ export def "programme Feed" [
 #
 # GET /search.atom
 # operationId: Search_Feed
-export def "searchatom Feed" [
+export def "searchatom get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1441,7 +1441,7 @@ export def "searchatom Feed" [
 #
 # GET /search/page-{pageno}.atom
 # operationId: Search_Feed(3)
-export def "search-page-pageno-atom Feed3" [
+export def "search-page-pageno-atom list" [
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1457,7 +1457,7 @@ export def "search-page-pageno-atom Feed3" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({pageno: $pageno} | format pattern "/search/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1467,7 +1467,7 @@ export def "search-page-pageno-atom Feed3" [
 #
 # GET /search/{q}.atom
 # operationId: Search_Feed(2)
-export def "search Feed2" [
+export def "search get" [
   q: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1482,7 +1482,7 @@ export def "search Feed2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($q).atom" $qp)
+  let full_url = (build-url $base ({q: $q} | format pattern "/search/{q}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1492,7 +1492,7 @@ export def "search Feed2" [
 #
 # GET /search/{q}/page-{pageno}.atom
 # operationId: Search_Feed(4)
-export def "search-page-pageno-atom Feed4" [
+export def "search-page-pageno-atom get" [
   q: string
   pageno: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1508,7 +1508,7 @@ export def "search-page-pageno-atom Feed4" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($q)/page-($pageno).atom" $qp)
+  let full_url = (build-url $base ({q: $q, pageno: $pageno} | format pattern "/search/{q}/page-{pageno}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1518,7 +1518,7 @@ export def "search-page-pageno-atom Feed4" [
 #
 # GET /tv-listings/daily/{yyyy}/{mm}/{dd}.atom
 # operationId: TV_Listings_Feed
-export def "tv-listings-daily Feed" [
+export def "tv-listings-daily list" [
   yyyy: string
   mm: string
   dd: string
@@ -1535,7 +1535,7 @@ export def "tv-listings-daily Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tv-listings/daily/($yyyy)/($mm)/($dd).atom" $qp)
+  let full_url = (build-url $base ({yyyy: $yyyy, mm: $mm, dd: $dd} | format pattern "/tv-listings/daily/{yyyy}/{mm}/{dd}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1545,7 +1545,7 @@ export def "tv-listings-daily Feed" [
 #
 # GET /tv-listings/daily/{yyyy}/{mm}/{dd}/{channel}.atom
 # operationId: TV_Listings_Feed(2)
-export def "tv-listings-daily Feed2" [
+export def "tv-listings-daily get" [
   yyyy: string
   mm: string
   dd: string
@@ -1563,7 +1563,7 @@ export def "tv-listings-daily Feed2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tv-listings/daily/($yyyy)/($mm)/($dd)/($channel).atom" $qp)
+  let full_url = (build-url $base ({yyyy: $yyyy, mm: $mm, dd: $dd, channel: $channel} | format pattern "/tv-listings/daily/{yyyy}/{mm}/{dd}/{channel}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1573,7 +1573,7 @@ export def "tv-listings-daily Feed2" [
 #
 # GET /{brand-web-safe-title}.atom
 # operationId: Hub_Feed
-export def "metadataresources Feed" [
+export def "metadataresources get" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1588,7 +1588,7 @@ export def "metadataresources Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: $brand_web_safe_title} | format pattern "/{brand_web_safe_title}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1598,7 +1598,7 @@ export def "metadataresources Feed" [
 #
 # GET /{brand-web-safe-title}/4od.atom
 # operationId: 4oD_Feed
-export def "4odatom Feed" [
+export def "4odatom get" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1613,7 +1613,7 @@ export def "4odatom Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/4od.atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: $brand_web_safe_title} | format pattern "/{brand_web_safe_title}/4od.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1623,7 +1623,7 @@ export def "4odatom Feed" [
 #
 # GET /{brand-web-safe-title}/epg.atom
 # operationId: Brand_EPG_Atom_Feed
-export def "epgatom Feed" [
+export def "epgatom get" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,7 +1638,7 @@ export def "epgatom Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/epg.atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: $brand_web_safe_title} | format pattern "/{brand_web_safe_title}/epg.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1648,7 +1648,7 @@ export def "epgatom Feed" [
 #
 # GET /{brand-web-safe-title}/episode-guide.atom
 # operationId: Episode_Guide_Feed_Series_Landing
-export def "episode-guideatom Landing" [
+export def "episode-guideatom get" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1663,7 +1663,7 @@ export def "episode-guideatom Landing" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/episode-guide.atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: $brand_web_safe_title} | format pattern "/{brand_web_safe_title}/episode-guide.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1673,7 +1673,7 @@ export def "episode-guideatom Landing" [
 #
 # GET /{brand-web-safe-title}/episode-guide/series-{series_number}.atom
 # operationId: Episode_Guide_Feed_Series_Detail
-export def "episode-guide-series-series-number-atom Detail" [
+export def "episode-guide-series-series-number-atom get" [
   brand_web_safe_title: string
   series_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1689,7 +1689,7 @@ export def "episode-guide-series-series-number-atom Detail" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/episode-guide/series-($series_number).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: $brand_web_safe_title, series_number: $series_number} | format pattern "/{brand_web_safe_title}/episode-guide/series-{series_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1699,7 +1699,7 @@ export def "episode-guide-series-series-number-atom Detail" [
 #
 # GET /{brand-web-safe-title}/episode-guide/series-{series_number}/episode-{episode_number}.atom
 # operationId: Episode_Guide_Feed_Episode_Detail
-export def "episode-guide-series-series-number-episode-episode-number-atom Detail" [
+export def "episode-guide-series-series-number-episode-episode-number-atom get" [
   brand_web_safe_title: string
   series_number: string
   episode_number: string
@@ -1716,7 +1716,7 @@ export def "episode-guide-series-series-number-episode-episode-number-atom Detai
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/episode-guide/series-($series_number)/episode-($episode_number).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: $brand_web_safe_title, series_number: $series_number, episode_number: $episode_number} | format pattern "/{brand_web_safe_title}/episode-guide/series-{series_number}/episode-{episode_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1726,7 +1726,7 @@ export def "episode-guide-series-series-number-episode-episode-number-atom Detai
 #
 # GET /{brand-web-safe-title}/videos/all.atom
 # operationId: Clips_Landing_Feed_Brand_Series_and_Episode_Levels
-export def "videos-allatom Levels" [
+export def "videos-allatom get" [
   brand_web_safe_title: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1741,7 +1741,7 @@ export def "videos-allatom Levels" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/videos/all.atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: $brand_web_safe_title} | format pattern "/{brand_web_safe_title}/videos/all.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1751,7 +1751,7 @@ export def "videos-allatom Levels" [
 #
 # GET /{brand-web-safe-title}/videos/series-{series_number}.atom
 # operationId: Clips_Landing_Feed_Brand_Series_and_Episode_Levels(2)
-export def "videos-series-series-number-atom Levels2" [
+export def "videos-series-series-number-atom get" [
   brand_web_safe_title: string
   series_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1767,7 +1767,7 @@ export def "videos-series-series-number-atom Levels2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/videos/series-($series_number).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: $brand_web_safe_title, series_number: $series_number} | format pattern "/{brand_web_safe_title}/videos/series-{series_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1777,7 +1777,7 @@ export def "videos-series-series-number-atom Levels2" [
 #
 # GET /{brand-web-safe-title}/videos/series-{series_number}/episode-{episode_number}.atom
 # operationId: Clips_Landing_Feed_Brand_Series_and_Episode_Levels(3)
-export def "videos-series-series-number-episode-episode-number-atom Levels3" [
+export def "videos-series-series-number-episode-episode-number-atom get" [
   brand_web_safe_title: string
   series_number: string
   episode_number: string
@@ -1794,7 +1794,7 @@ export def "videos-series-series-number-episode-episode-number-atom Levels3" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/videos/series-($series_number)/episode-($episode_number).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: $brand_web_safe_title, series_number: $series_number, episode_number: $episode_number} | format pattern "/{brand_web_safe_title}/videos/series-{series_number}/episode-{episode_number}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1804,7 +1804,7 @@ export def "videos-series-series-number-episode-episode-number-atom Levels3" [
 #
 # GET /{brand-web-safe-title}/videos/{clip-asset-id}.atom
 # operationId: Clip_Detail_Atom_Feed
-export def "videos Feed" [
+export def "videos get" [
   brand_web_safe_title: string
   clip_asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1820,7 +1820,7 @@ export def "videos Feed" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "platform" $platform "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($brand_web_safe_title)/videos/($clip_asset_id).atom" $qp)
+  let full_url = (build-url $base ({brand_web_safe_title: $brand_web_safe_title, clip_asset_id: $clip_asset_id} | format pattern "/{brand_web_safe_title}/videos/{clip_asset_id}.atom") $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

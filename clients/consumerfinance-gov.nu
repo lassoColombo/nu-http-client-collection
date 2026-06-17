@@ -72,7 +72,7 @@ def accept-completer-2 [] { ["application/json" "application/xml" "text/csv" "te
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data get-datasets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /data
 # operationId: getDatasets
-export def "data list" [
+export def "data get-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,7 +119,7 @@ export def "data list" [
 #
 # GET /data/hmda
 # operationId: getDatasetHmda
-export def "data-hmda get" [
+export def "data-hmda get-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "data-hmda-concept get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/hmda/concept/($concept)")
+  let full_url = (build-url $base ({concept: $concept} | format pattern "/data/hmda/concept/{concept}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -166,7 +166,7 @@ export def "data-hmda-concept get" [
 #
 # GET /data/hmda/slice/{slice}
 # operationId: querySliceHmda
-export def "data-hmda-slice querySliceHmda" [
+export def "data-hmda-slice list" [
   slice: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,13 +182,13 @@ export def "data-hmda-slice querySliceHmda" [
   --group: string # Fields to group by, summarizing the data, separated by commas.
   --limit: int # Number of records to return, 100 by default. Enter 0 for no limit.
   --offset: int # Number of records to skip.
-  --orderBy: string # Fields to order by, separated by commas. ASC and DESC can be used to modify the order.
+  --order-by: string # Fields to order by, separated by commas. ASC and DESC can be used to modify the order.
   --callback: string # JavaScript callback to invoke. Only useful with JSONP requests.
 ]: nothing -> record<size: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$where" $qp_where "scalar") (serialize-qp "$group" $group "scalar") (serialize-qp "$limit" $limit "scalar") (serialize-qp "$offset" $offset "scalar") (serialize-qp "$orderBy" $orderBy "scalar") (serialize-qp "$callback" $callback "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/hmda/slice/($slice)" $qp)
+  let qp = [(serialize-qp "$select" $select "scalar") (serialize-qp "$where" $qp_where "scalar") (serialize-qp "$group" $group "scalar") (serialize-qp "$limit" $limit "scalar") (serialize-qp "$offset" $offset "scalar") (serialize-qp "$orderBy" $order_by "scalar") (serialize-qp "$callback" $callback "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({slice: $slice} | format pattern "/data/hmda/slice/{slice}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +212,7 @@ export def "data-hmda-slice-metadata get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/hmda/slice/($slice)/metadata")
+  let full_url = (build-url $base ({slice: $slice} | format pattern "/data/hmda/slice/{slice}/metadata"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,7 +236,7 @@ export def "data get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/($dataset)")
+  let full_url = (build-url $base ({dataset: $dataset} | format pattern "/data/{dataset}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

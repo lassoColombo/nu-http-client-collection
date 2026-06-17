@@ -147,7 +147,7 @@ export def "issue-tracking-collections collectionsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/issue-tracking/collections/{collection_id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -180,7 +180,7 @@ export def "issue-tracking-collections-tags collectionTagsAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tags" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/issue-tracking/collections/{collection_id}/tags") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -215,7 +215,7 @@ export def "issue-tracking-collections-tickets collectionTicketsAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "deepObject") (serialize-qp "filter" $filter "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tickets" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/issue-tracking/collections/{collection_id}/tickets") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -257,8 +257,8 @@ export def "issue-tracking-collections-tickets collectionTicketsAdd" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tickets" $qp)
-  let body = {assignees: $assignees, description: $description, due_date: $due_date, parent_id: $parent_id, priority: $priority, status: $status, subject: $subject, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/issue-tracking/collections/{collection_id}/tickets") $qp)
+  let body = {"assignees": $assignees, "description": $description, "due_date": $due_date, "parent_id": $parent_id, "priority": $priority, "status": $status, "subject": $subject, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -272,8 +272,8 @@ export def "issue-tracking-collections-tickets collectionTicketsAdd" [
 # DELETE /issue-tracking/collections/{collection_id}/tickets/{ticket_id}
 # operationId: collectionTicketsDelete
 export def "issue-tracking-collections-tickets collectionTicketsDelete" [
-  ticket_id: string
   collection_id: string
+  ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "issue-tracking-collections-tickets collectionTicketsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tickets/($ticket_id)" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id, ticket_id: $ticket_id} | format pattern "/issue-tracking/collections/{collection_id}/tickets/{ticket_id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -303,8 +303,8 @@ export def "issue-tracking-collections-tickets collectionTicketsDelete" [
 # GET /issue-tracking/collections/{collection_id}/tickets/{ticket_id}
 # operationId: collectionTicketsOne
 export def "issue-tracking-collections-tickets collectionTicketsOne" [
-  ticket_id: string
   collection_id: string
+  ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,7 +322,7 @@ export def "issue-tracking-collections-tickets collectionTicketsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tickets/($ticket_id)" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id, ticket_id: $ticket_id} | format pattern "/issue-tracking/collections/{collection_id}/tickets/{ticket_id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -337,8 +337,8 @@ export def "issue-tracking-collections-tickets collectionTicketsOne" [
 # --assignees item shape: {id: string}
 # --tags item shape: {id: string}
 export def "issue-tracking-collections-tickets collectionTicketsUpdate" [
-  ticket_id: string
   collection_id: string
+  ticket_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,8 +365,8 @@ export def "issue-tracking-collections-tickets collectionTicketsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tickets/($ticket_id)" $qp)
-  let body = {assignees: $assignees, description: $description, due_date: $due_date, parent_id: $parent_id, priority: $priority, status: $status, subject: $subject, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id, ticket_id: $ticket_id} | format pattern "/issue-tracking/collections/{collection_id}/tickets/{ticket_id}") $qp)
+  let body = {"assignees": $assignees, "description": $description, "due_date": $due_date, "parent_id": $parent_id, "priority": $priority, "status": $status, "subject": $subject, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -402,7 +402,7 @@ export def "issue-tracking-collections-tickets-comments collectionTicketComments
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "deepObject") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tickets/($ticket_id)/comments" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id, ticket_id: $ticket_id} | format pattern "/issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -435,8 +435,8 @@ export def "issue-tracking-collections-tickets-comments collectionTicketComments
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tickets/($ticket_id)/comments" $qp)
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id, ticket_id: $ticket_id} | format pattern "/issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments") $qp)
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -450,9 +450,9 @@ export def "issue-tracking-collections-tickets-comments collectionTicketComments
 # DELETE /issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments/{id}
 # operationId: collectionTicketCommentsDelete
 export def "issue-tracking-collections-tickets-comments collectionTicketCommentsDelete" [
-  id: string
   collection_id: string
   ticket_id: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "issue-tracking-collections-tickets-comments collectionTicketComments
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tickets/($ticket_id)/comments/($id)" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id, ticket_id: $ticket_id, id: $id} | format pattern "/issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -482,9 +482,9 @@ export def "issue-tracking-collections-tickets-comments collectionTicketComments
 # GET /issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments/{id}
 # operationId: collectionTicketCommentsOne
 export def "issue-tracking-collections-tickets-comments collectionTicketCommentsOne" [
-  id: string
   collection_id: string
   ticket_id: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "issue-tracking-collections-tickets-comments collectionTicketComments
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tickets/($ticket_id)/comments/($id)" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id, ticket_id: $ticket_id, id: $id} | format pattern "/issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -517,9 +517,9 @@ export def "issue-tracking-collections-tickets-comments collectionTicketComments
 # PATCH /issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments/{id}
 # operationId: collectionTicketCommentsUpdate
 export def "issue-tracking-collections-tickets-comments collectionTicketCommentsUpdate" [
-  id: string
   collection_id: string
   ticket_id: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,8 +538,8 @@ export def "issue-tracking-collections-tickets-comments collectionTicketComments
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/tickets/($ticket_id)/comments/($id)" $qp)
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id, ticket_id: $ticket_id, id: $id} | format pattern "/issue-tracking/collections/{collection_id}/tickets/{ticket_id}/comments/{id}") $qp)
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -573,7 +573,7 @@ export def "issue-tracking-collections-users collectionUsersAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/users" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/issue-tracking/collections/{collection_id}/users") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -605,7 +605,7 @@ export def "issue-tracking-collections-users collectionUsersOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/issue-tracking/collections/($collection_id)/users/($id)" $qp)
+  let full_url = (build-url $base ({collection_id: $collection_id, id: $id} | format pattern "/issue-tracking/collections/{collection_id}/users/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"

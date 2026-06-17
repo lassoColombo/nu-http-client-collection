@@ -100,16 +100,16 @@ export def "banks list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Current page number.
-  --pagesize: int # Page size.<br>*Default value: 100*
-  --filtersort-code: string # Filtering by banks code.
-  --filtercode: string # Filtering by code.
-  --filterstatus: list # Filtration by status.
+  --page-number: int # Current page number.
+  --page-size: int # Page size.<br>*Default value: 100*
+  --filter-sort-code: string # Filtering by banks code.
+  --filter-code: string # Filtering by code.
+  --filter-status: list # Filtration by status.
   --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | code | -code | | status | -status | | sort_code | -sort_code |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[sort_code]" $filtersort_code "scalar") (serialize-qp "filter[code]" $filtercode "scalar") (serialize-qp "filter[status]" $filterstatus "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[sort_code]" $filter_sort_code "scalar") (serialize-qp "filter[code]" $filter_code "scalar") (serialize-qp "filter[status]" $filter_status "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/banks" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,7 +132,7 @@ export def "banks get" [
 ]: nothing -> record<data: record<attributes: record<account_number: string, bank_code: string, bic: string, code: string, iban: string, name: string, sort_code: string, status: string, vatin: string>, id: string, links: record<self: string>, relationships: record<organization: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/banks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/banks/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,15 +150,15 @@ export def "countries list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Current page number.
-  --pagesize: int # Page size.<br>*Default value: 100*
-  --filterregion: list # Filtration by region.
-  --filtersub-region: list # Filtration by sub region.
+  --page-number: int # Current page number.
+  --page-size: int # Page size.<br>*Default value: 100*
+  --filter-region: list # Filtration by region.
+  --filter-sub-region: list # Filtration by sub region.
   --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | area | -area | | population | -population | | region | -region | | sub_region | -sub_region |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[region]" $filterregion "csv") (serialize-qp "filter[sub_region]" $filtersub_region "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[region]" $filter_region "csv") (serialize-qp "filter[sub_region]" $filter_sub_region "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/countries" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,7 +181,7 @@ export def "countries get" [
 ]: nothing -> record<data: record<attributes: record<area: string, calling_codes: list, capital: string, code_alpha3: string, languages: list, name: string, native_name: string, population: string, region: string, sub_region: string, timezones: list, top_level_domains: list>, id: string, links: record<self: string>, relationships: record<translations: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/countries/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/countries/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,19 +199,19 @@ export def "currencies list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Current page number.
-  --pagesize: int # Page size.<br>*Default value: 100*
-  --filtersearch: string # Full text search with name, code, type, code_iso_alpha3, code_jsons_alpha, code_estandards_alpha, category.
-  --filtercode-iso-alpha3: string # Filtering by ISO code.
-  --filtercode-iso-numeric3: int # Filtering by ISO number.
-  --filtercode-estandards-alpha: string # Filtering by estandards code.
-  --filtercurrency-type: list # Filtration by currency type.
-  --filtercategory: list # Filtration by category.
+  --page-number: int # Current page number.
+  --page-size: int # Page size.<br>*Default value: 100*
+  --filter-search: string # Full text search with name, code, type, code_iso_alpha3, code_jsons_alpha, code_estandards_alpha, category.
+  --filter-code-iso-alpha3: string # Filtering by ISO code.
+  --filter-code-iso-numeric3: int # Filtering by ISO number.
+  --filter-code-estandards-alpha: string # Filtering by estandards code.
+  --filter-currency-type: list # Filtration by currency type.
+  --filter-category: list # Filtration by category.
   --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | type | -type | | category | -category | | code | -code | | code_iso_alpha3 | -code_iso_alpha3 | | code_iso_numeric3 | -code_iso_numeric3 | | code_estandards_alpha | -code_estandards_alpha |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[search]" $filtersearch "scalar") (serialize-qp "filter[code_iso_alpha3]" $filtercode_iso_alpha3 "scalar") (serialize-qp "filter[code_iso_numeric3]" $filtercode_iso_numeric3 "scalar") (serialize-qp "filter[code_estandards_alpha]" $filtercode_estandards_alpha "scalar") (serialize-qp "filter[currency_type]" $filtercurrency_type "csv") (serialize-qp "filter[category]" $filtercategory "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[search]" $filter_search "scalar") (serialize-qp "filter[code_iso_alpha3]" $filter_code_iso_alpha3 "scalar") (serialize-qp "filter[code_iso_numeric3]" $filter_code_iso_numeric3 "scalar") (serialize-qp "filter[code_estandards_alpha]" $filter_code_estandards_alpha "scalar") (serialize-qp "filter[currency_type]" $filter_currency_type "csv") (serialize-qp "filter[category]" $filter_category "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/currencies" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -234,7 +234,7 @@ export def "currencies get" [
 ]: nothing -> record<data: record<attributes: record<category: string, code: string, code_estandards_alpha: string, code_iso_alpha3: string, code_iso_numeric3: int, code_json_alpha: string, created: string, currency_type: string, decimal_e: string, icon: record, issuer: string, name: string, native_symbol: string, symbol: string>, id: string, links: record<self: string>, relationships: record<countries: record, issuer: record, issuer_organization: record, parent: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/currencies/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/currencies/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,18 +252,18 @@ export def "deposit-methods list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Current page number.
-  --pagesize: int # Page size.<br>*Default value: 100*
-  --filtersearch: string # Full text search with id, name, code, category.
-  --filtername: string # Filtering by name.
-  --filtercode: string # Filtering by code.
-  --filterprocessor-name: string # Filtering by processor_name.
-  --filtercategory: list # Filtering by category.
+  --page-number: int # Current page number.
+  --page-size: int # Page size.<br>*Default value: 100*
+  --filter-search: string # Full text search with id, name, code, category.
+  --filter-name: string # Filtering by name.
+  --filter-code: string # Filtering by code.
+  --filter-processor-name: string # Filtering by processor_name.
+  --filter-category: list # Filtering by category.
   --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | code | -code | | processor_name | -processor_name | | category | -category |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[search]" $filtersearch "scalar") (serialize-qp "filter[name]" $filtername "scalar") (serialize-qp "filter[code]" $filtercode "scalar") (serialize-qp "filter[processor_name]" $filterprocessor_name "scalar") (serialize-qp "filter[category]" $filtercategory "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[search]" $filter_search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[code]" $filter_code "scalar") (serialize-qp "filter[processor_name]" $filter_processor_name "scalar") (serialize-qp "filter[category]" $filter_category "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/deposit-methods" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,7 +286,7 @@ export def "deposit-methods get" [
 ]: nothing -> record<data: record<attributes: record<category: string, code: string, name: string, processor_name: string>, id: string, links: record<self: string>, relationships: record<actiove_in_countries: record, currencies: record, payment_processor: record, supported_psps: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/deposit-methods/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/deposit-methods/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,15 +304,15 @@ export def "exchangers list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Current page number.
-  --pagesize: int # Page size.<br>*Default value: 100*
-  --filtername: string # Filtering by name.
-  --filterstatus: list # Filtration by status.
+  --page-number: int # Current page number.
+  --page-size: int # Page size.<br>*Default value: 100*
+  --filter-name: string # Filtering by name.
+  --filter-status: list # Filtration by status.
   --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | status | -status | | wmid | -wmid | | rate_type | -rate_type | | rates_export_standard | <nobr>-rates_export_standard</nobr> |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[name]" $filtername "scalar") (serialize-qp "filter[status]" $filterstatus "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[status]" $filter_status "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/exchangers" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -335,7 +335,7 @@ export def "exchangers get" [
 ]: nothing -> record<data: record<attributes: record<name: string, rates_export_standard: string, rates_export_url: string, status: string, wmid: int>, id: string, links: record<self: string>, relationships: record<organization: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/exchangers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/exchangers/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -353,13 +353,13 @@ export def "merchant-industries list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Current page number.
-  --pagesize: int # Page size.<br>*Default value: 100*
-  --filtername: string # Filtering by name.
+  --page-number: int # Current page number.
+  --page-size: int # Page size.<br>*Default value: 100*
+  --filter-name: string # Filtering by name.
 ]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[name]" $filtername "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[name]" $filter_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/merchant-industries" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -382,7 +382,7 @@ export def "merchant-industries get" [
 ]: nothing -> record<data: record<attributes: record<name: string>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/merchant-industries/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/merchant-industries/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -400,18 +400,18 @@ export def "organizations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Current page number.
-  --pagesize: int # Page size.<br>*Default value: 100*
-  --filtersearch: string # Full text search with id, name, code.
-  --filtername: string # Filtering by name.
-  --filtercode: string # Filtering by code.
-  --filterstatus: list # Filtration by status.
-  --filterindustries: string # Filtering by industries.
+  --page-number: int # Current page number.
+  --page-size: int # Page size.<br>*Default value: 100*
+  --filter-search: string # Full text search with id, name, code.
+  --filter-name: string # Filtering by name.
+  --filter-code: string # Filtering by code.
+  --filter-status: list # Filtration by status.
+  --filter-industries: string # Filtering by industries.
   --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | code | -code | | status | -status | | description | -description |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[search]" $filtersearch "scalar") (serialize-qp "filter[name]" $filtername "scalar") (serialize-qp "filter[code]" $filtercode "scalar") (serialize-qp "filter[status]" $filterstatus "csv") (serialize-qp "filter[industries]" $filterindustries "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[search]" $filter_search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[code]" $filter_code "scalar") (serialize-qp "filter[status]" $filter_status "csv") (serialize-qp "filter[industries]" $filter_industries "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/organizations" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -434,7 +434,7 @@ export def "organizations get" [
 ]: nothing -> record<data: record<attributes: record<address: record, blog: string, code: string, contacts: record, description: string, icon: record, industries: list, logo: record, name: string, site: string, social_profiles: record, status: string, wiki: string>, id: string, links: record<self: string>, relationships: record<active_in_countries: record, hq_in_country: record, source_register_org: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/organizations/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,18 +452,18 @@ export def "payment-methods list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Current page number.
-  --pagesize: int # Page size.<br>*Default value: 100*
-  --filtersearch: string # Full text search with id, name, code, category.
-  --filtername: string # Filtering by name.
-  --filtercode: string # Filtering by code.
-  --filterprocessor-name: string # Filtering by processor_name.
-  --filtercategory: list # Filtering by category.
+  --page-number: int # Current page number.
+  --page-size: int # Page size.<br>*Default value: 100*
+  --filter-search: string # Full text search with id, name, code, category.
+  --filter-name: string # Filtering by name.
+  --filter-code: string # Filtering by code.
+  --filter-processor-name: string # Filtering by processor_name.
+  --filter-category: list # Filtering by category.
   --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | code | -code | | processor_name | -processor_name | | category | -category |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[search]" $filtersearch "scalar") (serialize-qp "filter[name]" $filtername "scalar") (serialize-qp "filter[code]" $filtercode "scalar") (serialize-qp "filter[processor_name]" $filterprocessor_name "scalar") (serialize-qp "filter[category]" $filtercategory "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[search]" $filter_search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[code]" $filter_code "scalar") (serialize-qp "filter[processor_name]" $filter_processor_name "scalar") (serialize-qp "filter[category]" $filter_category "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/payment-methods" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -486,7 +486,7 @@ export def "payment-methods get" [
 ]: nothing -> record<data: record<attributes: record<category: string, code: string, name: string, processor_name: string>, id: string, links: record<self: string>, relationships: record<currencies: record, payment_processor: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/payment-methods/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/payment-methods/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -504,19 +504,19 @@ export def "payment-providers list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagenumber: int # Current page number.
-  --pagesize: int # Page size.<br>*Default value: 100*
-  --filtersearch: string # Full text search with id, code, name.
-  --filtername: string # Filtering by name.
-  --filtercode: string # Filtering by code.
-  --filtertypes: list # Filtering by types.
-  --filtersales-channels: list # Filtering by sales channels.
-  --filterfeatures: list # Filtering by features.
+  --page-number: int # Current page number.
+  --page-size: int # Page size.<br>*Default value: 100*
+  --filter-search: string # Full text search with id, code, name.
+  --filter-name: string # Filtering by name.
+  --filter-code: string # Filtering by code.
+  --filter-types: list # Filtering by types.
+  --filter-sales-channels: list # Filtering by sales channels.
+  --filter-features: list # Filtering by features.
   --qp-sort: list # Sort params:<br>  | ASC | DESC | |-----|------| | name | -name | | code | -code |
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string>, meta: record<pages: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[number]" $pagenumber "scalar") (serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[search]" $filtersearch "scalar") (serialize-qp "filter[name]" $filtername "scalar") (serialize-qp "filter[code]" $filtercode "scalar") (serialize-qp "filter[types]" $filtertypes "csv") (serialize-qp "filter[sales_channels]" $filtersales_channels "csv") (serialize-qp "filter[features]" $filterfeatures "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[search]" $filter_search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[code]" $filter_code "scalar") (serialize-qp "filter[types]" $filter_types "csv") (serialize-qp "filter[sales_channels]" $filter_sales_channels "csv") (serialize-qp "filter[features]" $filter_features "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/payment-providers" $qp)
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -539,7 +539,7 @@ export def "payment-providers get" [
 ]: nothing -> record<data: record<attributes: record<code: string, features: list, name: string, sales_channels: list, types: list>, id: string, links: record<self: string>, relationships: record<organization: record, payment_methods: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/payment-providers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/payment-providers/{id}"))
   let accept_val = "application/vnd.api+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

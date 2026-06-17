@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def authenticationMethod-completer [] { ["EAPMSCHAPv2" "EAPTLS"] }
+def authentication-method-completer [] { ["EAPMSCHAPv2" "EAPTLS"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-p2svpn-gateways List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-p2svpn-gateways list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,8 +95,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/p2svpnGateways
 # operationId: P2sVpnGateways_List
-export def "subscriptions-providers-microsoft-network-p2svpn-gateways List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-p2svpn-gateways list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-providers-microsoft-network-p2svpn-gateways List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/p2svpnGateways" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/p2svpnGateways") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,8 +120,8 @@ export def "subscriptions-providers-microsoft-network-p2svpn-gateways List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/virtualHubs
 # operationId: VirtualHubs_List
-export def "subscriptions-providers-microsoft-network-virtual-hubs List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-virtual-hubs list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +135,7 @@ export def "subscriptions-providers-microsoft-network-virtual-hubs List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/virtualHubs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/virtualHubs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,8 +145,8 @@ export def "subscriptions-providers-microsoft-network-virtual-hubs List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/virtualWans
 # operationId: VirtualWans_List
-export def "subscriptions-providers-microsoft-network-virtual-wans List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-virtual-wans list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "subscriptions-providers-microsoft-network-virtual-wans List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/virtualWans" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/virtualWans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,8 +170,8 @@ export def "subscriptions-providers-microsoft-network-virtual-wans List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/vpnGateways
 # operationId: VpnGateways_List
-export def "subscriptions-providers-microsoft-network-vpn-gateways List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-vpn-gateways list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "subscriptions-providers-microsoft-network-vpn-gateways List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/vpnGateways" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/vpnGateways") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,8 +195,8 @@ export def "subscriptions-providers-microsoft-network-vpn-gateways List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/vpnSites
 # operationId: VpnSites_List
-export def "subscriptions-providers-microsoft-network-vpn-sites List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-network-vpn-sites list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "subscriptions-providers-microsoft-network-vpn-sites List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Network/vpnSites" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Network/vpnSites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,9 +220,9 @@ export def "subscriptions-providers-microsoft-network-vpn-sites List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways
 # operationId: P2sVpnGateways_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/p2svpnGateways" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,10 +246,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}
 # operationId: P2sVpnGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways delete" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/p2svpnGateways/($gatewayName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,10 +273,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}
 # operationId: P2sVpnGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways get" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/p2svpnGateways/($gatewayName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,10 +300,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}
 # operationId: P2sVpnGateways_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways UpdateTags" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,8 +319,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/p2svpnGateways/($gatewayName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -332,10 +332,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}
 # operationId: P2sVpnGateways_CreateOrUpdate
 # --properties shape: {customRoutes?: any, p2SVpnServerConfiguration?: any, virtualHub?: any, vpnClientAddressPool?: any, vpnClientConnectionHealth?: any, vpnGatewayScaleUnit?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,8 +354,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/p2svpnGateways/($gatewayName)" $qp)
-  let body = {properties: $properties, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}") $qp)
+  let body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,10 +366,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}/generatevpnprofile
 # operationId: P2sVpnGateways_GenerateVpnProfile
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways-generatevpnprofile GenerateVpnProfile" [
-  resourceGroupName: string
-  gatewayName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways-generatevpnprofile post" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,14 +379,14 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  --authenticationMethod: string@authenticationMethod-completer # VPN client authentication method.
+  --authentication-method: string@authentication-method-completer # VPN client authentication method.
 ]: any -> record<profileUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/p2svpnGateways/($gatewayName)/generatevpnprofile" $qp)
-  let body = {authenticationMethod: $authenticationMethod} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}/generatevpnprofile") $qp)
+  let body = {"authenticationMethod": $authentication_method} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,10 +397,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/p2svpnGateways/{gatewayName}/getP2sVpnConnectionHealth
 # operationId: P2sVpnGateways_GetP2sVpnConnectionHealth
-export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways-get-p2s-vpn-connection-health GetP2sVpnConnectionHealth" [
-  resourceGroupName: string
-  gatewayName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gateways-get-p2s-vpn-connection-health get" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/p2svpnGateways/($gatewayName)/getP2sVpnConnectionHealth" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/p2svpnGateways/{gateway_name}/getP2sVpnConnectionHealth") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -424,9 +424,9 @@ export def "subscriptions-resource-groups-providers-microsoft-network-p2svpn-gat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs
 # operationId: VirtualHubs_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualHubs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,10 +450,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}
 # operationId: VirtualHubs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualHubName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs delete" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,7 +467,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualHubs/($virtualHubName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_hub_name: $virtual_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -477,10 +477,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}
 # operationId: VirtualHubs_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualHubName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs get" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,7 +494,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualHubs/($virtualHubName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_hub_name: $virtual_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -504,10 +504,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}
 # operationId: VirtualHubs_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs UpdateTags" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualHubName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,8 +523,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualHubs/($virtualHubName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_hub_name: $virtual_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -536,10 +536,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}
 # operationId: VirtualHubs_CreateOrUpdate
 # --properties shape: {addressPrefix?: string, expressRouteGateway?: any, p2SVpnGateway?: any, routeTable?: any, virtualNetworkConnections?: list, virtualWan?: any, vpnGateway?: any}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualHubName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,8 +558,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualHubs/($virtualHubName)" $qp)
-  let body = {properties: $properties, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_hub_name: $virtual_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}") $qp)
+  let body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -570,10 +570,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}/hubVirtualNetworkConnections
 # operationId: HubVirtualNetworkConnections_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs-hub-virtual-network-connections List" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualHubName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs-hub-virtual-network-connections list" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,7 +587,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualHubs/($virtualHubName)/hubVirtualNetworkConnections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_hub_name: $virtual_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}/hubVirtualNetworkConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -597,11 +597,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualHubs/{virtualHubName}/hubVirtualNetworkConnections/{connectionName}
 # operationId: HubVirtualNetworkConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs-hub-virtual-network-connections Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualHubName: string
-  connectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hubs-hub-virtual-network-connections get" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_hub_name: string
+  connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualHubs/($virtualHubName)/hubVirtualNetworkConnections/($connectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_hub_name: $virtual_hub_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualHubs/{virtual_hub_name}/hubVirtualNetworkConnections/{connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -625,9 +625,9 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-hu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans
 # operationId: VirtualWans_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -651,10 +651,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{VirtualWANName}
 # operationId: VirtualWans_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  VirtualWANName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans delete" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_wan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans/($VirtualWANName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_wan_name: $virtual_wan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -678,10 +678,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{VirtualWANName}
 # operationId: VirtualWans_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans Get" [
-  resourceGroupName: string
-  VirtualWANName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans get" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_wan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +695,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans/($VirtualWANName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_wan_name: $virtual_wan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -705,10 +705,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{VirtualWANName}
 # operationId: VirtualWans_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans UpdateTags" [
-  subscriptionId: string
-  resourceGroupName: string
-  VirtualWANName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_wan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,8 +724,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans/($VirtualWANName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_wan_name: $virtual_wan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -737,10 +737,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{VirtualWANName}
 # operationId: VirtualWans_CreateOrUpdate
 # --properties shape: {allowBranchToBranchTraffic?: bool, allowVnetToVnetTraffic?: bool, disableVpnEncryption?: bool, p2SVpnServerConfigurations?: list, securityProviderName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  VirtualWANName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_wan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,8 +759,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans/($VirtualWANName)" $qp)
-  let body = {properties: $properties, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_wan_name: $virtual_wan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}") $qp)
+  let body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -771,10 +771,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWANName}/supportedSecurityProviders
 # operationId: SupportedSecurityProviders
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-supported-security-providers SupportedSecurityProviders" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualWANName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-supported-security-providers get" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_wan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans/($virtualWANName)/supportedSecurityProviders" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_wan_name: $virtual_wan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/supportedSecurityProviders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -798,10 +798,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWANName}/vpnConfiguration
 # operationId: VpnSitesConfiguration_Download
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-vpn-configuration Download" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualWANName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-vpn-configuration download" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_wan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,15 +811,15 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-  outputBlobSasUrl: string # The sas-url to download the configurations for vpn-sites.
-  --vpnSites: list # List of resource-ids of the vpn-sites for which config is to be downloaded.
+  output_blob_sas_url: string # The sas-url to download the configurations for vpn-sites.
+  --vpn-sites: list # List of resource-ids of the vpn-sites for which config is to be downloaded.
 ]: any -> record<code: string, details: table<code: string, message: string, target: string>, innerError: string, message: string, target: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans/($virtualWANName)/vpnConfiguration" $qp)
-  let body = {outputBlobSasUrl: $outputBlobSasUrl, vpnSites: $vpnSites} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_wan_name: $virtual_wan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/vpnConfiguration") $qp)
+  let body = {"outputBlobSasUrl": $output_blob_sas_url, "vpnSites": $vpn_sites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,10 +830,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWanName}/p2sVpnServerConfigurations
 # operationId: P2sVpnServerConfigurations_ListByVirtualWan
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations ListByVirtualWan" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualWanName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations list-by" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_wan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -847,7 +847,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans/($virtualWanName)/p2sVpnServerConfigurations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_wan_name: $virtual_wan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/p2sVpnServerConfigurations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -857,11 +857,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWanName}/p2sVpnServerConfigurations/{p2SVpnServerConfigurationName}
 # operationId: P2sVpnServerConfigurations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualWanName: string
-  p2SVpnServerConfigurationName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations delete" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_wan_name: string
+  p2_s_vpn_server_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,7 +875,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans/($virtualWanName)/p2sVpnServerConfigurations/($p2SVpnServerConfigurationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_wan_name: $virtual_wan_name, p2_s_vpn_server_configuration_name: $p2_s_vpn_server_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/p2sVpnServerConfigurations/{p2_s_vpn_server_configuration_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -885,11 +885,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWanName}/p2sVpnServerConfigurations/{p2SVpnServerConfigurationName}
 # operationId: P2sVpnServerConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualWanName: string
-  p2SVpnServerConfigurationName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations get" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_wan_name: string
+  p2_s_vpn_server_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,7 +903,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans/($virtualWanName)/p2sVpnServerConfigurations/($p2SVpnServerConfigurationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_wan_name: $virtual_wan_name, p2_s_vpn_server_configuration_name: $p2_s_vpn_server_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/p2sVpnServerConfigurations/{p2_s_vpn_server_configuration_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -914,11 +914,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualWans/{virtualWanName}/p2sVpnServerConfigurations/{p2SVpnServerConfigurationName}
 # operationId: P2sVpnServerConfigurations_CreateOrUpdate
 # --properties shape: {etag?: string, name?: string, p2SVpnServerConfigRadiusClientRootCertificates?: list, p2SVpnServerConfigRadiusServerRootCertificates?: list, p2SVpnServerConfigVpnClientRevokedCertificates?: list, p2SVpnServerConfigVpnClientRootCertificates?: list, radiusServerAddress?: string, radiusServerSecret?: string, vpnClientIpsecPolicies?: list, vpnProtocols?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  virtualWanName: string
-  p2SVpnServerConfigurationName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wans-p2s-vpn-server-configurations create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_wan_name: string
+  p2_s_vpn_server_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -936,8 +936,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/virtualWans/($virtualWanName)/p2sVpnServerConfigurations/($p2SVpnServerConfigurationName)" $qp)
-  let body = {name: $name, properties: $properties, id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_wan_name: $virtual_wan_name, p2_s_vpn_server_configuration_name: $p2_s_vpn_server_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/virtualWans/{virtual_wan_name}/p2sVpnServerConfigurations/{p2_s_vpn_server_configuration_name}") $qp)
+  let body = {"name": $name, "properties": $properties, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -948,9 +948,9 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-wa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways
 # operationId: VpnGateways_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +964,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -974,10 +974,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}
 # operationId: VpnGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways delete" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,7 +991,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1001,10 +1001,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}
 # operationId: VpnGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways get" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1018,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1028,10 +1028,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}
 # operationId: VpnGateways_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways UpdateTags" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,8 +1047,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1060,10 +1060,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}
 # operationId: VpnGateways_CreateOrUpdate
 # --properties shape: {bgpSettings?: any, connections?: list, virtualHub?: any, vpnGatewayScaleUnit?: int}
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,8 +1082,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)" $qp)
-  let body = {properties: $properties, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}") $qp)
+  let body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1094,10 +1094,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/reset
 # operationId: VpnGateways_Reset
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-reset Reset" [
-  resourceGroupName: string
-  gatewayName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-reset reset" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1111,7 +1111,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)/reset" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1121,10 +1121,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections
 # operationId: VpnConnections_ListByVpnGateway
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections ListByVpnGateway" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections list-by" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1138,7 +1138,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)/vpnConnections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1148,11 +1148,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}
 # operationId: VpnConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
-  connectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections delete" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
+  connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1166,7 +1166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)/vpnConnections/($connectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections/{connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1176,11 +1176,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}
 # operationId: VpnConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
-  connectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections get" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
+  connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,7 +1194,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)/vpnConnections/($connectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections/{connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1205,11 +1205,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}
 # operationId: VpnConnections_CreateOrUpdate
 # --properties shape: {connectionBandwidth?: int, enableBgp?: bool, enableInternetSecurity?: bool, enableRateLimiting?: bool, ipsecPolicies?: list, remoteVpnSite?: any, routingWeight?: int, sharedKey?: string, useLocalAzureIpAddress?: bool, usePolicyBasedTrafficSelectors?: bool, vpnConnectionProtocolType?: "IKEv2"|"IKEv1", vpnLinkConnections?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
-  connectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
+  connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1227,8 +1227,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)/vpnConnections/($connectionName)" $qp)
-  let body = {name: $name, properties: $properties, id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections/{connection_name}") $qp)
+  let body = {"name": $name, "properties": $properties, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1239,11 +1239,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}/vpnLinkConnections
 # operationId: VpnLinkConnections_ListByVpnConnection
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections-vpn-link-connections ListByVpnConnection" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
-  connectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections-vpn-link-connections list-by" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
+  connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,7 +1257,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)/vpnConnections/($connectionName)/vpnLinkConnections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name, connection_name: $connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections/{connection_name}/vpnLinkConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1267,12 +1267,12 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnGateways/{gatewayName}/vpnConnections/{connectionName}/vpnLinkConnections/{linkConnectionName}
 # operationId: VpnSiteLinkConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections-vpn-link-connections Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  gatewayName: string
-  connectionName: string
-  linkConnectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gateways-vpn-connections-vpn-link-connections get" [
+  subscription_id: string
+  resource_group_name: string
+  gateway_name: string
+  connection_name: string
+  link_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1286,7 +1286,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnGateways/($gatewayName)/vpnConnections/($connectionName)/vpnLinkConnections/($linkConnectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, gateway_name: $gateway_name, connection_name: $connection_name, link_connection_name: $link_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnGateways/{gateway_name}/vpnConnections/{connection_name}/vpnLinkConnections/{link_connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1296,9 +1296,9 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-gatewa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites
 # operationId: VpnSites_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1312,7 +1312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnSites" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1322,10 +1322,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}
 # operationId: VpnSites_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  vpnSiteName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites delete" [
+  subscription_id: string
+  resource_group_name: string
+  vpn_site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1339,7 +1339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnSites/($vpnSiteName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vpn_site_name: $vpn_site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1349,10 +1349,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}
 # operationId: VpnSites_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  vpnSiteName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites get" [
+  subscription_id: string
+  resource_group_name: string
+  vpn_site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,7 +1366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnSites/($vpnSiteName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vpn_site_name: $vpn_site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1376,10 +1376,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}
 # operationId: VpnSites_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites UpdateTags" [
-  subscriptionId: string
-  resourceGroupName: string
-  vpnSiteName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  vpn_site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1395,8 +1395,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnSites/($vpnSiteName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vpn_site_name: $vpn_site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1408,10 +1408,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}
 # operationId: VpnSites_CreateOrUpdate
 # --properties shape: {addressSpace?: any, bgpProperties?: any, deviceProperties?: any, ipAddress?: string, isSecuritySite?: bool, siteKey?: string, virtualWan?: any, vpnSiteLinks?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  vpnSiteName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  vpn_site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,8 +1430,8 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnSites/($vpnSiteName)" $qp)
-  let body = {properties: $properties, id: $id, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vpn_site_name: $vpn_site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}") $qp)
+  let body = {"properties": $properties, "id": $id, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1442,10 +1442,10 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}/vpnSiteLinks
 # operationId: VpnSiteLinks_ListByVpnSite
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites-vpn-site-links ListByVpnSite" [
-  subscriptionId: string
-  resourceGroupName: string
-  vpnSiteName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites-vpn-site-links list-by" [
+  subscription_id: string
+  resource_group_name: string
+  vpn_site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1459,7 +1459,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnSites/($vpnSiteName)/vpnSiteLinks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vpn_site_name: $vpn_site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}/vpnSiteLinks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1469,11 +1469,11 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/vpnSites/{vpnSiteName}/vpnSiteLinks/{vpnSiteLinkName}
 # operationId: VpnSiteLinks_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites-vpn-site-links Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  vpnSiteName: string
-  vpnSiteLinkName: string
+export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites-vpn-site-links get" [
+  subscription_id: string
+  resource_group_name: string
+  vpn_site_name: string
+  vpn_site_link_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1487,7 +1487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-vpn-sites-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Network/vpnSites/($vpnSiteName)/vpnSiteLinks/($vpnSiteLinkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, vpn_site_name: $vpn_site_name, vpn_site_link_name: $vpn_site_link_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Network/vpnSites/{vpn_site_name}/vpnSiteLinks/{vpn_site_link_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

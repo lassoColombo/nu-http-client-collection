@@ -69,21 +69,21 @@ def auth-scheme-completer [] { ["bearer"] }
 def api-version-completer [] { ["2019-05-05-preview"] }
 def identifier-completer [] { ["MonitorServiceList"] }
 def severity-completer [] { ["Sev0" "Sev1" "Sev2" "Sev3" "Sev4"] }
-def monitorService-completer [] { ["ActivityLog Administrative" "ActivityLog Autoscale" "ActivityLog Policy" "ActivityLog Recommendation" "ActivityLog Security" "Application Insights" "Log Analytics" "Nagios" "Platform" "SCOM" "ServiceHealth" "SmartDetector" "VM Insights" "Zabbix"] }
-def monitorCondition-completer [] { ["Fired" "Resolved"] }
-def alertState-completer [] { ["Acknowledged" "Closed" "New"] }
-def sortBy-completer [] { ["alertState" "lastModifiedDateTime" "monitorCondition" "name" "severity" "startDateTime" "targetResource" "targetResourceGroup" "targetResourceName" "targetResourceType"] }
-def sortOrder-completer [] { ["asc" "desc"] }
-def timeRange-completer [] { ["1d" "1h" "30d" "7d"] }
-def newState-completer [] { ["Acknowledged" "Closed" "New"] }
+def monitor-service-completer [] { ["ActivityLog Administrative" "ActivityLog Autoscale" "ActivityLog Policy" "ActivityLog Recommendation" "ActivityLog Security" "Application Insights" "Log Analytics" "Nagios" "Platform" "SCOM" "ServiceHealth" "SmartDetector" "VM Insights" "Zabbix"] }
+def monitor-condition-completer [] { ["Fired" "Resolved"] }
+def alert-state-completer [] { ["Acknowledged" "Closed" "New"] }
+def sort-by-completer [] { ["alertState" "lastModifiedDateTime" "monitorCondition" "name" "severity" "startDateTime" "targetResource" "targetResourceGroup" "targetResourceName" "targetResourceType"] }
+def sort-order-completer [] { ["asc" "desc"] }
+def time-range-completer [] { ["1d" "1h" "30d" "7d"] }
+def new-state-completer [] { ["Acknowledged" "Closed" "New"] }
 def groupby-completer [] { ["alertRule" "alertState" "monitorCondition" "monitorService" "severity" "signalType"] }
-def smartGroupState-completer [] { ["Acknowledged" "Closed" "New"] }
-def sortBy-completer-1 [] { ["alertsCount" "lastModifiedDateTime" "severity" "startDateTime" "state"] }
+def smart-group-state-completer [] { ["Acknowledged" "Closed" "New"] }
+def sort-by-completer-1 [] { ["alertsCount" "lastModifiedDateTime" "severity" "startDateTime" "state"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-alerts-management-alerts-meta-data MetaData" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-alerts-management-alerts-meta-data get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.AlertsManagement/alertsMetaData
 # operationId: Alerts_MetaData
-export def "providers-microsoft-alerts-management-alerts-meta-data MetaData" [
+export def "providers-microsoft-alerts-management-alerts-meta-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "providers-microsoft-alerts-management-alerts-meta-data MetaData" [
 #
 # GET /providers/Microsoft.AlertsManagement/operations
 # operationId: Operations_List
-export def "providers-microsoft-alerts-management-operations List" [
+export def "providers-microsoft-alerts-management-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,8 +156,8 @@ export def "providers-microsoft-alerts-management-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/actionRules
 # operationId: ActionRules_ListBySubscription
-export def "subscriptions-providers-microsoft-alerts-management-action-rules ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-alerts-management-action-rules list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,22 +166,22 @@ export def "subscriptions-providers-microsoft-alerts-management-action-rules Lis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --targetResourceGroup: string # Filter by target resource group name. Default value is select all.
-  --targetResourceType: string # Filter by target resource type. Default value is select all.
-  --targetResource: string # Filter by target resource( which is full ARM ID) Default value is select all.
+  --target-resource-group: string # Filter by target resource group name. Default value is select all.
+  --target-resource-type: string # Filter by target resource type. Default value is select all.
+  --target-resource: string # Filter by target resource( which is full ARM ID) Default value is select all.
   --severity: string@severity-completer # Filter by severity.  Default value is select all.
-  --monitorService: string@monitorService-completer # Filter by monitor service which generates the alert instance. Default value is select all.
-  --impactedScope: string # filter by impacted/target scope (provide comma separated list for multiple scopes). The value should be an well constructed ARM id of the scope.
+  --monitor-service: string@monitor-service-completer # Filter by monitor service which generates the alert instance. Default value is select all.
+  --impacted-scope: string # filter by impacted/target scope (provide comma separated list for multiple scopes). The value should be an well constructed ARM id of the scope.
   --description: string # filter by alert rule description
-  --alertRuleId: string # filter by alert rule id
-  --actionGroup: string # filter by action group configured as part of action rule
+  --alert-rule-id: string # filter by alert rule id
+  --action-group: string # filter by action group configured as part of action rule
   --name: string # filter by action rule name
   --api-version: string@api-version-completer # client API version
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "targetResourceGroup" $targetResourceGroup "scalar") (serialize-qp "targetResourceType" $targetResourceType "scalar") (serialize-qp "targetResource" $targetResource "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "monitorService" $monitorService "scalar") (serialize-qp "impactedScope" $impactedScope "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "alertRuleId" $alertRuleId "scalar") (serialize-qp "actionGroup" $actionGroup "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/actionRules" $qp)
+  let qp = [(serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "impactedScope" $impacted_scope "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "alertRuleId" $alert_rule_id "scalar") (serialize-qp "actionGroup" $action_group "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/actionRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,8 +191,8 @@ export def "subscriptions-providers-microsoft-alerts-management-action-rules Lis
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts
 # operationId: Alerts_GetAll
-export def "subscriptions-providers-microsoft-alerts-management-alerts GetAll" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-alerts-management-alerts get-all" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,29 +201,29 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts GetAll" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --targetResource: string # Filter by target resource( which is full ARM ID) Default value is select all.
-  --targetResourceType: string # Filter by target resource type. Default value is select all.
-  --targetResourceGroup: string # Filter by target resource group name. Default value is select all.
-  --monitorService: string@monitorService-completer # Filter by monitor service which generates the alert instance. Default value is select all.
-  --monitorCondition: string@monitorCondition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
+  --target-resource: string # Filter by target resource( which is full ARM ID) Default value is select all.
+  --target-resource-type: string # Filter by target resource type. Default value is select all.
+  --target-resource-group: string # Filter by target resource group name. Default value is select all.
+  --monitor-service: string@monitor-service-completer # Filter by monitor service which generates the alert instance. Default value is select all.
+  --monitor-condition: string@monitor-condition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
   --severity: string@severity-completer # Filter by severity.  Default value is select all.
-  --alertState: string@alertState-completer # Filter by state of the alert instance. Default value is to select all.
-  --alertRule: string # Filter by specific alert rule.  Default value is to select all.
-  --smartGroupId: string # Filter the alerts list by the Smart Group Id. Default value is none.
-  --includeContext: oneof<nothing, bool> # Include context which has contextual data specific to the monitor service. Default value is false'
-  --includeEgressConfig: oneof<nothing, bool> # Include egress config which would be used for displaying the content in portal.  Default value is 'false'.
-  --pageCount: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent"  filter is selected, maximum value allowed is 25. Default value is 25.
-  --sortBy: string@sortBy-completer # Sort the query results by input field,  Default value is 'lastModifiedDateTime'.
-  --sortOrder: string@sortOrder-completer # Sort the query results order in either ascending or descending.  Default value is 'desc' for time fields and 'asc' for others.
+  --alert-state: string@alert-state-completer # Filter by state of the alert instance. Default value is to select all.
+  --alert-rule: string # Filter by specific alert rule.  Default value is to select all.
+  --smart-group-id: string # Filter the alerts list by the Smart Group Id. Default value is none.
+  --include-context: oneof<nothing, bool> # Include context which has contextual data specific to the monitor service. Default value is false'
+  --include-egress-config: oneof<nothing, bool> # Include egress config which would be used for displaying the content in portal.  Default value is 'false'.
+  --page-count: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent"  filter is selected, maximum value allowed is 25. Default value is 25.
+  --sort-by: string@sort-by-completer # Sort the query results by input field,  Default value is 'lastModifiedDateTime'.
+  --sort-order: string@sort-order-completer # Sort the query results order in either ascending or descending.  Default value is 'desc' for time fields and 'asc' for others.
   --select: string # This filter allows to selection of the fields(comma separated) which would  be part of the essential section. This would allow to project only the  required fields rather than getting entire content.  Default is to fetch all the fields in the essentials section.
-  --timeRange: string@timeRange-completer # Filter by time range by below listed values. Default value is 1 day.
-  --customTimeRange: string # Filter by custom time range in the format <start-time>/<end-time>  where time is in (ISO-8601 format)'. Permissible values is within 30 days from  query time. Either timeRange or customTimeRange could be used but not both. Default is none.
+  --time-range: string@time-range-completer # Filter by time range by below listed values. Default value is 1 day.
+  --custom-time-range: string # Filter by custom time range in the format <start-time>/<end-time>  where time is in (ISO-8601 format)'. Permissible values is within 30 days from  query time. Either timeRange or customTimeRange could be used but not both. Default is none.
   --api-version: string@api-version-completer # client API version
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "targetResource" $targetResource "scalar") (serialize-qp "targetResourceType" $targetResourceType "scalar") (serialize-qp "targetResourceGroup" $targetResourceGroup "scalar") (serialize-qp "monitorService" $monitorService "scalar") (serialize-qp "monitorCondition" $monitorCondition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "alertState" $alertState "scalar") (serialize-qp "alertRule" $alertRule "scalar") (serialize-qp "smartGroupId" $smartGroupId "scalar") (serialize-qp "includeContext" $includeContext "scalar") (serialize-qp "includeEgressConfig" $includeEgressConfig "scalar") (serialize-qp "pageCount" $pageCount "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "timeRange" $timeRange "scalar") (serialize-qp "customTimeRange" $customTimeRange "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/alerts" $qp)
+  let qp = [(serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "monitorCondition" $monitor_condition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "alertState" $alert_state "scalar") (serialize-qp "alertRule" $alert_rule "scalar") (serialize-qp "smartGroupId" $smart_group_id "scalar") (serialize-qp "includeContext" $include_context "scalar") (serialize-qp "includeEgressConfig" $include_egress_config "scalar") (serialize-qp "pageCount" $page_count "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "timeRange" $time_range "scalar") (serialize-qp "customTimeRange" $custom_time_range "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -233,9 +233,9 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts GetAll" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}
 # operationId: Alerts_GetById
-export def "subscriptions-providers-microsoft-alerts-management-alerts GetById" [
-  subscriptionId: string
-  alertId: string
+export def "subscriptions-providers-microsoft-alerts-management-alerts get-by" [
+  subscription_id: string
+  alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts GetById" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/alerts/($alertId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, alert_id: $alert_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,9 +259,9 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts GetById" 
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}/changestate
 # operationId: Alerts_ChangeState
-export def "subscriptions-providers-microsoft-alerts-management-alerts-changestate ChangeState" [
-  subscriptionId: string
-  alertId: string
+export def "subscriptions-providers-microsoft-alerts-management-alerts-changestate changes-tate" [
+  subscription_id: string
+  alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,12 +271,12 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-changesta
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # client API version
-  --newState: string@newState-completer # New state of the alert.
+  --new-state: string@new-state-completer # New state of the alert.
 ]: nothing -> record<properties: record<context: record, egressConfig: record, essentials: record<alertRule: string, alertState: string, lastModifiedDateTime: string, lastModifiedUserName: string, monitorCondition: string, monitorConditionResolvedDateTime: string, monitorService: string, severity: string, signalType: string, smartGroupId: string, smartGroupingReason: string, sourceCreatedId: string, startDateTime: string, targetResource: string, targetResourceGroup: string, targetResourceName: string, targetResourceType: string>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "newState" $newState "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/alerts/($alertId)/changestate" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "newState" $new_state "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, alert_id: $alert_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}/changestate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,9 +286,9 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-changesta
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}/history
 # operationId: Alerts_GetHistory
-export def "subscriptions-providers-microsoft-alerts-management-alerts-history GetHistory" [
-  subscriptionId: string
-  alertId: string
+export def "subscriptions-providers-microsoft-alerts-management-alerts-history get" [
+  subscription_id: string
+  alert_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-history G
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/alerts/($alertId)/history" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, alert_id: $alert_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alerts/{alert_id}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -312,8 +312,8 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-history G
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alertsSummary
 # operationId: Alerts_GetSummary
-export def "subscriptions-providers-microsoft-alerts-management-alerts-summary GetSummary" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-alerts-management-alerts-summary get" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,23 +323,23 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-summary G
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --groupby: string@groupby-completer # This parameter allows the result set to be grouped by input fields (Maximum 2 comma separated fields supported). For example, groupby=severity or groupby=severity,alertstate.
-  --includeSmartGroupsCount: oneof<nothing, bool> # Include count of the SmartGroups as part of the summary. Default value is 'false'.
-  --targetResource: string # Filter by target resource( which is full ARM ID) Default value is select all.
-  --targetResourceType: string # Filter by target resource type. Default value is select all.
-  --targetResourceGroup: string # Filter by target resource group name. Default value is select all.
-  --monitorService: string@monitorService-completer # Filter by monitor service which generates the alert instance. Default value is select all.
-  --monitorCondition: string@monitorCondition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
+  --include-smart-groups-count: oneof<nothing, bool> # Include count of the SmartGroups as part of the summary. Default value is 'false'.
+  --target-resource: string # Filter by target resource( which is full ARM ID) Default value is select all.
+  --target-resource-type: string # Filter by target resource type. Default value is select all.
+  --target-resource-group: string # Filter by target resource group name. Default value is select all.
+  --monitor-service: string@monitor-service-completer # Filter by monitor service which generates the alert instance. Default value is select all.
+  --monitor-condition: string@monitor-condition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
   --severity: string@severity-completer # Filter by severity.  Default value is select all.
-  --alertState: string@alertState-completer # Filter by state of the alert instance. Default value is to select all.
-  --alertRule: string # Filter by specific alert rule.  Default value is to select all.
-  --timeRange: string@timeRange-completer # Filter by time range by below listed values. Default value is 1 day.
-  --customTimeRange: string # Filter by custom time range in the format <start-time>/<end-time>  where time is in (ISO-8601 format)'. Permissible values is within 30 days from  query time. Either timeRange or customTimeRange could be used but not both. Default is none.
+  --alert-state: string@alert-state-completer # Filter by state of the alert instance. Default value is to select all.
+  --alert-rule: string # Filter by specific alert rule.  Default value is to select all.
+  --time-range: string@time-range-completer # Filter by time range by below listed values. Default value is 1 day.
+  --custom-time-range: string # Filter by custom time range in the format <start-time>/<end-time>  where time is in (ISO-8601 format)'. Permissible values is within 30 days from  query time. Either timeRange or customTimeRange could be used but not both. Default is none.
   --api-version: string@api-version-completer # client API version
 ]: nothing -> record<properties: record<groupedby: string, smartGroupsCount: int, total: int, values: list<record>>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupby" $groupby "scalar") (serialize-qp "includeSmartGroupsCount" $includeSmartGroupsCount "scalar") (serialize-qp "targetResource" $targetResource "scalar") (serialize-qp "targetResourceType" $targetResourceType "scalar") (serialize-qp "targetResourceGroup" $targetResourceGroup "scalar") (serialize-qp "monitorService" $monitorService "scalar") (serialize-qp "monitorCondition" $monitorCondition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "alertState" $alertState "scalar") (serialize-qp "alertRule" $alertRule "scalar") (serialize-qp "timeRange" $timeRange "scalar") (serialize-qp "customTimeRange" $customTimeRange "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/alertsSummary" $qp)
+  let qp = [(serialize-qp "groupby" $groupby "scalar") (serialize-qp "includeSmartGroupsCount" $include_smart_groups_count "scalar") (serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "monitorCondition" $monitor_condition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "alertState" $alert_state "scalar") (serialize-qp "alertRule" $alert_rule "scalar") (serialize-qp "timeRange" $time_range "scalar") (serialize-qp "customTimeRange" $custom_time_range "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/alertsSummary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,8 +349,8 @@ export def "subscriptions-providers-microsoft-alerts-management-alerts-summary G
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups
 # operationId: SmartGroups_GetAll
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups GetAll" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups get-all" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,23 +359,23 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --targetResource: string # Filter by target resource( which is full ARM ID) Default value is select all.
-  --targetResourceGroup: string # Filter by target resource group name. Default value is select all.
-  --targetResourceType: string # Filter by target resource type. Default value is select all.
-  --monitorService: string@monitorService-completer # Filter by monitor service which generates the alert instance. Default value is select all.
-  --monitorCondition: string@monitorCondition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
+  --target-resource: string # Filter by target resource( which is full ARM ID) Default value is select all.
+  --target-resource-group: string # Filter by target resource group name. Default value is select all.
+  --target-resource-type: string # Filter by target resource type. Default value is select all.
+  --monitor-service: string@monitor-service-completer # Filter by monitor service which generates the alert instance. Default value is select all.
+  --monitor-condition: string@monitor-condition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
   --severity: string@severity-completer # Filter by severity.  Default value is select all.
-  --smartGroupState: string@smartGroupState-completer # Filter by state of the smart group. Default value is to select all.
-  --timeRange: string@timeRange-completer # Filter by time range by below listed values. Default value is 1 day.
-  --pageCount: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent"  filter is selected, maximum value allowed is 25. Default value is 25.
-  --sortBy: string@sortBy-completer-1 # Sort the query results by input field. Default value is sort by 'lastModifiedDateTime'.
-  --sortOrder: string@sortOrder-completer # Sort the query results order in either ascending or descending.  Default value is 'desc' for time fields and 'asc' for others.
+  --smart-group-state: string@smart-group-state-completer # Filter by state of the smart group. Default value is to select all.
+  --time-range: string@time-range-completer # Filter by time range by below listed values. Default value is 1 day.
+  --page-count: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent"  filter is selected, maximum value allowed is 25. Default value is 25.
+  --sort-by: string@sort-by-completer-1 # Sort the query results by input field. Default value is sort by 'lastModifiedDateTime'.
+  --sort-order: string@sort-order-completer # Sort the query results order in either ascending or descending.  Default value is 'desc' for time fields and 'asc' for others.
   --api-version: string@api-version-completer # client API version
 ]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "targetResource" $targetResource "scalar") (serialize-qp "targetResourceGroup" $targetResourceGroup "scalar") (serialize-qp "targetResourceType" $targetResourceType "scalar") (serialize-qp "monitorService" $monitorService "scalar") (serialize-qp "monitorCondition" $monitorCondition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "smartGroupState" $smartGroupState "scalar") (serialize-qp "timeRange" $timeRange "scalar") (serialize-qp "pageCount" $pageCount "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/smartGroups" $qp)
+  let qp = [(serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "monitorCondition" $monitor_condition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "smartGroupState" $smart_group_state "scalar") (serialize-qp "timeRange" $time_range "scalar") (serialize-qp "pageCount" $page_count "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -385,9 +385,9 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups Get
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}
 # operationId: SmartGroups_GetById
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups GetById" [
-  subscriptionId: string
-  smartGroupId: string
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups get-by" [
+  subscription_id: string
+  smart_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups Get
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/smartGroups/($smartGroupId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, smart_group_id: $smart_group_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,9 +411,9 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups Get
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}/changeState
 # operationId: SmartGroups_ChangeState
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups-change-state ChangeState" [
-  subscriptionId: string
-  smartGroupId: string
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups-change-state changes-tate" [
+  subscription_id: string
+  smart_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,12 +423,12 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups-cha
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # client API version
-  --newState: string@newState-completer # New state of the alert.
+  --new-state: string@new-state-completer # New state of the alert.
 ]: nothing -> record<properties: record<alertSeverities: list<record>, alertStates: list<record>, alertsCount: int, lastModifiedDateTime: string, lastModifiedUserName: string, monitorConditions: list<record>, monitorServices: list<record>, nextLink: string, resourceGroups: list<record>, resourceTypes: list<record>, resources: list<record>, severity: string, smartGroupState: string, startDateTime: string>, id: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "newState" $newState "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/smartGroups/($smartGroupId)/changeState" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "newState" $new_state "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, smart_group_id: $smart_group_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}/changeState") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -438,9 +438,9 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups-cha
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}/history
 # operationId: SmartGroups_GetHistory
-export def "subscriptions-providers-microsoft-alerts-management-smart-groups-history GetHistory" [
-  subscriptionId: string
-  smartGroupId: string
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups-history get" [
+  subscription_id: string
+  smart_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups-his
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/smartGroups/($smartGroupId)/history" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, smart_group_id: $smart_group_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AlertsManagement/smartGroups/{smart_group_id}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -464,9 +464,9 @@ export def "subscriptions-providers-microsoft-alerts-management-smart-groups-his
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules
 # operationId: ActionRules_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,22 +475,22 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --targetResourceGroup: string # Filter by target resource group name. Default value is select all.
-  --targetResourceType: string # Filter by target resource type. Default value is select all.
-  --targetResource: string # Filter by target resource( which is full ARM ID) Default value is select all.
+  --target-resource-group: string # Filter by target resource group name. Default value is select all.
+  --target-resource-type: string # Filter by target resource type. Default value is select all.
+  --target-resource: string # Filter by target resource( which is full ARM ID) Default value is select all.
   --severity: string@severity-completer # Filter by severity.  Default value is select all.
-  --monitorService: string@monitorService-completer # Filter by monitor service which generates the alert instance. Default value is select all.
-  --impactedScope: string # filter by impacted/target scope (provide comma separated list for multiple scopes). The value should be an well constructed ARM id of the scope.
+  --monitor-service: string@monitor-service-completer # Filter by monitor service which generates the alert instance. Default value is select all.
+  --impacted-scope: string # filter by impacted/target scope (provide comma separated list for multiple scopes). The value should be an well constructed ARM id of the scope.
   --description: string # filter by alert rule description
-  --alertRuleId: string # filter by alert rule id
-  --actionGroup: string # filter by action group configured as part of action rule
+  --alert-rule-id: string # filter by alert rule id
+  --action-group: string # filter by action group configured as part of action rule
   --name: string # filter by action rule name
   --api-version: string@api-version-completer # client API version
 ]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "targetResourceGroup" $targetResourceGroup "scalar") (serialize-qp "targetResourceType" $targetResourceType "scalar") (serialize-qp "targetResource" $targetResource "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "monitorService" $monitorService "scalar") (serialize-qp "impactedScope" $impactedScope "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "alertRuleId" $alertRuleId "scalar") (serialize-qp "actionGroup" $actionGroup "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AlertsManagement/actionRules" $qp)
+  let qp = [(serialize-qp "targetResourceGroup" $target_resource_group "scalar") (serialize-qp "targetResourceType" $target_resource_type "scalar") (serialize-qp "targetResource" $target_resource "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "monitorService" $monitor_service "scalar") (serialize-qp "impactedScope" $impacted_scope "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "alertRuleId" $alert_rule_id "scalar") (serialize-qp "actionGroup" $action_group "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -500,10 +500,10 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
 # operationId: ActionRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  actionRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  action_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AlertsManagement/actionRules/($actionRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_rule_name: $action_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -527,10 +527,10 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
 # operationId: ActionRules_GetByName
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules GetByName" [
-  subscriptionId: string
-  resourceGroupName: string
-  actionRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules get-by-name" [
+  subscription_id: string
+  resource_group_name: string
+  action_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,7 +544,7 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AlertsManagement/actionRules/($actionRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_rule_name: $action_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -555,10 +555,10 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
 # operationId: ActionRules_Update
 # --properties shape: {status?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  actionRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules update" [
+  subscription_id: string
+  resource_group_name: string
+  action_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,8 +575,8 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AlertsManagement/actionRules/($actionRuleName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_rule_name: $action_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -588,10 +588,10 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
 # operationId: ActionRules_CreateUpdate
 # --properties shape: {conditions?: record, description?: string, scope?: record, status?: "Enabled"|"Disabled", type: "Suppression"|"ActionGroup"|"Diagnostics"}
-export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules CreateUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  actionRuleName: string
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules create-update" [
+  subscription_id: string
+  resource_group_name: string
+  action_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,8 +609,8 @@ export def "subscriptions-resource-groups-providers-microsoft-alerts-management-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AlertsManagement/actionRules/($actionRuleName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, action_rule_name: $action_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AlertsManagement/actionRules/{action_rule_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

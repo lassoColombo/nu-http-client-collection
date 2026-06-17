@@ -105,14 +105,14 @@ export def "agreements get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --keys: list # Keys for Agreements whose details are to be retrieved
-  --X-Private-Label-Id: int # PrivateLabelId to operate as, if different from JWT
-  --X-Market-Id: string # Unique identifier of the Market used to retrieve/translate Legal Agreements
+  --x-private-label-id: int # PrivateLabelId to operate as, if different from JWT
+  --x-market-id: string # Unique identifier of the Market used to retrieve/translate Legal Agreements
 ]: nothing -> table<agreementKey: string, content: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keys" $keys "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/agreements" $qp)
-  let extra_headers = {"X-Private-Label-Id": $X_Private_Label_Id, "X-Market-Id": $X_Market_Id} | compact
+  let extra_headers = {"X-Private-Label-Id": $x_private_label_id, "X-Market-Id": $x_market_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/javascript")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

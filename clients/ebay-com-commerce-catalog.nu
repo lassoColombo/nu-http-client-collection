@@ -103,12 +103,12 @@ export def "product get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-EBAY-C-MARKETPLACE-ID: string # This method also uses the <code>X-EBAY-C-MARKETPLACE-ID</code> header to identify the seller's eBay marketplace. It is required for all marketplaces except EBAY_US, which is the default. <b>Note:</b> This method is limited to <code>EBAY_US</code>, <code>EBAY_AU</code>, <code>EBAY_CA</code>, and <code>EBAY_GB</code> values.
+  --x-ebay-c-marketplace-id: string # This method also uses the <code>X-EBAY-C-MARKETPLACE-ID</code> header to identify the seller's eBay marketplace. It is required for all marketplaces except EBAY_US, which is the default. <b>Note:</b> This method is limited to <code>EBAY_US</code>, <code>EBAY_AU</code>, <code>EBAY_CA</code>, and <code>EBAY_GB</code> values.
 ]: nothing -> record<additionalImages: table<height: int, imageUrl: string, width: int>, aspects: table<localizedName: string, localizedValues: list>, brand: string, description: string, ean: list<string>, epid: string, gtin: list<string>, image: record<height: int, imageUrl: string, width: int>, isbn: list<string>, mpn: list<string>, otherApplicableCategoryIds: list<string>, primaryCategoryId: string, productWebUrl: string, title: string, upc: list<string>, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/product/($epid)")
-  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $X_EBAY_C_MARKETPLACE_ID} | compact
+  let full_url = (build-url $base ({epid: $epid} | format pattern "/product/{epid}"))
+  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -136,13 +136,13 @@ export def "product-summary-search search" [
   --mpn: string # A string consisting of one or more comma-separated Manufacturer Part Numbers (MPNs) that identify products to search for. This method will return all products that have one of the specified MPNs. <br /><br /> MPNs are defined by manufacturers for their own products, and are therefore certain to be unique only within a given brand. However, many MPNs do turn out to be globally unique. <br /><br /> <span class="tablenote"> <strong>Note:</strong> Although all query parameters are optional, this method must include at least the <b>q</b> parameter, or the <b>category_ids</b>, <b>gtin</b>, or <b>mpn</b> parameter with a valid value. <br /><br /> You cannot use the <b>mpn</b> parameter in the same method with either the <b>q</b> parameter or the <b>aspect_filter</b> parameter. </span>
   --offset: string # This parameter is reserved for internal or future use.
   --q: string # A string consisting of one or more keywords to use to search for products in the eBay catalog. <br /><br /> <span class="tablenote"> <strong>Note:</strong> This method searches the following product record fields: <b>title</b>, <b>description</b>, <b>brand</b>, and <b>aspects.localizedName</b>, which do not include product IDs. Wildcard characters (e.g. <code>*</code>) are not allowed. </span> <br /><br /> The keywords are handled as follows: <ul> <li>If the keywords are separated by a comma (e.g. <code>iPhone,256GB</code>), the query returns products that have <code>iPhone</code> <b>AND</b> <code>256GB</code>.</li> <li>If the keywords are separated by a space (e.g. <code>"iPhone&nbsp;ipad"</code> or <code>"iPhone,&nbsp;ipad"</code>), the query ignores any commas and returns products that have <code>iPhone</code> <b>OR</b> <code>iPad</code>.</li> </ul> <span class="tablenote"> <strong>Note:</strong> Although all query parameters are optional, this method must include at least the <b>q</b> parameter, or the <b>category_ids</b>, <b>gtin</b>, or <b>mpn</b> parameter with a valid value.  <br /><br /> You cannot use the <b>q</b> parameter in the same method with either the <b>gtin</b> parameter or the <b>mpn</b> parameter. </span>
-  --X-EBAY-C-MARKETPLACE-ID: string # This method also uses the <code>X-EBAY-C-MARKETPLACE-ID</code> header to identify the seller's eBay marketplace. It is required for all marketplaces except EBAY_US, which is the default. <b>Note:</b> This method is limited to <code>EBAY_US</code>, <code>EBAY_AU</code>, <code>EBAY_CA</code>, and <code>EBAY_GB</code> values.
+  --x-ebay-c-marketplace-id: string # This method also uses the <code>X-EBAY-C-MARKETPLACE-ID</code> header to identify the seller's eBay marketplace. It is required for all marketplaces except EBAY_US, which is the default. <b>Note:</b> This method is limited to <code>EBAY_US</code>, <code>EBAY_AU</code>, <code>EBAY_CA</code>, and <code>EBAY_GB</code> values.
 ]: nothing -> record<href: string, limit: int, next: string, offset: int, prev: string, productSummaries: table<additionalImages: list, aspects: list, brand: string, ean: list, epid: string, gtin: list, image: record, isbn: list, mpn: list, productHref: string, productWebUrl: string, title: string, upc: list>, refinement: record<aspectDistributions: list<record>, dominantCategoryId: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aspect_filter" $aspect_filter "scalar") (serialize-qp "category_ids" $category_ids "scalar") (serialize-qp "fieldgroups" $fieldgroups "scalar") (serialize-qp "gtin" $gtin "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "mpn" $mpn "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product_summary/search" $qp)
-  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $X_EBAY_C_MARKETPLACE_ID} | compact
+  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

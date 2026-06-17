@@ -127,11 +127,11 @@ export def "query get" [
   --start: float
   --count: float
   --subdomains: string
-  --inUrlPrefixes: string
+  --in-url-prefixes: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "subdomains" $subdomains "scalar") (serialize-qp "inUrlPrefixes" $inUrlPrefixes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "subdomains" $subdomains "scalar") (serialize-qp "inUrlPrefixes" $in_url_prefixes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -156,12 +156,12 @@ export def "query-extension get" [
   --start: float
   --count: float
   --subdomains: string
-  --inUrlPrefixes: string
+  --in-url-prefixes: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "subdomains" $subdomains "scalar") (serialize-qp "inUrlPrefixes" $inUrlPrefixes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/query.($extension)" $qp)
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "subdomains" $subdomains "scalar") (serialize-qp "inUrlPrefixes" $in_url_prefixes "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({extension: $extension} | format pattern "/query.{extension}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

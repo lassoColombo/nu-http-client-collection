@@ -66,31 +66,31 @@ def base-url-completer [] { ["http://kinesisanalytics.us-east-1.amazonaws.com" "
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["KinesisAnalytics_20150814.AddApplicationCloudWatchLoggingOption"] }
-def X-Amz-Target-completer-1 [] { ["KinesisAnalytics_20150814.AddApplicationInput"] }
-def X-Amz-Target-completer-2 [] { ["KinesisAnalytics_20150814.AddApplicationInputProcessingConfiguration"] }
-def X-Amz-Target-completer-3 [] { ["KinesisAnalytics_20150814.AddApplicationOutput"] }
-def X-Amz-Target-completer-4 [] { ["KinesisAnalytics_20150814.AddApplicationReferenceDataSource"] }
-def X-Amz-Target-completer-5 [] { ["KinesisAnalytics_20150814.CreateApplication"] }
-def X-Amz-Target-completer-6 [] { ["KinesisAnalytics_20150814.DeleteApplication"] }
-def X-Amz-Target-completer-7 [] { ["KinesisAnalytics_20150814.DeleteApplicationCloudWatchLoggingOption"] }
-def X-Amz-Target-completer-8 [] { ["KinesisAnalytics_20150814.DeleteApplicationInputProcessingConfiguration"] }
-def X-Amz-Target-completer-9 [] { ["KinesisAnalytics_20150814.DeleteApplicationOutput"] }
-def X-Amz-Target-completer-10 [] { ["KinesisAnalytics_20150814.DeleteApplicationReferenceDataSource"] }
-def X-Amz-Target-completer-11 [] { ["KinesisAnalytics_20150814.DescribeApplication"] }
-def X-Amz-Target-completer-12 [] { ["KinesisAnalytics_20150814.DiscoverInputSchema"] }
-def X-Amz-Target-completer-13 [] { ["KinesisAnalytics_20150814.ListApplications"] }
-def X-Amz-Target-completer-14 [] { ["KinesisAnalytics_20150814.ListTagsForResource"] }
-def X-Amz-Target-completer-15 [] { ["KinesisAnalytics_20150814.StartApplication"] }
-def X-Amz-Target-completer-16 [] { ["KinesisAnalytics_20150814.StopApplication"] }
-def X-Amz-Target-completer-17 [] { ["KinesisAnalytics_20150814.TagResource"] }
-def X-Amz-Target-completer-18 [] { ["KinesisAnalytics_20150814.UntagResource"] }
-def X-Amz-Target-completer-19 [] { ["KinesisAnalytics_20150814.UpdateApplication"] }
+def x-amz-target-completer [] { ["KinesisAnalytics_20150814.AddApplicationCloudWatchLoggingOption"] }
+def x-amz-target-completer-1 [] { ["KinesisAnalytics_20150814.AddApplicationInput"] }
+def x-amz-target-completer-2 [] { ["KinesisAnalytics_20150814.AddApplicationInputProcessingConfiguration"] }
+def x-amz-target-completer-3 [] { ["KinesisAnalytics_20150814.AddApplicationOutput"] }
+def x-amz-target-completer-4 [] { ["KinesisAnalytics_20150814.AddApplicationReferenceDataSource"] }
+def x-amz-target-completer-5 [] { ["KinesisAnalytics_20150814.CreateApplication"] }
+def x-amz-target-completer-6 [] { ["KinesisAnalytics_20150814.DeleteApplication"] }
+def x-amz-target-completer-7 [] { ["KinesisAnalytics_20150814.DeleteApplicationCloudWatchLoggingOption"] }
+def x-amz-target-completer-8 [] { ["KinesisAnalytics_20150814.DeleteApplicationInputProcessingConfiguration"] }
+def x-amz-target-completer-9 [] { ["KinesisAnalytics_20150814.DeleteApplicationOutput"] }
+def x-amz-target-completer-10 [] { ["KinesisAnalytics_20150814.DeleteApplicationReferenceDataSource"] }
+def x-amz-target-completer-11 [] { ["KinesisAnalytics_20150814.DescribeApplication"] }
+def x-amz-target-completer-12 [] { ["KinesisAnalytics_20150814.DiscoverInputSchema"] }
+def x-amz-target-completer-13 [] { ["KinesisAnalytics_20150814.ListApplications"] }
+def x-amz-target-completer-14 [] { ["KinesisAnalytics_20150814.ListTagsForResource"] }
+def x-amz-target-completer-15 [] { ["KinesisAnalytics_20150814.StartApplication"] }
+def x-amz-target-completer-16 [] { ["KinesisAnalytics_20150814.StopApplication"] }
+def x-amz-target-completer-17 [] { ["KinesisAnalytics_20150814.TagResource"] }
+def x-amz-target-completer-18 [] { ["KinesisAnalytics_20150814.UntagResource"] }
+def x-amz-target-completer-19 [] { ["KinesisAnalytics_20150814.UpdateApplication"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-kinesis-analytics-20150814add-application-cloud-watch-logging-option AddApplicationCloudWatchLoggingOption" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-kinesis-analytics-20150814add-application-cloud-watch-logging-option create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -114,7 +114,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.AddApplicationCloudWatchLoggingOption
 # operationId: AddApplicationCloudWatchLoggingOption
-export def "x-amz-target-kinesis-analytics-20150814add-application-cloud-watch-logging-option AddApplicationCloudWatchLoggingOption" [
+export def "x-amz-target-kinesis-analytics-20150814add-application-cloud-watch-logging-option create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,25 +123,25 @@ export def "x-amz-target-kinesis-analytics-20150814add-application-cloud-watch-l
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ApplicationName: any
-  CurrentApplicationVersionId: any
-  CloudWatchLoggingOption: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  application_name: any
+  current_application_version_id: any
+  cloud_watch_logging_option: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.AddApplicationCloudWatchLoggingOption")
-  let body = {ApplicationName: $ApplicationName, CurrentApplicationVersionId: $CurrentApplicationVersionId, CloudWatchLoggingOption: $CloudWatchLoggingOption} | compact
+  let body = {"ApplicationName": $application_name, "CurrentApplicationVersionId": $current_application_version_id, "CloudWatchLoggingOption": $cloud_watch_logging_option} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -152,7 +152,7 @@ export def "x-amz-target-kinesis-analytics-20150814add-application-cloud-watch-l
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.AddApplicationInput
 # operationId: AddApplicationInput
-export def "x-amz-target-kinesis-analytics-20150814add-application-input AddApplicationInput" [
+export def "x-amz-target-kinesis-analytics-20150814add-application-input create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,25 +161,25 @@ export def "x-amz-target-kinesis-analytics-20150814add-application-input AddAppl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ApplicationName: any
-  CurrentApplicationVersionId: any
-  Input: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  application_name: any
+  current_application_version_id: any
+  input: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.AddApplicationInput")
-  let body = {ApplicationName: $ApplicationName, CurrentApplicationVersionId: $CurrentApplicationVersionId, Input: $Input} | compact
+  let body = {"ApplicationName": $application_name, "CurrentApplicationVersionId": $current_application_version_id, "Input": $input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -190,7 +190,7 @@ export def "x-amz-target-kinesis-analytics-20150814add-application-input AddAppl
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.AddApplicationInputProcessingConfiguration
 # operationId: AddApplicationInputProcessingConfiguration
-export def "x-amz-target-kinesis-analytics-20150814add-application-input-processing-configuration AddApplicationInputProcessingConfiguration" [
+export def "x-amz-target-kinesis-analytics-20150814add-application-input-processing-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,26 +199,26 @@ export def "x-amz-target-kinesis-analytics-20150814add-application-input-process
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ApplicationName: any
-  CurrentApplicationVersionId: any
-  InputId: any
-  InputProcessingConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  application_name: any
+  current_application_version_id: any
+  input_id: any
+  input_processing_configuration: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.AddApplicationInputProcessingConfiguration")
-  let body = {ApplicationName: $ApplicationName, CurrentApplicationVersionId: $CurrentApplicationVersionId, InputId: $InputId, InputProcessingConfiguration: $InputProcessingConfiguration} | compact
+  let body = {"ApplicationName": $application_name, "CurrentApplicationVersionId": $current_application_version_id, "InputId": $input_id, "InputProcessingConfiguration": $input_processing_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,7 +229,7 @@ export def "x-amz-target-kinesis-analytics-20150814add-application-input-process
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.AddApplicationOutput
 # operationId: AddApplicationOutput
-export def "x-amz-target-kinesis-analytics-20150814add-application-output AddApplicationOutput" [
+export def "x-amz-target-kinesis-analytics-20150814add-application-output create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,25 +238,25 @@ export def "x-amz-target-kinesis-analytics-20150814add-application-output AddApp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ApplicationName: any
-  CurrentApplicationVersionId: any
-  Output: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  application_name: any
+  current_application_version_id: any
+  output: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.AddApplicationOutput")
-  let body = {ApplicationName: $ApplicationName, CurrentApplicationVersionId: $CurrentApplicationVersionId, Output: $Output} | compact
+  let body = {"ApplicationName": $application_name, "CurrentApplicationVersionId": $current_application_version_id, "Output": $output} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -267,7 +267,7 @@ export def "x-amz-target-kinesis-analytics-20150814add-application-output AddApp
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.AddApplicationReferenceDataSource
 # operationId: AddApplicationReferenceDataSource
-export def "x-amz-target-kinesis-analytics-20150814add-application-reference-data-source AddApplicationReferenceDataSource" [
+export def "x-amz-target-kinesis-analytics-20150814add-application-reference-data-source create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,25 +276,25 @@ export def "x-amz-target-kinesis-analytics-20150814add-application-reference-dat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ApplicationName: any
-  CurrentApplicationVersionId: any
-  ReferenceDataSource: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  application_name: any
+  current_application_version_id: any
+  reference_data_source: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.AddApplicationReferenceDataSource")
-  let body = {ApplicationName: $ApplicationName, CurrentApplicationVersionId: $CurrentApplicationVersionId, ReferenceDataSource: $ReferenceDataSource} | compact
+  let body = {"ApplicationName": $application_name, "CurrentApplicationVersionId": $current_application_version_id, "ReferenceDataSource": $reference_data_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -305,7 +305,7 @@ export def "x-amz-target-kinesis-analytics-20150814add-application-reference-dat
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.CreateApplication
 # operationId: CreateApplication
-export def "x-amz-target-kinesis-analytics-20150814create-application CreateApplication" [
+export def "x-amz-target-kinesis-analytics-20150814create-application create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,29 +314,29 @@ export def "x-amz-target-kinesis-analytics-20150814create-application CreateAppl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  ApplicationName: any
-  --ApplicationDescription: any
-  --Inputs: any
-  --Outputs: any
-  --CloudWatchLoggingOptions: any
-  --ApplicationCode: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  application_name: any
+  --application-description: any
+  --inputs: any
+  --outputs: any
+  --cloud-watch-logging-options: any
+  --application-code: any
+  --tags: any
 ]: any -> record<ApplicationSummary: record<ApplicationName: record, ApplicationARN: record, ApplicationStatus: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.CreateApplication")
-  let body = {ApplicationName: $ApplicationName, ApplicationDescription: $ApplicationDescription, Inputs: $Inputs, Outputs: $Outputs, CloudWatchLoggingOptions: $CloudWatchLoggingOptions, ApplicationCode: $ApplicationCode, Tags: $Tags} | compact
+  let body = {"ApplicationName": $application_name, "ApplicationDescription": $application_description, "Inputs": $inputs, "Outputs": $outputs, "CloudWatchLoggingOptions": $cloud_watch_logging_options, "ApplicationCode": $application_code, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -347,7 +347,7 @@ export def "x-amz-target-kinesis-analytics-20150814create-application CreateAppl
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.DeleteApplication
 # operationId: DeleteApplication
-export def "x-amz-target-kinesis-analytics-20150814delete-application DeleteApplication" [
+export def "x-amz-target-kinesis-analytics-20150814delete-application delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,24 +356,24 @@ export def "x-amz-target-kinesis-analytics-20150814delete-application DeleteAppl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  ApplicationName: any
-  CreateTimestamp: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  application_name: any
+  create_timestamp: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.DeleteApplication")
-  let body = {ApplicationName: $ApplicationName, CreateTimestamp: $CreateTimestamp} | compact
+  let body = {"ApplicationName": $application_name, "CreateTimestamp": $create_timestamp} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,7 +384,7 @@ export def "x-amz-target-kinesis-analytics-20150814delete-application DeleteAppl
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.DeleteApplicationCloudWatchLoggingOption
 # operationId: DeleteApplicationCloudWatchLoggingOption
-export def "x-amz-target-kinesis-analytics-20150814delete-application-cloud-watch-logging-option DeleteApplicationCloudWatchLoggingOption" [
+export def "x-amz-target-kinesis-analytics-20150814delete-application-cloud-watch-logging-option delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,25 +393,25 @@ export def "x-amz-target-kinesis-analytics-20150814delete-application-cloud-watc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ApplicationName: any
-  CurrentApplicationVersionId: any
-  CloudWatchLoggingOptionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  application_name: any
+  current_application_version_id: any
+  cloud_watch_logging_option_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.DeleteApplicationCloudWatchLoggingOption")
-  let body = {ApplicationName: $ApplicationName, CurrentApplicationVersionId: $CurrentApplicationVersionId, CloudWatchLoggingOptionId: $CloudWatchLoggingOptionId} | compact
+  let body = {"ApplicationName": $application_name, "CurrentApplicationVersionId": $current_application_version_id, "CloudWatchLoggingOptionId": $cloud_watch_logging_option_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -422,7 +422,7 @@ export def "x-amz-target-kinesis-analytics-20150814delete-application-cloud-watc
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.DeleteApplicationInputProcessingConfiguration
 # operationId: DeleteApplicationInputProcessingConfiguration
-export def "x-amz-target-kinesis-analytics-20150814delete-application-input-processing-configuration DeleteApplicationInputProcessingConfiguration" [
+export def "x-amz-target-kinesis-analytics-20150814delete-application-input-processing-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,25 +431,25 @@ export def "x-amz-target-kinesis-analytics-20150814delete-application-input-proc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ApplicationName: any
-  CurrentApplicationVersionId: any
-  InputId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  application_name: any
+  current_application_version_id: any
+  input_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.DeleteApplicationInputProcessingConfiguration")
-  let body = {ApplicationName: $ApplicationName, CurrentApplicationVersionId: $CurrentApplicationVersionId, InputId: $InputId} | compact
+  let body = {"ApplicationName": $application_name, "CurrentApplicationVersionId": $current_application_version_id, "InputId": $input_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -460,7 +460,7 @@ export def "x-amz-target-kinesis-analytics-20150814delete-application-input-proc
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.DeleteApplicationOutput
 # operationId: DeleteApplicationOutput
-export def "x-amz-target-kinesis-analytics-20150814delete-application-output DeleteApplicationOutput" [
+export def "x-amz-target-kinesis-analytics-20150814delete-application-output delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,25 +469,25 @@ export def "x-amz-target-kinesis-analytics-20150814delete-application-output Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  ApplicationName: any
-  CurrentApplicationVersionId: any
-  OutputId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  application_name: any
+  current_application_version_id: any
+  output_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.DeleteApplicationOutput")
-  let body = {ApplicationName: $ApplicationName, CurrentApplicationVersionId: $CurrentApplicationVersionId, OutputId: $OutputId} | compact
+  let body = {"ApplicationName": $application_name, "CurrentApplicationVersionId": $current_application_version_id, "OutputId": $output_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,7 +498,7 @@ export def "x-amz-target-kinesis-analytics-20150814delete-application-output Del
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.DeleteApplicationReferenceDataSource
 # operationId: DeleteApplicationReferenceDataSource
-export def "x-amz-target-kinesis-analytics-20150814delete-application-reference-data-source DeleteApplicationReferenceDataSource" [
+export def "x-amz-target-kinesis-analytics-20150814delete-application-reference-data-source delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,25 +507,25 @@ export def "x-amz-target-kinesis-analytics-20150814delete-application-reference-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  ApplicationName: any
-  CurrentApplicationVersionId: any
-  ReferenceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  application_name: any
+  current_application_version_id: any
+  reference_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.DeleteApplicationReferenceDataSource")
-  let body = {ApplicationName: $ApplicationName, CurrentApplicationVersionId: $CurrentApplicationVersionId, ReferenceId: $ReferenceId} | compact
+  let body = {"ApplicationName": $application_name, "CurrentApplicationVersionId": $current_application_version_id, "ReferenceId": $reference_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -536,7 +536,7 @@ export def "x-amz-target-kinesis-analytics-20150814delete-application-reference-
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.DescribeApplication
 # operationId: DescribeApplication
-export def "x-amz-target-kinesis-analytics-20150814describe-application DescribeApplication" [
+export def "x-amz-target-kinesis-analytics-20150814describe-application post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,23 +545,23 @@ export def "x-amz-target-kinesis-analytics-20150814describe-application Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  ApplicationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  application_name: any
 ]: any -> record<ApplicationDetail: record<ApplicationName: record, ApplicationDescription: record, ApplicationARN: record, ApplicationStatus: record, CreateTimestamp: record, LastUpdateTimestamp: record, InputDescriptions: record, OutputDescriptions: record, ReferenceDataSourceDescriptions: record, CloudWatchLoggingOptionDescriptions: record, ApplicationCode: record, ApplicationVersionId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.DescribeApplication")
-  let body = {ApplicationName: $ApplicationName} | compact
+  let body = {"ApplicationName": $application_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -572,7 +572,7 @@ export def "x-amz-target-kinesis-analytics-20150814describe-application Describe
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.DiscoverInputSchema
 # operationId: DiscoverInputSchema
-export def "x-amz-target-kinesis-analytics-20150814discover-input-schema DiscoverInputSchema" [
+export def "x-amz-target-kinesis-analytics-20150814discover-input-schema post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,27 +581,27 @@ export def "x-amz-target-kinesis-analytics-20150814discover-input-schema Discove
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  --ResourceARN: any
-  --RoleARN: any
-  --InputStartingPositionConfiguration: any
-  --S3Configuration: any
-  --InputProcessingConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  --resource-arn: any
+  --role-arn: any
+  --input-starting-position-configuration: any
+  --s3-configuration: any
+  --input-processing-configuration: any
 ]: any -> record<InputSchema: record<RecordFormat: record<RecordFormatType: record, MappingParameters: record>, RecordEncoding: record, RecordColumns: record>, ParsedInputRecords: record, ProcessedInputRecords: record, RawInputRecords: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.DiscoverInputSchema")
-  let body = {ResourceARN: $ResourceARN, RoleARN: $RoleARN, InputStartingPositionConfiguration: $InputStartingPositionConfiguration, S3Configuration: $S3Configuration, InputProcessingConfiguration: $InputProcessingConfiguration} | compact
+  let body = {"ResourceARN": $resource_arn, "RoleARN": $role_arn, "InputStartingPositionConfiguration": $input_starting_position_configuration, "S3Configuration": $s3_configuration, "InputProcessingConfiguration": $input_processing_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -612,7 +612,7 @@ export def "x-amz-target-kinesis-analytics-20150814discover-input-schema Discove
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.ListApplications
 # operationId: ListApplications
-export def "x-amz-target-kinesis-analytics-20150814list-applications ListApplications" [
+export def "x-amz-target-kinesis-analytics-20150814list-applications list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,24 +621,24 @@ export def "x-amz-target-kinesis-analytics-20150814list-applications ListApplica
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  --Limit: any
-  --ExclusiveStartApplicationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  --limit: any
+  --exclusive-start-application-name: any
 ]: any -> record<ApplicationSummaries: record, HasMoreApplications: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.ListApplications")
-  let body = {Limit: $Limit, ExclusiveStartApplicationName: $ExclusiveStartApplicationName} | compact
+  let body = {"Limit": $limit, "ExclusiveStartApplicationName": $exclusive_start_application_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -649,7 +649,7 @@ export def "x-amz-target-kinesis-analytics-20150814list-applications ListApplica
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-kinesis-analytics-20150814list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-kinesis-analytics-20150814list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,23 +658,23 @@ export def "x-amz-target-kinesis-analytics-20150814list-tags-for-resource ListTa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  ResourceARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.ListTagsForResource")
-  let body = {ResourceARN: $ResourceARN} | compact
+  let body = {"ResourceARN": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,7 +685,7 @@ export def "x-amz-target-kinesis-analytics-20150814list-tags-for-resource ListTa
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.StartApplication
 # operationId: StartApplication
-export def "x-amz-target-kinesis-analytics-20150814start-application StartApplication" [
+export def "x-amz-target-kinesis-analytics-20150814start-application start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,24 +694,24 @@ export def "x-amz-target-kinesis-analytics-20150814start-application StartApplic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  ApplicationName: any
-  InputConfigurations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  application_name: any
+  input_configurations: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.StartApplication")
-  let body = {ApplicationName: $ApplicationName, InputConfigurations: $InputConfigurations} | compact
+  let body = {"ApplicationName": $application_name, "InputConfigurations": $input_configurations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,7 +722,7 @@ export def "x-amz-target-kinesis-analytics-20150814start-application StartApplic
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.StopApplication
 # operationId: StopApplication
-export def "x-amz-target-kinesis-analytics-20150814stop-application StopApplication" [
+export def "x-amz-target-kinesis-analytics-20150814stop-application stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -731,23 +731,23 @@ export def "x-amz-target-kinesis-analytics-20150814stop-application StopApplicat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  ApplicationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  application_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.StopApplication")
-  let body = {ApplicationName: $ApplicationName} | compact
+  let body = {"ApplicationName": $application_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -758,7 +758,7 @@ export def "x-amz-target-kinesis-analytics-20150814stop-application StopApplicat
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.TagResource
 # operationId: TagResource
-export def "x-amz-target-kinesis-analytics-20150814tag-resource TagResource" [
+export def "x-amz-target-kinesis-analytics-20150814tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,24 +767,24 @@ export def "x-amz-target-kinesis-analytics-20150814tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  ResourceARN: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.TagResource")
-  let body = {ResourceARN: $ResourceARN, Tags: $Tags} | compact
+  let body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -795,7 +795,7 @@ export def "x-amz-target-kinesis-analytics-20150814tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-kinesis-analytics-20150814untag-resource UntagResource" [
+export def "x-amz-target-kinesis-analytics-20150814untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,24 +804,24 @@ export def "x-amz-target-kinesis-analytics-20150814untag-resource UntagResource"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ResourceARN: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.UntagResource")
-  let body = {ResourceARN: $ResourceARN, TagKeys: $TagKeys} | compact
+  let body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -832,7 +832,7 @@ export def "x-amz-target-kinesis-analytics-20150814untag-resource UntagResource"
 #
 # POST /#X-Amz-Target=KinesisAnalytics_20150814.UpdateApplication
 # operationId: UpdateApplication
-export def "x-amz-target-kinesis-analytics-20150814update-application UpdateApplication" [
+export def "x-amz-target-kinesis-analytics-20150814update-application update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -841,25 +841,25 @@ export def "x-amz-target-kinesis-analytics-20150814update-application UpdateAppl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  ApplicationName: any
-  CurrentApplicationVersionId: any
-  ApplicationUpdate: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  application_name: any
+  current_application_version_id: any
+  application_update: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=KinesisAnalytics_20150814.UpdateApplication")
-  let body = {ApplicationName: $ApplicationName, CurrentApplicationVersionId: $CurrentApplicationVersionId, ApplicationUpdate: $ApplicationUpdate} | compact
+  let body = {"ApplicationName": $application_name, "CurrentApplicationVersionId": $current_application_version_id, "ApplicationUpdate": $application_update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

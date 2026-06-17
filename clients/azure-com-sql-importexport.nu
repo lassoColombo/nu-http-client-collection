@@ -66,15 +66,15 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def authenticationType-completer [] { ["ADPassword" "SQL"] }
-def storageKeyType-completer [] { ["SharedAccessKey" "StorageAccessKey"] }
+def authentication-type-completer [] { ["ADPassword" "SQL"] }
+def storage-key-type-completer [] { ["SharedAccessKey" "StorageAccessKey"] }
 def edition-completer [] { ["Basic" "Business" "BusinessCritical" "DataWarehouse" "Free" "GeneralPurpose" "Hyperscale" "Premium" "PremiumRS" "Standard" "Stretch" "System" "System2" "Web"] }
-def serviceObjectiveName-completer [] { ["Basic" "DS100" "DS1000" "DS1200" "DS1500" "DS200" "DS2000" "DS300" "DS400" "DS500" "DS600" "DW100" "DW1000" "DW10000c" "DW1000c" "DW1200" "DW1500" "DW15000c" "DW1500c" "DW200" "DW2000" "DW2000c" "DW2500c" "DW300" "DW3000" "DW30000c" "DW3000c" "DW400" "DW500" "DW5000c" "DW600" "DW6000" "DW6000c" "DW7500c" "ElasticPool" "Free" "P1" "P11" "P15" "P2" "P3" "P4" "P6" "PRS1" "PRS2" "PRS4" "PRS6" "S0" "S1" "S12" "S2" "S3" "S4" "S6" "S7" "S9" "System" "System0" "System1" "System2" "System2L" "System3" "System3L" "System4" "System4L"] }
+def service-objective-name-completer [] { ["Basic" "DS100" "DS1000" "DS1200" "DS1500" "DS200" "DS2000" "DS300" "DS400" "DS500" "DS600" "DW100" "DW1000" "DW10000c" "DW1000c" "DW1200" "DW1500" "DW15000c" "DW1500c" "DW200" "DW2000" "DW2000c" "DW2500c" "DW300" "DW3000" "DW30000c" "DW3000c" "DW400" "DW500" "DW5000c" "DW600" "DW6000" "DW6000c" "DW7500c" "ElasticPool" "Free" "P1" "P11" "P15" "P2" "P3" "P4" "P6" "PRS1" "PRS2" "PRS4" "PRS6" "S0" "S1" "S12" "S2" "S3" "S4" "S6" "S7" "S9" "System" "System0" "System1" "System2" "System2L" "System3" "System3L" "System4" "System4L"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-export Export" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-export export" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,11 +98,11 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/export
 # operationId: Databases_Export
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-export Export" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-export export" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,19 +112,19 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for the request.
-  administratorLogin: string # The name of the SQL administrator.
-  administratorLoginPassword: string # The password of the SQL administrator.
-  --authenticationType: string@authenticationType-completer # The authentication type. (default: SQL)
-  storageKey: string # The storage key to use.  If storage key type is SharedAccessKey, it must be preceded with a "?."
-  storageKeyType: string@storageKeyType-completer # The type of the storage key to use.
-  storageUri: string # The storage uri to use.
+  administrator_login: string # The name of the SQL administrator.
+  administrator_login_password: string # The password of the SQL administrator.
+  --authentication-type: string@authentication-type-completer # The authentication type. (default: SQL)
+  storage_key: string # The storage key to use.  If storage key type is SharedAccessKey, it must be preceded with a "?."
+  storage_key_type: string@storage-key-type-completer # The type of the storage key to use.
+  storage_uri: string # The storage uri to use.
 ]: any -> record<properties: record<blobUri: string, databaseName: string, errorMessage: string, lastModifiedTime: string, queuedTime: string, requestId: string, requestType: string, serverName: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/export" $qp)
-  let body = {administratorLogin: $administratorLogin, administratorLoginPassword: $administratorLoginPassword, authenticationType: $authenticationType, storageKey: $storageKey, storageKeyType: $storageKeyType, storageUri: $storageUri} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/export") $qp)
+  let body = {"administratorLogin": $administrator_login, "administratorLoginPassword": $administrator_login_password, "authenticationType": $authentication_type, "storageKey": $storage_key, "storageKeyType": $storage_key_type, "storageUri": $storage_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -136,12 +136,12 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/extensions/{extensionName}
 # operationId: Databases_CreateImportOperation
 # --properties shape: {operationMode: "Import", administratorLogin: string, administratorLoginPassword: string, authenticationType?: "SQL"|"ADPassword", storageKey: string, storageKeyType: "StorageAccessKey"|"SharedAccessKey", storageUri: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-extensions CreateImportOperation" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  extensionName: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-extensions create-import-operation" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  extension_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,8 +159,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/extensions/($extensionName)" $qp)
-  let body = {name: $name, properties: $properties, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, extension_name: $extension_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/extensions/{extension_name}") $qp)
+  let body = {"name": $name, "properties": $properties, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -171,10 +171,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/import
 # operationId: Databases_Import
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-import Import" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-import import" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,23 +184,23 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-import
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for the request.
-  databaseName: string # The name of the database to import.
+  database_name: string # The name of the database to import.
   edition: string@edition-completer # The edition for the database being created.  The list of SKUs may vary by region and support offer. To determine the SKUs (including the SKU name, tier/edition, family, and capacity) that are available to your subscription in an Azure region, use the `Capabilities_ListByLocation` REST API or one of the following commands:  ```azurecli az sql db list-editions -l <location> -o table ````  ```powershell Get-AzSqlServerServiceObjective -Location <location> ````
-  maxSizeBytes: string # The maximum size for the newly imported database.
-  serviceObjectiveName: string@serviceObjectiveName-completer # The name of the service objective to assign to the database.
-  administratorLogin: string # The name of the SQL administrator.
-  administratorLoginPassword: string # The password of the SQL administrator.
-  --authenticationType: string@authenticationType-completer # The authentication type. (default: SQL)
-  storageKey: string # The storage key to use.  If storage key type is SharedAccessKey, it must be preceded with a "?."
-  storageKeyType: string@storageKeyType-completer # The type of the storage key to use.
-  storageUri: string # The storage uri to use.
+  max_size_bytes: string # The maximum size for the newly imported database.
+  service_objective_name: string@service-objective-name-completer # The name of the service objective to assign to the database.
+  administrator_login: string # The name of the SQL administrator.
+  administrator_login_password: string # The password of the SQL administrator.
+  --authentication-type: string@authentication-type-completer # The authentication type. (default: SQL)
+  storage_key: string # The storage key to use.  If storage key type is SharedAccessKey, it must be preceded with a "?."
+  storage_key_type: string@storage-key-type-completer # The type of the storage key to use.
+  storage_uri: string # The storage uri to use.
 ]: any -> record<properties: record<blobUri: string, databaseName: string, errorMessage: string, lastModifiedTime: string, queuedTime: string, requestId: string, requestType: string, serverName: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/import" $qp)
-  let body = {databaseName: $databaseName, edition: $edition, maxSizeBytes: $maxSizeBytes, serviceObjectiveName: $serviceObjectiveName, administratorLogin: $administratorLogin, administratorLoginPassword: $administratorLoginPassword, authenticationType: $authenticationType, storageKey: $storageKey, storageKeyType: $storageKeyType, storageUri: $storageUri} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/import") $qp)
+  let body = {"databaseName": $database_name, "edition": $edition, "maxSizeBytes": $max_size_bytes, "serviceObjectiveName": $service_objective_name, "administratorLogin": $administrator_login, "administratorLoginPassword": $administrator_login_password, "authenticationType": $authentication_type, "storageKey": $storage_key, "storageKeyType": $storage_key_type, "storageUri": $storage_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

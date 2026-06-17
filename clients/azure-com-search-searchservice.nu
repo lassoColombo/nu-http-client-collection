@@ -66,7 +66,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def type-completer [] { ["azureblob" "azuresql" "azuretable" "cosmosdb" "mysql"] }
-def Prefer-completer [] { ["return=representation"] }
+def prefer-completer [] { ["return=representation"] }
 def analyzer-completer [] { ["ar.lucene" "ar.microsoft" "bg.lucene" "bg.microsoft" "bn.microsoft" "ca.lucene" "ca.microsoft" "cs.lucene" "cs.microsoft" "da.lucene" "da.microsoft" "de.lucene" "de.microsoft" "el.lucene" "el.microsoft" "en.lucene" "en.microsoft" "es.lucene" "es.microsoft" "et.microsoft" "eu.lucene" "fa.lucene" "fi.lucene" "fi.microsoft" "fr.lucene" "fr.microsoft" "ga.lucene" "gl.lucene" "gu.microsoft" "he.microsoft" "hi.lucene" "hi.microsoft" "hr.microsoft" "hu.lucene" "hu.microsoft" "hy.lucene" "id.lucene" "id.microsoft" "is.microsoft" "it.lucene" "it.microsoft" "ja.lucene" "ja.microsoft" "keyword" "kn.microsoft" "ko.lucene" "ko.microsoft" "lt.microsoft" "lv.lucene" "lv.microsoft" "ml.microsoft" "mr.microsoft" "ms.microsoft" "nb.microsoft" "nl.lucene" "nl.microsoft" "no.lucene" "pa.microsoft" "pattern" "pl.lucene" "pl.microsoft" "pt-BR.lucene" "pt-BR.microsoft" "pt-PT.lucene" "pt-PT.microsoft" "ro.lucene" "ro.microsoft" "ru.lucene" "ru.microsoft" "simple" "sk.microsoft" "sl.microsoft" "sr-cyrillic.microsoft" "sr-latin.microsoft" "standard.lucene" "standardasciifolding.lucene" "stop" "sv.lucene" "sv.microsoft" "ta.microsoft" "te.microsoft" "th.lucene" "th.microsoft" "tr.lucene" "tr.microsoft" "uk.microsoft" "ur.microsoft" "vi.microsoft" "whitespace" "zh-Hans.lucene" "zh-Hans.microsoft" "zh-Hant.lucene" "zh-Hant.microsoft"] }
 def tokenizer-completer [] { ["classic" "edgeNGram" "keyword_v2" "letter" "lowercase" "microsoft_language_stemming_tokenizer" "microsoft_language_tokenizer" "nGram" "path_hierarchy_v2" "pattern" "standard_v2" "uax_url_email" "whitespace"] }
 def format-completer [] { ["solr"] }
@@ -74,7 +74,7 @@ def format-completer [] { ["solr"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datasources List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datasources list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +99,7 @@ export def commands []: nothing -> table {
 # GET /datasources
 # Docs: https://docs.microsoft.com/rest/api/searchservice/List-Data-Sources
 # operationId: DataSources_List
-export def "datasources List" [
+export def "datasources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "datasources List" [
 # --credentials shape: {connectionString?: string}
 # --dataChangeDetectionPolicy shape: {@odata.type: string}
 # --dataDeletionDetectionPolicy shape: {@odata.type: string}
-export def "datasources Create" [
+export def "datasources create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,11 +143,11 @@ export def "datasources Create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --odataetag: string # The ETag of the DataSource.
+  --odata-etag: string # The ETag of the DataSource.
   container: any # Represents information about the entity (such as Azure SQL table or CosmosDB collection) that will be indexed. — shape: {name: string, query?: string}
   credentials: any # Represents credentials that can be used to connect to a datasource. — shape: {connectionString?: string}
-  --dataChangeDetectionPolicy: any # Abstract base class for data change detection policies. — shape: {@odata.type: string}
-  --dataDeletionDetectionPolicy: any # Abstract base class for data deletion detection policies. — shape: {@odata.type: string}
+  --data-change-detection-policy: any # Abstract base class for data change detection policies. — shape: {@odata.type: string}
+  --data-deletion-detection-policy: any # Abstract base class for data deletion detection policies. — shape: {@odata.type: string}
   --description: string # The description of the datasource.
   name: string # The name of the datasource.
   type: string@type-completer # Defines the type of a datasource.
@@ -157,7 +157,7 @@ export def "datasources Create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/datasources" $qp)
-  let body = {@odata.etag: $odataetag, container: $container, credentials: $credentials, dataChangeDetectionPolicy: $dataChangeDetectionPolicy, dataDeletionDetectionPolicy: $dataDeletionDetectionPolicy, description: $description, name: $name, type: $type} | compact
+  let body = {"@odata.etag": $odata_etag, "container": $container, "credentials": $credentials, "dataChangeDetectionPolicy": $data_change_detection_policy, "dataDeletionDetectionPolicy": $data_deletion_detection_policy, "description": $description, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -171,8 +171,8 @@ export def "datasources Create" [
 # DELETE /datasources('{dataSourceName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Delete-Data-Source
 # operationId: DataSources_Delete
-export def "datasources-data-source-name Delete" [
-  dataSourceName: string
+export def "datasources delete" [
+  data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,14 +183,14 @@ export def "datasources-data-source-name Delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --If-Match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
-  --If-None-Match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
+  --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
+  --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/datasources('($dataSourceName)')" $qp)
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({data_source_name: $data_source_name} | format pattern "/datasources('{data_source_name}')") $qp)
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -202,8 +202,8 @@ export def "datasources-data-source-name Delete" [
 # GET /datasources('{dataSourceName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Data-Source
 # operationId: DataSources_Get
-export def "datasources-data-source-name Get" [
-  dataSourceName: string
+export def "datasources get" [
+  data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "datasources-data-source-name Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/datasources('($dataSourceName)')" $qp)
+  let full_url = (build-url $base ({data_source_name: $data_source_name} | format pattern "/datasources('{data_source_name}')") $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -235,8 +235,8 @@ export def "datasources-data-source-name Get" [
 # --credentials shape: {connectionString?: string}
 # --dataChangeDetectionPolicy shape: {@odata.type: string}
 # --dataDeletionDetectionPolicy shape: {@odata.type: string}
-export def "datasources-data-source-name CreateOrUpdate" [
-  dataSourceName: string
+export def "datasources create-or-update" [
+  data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,14 +247,14 @@ export def "datasources-data-source-name CreateOrUpdate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --If-Match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
-  --If-None-Match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
-  --Prefer: string@Prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
-  --odataetag: string # The ETag of the DataSource.
+  --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
+  --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
+  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
+  --odata-etag: string # The ETag of the DataSource.
   container: any # Represents information about the entity (such as Azure SQL table or CosmosDB collection) that will be indexed. — shape: {name: string, query?: string}
   credentials: any # Represents credentials that can be used to connect to a datasource. — shape: {connectionString?: string}
-  --dataChangeDetectionPolicy: any # Abstract base class for data change detection policies. — shape: {@odata.type: string}
-  --dataDeletionDetectionPolicy: any # Abstract base class for data deletion detection policies. — shape: {@odata.type: string}
+  --data-change-detection-policy: any # Abstract base class for data change detection policies. — shape: {@odata.type: string}
+  --data-deletion-detection-policy: any # Abstract base class for data deletion detection policies. — shape: {@odata.type: string}
   --description: string # The description of the datasource.
   name: string # The name of the datasource.
   type: string@type-completer # Defines the type of a datasource.
@@ -263,10 +263,10 @@ export def "datasources-data-source-name CreateOrUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/datasources('($dataSourceName)')" $qp)
-  let body = {@odata.etag: $odataetag, container: $container, credentials: $credentials, dataChangeDetectionPolicy: $dataChangeDetectionPolicy, dataDeletionDetectionPolicy: $dataDeletionDetectionPolicy, description: $description, name: $name, type: $type} | compact
+  let full_url = (build-url $base ({data_source_name: $data_source_name} | format pattern "/datasources('{data_source_name}')") $qp)
+  let body = {"@odata.etag": $odata_etag, "container": $container, "credentials": $credentials, "dataChangeDetectionPolicy": $data_change_detection_policy, "dataDeletionDetectionPolicy": $data_deletion_detection_policy, "description": $description, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "Prefer": $Prefer} | compact
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -278,7 +278,7 @@ export def "datasources-data-source-name CreateOrUpdate" [
 # GET /indexers
 # Docs: https://docs.microsoft.com/rest/api/searchservice/List-Indexers
 # operationId: Indexers_List
-export def "indexers List" [
+export def "indexers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "indexers List" [
 # --outputFieldMappings item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
 # --parameters shape: {base64EncodeKeys?: bool, batchSize?: int, configuration?: record, maxFailedItems?: int, maxFailedItemsPerBatch?: int}
 # --schedule shape: {interval: string, startTime?: string}
-export def "indexers Create" [
+export def "indexers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,24 +322,24 @@ export def "indexers Create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --odataetag: string # The ETag of the Indexer.
-  dataSourceName: string # The name of the datasource from which this indexer reads data.
+  --odata-etag: string # The ETag of the Indexer.
+  data_source_name: string # The name of the datasource from which this indexer reads data.
   --description: string # The description of the indexer.
   --disabled: oneof<nothing, bool> # A value indicating whether the indexer is disabled. Default is false. (default: false)
-  --fieldMappings: list # Defines mappings between fields in the data source and corresponding target fields in the index. — item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
+  --field-mappings: list # Defines mappings between fields in the data source and corresponding target fields in the index. — item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
   name: string # The name of the indexer.
-  --outputFieldMappings: list # Output field mappings are applied after enrichment and immediately before indexing. — item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
+  --output-field-mappings: list # Output field mappings are applied after enrichment and immediately before indexing. — item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
   --parameters: any # Represents parameters for indexer execution. — shape: {base64EncodeKeys?: bool, batchSize?: int, configuration?: record, maxFailedItems?: int, maxFailedItemsPerBatch?: int}
   --schedule: any # Represents a schedule for indexer execution. — shape: {interval: string, startTime?: string}
-  --skillsetName: string # The name of the skillset executing with this indexer.
-  targetIndexName: string # The name of the index to which this indexer writes data.
+  --skillset-name: string # The name of the skillset executing with this indexer.
+  target_index_name: string # The name of the index to which this indexer writes data.
 ]: any -> record<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, name: string, outputFieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, parameters: record<base64EncodeKeys: bool, batchSize: int, configuration: record, maxFailedItems: int, maxFailedItemsPerBatch: int>, schedule: record<interval: string, startTime: string>, skillsetName: string, targetIndexName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexers" $qp)
-  let body = {@odata.etag: $odataetag, dataSourceName: $dataSourceName, description: $description, disabled: $disabled, fieldMappings: $fieldMappings, name: $name, outputFieldMappings: $outputFieldMappings, parameters: $parameters, schedule: $schedule, skillsetName: $skillsetName, targetIndexName: $targetIndexName} | compact
+  let body = {"@odata.etag": $odata_etag, "dataSourceName": $data_source_name, "description": $description, "disabled": $disabled, "fieldMappings": $field_mappings, "name": $name, "outputFieldMappings": $output_field_mappings, "parameters": $parameters, "schedule": $schedule, "skillsetName": $skillset_name, "targetIndexName": $target_index_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -353,8 +353,8 @@ export def "indexers Create" [
 # DELETE /indexers('{indexerName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Delete-Indexer
 # operationId: Indexers_Delete
-export def "indexers-indexer-name Delete" [
-  indexerName: string
+export def "indexers delete" [
+  indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,14 +365,14 @@ export def "indexers-indexer-name Delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --If-Match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
-  --If-None-Match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
+  --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
+  --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexers('($indexerName)')" $qp)
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')") $qp)
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,8 +384,8 @@ export def "indexers-indexer-name Delete" [
 # GET /indexers('{indexerName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Indexer
 # operationId: Indexers_Get
-export def "indexers-indexer-name Get" [
-  indexerName: string
+export def "indexers get" [
+  indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "indexers-indexer-name Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexers('($indexerName)')" $qp)
+  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')") $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -417,8 +417,8 @@ export def "indexers-indexer-name Get" [
 # --outputFieldMappings item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
 # --parameters shape: {base64EncodeKeys?: bool, batchSize?: int, configuration?: record, maxFailedItems?: int, maxFailedItemsPerBatch?: int}
 # --schedule shape: {interval: string, startTime?: string}
-export def "indexers-indexer-name CreateOrUpdate" [
-  indexerName: string
+export def "indexers create-or-update" [
+  indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,29 +429,29 @@ export def "indexers-indexer-name CreateOrUpdate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --If-Match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
-  --If-None-Match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
-  --Prefer: string@Prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
-  --odataetag: string # The ETag of the Indexer.
-  dataSourceName: string # The name of the datasource from which this indexer reads data.
+  --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
+  --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
+  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
+  --odata-etag: string # The ETag of the Indexer.
+  data_source_name: string # The name of the datasource from which this indexer reads data.
   --description: string # The description of the indexer.
   --disabled: oneof<nothing, bool> # A value indicating whether the indexer is disabled. Default is false. (default: false)
-  --fieldMappings: list # Defines mappings between fields in the data source and corresponding target fields in the index. — item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
+  --field-mappings: list # Defines mappings between fields in the data source and corresponding target fields in the index. — item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
   name: string # The name of the indexer.
-  --outputFieldMappings: list # Output field mappings are applied after enrichment and immediately before indexing. — item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
+  --output-field-mappings: list # Output field mappings are applied after enrichment and immediately before indexing. — item shape: {mappingFunction?: any, sourceFieldName: string, targetFieldName?: string}
   --parameters: any # Represents parameters for indexer execution. — shape: {base64EncodeKeys?: bool, batchSize?: int, configuration?: record, maxFailedItems?: int, maxFailedItemsPerBatch?: int}
   --schedule: any # Represents a schedule for indexer execution. — shape: {interval: string, startTime?: string}
-  --skillsetName: string # The name of the skillset executing with this indexer.
-  targetIndexName: string # The name of the index to which this indexer writes data.
+  --skillset-name: string # The name of the skillset executing with this indexer.
+  target_index_name: string # The name of the index to which this indexer writes data.
 ]: any -> record<_odata_etag: string, dataSourceName: string, description: string, disabled: bool, fieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, name: string, outputFieldMappings: table<mappingFunction: record, sourceFieldName: string, targetFieldName: string>, parameters: record<base64EncodeKeys: bool, batchSize: int, configuration: record, maxFailedItems: int, maxFailedItemsPerBatch: int>, schedule: record<interval: string, startTime: string>, skillsetName: string, targetIndexName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexers('($indexerName)')" $qp)
-  let body = {@odata.etag: $odataetag, dataSourceName: $dataSourceName, description: $description, disabled: $disabled, fieldMappings: $fieldMappings, name: $name, outputFieldMappings: $outputFieldMappings, parameters: $parameters, schedule: $schedule, skillsetName: $skillsetName, targetIndexName: $targetIndexName} | compact
+  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')") $qp)
+  let body = {"@odata.etag": $odata_etag, "dataSourceName": $data_source_name, "description": $description, "disabled": $disabled, "fieldMappings": $field_mappings, "name": $name, "outputFieldMappings": $output_field_mappings, "parameters": $parameters, "schedule": $schedule, "skillsetName": $skillset_name, "targetIndexName": $target_index_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "Prefer": $Prefer} | compact
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -463,8 +463,8 @@ export def "indexers-indexer-name CreateOrUpdate" [
 # POST /indexers('{indexerName}')/search.reset
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Reset-Indexer
 # operationId: Indexers_Reset
-export def "indexers-indexer-name-searchreset Reset" [
-  indexerName: string
+export def "indexers-searchreset reset" [
+  indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "indexers-indexer-name-searchreset Reset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexers('($indexerName)')/search.reset" $qp)
+  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')/search.reset") $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -492,8 +492,8 @@ export def "indexers-indexer-name-searchreset Reset" [
 # POST /indexers('{indexerName}')/search.run
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Run-Indexer
 # operationId: Indexers_Run
-export def "indexers-indexer-name-searchrun Run" [
-  indexerName: string
+export def "indexers-searchrun post" [
+  indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "indexers-indexer-name-searchrun Run" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexers('($indexerName)')/search.run" $qp)
+  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')/search.run") $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -521,8 +521,8 @@ export def "indexers-indexer-name-searchrun Run" [
 # GET /indexers('{indexerName}')/search.status
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Indexer-Status
 # operationId: Indexers_GetStatus
-export def "indexers-indexer-name-searchstatus GetStatus" [
-  indexerName: string
+export def "indexers-searchstatus get-status" [
+  indexer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "indexers-indexer-name-searchstatus GetStatus" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexers('($indexerName)')/search.status" $qp)
+  let full_url = (build-url $base ({indexer_name: $indexer_name} | format pattern "/indexers('{indexer_name}')/search.status") $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -550,7 +550,7 @@ export def "indexers-indexer-name-searchstatus GetStatus" [
 # GET /indexes
 # Docs: https://docs.microsoft.com/rest/api/searchservice/List-Indexes
 # operationId: Indexes_List
-export def "indexes List" [
+export def "indexes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "indexes List" [
 # --suggesters item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list}
 # --tokenFilters item shape: {@odata.type: string, name: string}
 # --tokenizers item shape: {@odata.type: string, name: string}
-export def "indexes Create" [
+export def "indexes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,17 +599,17 @@ export def "indexes Create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --odataetag: string # The ETag of the index.
+  --odata-etag: string # The ETag of the index.
   --analyzers: list # The analyzers for the index. — item shape: {@odata.type: string, name: string}
-  --charFilters: list # The character filters for the index. — item shape: {@odata.type: string, name: string}
-  --corsOptions: any # Defines options to control Cross-Origin Resource Sharing (CORS) for an index. — shape: {allowedOrigins: list, maxAgeInSeconds?: int}
-  --defaultScoringProfile: string # The name of the scoring profile to use if none is specified in the query. If this property is not set and no scoring profile is specified in the query, then default scoring (tf-idf) will be used.
-  --encryptionKey: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
+  --char-filters: list # The character filters for the index. — item shape: {@odata.type: string, name: string}
+  --cors-options: any # Defines options to control Cross-Origin Resource Sharing (CORS) for an index. — shape: {allowedOrigins: list, maxAgeInSeconds?: int}
+  --default-scoring-profile: string # The name of the scoring profile to use if none is specified in the query. If this property is not set and no scoring profile is specified in the query, then default scoring (tf-idf) will be used.
+  --encryption-key: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
   fields: list # The fields of the index. — item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", facetable?: bool, fields?: list, filterable?: bool, indexAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", key?: bool, name: string, retrievable?: bool, searchAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", searchable?: bool, sortable?: bool, synonymMaps?: list, type: "Edm.String"|"Edm.Int32"|"Edm.Int64"|"Edm.Double"|"Edm.Boolean"|"Edm.DateTimeOffset"|"Edm.GeographyPoint"|"Edm.ComplexType"}
   name: string # The name of the index.
-  --scoringProfiles: list # The scoring profiles for the index. — item shape: {functionAggregation?: "sum"|"average"|"minimum"|"maximum"|"firstMatching", functions?: list, name: string, text?: any}
+  --scoring-profiles: list # The scoring profiles for the index. — item shape: {functionAggregation?: "sum"|"average"|"minimum"|"maximum"|"firstMatching", functions?: list, name: string, text?: any}
   --suggesters: list # The suggesters for the index. — item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list}
-  --tokenFilters: list # The token filters for the index. — item shape: {@odata.type: string, name: string}
+  --token-filters: list # The token filters for the index. — item shape: {@odata.type: string, name: string}
   --tokenizers: list # The tokenizers for the index. — item shape: {@odata.type: string, name: string}
 ]: any -> record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>> {
   let input = $in
@@ -617,7 +617,7 @@ export def "indexes Create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/indexes" $qp)
-  let body = {@odata.etag: $odataetag, analyzers: $analyzers, charFilters: $charFilters, corsOptions: $corsOptions, defaultScoringProfile: $defaultScoringProfile, encryptionKey: $encryptionKey, fields: $fields, name: $name, scoringProfiles: $scoringProfiles, suggesters: $suggesters, tokenFilters: $tokenFilters, tokenizers: $tokenizers} | compact
+  let body = {"@odata.etag": $odata_etag, "analyzers": $analyzers, "charFilters": $char_filters, "corsOptions": $cors_options, "defaultScoringProfile": $default_scoring_profile, "encryptionKey": $encryption_key, "fields": $fields, "name": $name, "scoringProfiles": $scoring_profiles, "suggesters": $suggesters, "tokenFilters": $token_filters, "tokenizers": $tokenizers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -631,8 +631,8 @@ export def "indexes Create" [
 # DELETE /indexes('{indexName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Delete-Index
 # operationId: Indexes_Delete
-export def "indexes-index-name Delete" [
-  indexName: string
+export def "indexes delete" [
+  index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,14 +643,14 @@ export def "indexes-index-name Delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --If-Match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
-  --If-None-Match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
+  --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
+  --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexes('($indexName)')" $qp)
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes('{index_name}')") $qp)
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -662,8 +662,8 @@ export def "indexes-index-name Delete" [
 # GET /indexes('{indexName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Index
 # operationId: Indexes_Get
-export def "indexes-index-name Get" [
-  indexName: string
+export def "indexes get" [
+  index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,7 +678,7 @@ export def "indexes-index-name Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexes('($indexName)')" $qp)
+  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes('{index_name}')") $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -700,8 +700,8 @@ export def "indexes-index-name Get" [
 # --suggesters item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list}
 # --tokenFilters item shape: {@odata.type: string, name: string}
 # --tokenizers item shape: {@odata.type: string, name: string}
-export def "indexes-index-name CreateOrUpdate" [
-  indexName: string
+export def "indexes create-or-update" [
+  index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,33 +710,33 @@ export def "indexes-index-name CreateOrUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowIndexDowntime: oneof<nothing, bool> # Allows new analyzers, tokenizers, token filters, or char filters to be added to an index by taking the index offline for at least a few seconds. This temporarily causes indexing and query requests to fail. Performance and write availability of the index can be impaired for several minutes after the index is updated, or longer for very large indexes.
+  --allow-index-downtime: oneof<nothing, bool> # Allows new analyzers, tokenizers, token filters, or char filters to be added to an index by taking the index offline for at least a few seconds. This temporarily causes indexing and query requests to fail. Performance and write availability of the index can be impaired for several minutes after the index is updated, or longer for very large indexes.
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --If-Match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
-  --If-None-Match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
-  --Prefer: string@Prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
-  --odataetag: string # The ETag of the index.
+  --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
+  --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
+  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
+  --odata-etag: string # The ETag of the index.
   --analyzers: list # The analyzers for the index. — item shape: {@odata.type: string, name: string}
-  --charFilters: list # The character filters for the index. — item shape: {@odata.type: string, name: string}
-  --corsOptions: any # Defines options to control Cross-Origin Resource Sharing (CORS) for an index. — shape: {allowedOrigins: list, maxAgeInSeconds?: int}
-  --defaultScoringProfile: string # The name of the scoring profile to use if none is specified in the query. If this property is not set and no scoring profile is specified in the query, then default scoring (tf-idf) will be used.
-  --encryptionKey: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
+  --char-filters: list # The character filters for the index. — item shape: {@odata.type: string, name: string}
+  --cors-options: any # Defines options to control Cross-Origin Resource Sharing (CORS) for an index. — shape: {allowedOrigins: list, maxAgeInSeconds?: int}
+  --default-scoring-profile: string # The name of the scoring profile to use if none is specified in the query. If this property is not set and no scoring profile is specified in the query, then default scoring (tf-idf) will be used.
+  --encryption-key: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
   fields: list # The fields of the index. — item shape: {analyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", facetable?: bool, fields?: list, filterable?: bool, indexAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", key?: bool, name: string, retrievable?: bool, searchAnalyzer?: "ar.microsoft"|"ar.lucene"|"hy.lucene"|"bn.microsoft"|"eu.lucene"|"bg.microsoft"|"bg.lucene"|"ca.microsoft"|"ca.lucene"|"zh-Hans.microsoft"|"zh-Hans.lucene"|"zh-Hant.microsoft"|"zh-Hant.lucene"|"hr.microsoft"|"cs.microsoft"|"cs.lucene"|"da.microsoft"|"da.lucene"|"nl.microsoft"|"nl.lucene"|"en.microsoft"|"en.lucene"|"et.microsoft"|"fi.microsoft"|"fi.lucene"|"fr.microsoft"|"fr.lucene"|"gl.lucene"|"de.microsoft"|"de.lucene"|"el.microsoft"|"el.lucene"|"gu.microsoft"|"he.microsoft"|"hi.microsoft"|"hi.lucene"|"hu.microsoft"|"hu.lucene"|"is.microsoft"|"id.microsoft"|"id.lucene"|"ga.lucene"|"it.microsoft"|"it.lucene"|"ja.microsoft"|"ja.lucene"|"kn.microsoft"|"ko.microsoft"|"ko.lucene"|"lv.microsoft"|"lv.lucene"|"lt.microsoft"|"ml.microsoft"|"ms.microsoft"|"mr.microsoft"|"nb.microsoft"|"no.lucene"|"fa.lucene"|"pl.microsoft"|"pl.lucene"|"pt-BR.microsoft"|"pt-BR.lucene"|"pt-PT.microsoft"|"pt-PT.lucene"|"pa.microsoft"|"ro.microsoft"|"ro.lucene"|"ru.microsoft"|"ru.lucene"|"sr-cyrillic.microsoft"|"sr-latin.microsoft"|"sk.microsoft"|"sl.microsoft"|"es.microsoft"|"es.lucene"|"sv.microsoft"|"sv.lucene"|"ta.microsoft"|"te.microsoft"|"th.microsoft"|"th.lucene"|"tr.microsoft"|"tr.lucene"|"uk.microsoft"|"ur.microsoft"|"vi.microsoft"|"standard.lucene"|"standardasciifolding.lucene"|"keyword"|"pattern"|"simple"|"stop"|"whitespace", searchable?: bool, sortable?: bool, synonymMaps?: list, type: "Edm.String"|"Edm.Int32"|"Edm.Int64"|"Edm.Double"|"Edm.Boolean"|"Edm.DateTimeOffset"|"Edm.GeographyPoint"|"Edm.ComplexType"}
   name: string # The name of the index.
-  --scoringProfiles: list # The scoring profiles for the index. — item shape: {functionAggregation?: "sum"|"average"|"minimum"|"maximum"|"firstMatching", functions?: list, name: string, text?: any}
+  --scoring-profiles: list # The scoring profiles for the index. — item shape: {functionAggregation?: "sum"|"average"|"minimum"|"maximum"|"firstMatching", functions?: list, name: string, text?: any}
   --suggesters: list # The suggesters for the index. — item shape: {name: string, searchMode: "analyzingInfixMatching", sourceFields: list}
-  --tokenFilters: list # The token filters for the index. — item shape: {@odata.type: string, name: string}
+  --token-filters: list # The token filters for the index. — item shape: {@odata.type: string, name: string}
   --tokenizers: list # The tokenizers for the index. — item shape: {@odata.type: string, name: string}
 ]: any -> record<_odata_etag: string, analyzers: table<_odata_type: string, name: string>, charFilters: table<_odata_type: string, name: string>, corsOptions: record<allowedOrigins: list<string>, maxAgeInSeconds: int>, defaultScoringProfile: string, encryptionKey: record<accessCredentials: record<applicationId: string, applicationSecret: string>, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string>, fields: table<analyzer: string, facetable: bool, fields: list, filterable: bool, indexAnalyzer: string, key: bool, name: string, retrievable: bool, searchAnalyzer: string, searchable: bool, sortable: bool, synonymMaps: list, type: string>, name: string, scoringProfiles: table<functionAggregation: string, functions: list, name: string, text: record>, suggesters: table<name: string, searchMode: string, sourceFields: list>, tokenFilters: table<_odata_type: string, name: string>, tokenizers: table<_odata_type: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowIndexDowntime" $allowIndexDowntime "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexes('($indexName)')" $qp)
-  let body = {@odata.etag: $odataetag, analyzers: $analyzers, charFilters: $charFilters, corsOptions: $corsOptions, defaultScoringProfile: $defaultScoringProfile, encryptionKey: $encryptionKey, fields: $fields, name: $name, scoringProfiles: $scoringProfiles, suggesters: $suggesters, tokenFilters: $tokenFilters, tokenizers: $tokenizers} | compact
+  let qp = [(serialize-qp "allowIndexDowntime" $allow_index_downtime "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes('{index_name}')") $qp)
+  let body = {"@odata.etag": $odata_etag, "analyzers": $analyzers, "charFilters": $char_filters, "corsOptions": $cors_options, "defaultScoringProfile": $default_scoring_profile, "encryptionKey": $encryption_key, "fields": $fields, "name": $name, "scoringProfiles": $scoring_profiles, "suggesters": $suggesters, "tokenFilters": $token_filters, "tokenizers": $tokenizers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "Prefer": $Prefer} | compact
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -748,8 +748,8 @@ export def "indexes-index-name CreateOrUpdate" [
 # POST /indexes('{indexName}')/search.analyze
 # Docs: https://docs.microsoft.com/rest/api/searchservice/test-analyzer
 # operationId: Indexes_Analyze
-export def "indexes-index-name-searchanalyze Analyze" [
-  indexName: string
+export def "indexes-searchanalyze post" [
+  index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -761,17 +761,17 @@ export def "indexes-index-name-searchanalyze Analyze" [
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
   --analyzer: string@analyzer-completer # Defines the names of all text analyzers supported by Azure Cognitive Search.
-  --charFilters: list # An optional list of character filters to use when breaking the given text. This parameter can only be set when using the tokenizer parameter.
+  --char-filters: list # An optional list of character filters to use when breaking the given text. This parameter can only be set when using the tokenizer parameter.
   text: string # The text to break into tokens.
-  --tokenFilters: list # An optional list of token filters to use when breaking the given text. This parameter can only be set when using the tokenizer parameter.
+  --token-filters: list # An optional list of token filters to use when breaking the given text. This parameter can only be set when using the tokenizer parameter.
   --tokenizer: string@tokenizer-completer # Defines the names of all tokenizers supported by Azure Cognitive Search.
 ]: any -> record<tokens: table<endOffset: int, position: int, startOffset: int, token: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexes('($indexName)')/search.analyze" $qp)
-  let body = {analyzer: $analyzer, charFilters: $charFilters, text: $text, tokenFilters: $tokenFilters, tokenizer: $tokenizer} | compact
+  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes('{index_name}')/search.analyze") $qp)
+  let body = {"analyzer": $analyzer, "charFilters": $char_filters, "text": $text, "tokenFilters": $token_filters, "tokenizer": $tokenizer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -785,8 +785,8 @@ export def "indexes-index-name-searchanalyze Analyze" [
 # GET /indexes('{indexName}')/search.stats
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Index-Statistics
 # operationId: Indexes_GetStatistics
-export def "indexes-index-name-searchstats GetStatistics" [
-  indexName: string
+export def "indexes-searchstats get-statistics" [
+  index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -801,7 +801,7 @@ export def "indexes-index-name-searchstats GetStatistics" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/indexes('($indexName)')/search.stats" $qp)
+  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes('{index_name}')/search.stats") $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -813,7 +813,7 @@ export def "indexes-index-name-searchstats GetStatistics" [
 #
 # GET /servicestats
 # operationId: GetServiceStatistics
-export def "servicestats GetServiceStatistics" [
+export def "servicestats get-service-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -841,7 +841,7 @@ export def "servicestats GetServiceStatistics" [
 # GET /skillsets
 # Docs: https://docs.microsoft.com/rest/api/searchservice/list-skillset
 # operationId: Skillsets_List
-export def "skillsets List" [
+export def "skillsets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "skillsets List" [
 # operationId: Skillsets_Create
 # --cognitiveServices shape: {@odata.type: string, description?: string}
 # --skills item shape: {@odata.type: string, context?: string, description?: string, inputs: list, name?: string, outputs: list}
-export def "skillsets Create" [
+export def "skillsets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,8 +883,8 @@ export def "skillsets Create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --odataetag: string # The ETag of the skillset.
-  --cognitiveServices: any # Abstract base class for describing any cognitive service resource attached to the skillset. — shape: {@odata.type: string, description?: string}
+  --odata-etag: string # The ETag of the skillset.
+  --cognitive-services: any # Abstract base class for describing any cognitive service resource attached to the skillset. — shape: {@odata.type: string, description?: string}
   description: string # The description of the skillset.
   name: string # The name of the skillset.
   skills: list # A list of skills in the skillset. — item shape: {@odata.type: string, context?: string, description?: string, inputs: list, name?: string, outputs: list}
@@ -894,7 +894,7 @@ export def "skillsets Create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/skillsets" $qp)
-  let body = {@odata.etag: $odataetag, cognitiveServices: $cognitiveServices, description: $description, name: $name, skills: $skills} | compact
+  let body = {"@odata.etag": $odata_etag, "cognitiveServices": $cognitive_services, "description": $description, "name": $name, "skills": $skills} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -908,8 +908,8 @@ export def "skillsets Create" [
 # DELETE /skillsets('{skillsetName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/delete-skillset
 # operationId: Skillsets_Delete
-export def "skillsets-skillset-name Delete" [
-  skillsetName: string
+export def "skillsets delete" [
+  skillset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,14 +920,14 @@ export def "skillsets-skillset-name Delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --If-Match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
-  --If-None-Match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
+  --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
+  --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/skillsets('($skillsetName)')" $qp)
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({skillset_name: $skillset_name} | format pattern "/skillsets('{skillset_name}')") $qp)
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -939,8 +939,8 @@ export def "skillsets-skillset-name Delete" [
 # GET /skillsets('{skillsetName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/get-skillset
 # operationId: Skillsets_Get
-export def "skillsets-skillset-name Get" [
-  skillsetName: string
+export def "skillsets get" [
+  skillset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +955,7 @@ export def "skillsets-skillset-name Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/skillsets('($skillsetName)')" $qp)
+  let full_url = (build-url $base ({skillset_name: $skillset_name} | format pattern "/skillsets('{skillset_name}')") $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -970,8 +970,8 @@ export def "skillsets-skillset-name Get" [
 # operationId: Skillsets_CreateOrUpdate
 # --cognitiveServices shape: {@odata.type: string, description?: string}
 # --skills item shape: {@odata.type: string, context?: string, description?: string, inputs: list, name?: string, outputs: list}
-export def "skillsets-skillset-name CreateOrUpdate" [
-  skillsetName: string
+export def "skillsets create-or-update" [
+  skillset_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -982,11 +982,11 @@ export def "skillsets-skillset-name CreateOrUpdate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --If-Match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
-  --If-None-Match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
-  --Prefer: string@Prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
-  --odataetag: string # The ETag of the skillset.
-  --cognitiveServices: any # Abstract base class for describing any cognitive service resource attached to the skillset. — shape: {@odata.type: string, description?: string}
+  --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
+  --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
+  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
+  --odata-etag: string # The ETag of the skillset.
+  --cognitive-services: any # Abstract base class for describing any cognitive service resource attached to the skillset. — shape: {@odata.type: string, description?: string}
   description: string # The description of the skillset.
   name: string # The name of the skillset.
   skills: list # A list of skills in the skillset. — item shape: {@odata.type: string, context?: string, description?: string, inputs: list, name?: string, outputs: list}
@@ -995,10 +995,10 @@ export def "skillsets-skillset-name CreateOrUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/skillsets('($skillsetName)')" $qp)
-  let body = {@odata.etag: $odataetag, cognitiveServices: $cognitiveServices, description: $description, name: $name, skills: $skills} | compact
+  let full_url = (build-url $base ({skillset_name: $skillset_name} | format pattern "/skillsets('{skillset_name}')") $qp)
+  let body = {"@odata.etag": $odata_etag, "cognitiveServices": $cognitive_services, "description": $description, "name": $name, "skills": $skills} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "Prefer": $Prefer} | compact
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1010,7 +1010,7 @@ export def "skillsets-skillset-name CreateOrUpdate" [
 # GET /synonymmaps
 # Docs: https://docs.microsoft.com/rest/api/searchservice/List-Synonym-Maps
 # operationId: SynonymMaps_List
-export def "synonymmaps List" [
+export def "synonymmaps list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1040,7 +1040,7 @@ export def "synonymmaps List" [
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Create-Synonym-Map
 # operationId: SynonymMaps_Create
 # --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-export def "synonymmaps Create" [
+export def "synonymmaps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1051,8 +1051,8 @@ export def "synonymmaps Create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --odataetag: string # The ETag of the synonym map.
-  --encryptionKey: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
+  --odata-etag: string # The ETag of the synonym map.
+  --encryption-key: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
   format: string@format-completer # The format of the synonym map. Only the 'solr' format is currently supported.
   name: string # The name of the synonym map.
   synonyms: string # A series of synonym rules in the specified synonym map format. The rules must be separated by newlines.
@@ -1062,7 +1062,7 @@ export def "synonymmaps Create" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/synonymmaps" $qp)
-  let body = {@odata.etag: $odataetag, encryptionKey: $encryptionKey, format: $format, name: $name, synonyms: $synonyms} | compact
+  let body = {"@odata.etag": $odata_etag, "encryptionKey": $encryption_key, "format": $format, "name": $name, "synonyms": $synonyms} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1076,8 +1076,8 @@ export def "synonymmaps Create" [
 # DELETE /synonymmaps('{synonymMapName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Delete-Synonym-Map
 # operationId: SynonymMaps_Delete
-export def "synonymmaps-synonym-map-name Delete" [
-  synonymMapName: string
+export def "synonymmaps delete" [
+  synonym_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1088,14 +1088,14 @@ export def "synonymmaps-synonym-map-name Delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --If-Match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
-  --If-None-Match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
+  --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
+  --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/synonymmaps('($synonymMapName)')" $qp)
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({synonym_map_name: $synonym_map_name} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1107,8 +1107,8 @@ export def "synonymmaps-synonym-map-name Delete" [
 # GET /synonymmaps('{synonymMapName}')
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Get-Synonym-Map
 # operationId: SynonymMaps_Get
-export def "synonymmaps-synonym-map-name Get" [
-  synonymMapName: string
+export def "synonymmaps get" [
+  synonym_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,7 +1123,7 @@ export def "synonymmaps-synonym-map-name Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/synonymmaps('($synonymMapName)')" $qp)
+  let full_url = (build-url $base ({synonym_map_name: $synonym_map_name} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
   let extra_headers = {"client-request-id": $client_request_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1137,8 +1137,8 @@ export def "synonymmaps-synonym-map-name Get" [
 # Docs: https://docs.microsoft.com/rest/api/searchservice/Update-Synonym-Map
 # operationId: SynonymMaps_CreateOrUpdate
 # --encryptionKey shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
-export def "synonymmaps-synonym-map-name CreateOrUpdate" [
-  synonymMapName: string
+export def "synonymmaps create-or-update" [
+  synonym_map_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1149,11 +1149,11 @@ export def "synonymmaps-synonym-map-name CreateOrUpdate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-  --If-Match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
-  --If-None-Match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
-  --Prefer: string@Prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
-  --odataetag: string # The ETag of the synonym map.
-  --encryptionKey: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
+  --if-match: string # Defines the If-Match condition. The operation will be performed only if the ETag on the server matches this value.
+  --if-none-match: string # Defines the If-None-Match condition. The operation will be performed only if the ETag on the server does not match this value.
+  --prefer: string@prefer-completer # For HTTP PUT requests, instructs the service to return the created/updated resource on success.
+  --odata-etag: string # The ETag of the synonym map.
+  --encryption-key: any # A customer-managed encryption key in Azure Key Vault. Keys that you create and manage can be used to encrypt or decrypt data-at-rest in Azure Cognitive Search, such as indexes and synonym maps. — shape: {accessCredentials?: any, keyVaultKeyName: string, keyVaultKeyVersion: string, keyVaultUri: string}
   format: string@format-completer # The format of the synonym map. Only the 'solr' format is currently supported.
   name: string # The name of the synonym map.
   synonyms: string # A series of synonym rules in the specified synonym map format. The rules must be separated by newlines.
@@ -1162,10 +1162,10 @@ export def "synonymmaps-synonym-map-name CreateOrUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/synonymmaps('($synonymMapName)')" $qp)
-  let body = {@odata.etag: $odataetag, encryptionKey: $encryptionKey, format: $format, name: $name, synonyms: $synonyms} | compact
+  let full_url = (build-url $base ({synonym_map_name: $synonym_map_name} | format pattern "/synonymmaps('{synonym_map_name}')") $qp)
+  let body = {"@odata.etag": $odata_etag, "encryptionKey": $encryption_key, "format": $format, "name": $name, "synonyms": $synonyms} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $If_Match, "If-None-Match": $If_None_Match, "Prefer": $Prefer} | compact
+  let extra_headers = {"client-request-id": $client_request_id, "If-Match": $if_match, "If-None-Match": $if_none_match, "Prefer": $prefer} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -66,9 +66,9 @@ def base-url-completer [] { ["https://api.up.com.au/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def filteraccountType-completer [] { ["SAVER" "TRANSACTIONAL"] }
-def filterownershipType-completer [] { ["INDIVIDUAL" "JOINT"] }
-def filterstatus-completer [] { ["HELD" "SETTLED"] }
+def filter-account-type-completer [] { ["SAVER" "TRANSACTIONAL"] }
+def filter-ownership-type-completer [] { ["INDIVIDUAL" "JOINT"] }
+def filter-status-completer [] { ["HELD" "SETTLED"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -105,13 +105,13 @@ export def "accounts list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagesize: int # The number of records to return in each page.  (e.g. 30)
-  --filteraccountType: string@filteraccountType-completer # The type of account for which to return records. This can be used to filter Savers from spending accounts.  (e.g. SAVER)
-  --filterownershipType: string@filterownershipType-completer # The account ownership structure for which to return records. This can be used to filter 2Up accounts from Up accounts.  (e.g. INDIVIDUAL)
+  --page-size: int # The number of records to return in each page.  (e.g. 30)
+  --filter-account-type: string@filter-account-type-completer # The type of account for which to return records. This can be used to filter Savers from spending accounts.  (e.g. SAVER)
+  --filter-ownership-type: string@filter-ownership-type-completer # The account ownership structure for which to return records. This can be used to filter 2Up accounts from Up accounts.  (e.g. INDIVIDUAL)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<next: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[accountType]" $filteraccountType "scalar") (serialize-qp "filter[ownershipType]" $filterownershipType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[accountType]" $filter_account_type "scalar") (serialize-qp "filter[ownershipType]" $filter_ownership_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/accounts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -122,7 +122,7 @@ export def "accounts list" [
 #
 # GET /accounts/{accountId}/transactions
 export def "accounts-transactions get" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,17 +131,17 @@ export def "accounts-transactions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagesize: int # The number of records to return in each page.  (e.g. 30)
-  --filterstatus: string@filterstatus-completer # The transaction status for which to return records. This can be used to filter `HELD` transactions from those that are `SETTLED`.  (e.g. HELD)
-  --filtersince: string # The start date-time from which to return records, formatted according to rfc-3339. Not to be used for pagination purposes.  (format: date-time, e.g. 2020-01-01T01:02:03+10:00)
-  --filteruntil: string # The end date-time up to which to return records, formatted according to rfc-3339. Not to be used for pagination purposes.  (format: date-time, e.g. 2020-02-01T01:02:03+10:00)
-  --filtercategory: string # The category identifier for which to filter transactions. Both parent and child categories can be filtered through this parameter. Providing an invalid category identifier results in a `404` response.  (e.g. good-life)
-  --filtertag: string # A transaction tag to filter for which to return records. If the tag does not exist, zero records are returned and a success response is given.  (e.g. Holiday)
+  --page-size: int # The number of records to return in each page.  (e.g. 30)
+  --filter-status: string@filter-status-completer # The transaction status for which to return records. This can be used to filter `HELD` transactions from those that are `SETTLED`.  (e.g. HELD)
+  --filter-since: string # The start date-time from which to return records, formatted according to rfc-3339. Not to be used for pagination purposes.  (format: date-time, e.g. 2020-01-01T01:02:03+10:00)
+  --filter-until: string # The end date-time up to which to return records, formatted according to rfc-3339. Not to be used for pagination purposes.  (format: date-time, e.g. 2020-02-01T01:02:03+10:00)
+  --filter-category: string # The category identifier for which to filter transactions. Both parent and child categories can be filtered through this parameter. Providing an invalid category identifier results in a `404` response.  (e.g. good-life)
+  --filter-tag: string # A transaction tag to filter for which to return records. If the tag does not exist, zero records are returned and a success response is given.  (e.g. Holiday)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<next: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "filter[since]" $filtersince "scalar") (serialize-qp "filter[until]" $filteruntil "scalar") (serialize-qp "filter[category]" $filtercategory "scalar") (serialize-qp "filter[tag]" $filtertag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($accountId)/transactions" $qp)
+  let qp = [(serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "filter[since]" $filter_since "scalar") (serialize-qp "filter[until]" $filter_until "scalar") (serialize-qp "filter[category]" $filter_category "scalar") (serialize-qp "filter[tag]" $filter_tag "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/transactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +163,7 @@ export def "accounts get" [
 ]: nothing -> record<data: record<attributes: record<accountType: record, balance: record, createdAt: string, displayName: string, ownershipType: record>, id: string, links: record<self: string>, relationships: record<transactions: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -181,11 +181,11 @@ export def "categories list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterparent: string # The unique identifier of a parent category for which to return only its children. Providing an invalid category identifier results in a `404` response.  (e.g. good-life)
+  --filter-parent: string # The unique identifier of a parent category for which to return only its children. Providing an invalid category identifier results in a `404` response.  (e.g. good-life)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter[parent]" $filterparent "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter[parent]" $filter_parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,7 +208,7 @@ export def "categories get" [
 ]: nothing -> record<data: record<attributes: record<name: string>, id: string, links: record<self: string>, relationships: record<children: record, parent: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/categories/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,11 +226,11 @@ export def "tags get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagesize: int # The number of records to return in each page.  (e.g. 50)
+  --page-size: int # The number of records to return in each page.  (e.g. 50)
 ]: nothing -> record<data: table<id: string, relationships: record, type: string>, links: record<next: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -249,16 +249,16 @@ export def "transactions list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagesize: int # The number of records to return in each page.  (e.g. 30)
-  --filterstatus: string@filterstatus-completer # The transaction status for which to return records. This can be used to filter `HELD` transactions from those that are `SETTLED`.  (e.g. HELD)
-  --filtersince: string # The start date-time from which to return records, formatted according to rfc-3339. Not to be used for pagination purposes.  (format: date-time, e.g. 2020-01-01T01:02:03+10:00)
-  --filteruntil: string # The end date-time up to which to return records, formatted according to rfc-3339. Not to be used for pagination purposes.  (format: date-time, e.g. 2020-02-01T01:02:03+10:00)
-  --filtercategory: string # The category identifier for which to filter transactions. Both parent and child categories can be filtered through this parameter. Providing an invalid category identifier results in a `404` response.  (e.g. good-life)
-  --filtertag: string # A transaction tag to filter for which to return records. If the tag does not exist, zero records are returned and a success response is given.  (e.g. Holiday)
+  --page-size: int # The number of records to return in each page.  (e.g. 30)
+  --filter-status: string@filter-status-completer # The transaction status for which to return records. This can be used to filter `HELD` transactions from those that are `SETTLED`.  (e.g. HELD)
+  --filter-since: string # The start date-time from which to return records, formatted according to rfc-3339. Not to be used for pagination purposes.  (format: date-time, e.g. 2020-01-01T01:02:03+10:00)
+  --filter-until: string # The end date-time up to which to return records, formatted according to rfc-3339. Not to be used for pagination purposes.  (format: date-time, e.g. 2020-02-01T01:02:03+10:00)
+  --filter-category: string # The category identifier for which to filter transactions. Both parent and child categories can be filtered through this parameter. Providing an invalid category identifier results in a `404` response.  (e.g. good-life)
+  --filter-tag: string # A transaction tag to filter for which to return records. If the tag does not exist, zero records are returned and a success response is given.  (e.g. Holiday)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<next: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[size]" $pagesize "scalar") (serialize-qp "filter[status]" $filterstatus "scalar") (serialize-qp "filter[since]" $filtersince "scalar") (serialize-qp "filter[until]" $filteruntil "scalar") (serialize-qp "filter[category]" $filtercategory "scalar") (serialize-qp "filter[tag]" $filtertag "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[size]" $page_size "scalar") (serialize-qp "filter[status]" $filter_status "scalar") (serialize-qp "filter[since]" $filter_since "scalar") (serialize-qp "filter[until]" $filter_until "scalar") (serialize-qp "filter[category]" $filter_category "scalar") (serialize-qp "filter[tag]" $filter_tag "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transactions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,7 +281,7 @@ export def "transactions get" [
 ]: nothing -> record<data: record<attributes: record<amount: record, cashback: record, createdAt: string, description: string, foreignAmount: record, holdInfo: record, isCategorizable: bool, message: string, rawText: string, roundUp: record, settledAt: string, status: record>, id: string, links: record<self: string>, relationships: record<account: record, category: record, parentCategory: record, tags: record, transferAccount: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transactions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transactions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -291,7 +291,7 @@ export def "transactions get" [
 #
 # PATCH /transactions/{transactionId}/relationships/category
 export def "transactions-relationships-category patch" [
-  transactionId: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,8 +305,8 @@ export def "transactions-relationships-category patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transactions/($transactionId)/relationships/category")
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({transaction_id: $transaction_id} | format pattern "/transactions/{transaction_id}/relationships/category"))
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -318,7 +318,7 @@ export def "transactions-relationships-category patch" [
 # DELETE /transactions/{transactionId}/relationships/tags
 # --data item shape: {id: string, type: string}
 export def "transactions-relationships-tags delete" [
-  transactionId: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,8 +332,8 @@ export def "transactions-relationships-tags delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transactions/($transactionId)/relationships/tags")
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({transaction_id: $transaction_id} | format pattern "/transactions/{transaction_id}/relationships/tags"))
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -345,7 +345,7 @@ export def "transactions-relationships-tags delete" [
 # POST /transactions/{transactionId}/relationships/tags
 # --data item shape: {id: string, type: string}
 export def "transactions-relationships-tags post" [
-  transactionId: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,8 +359,8 @@ export def "transactions-relationships-tags post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transactions/($transactionId)/relationships/tags")
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({transaction_id: $transaction_id} | format pattern "/transactions/{transaction_id}/relationships/tags"))
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -400,11 +400,11 @@ export def "webhooks list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagesize: int # The number of records to return in each page.  (e.g. 30)
+  --page-size: int # The number of records to return in each page.  (e.g. 30)
 ]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<next: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -429,7 +429,7 @@ export def "webhooks post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks")
-  let body = {data: $data} | compact
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -452,7 +452,7 @@ export def "webhooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -474,7 +474,7 @@ export def "webhooks get" [
 ]: nothing -> record<data: record<attributes: record<createdAt: string, description: string, secretKey: string, url: string>, id: string, links: record<self: string>, relationships: record<logs: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -484,7 +484,7 @@ export def "webhooks get" [
 #
 # GET /webhooks/{webhookId}/logs
 export def "webhooks-logs get" [
-  webhookId: string
+  webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,12 +493,12 @@ export def "webhooks-logs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pagesize: int # The number of records to return in each page.  (e.g. 30)
+  --page-size: int # The number of records to return in each page.  (e.g. 30)
 ]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<next: string, prev: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page[size]" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/webhooks/($webhookId)/logs" $qp)
+  let qp = [(serialize-qp "page[size]" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}/logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -508,7 +508,7 @@ export def "webhooks-logs get" [
 #
 # POST /webhooks/{webhookId}/ping
 export def "webhooks-ping post" [
-  webhookId: string
+  webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,7 +520,7 @@ export def "webhooks-ping post" [
 ]: nothing -> record<data: record<attributes: record<createdAt: string, eventType: record>, id: string, relationships: record<transaction: record, webhook: record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($webhookId)/ping")
+  let full_url = (build-url $base ({webhook_id: $webhook_id} | format pattern "/webhooks/{webhook_id}/ping"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

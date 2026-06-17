@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def keyName-completer [] { ["Key1" "Key2"] }
+def key-name-completer [] { ["Key1" "Key2"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-cognitive-services-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-cognitive-services-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.CognitiveServices/operations
 # operationId: Operations_List
-export def "providers-microsoft-cognitive-services-operations List" [
+export def "providers-microsoft-cognitive-services-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-cognitive-services-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.CognitiveServices/accounts
 # operationId: Accounts_List
-export def "subscriptions-providers-microsoft-cognitive-services-accounts List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-cognitive-services-accounts list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoft-cognitive-services-accounts List" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.CognitiveServices/accounts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.CognitiveServices/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,8 +144,8 @@ export def "subscriptions-providers-microsoft-cognitive-services-accounts List" 
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.CognitiveServices/checkDomainAvailability
 # operationId: CheckDomainAvailability
-export def "subscriptions-providers-microsoft-cognitive-services-check-domain-availability CheckDomainAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-cognitive-services-check-domain-availability check" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,15 +155,15 @@ export def "subscriptions-providers-microsoft-cognitive-services-check-domain-av
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-18
-  subdomainName: string # The subdomain name to use.
+  subdomain_name: string # The subdomain name to use.
   type: string # The Type of the resource.
 ]: any -> record<isSubdomainAvailable: bool, reason: string, subdomainName: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.CognitiveServices/checkDomainAvailability" $qp)
-  let body = {subdomainName: $subdomainName, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.CognitiveServices/checkDomainAvailability") $qp)
+  let body = {"subdomainName": $subdomain_name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,8 +174,8 @@ export def "subscriptions-providers-microsoft-cognitive-services-check-domain-av
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.CognitiveServices/locations/{location}/checkSkuAvailability
 # operationId: CheckSkuAvailability
-export def "subscriptions-providers-microsoft-cognitive-services-locations-check-sku-availability CheckSkuAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-cognitive-services-locations-check-sku-availability check" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,8 +194,8 @@ export def "subscriptions-providers-microsoft-cognitive-services-locations-check
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.CognitiveServices/locations/($location)/checkSkuAvailability" $qp)
-  let body = {kind: $kind, skus: $skus, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.CognitiveServices/locations/{location}/checkSkuAvailability") $qp)
+  let body = {"kind": $kind, "skus": $skus, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -206,8 +206,8 @@ export def "subscriptions-providers-microsoft-cognitive-services-locations-check
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.CognitiveServices/skus
 # operationId: ResourceSkus_List
-export def "subscriptions-providers-microsoft-cognitive-services-skus List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-cognitive-services-skus list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "subscriptions-providers-microsoft-cognitive-services-skus List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.CognitiveServices/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.CognitiveServices/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,9 +231,9 @@ export def "subscriptions-providers-microsoft-cognitive-services-skus List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CognitiveServices/accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CognitiveServices/accounts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CognitiveServices/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,10 +257,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CognitiveServices/accounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts Delete" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CognitiveServices/accounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CognitiveServices/accounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,10 +284,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CognitiveServices/accounts/{accountName}
 # operationId: Accounts_GetProperties
-export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts GetProperties" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts get-properties" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CognitiveServices/accounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CognitiveServices/accounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -313,10 +313,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
 # operationId: Accounts_Update
 # --properties shape: {apiProperties?: any, customSubDomainName?: string, networkAcls?: any}
 # --sku shape: {name: string}
-export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts Update" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,8 +336,8 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CognitiveServices/accounts/($accountName)" $qp)
-  let body = {kind: $kind, location: $location, properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CognitiveServices/accounts/{account_name}") $qp)
+  let body = {"kind": $kind, "location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -350,10 +350,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
 # operationId: Accounts_Create
 # --properties shape: {apiProperties?: any, customSubDomainName?: string, networkAcls?: any}
 # --sku shape: {name: string}
-export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts Create" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,8 +373,8 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CognitiveServices/accounts/($accountName)" $qp)
-  let body = {kind: $kind, location: $location, properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CognitiveServices/accounts/{account_name}") $qp)
+  let body = {"kind": $kind, "location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -385,10 +385,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CognitiveServices/accounts/{accountName}/listKeys
 # operationId: Accounts_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts-list-keys ListKeys" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CognitiveServices/accounts/($accountName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CognitiveServices/accounts/{account_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,10 +412,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CognitiveServices/accounts/{accountName}/regenerateKey
 # operationId: Accounts_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts-regenerate-key RegenerateKey" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts-regenerate-key post" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,14 +425,14 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-18
-  keyName: string@keyName-completer # key name to generate (Key1|Key2)
+  key_name: string@key-name-completer # key name to generate (Key1|Key2)
 ]: any -> record<key1: string, key2: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CognitiveServices/accounts/($accountName)/regenerateKey" $qp)
-  let body = {keyName: $keyName} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CognitiveServices/accounts/{account_name}/regenerateKey") $qp)
+  let body = {"keyName": $key_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -443,10 +443,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CognitiveServices/accounts/{accountName}/skus
 # operationId: Accounts_ListSkus
-export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts-skus ListSkus" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts-skus list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CognitiveServices/accounts/($accountName)/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CognitiveServices/accounts/{account_name}/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,10 +470,10 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.CognitiveServices/accounts/{accountName}/usages
 # operationId: Accounts_GetUsages
-export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts-usages GetUsages" [
-  resourceGroupName: string
-  accountName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-cognitive-services-accounts-usages get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-cognitive-services
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.CognitiveServices/accounts/($accountName)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.CognitiveServices/accounts/{account_name}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

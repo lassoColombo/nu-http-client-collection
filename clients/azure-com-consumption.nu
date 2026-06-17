@@ -72,7 +72,7 @@ def metric-completer [] { ["actualcost" "amortizedcost" "usage"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-billing-billing-accounts-providers-microsoft-billing-billing-periods-providers-microsoft-consumption-balances GetForBillingPeriodByBillingAccount" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-billing-billing-accounts-providers-microsoft-billing-billing-periods-providers-microsoft-consumption-balances get-for" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,9 +97,9 @@ export def commands []: nothing -> table {
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/Microsoft.Billing/billingPeriods/{billingPeriodName}/providers/Microsoft.Consumption/balances
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Balances_GetForBillingPeriodByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-billing-billing-periods-providers-microsoft-consumption-balances GetForBillingPeriodByBillingAccount" [
-  billingAccountId: string
-  billingPeriodName: string
+export def "providers-microsoft-billing-billing-accounts-providers-microsoft-billing-billing-periods-providers-microsoft-consumption-balances get-for" [
+  billing_account_id: string
+  billing_period_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,7 +113,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-bil
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Billing/billingAccounts/($billingAccountId)/providers/Microsoft.Billing/billingPeriods/($billingPeriodName)/providers/Microsoft.Consumption/balances" $qp)
+  let full_url = (build-url $base ({billing_account_id: $billing_account_id, billing_period_name: $billing_period_name} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/Microsoft.Billing/billingPeriods/{billing_period_name}/providers/Microsoft.Consumption/balances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -124,8 +124,8 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-bil
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/Microsoft.Consumption/balances
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Balances_GetByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-balances GetByBillingAccount" [
-  billingAccountId: string
+export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-balances get-by" [
+  billing_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Billing/billingAccounts/($billingAccountId)/providers/Microsoft.Consumption/balances" $qp)
+  let full_url = (build-url $base ({billing_account_id: $billing_account_id} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/Microsoft.Consumption/balances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,8 +150,8 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/Microsoft.Consumption/reservationDetails
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsDetails_ListByBillingAccountId
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-reservation-details ListByBillingAccountId" [
-  billingAccountId: string
+export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-reservation-details list-by" [
+  billing_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Billing/billingAccounts/($billingAccountId)/providers/Microsoft.Consumption/reservationDetails" $qp)
+  let full_url = (build-url $base ({billing_account_id: $billing_account_id} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/Microsoft.Consumption/reservationDetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,8 +177,8 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/Microsoft.Consumption/reservationSummaries
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsSummaries_ListByBillingAccountId
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-reservation-summaries ListByBillingAccountId" [
-  billingAccountId: string
+export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-reservation-summaries list-by" [
+  billing_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "grain" $grain "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Billing/billingAccounts/($billingAccountId)/providers/Microsoft.Consumption/reservationSummaries" $qp)
+  let full_url = (build-url $base ({billing_account_id: $billing_account_id} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/Microsoft.Consumption/reservationSummaries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,8 +205,8 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/Microsoft.Consumption/reservationTransactions
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationTransactions_ListByBillingAccountId
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-reservation-transactions ListByBillingAccountId" [
-  billingAccountId: string
+export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-reservation-transactions list-by" [
+  billing_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Billing/billingAccounts/($billingAccountId)/providers/Microsoft.Consumption/reservationTransactions" $qp)
+  let full_url = (build-url $base ({billing_account_id: $billing_account_id} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/Microsoft.Consumption/reservationTransactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,8 +232,8 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/microsoft.consumption/ReservationRecommendations
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationRecommendations_ListByBillingAccountId
-export def "providers-microsoft-billing-billing-accounts-providers-microsoftconsumption-reservation-recommendations ListByBillingAccountId" [
-  billingAccountId: string
+export def "providers-microsoft-billing-billing-accounts-providers-microsoftconsumption-reservation-recommendations list-by" [
+  billing_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoftcons
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Billing/billingAccounts/($billingAccountId)/providers/microsoft.consumption/ReservationRecommendations" $qp)
+  let full_url = (build-url $base ({billing_account_id: $billing_account_id} | format pattern "/providers/Microsoft.Billing/billingAccounts/{billing_account_id}/providers/microsoft.consumption/ReservationRecommendations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,8 +259,8 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoftcons
 # GET /providers/Microsoft.Capacity/reservationorders/{reservationOrderId}/providers/Microsoft.Consumption/reservationDetails
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsDetails_ListByReservationOrder
-export def "providers-microsoft-capacity-reservationorders-providers-microsoft-consumption-reservation-details ListByReservationOrder" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservationorders-providers-microsoft-consumption-reservation-details list-by" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "providers-microsoft-capacity-reservationorders-providers-microsoft-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationorders/($reservationOrderId)/providers/Microsoft.Consumption/reservationDetails" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id} | format pattern "/providers/Microsoft.Capacity/reservationorders/{reservation_order_id}/providers/Microsoft.Consumption/reservationDetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -286,8 +286,8 @@ export def "providers-microsoft-capacity-reservationorders-providers-microsoft-c
 # GET /providers/Microsoft.Capacity/reservationorders/{reservationOrderId}/providers/Microsoft.Consumption/reservationSummaries
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsSummaries_ListByReservationOrder
-export def "providers-microsoft-capacity-reservationorders-providers-microsoft-consumption-reservation-summaries ListByReservationOrder" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservationorders-providers-microsoft-consumption-reservation-summaries list-by" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "providers-microsoft-capacity-reservationorders-providers-microsoft-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "grain" $grain "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationorders/($reservationOrderId)/providers/Microsoft.Consumption/reservationSummaries" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id} | format pattern "/providers/Microsoft.Capacity/reservationorders/{reservation_order_id}/providers/Microsoft.Consumption/reservationSummaries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -314,9 +314,9 @@ export def "providers-microsoft-capacity-reservationorders-providers-microsoft-c
 # GET /providers/Microsoft.Capacity/reservationorders/{reservationOrderId}/reservations/{reservationId}/providers/Microsoft.Consumption/reservationDetails
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsDetails_ListByReservationOrderAndReservation
-export def "providers-microsoft-capacity-reservationorders-reservations-providers-microsoft-consumption-reservation-details ListByReservationOrderAndReservation" [
-  reservationOrderId: string
-  reservationId: string
+export def "providers-microsoft-capacity-reservationorders-reservations-providers-microsoft-consumption-reservation-details list-by-reservation-order-and" [
+  reservation_order_id: string
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "providers-microsoft-capacity-reservationorders-reservations-provider
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationorders/($reservationOrderId)/reservations/($reservationId)/providers/Microsoft.Consumption/reservationDetails" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id, reservation_id: $reservation_id} | format pattern "/providers/Microsoft.Capacity/reservationorders/{reservation_order_id}/reservations/{reservation_id}/providers/Microsoft.Consumption/reservationDetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,9 +342,9 @@ export def "providers-microsoft-capacity-reservationorders-reservations-provider
 # GET /providers/Microsoft.Capacity/reservationorders/{reservationOrderId}/reservations/{reservationId}/providers/Microsoft.Consumption/reservationSummaries
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsSummaries_ListByReservationOrderAndReservation
-export def "providers-microsoft-capacity-reservationorders-reservations-providers-microsoft-consumption-reservation-summaries ListByReservationOrderAndReservation" [
-  reservationOrderId: string
-  reservationId: string
+export def "providers-microsoft-capacity-reservationorders-reservations-providers-microsoft-consumption-reservation-summaries list-by-reservation-order-and" [
+  reservation_order_id: string
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +360,7 @@ export def "providers-microsoft-capacity-reservationorders-reservations-provider
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "grain" $grain "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationorders/($reservationOrderId)/reservations/($reservationId)/providers/Microsoft.Consumption/reservationSummaries" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id, reservation_id: $reservation_id} | format pattern "/providers/Microsoft.Capacity/reservationorders/{reservation_order_id}/reservations/{reservation_id}/providers/Microsoft.Consumption/reservationSummaries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -370,7 +370,7 @@ export def "providers-microsoft-capacity-reservationorders-reservations-provider
 #
 # GET /providers/Microsoft.Consumption/operations
 # operationId: Operations_List
-export def "providers-microsoft-consumption-operations List" [
+export def "providers-microsoft-consumption-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,9 +395,9 @@ export def "providers-microsoft-consumption-operations List" [
 # GET /providers/Microsoft.Management/managementGroups/{managementGroupId}/providers/Microsoft.Billing/billingPeriods/{billingPeriodName}/Microsoft.Consumption/aggregatedcost
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: AggregatedCost_GetForBillingPeriodByManagementGroup
-export def "providers-microsoft-management-management-groups-providers-microsoft-billing-billing-periods-microsoft-consumption-aggregatedcost GetForBillingPeriodByManagementGroup" [
-  managementGroupId: string
-  billingPeriodName: string
+export def "providers-microsoft-management-management-groups-providers-microsoft-billing-billing-periods-microsoft-consumption-aggregatedcost get-for" [
+  management_group_id: string
+  billing_period_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Management/managementGroups/($managementGroupId)/providers/Microsoft.Billing/billingPeriods/($billingPeriodName)/Microsoft.Consumption/aggregatedcost" $qp)
+  let full_url = (build-url $base ({management_group_id: $management_group_id, billing_period_name: $billing_period_name} | format pattern "/providers/Microsoft.Management/managementGroups/{management_group_id}/providers/Microsoft.Billing/billingPeriods/{billing_period_name}/Microsoft.Consumption/aggregatedcost") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -422,8 +422,8 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 # GET /providers/Microsoft.Management/managementGroups/{managementGroupId}/providers/Microsoft.Consumption/aggregatedcost
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: AggregatedCost_GetByManagementGroup
-export def "providers-microsoft-management-management-groups-providers-microsoft-consumption-aggregatedcost GetByManagementGroup" [
-  managementGroupId: string
+export def "providers-microsoft-management-management-groups-providers-microsoft-consumption-aggregatedcost get-by" [
+  management_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Management/managementGroups/($managementGroupId)/providers/Microsoft.Consumption/aggregatedcost" $qp)
+  let full_url = (build-url $base ({management_group_id: $management_group_id} | format pattern "/providers/Microsoft.Management/managementGroups/{management_group_id}/providers/Microsoft.Consumption/aggregatedcost") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -449,9 +449,9 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Billing/billingPeriods/{billingPeriodName}/providers/Microsoft.Consumption/pricesheets/default
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: PriceSheet_GetByBillingPeriod
-export def "subscriptions-providers-microsoft-billing-billing-periods-providers-microsoft-consumption-pricesheets-default GetByBillingPeriod" [
-  subscriptionId: string
-  billingPeriodName: string
+export def "subscriptions-providers-microsoft-billing-billing-periods-providers-microsoft-consumption-pricesheets-default get-by" [
+  subscription_id: string
+  billing_period_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -468,7 +468,7 @@ export def "subscriptions-providers-microsoft-billing-billing-periods-providers-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Billing/billingPeriods/($billingPeriodName)/providers/Microsoft.Consumption/pricesheets/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, billing_period_name: $billing_period_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Billing/billingPeriods/{billing_period_name}/providers/Microsoft.Consumption/pricesheets/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -479,8 +479,8 @@ export def "subscriptions-providers-microsoft-billing-billing-periods-providers-
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Consumption/forecasts
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Forecasts_List
-export def "subscriptions-providers-microsoft-consumption-forecasts List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-consumption-forecasts list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -495,7 +495,7 @@ export def "subscriptions-providers-microsoft-consumption-forecasts List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Consumption/forecasts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Consumption/forecasts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -506,8 +506,8 @@ export def "subscriptions-providers-microsoft-consumption-forecasts List" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Consumption/pricesheets/default
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: PriceSheet_Get
-export def "subscriptions-providers-microsoft-consumption-pricesheets-default Get" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-consumption-pricesheets-default get" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,7 +524,7 @@ export def "subscriptions-providers-microsoft-consumption-pricesheets-default Ge
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Consumption/pricesheets/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Consumption/pricesheets/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -535,8 +535,8 @@ export def "subscriptions-providers-microsoft-consumption-pricesheets-default Ge
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Consumption/reservationRecommendations
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationRecommendations_List
-export def "subscriptions-providers-microsoft-consumption-reservation-recommendations List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-consumption-reservation-recommendations list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -551,7 +551,7 @@ export def "subscriptions-providers-microsoft-consumption-reservation-recommenda
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Consumption/reservationRecommendations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Consumption/reservationRecommendations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -562,7 +562,7 @@ export def "subscriptions-providers-microsoft-consumption-reservation-recommenda
 # GET /{scope}/providers/Microsoft.Consumption/budgets
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Budgets_List
-export def "providers-microsoft-consumption-budgets List" [
+export def "providers-microsoft-consumption-budgets list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -577,7 +577,7 @@ export def "providers-microsoft-consumption-budgets List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Consumption/budgets" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Consumption/budgets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -588,9 +588,9 @@ export def "providers-microsoft-consumption-budgets List" [
 # DELETE /{scope}/providers/Microsoft.Consumption/budgets/{budgetName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Budgets_Delete
-export def "providers-microsoft-consumption-budgets Delete" [
+export def "providers-microsoft-consumption-budgets delete" [
   scope: string
-  budgetName: string
+  budget_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "providers-microsoft-consumption-budgets Delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Consumption/budgets/($budgetName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, budget_name: $budget_name} | format pattern "/{scope}/providers/Microsoft.Consumption/budgets/{budget_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -615,9 +615,9 @@ export def "providers-microsoft-consumption-budgets Delete" [
 # GET /{scope}/providers/Microsoft.Consumption/budgets/{budgetName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Budgets_Get
-export def "providers-microsoft-consumption-budgets Get" [
+export def "providers-microsoft-consumption-budgets get" [
   scope: string
-  budgetName: string
+  budget_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "providers-microsoft-consumption-budgets Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Consumption/budgets/($budgetName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, budget_name: $budget_name} | format pattern "/{scope}/providers/Microsoft.Consumption/budgets/{budget_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -643,9 +643,9 @@ export def "providers-microsoft-consumption-budgets Get" [
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Budgets_CreateOrUpdate
 # --properties shape: {amount: float, category: "Cost"|"Usage", currentSpend?: any, filters?: any, notifications?: record, timeGrain: "Monthly"|"Quarterly"|"Annually"|"BillingMonth"|"BillingQuarter"|"BillingAnnual", timePeriod: any}
-export def "providers-microsoft-consumption-budgets CreateOrUpdate" [
+export def "providers-microsoft-consumption-budgets create-or-update" [
   scope: string
-  budgetName: string
+  budget_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,14 +656,14 @@ export def "providers-microsoft-consumption-budgets CreateOrUpdate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2019-06-01.
   --properties: any # The properties of the budget. — shape: {amount: float, category: "Cost"|"Usage", currentSpend?: any, filters?: any, notifications?: record, timeGrain: "Monthly"|"Quarterly"|"Annually"|"BillingMonth"|"BillingQuarter"|"BillingAnnual", timePeriod: any}
-  --eTag: string # eTag of the resource. To handle concurrent update scenario, this field will be used to determine whether the user is updating the latest version or not.
+  --e-tag: string # eTag of the resource. To handle concurrent update scenario, this field will be used to determine whether the user is updating the latest version or not.
 ]: any -> record<properties: record<amount: float, category: string, currentSpend: record<amount: float, unit: string>, filters: record<meters: list, resourceGroups: list, resources: list, tags: record>, notifications: record, timeGrain: string, timePeriod: record<endDate: string, startDate: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Consumption/budgets/($budgetName)" $qp)
-  let body = {properties: $properties, eTag: $eTag} | compact
+  let full_url = (build-url $base ({scope: $scope, budget_name: $budget_name} | format pattern "/{scope}/providers/Microsoft.Consumption/budgets/{budget_name}") $qp)
+  let body = {"properties": $properties, "eTag": $e_tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -675,7 +675,7 @@ export def "providers-microsoft-consumption-budgets CreateOrUpdate" [
 # GET /{scope}/providers/Microsoft.Consumption/charges
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Charges_ListByScope
-export def "providers-microsoft-consumption-charges ListByScope" [
+export def "providers-microsoft-consumption-charges list-by" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -691,7 +691,7 @@ export def "providers-microsoft-consumption-charges ListByScope" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Consumption/charges" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Consumption/charges") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,7 +702,7 @@ export def "providers-microsoft-consumption-charges ListByScope" [
 # GET /{scope}/providers/Microsoft.Consumption/marketplaces
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Marketplaces_List
-export def "providers-microsoft-consumption-marketplaces List" [
+export def "providers-microsoft-consumption-marketplaces list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +720,7 @@ export def "providers-microsoft-consumption-marketplaces List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Consumption/marketplaces" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Consumption/marketplaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -731,7 +731,7 @@ export def "providers-microsoft-consumption-marketplaces List" [
 # GET /{scope}/providers/Microsoft.Consumption/tags
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Tags_Get
-export def "providers-microsoft-consumption-tags Get" [
+export def "providers-microsoft-consumption-tags get" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +746,7 @@ export def "providers-microsoft-consumption-tags Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Consumption/tags" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Consumption/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -757,7 +757,7 @@ export def "providers-microsoft-consumption-tags Get" [
 # GET /{scope}/providers/Microsoft.Consumption/usageDetails
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: UsageDetails_List
-export def "providers-microsoft-consumption-usage-details List" [
+export def "providers-microsoft-consumption-usage-details list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -777,7 +777,7 @@ export def "providers-microsoft-consumption-usage-details List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$expand" $expand "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "metric" $metric "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Consumption/usageDetails" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Consumption/usageDetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

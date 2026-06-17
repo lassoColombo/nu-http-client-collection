@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://azure.local"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def dataStoreType-completer [] { ["AzureBlob" "AzureDataLake" "AzureDataLakeGen2" "AzureFile" "AzurePostgreSql" "AzureSqlDatabase" "DBFS" "GlusterFs"] }
+def data-store-type-completer [] { ["AzureBlob" "AzureDataLake" "AzureDataLakeGen2" "AzureFile" "AzurePostgreSql" "AzureSqlDatabase" "DBFS" "GlusterFs"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores DeleteAll" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores delete-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,10 +95,10 @@ export def commands []: nothing -> table {
 #
 # DELETE /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/datastores
 # operationId: DataStores_DeleteAll
-export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores DeleteAll" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores delete-all" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 ]: nothing -> record<correlation: record, environment: string, error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>, location: string, time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datastore/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningServices/workspaces/($workspaceName)/datastores")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/datastore/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/datastores"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,10 +120,10 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/datastores
 # operationId: DataStores_List
-export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores List" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,15 +132,15 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dataStoreNames: list # List of Datastore names.
-  --continuationToken: string # The Continuation Token.
+  --data-store-names: list # List of Datastore names.
+  --continuation-token: string # The Continuation Token.
   --count: int # Count of Datastores to be returned. (format: int32, default: 30)
-  --includeSecret: oneof<nothing, bool> # Whether to include the datastore secret in the response. (default: true)
+  --include-secret: oneof<nothing, bool> # Whether to include the datastore secret in the response. (default: true)
 ]: nothing -> record<continuationToken: string, nextLink: string, value: table<azureDataLakeSection: record, azurePostgreSqlSection: record, azureSqlDatabaseSection: record, azureStorageSection: record, dataStoreType: string, glusterFsSection: record, hasBeenValidated: bool, name: string, tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dataStoreNames" $dataStoreNames "multi") (serialize-qp "continuationToken" $continuationToken "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "includeSecret" $includeSecret "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/datastore/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningServices/workspaces/($workspaceName)/datastores" $qp)
+  let qp = [(serialize-qp "dataStoreNames" $data_store_names "multi") (serialize-qp "continuationToken" $continuation_token "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "includeSecret" $include_secret "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/datastore/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/datastores") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -155,10 +155,10 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 # --azureSqlDatabaseSection shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, databaseName?: string, endpoint?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, serverName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
 # --azureStorageSection shape: {accountKey?: string, accountName?: string, areWorkspaceManagedIdentitiesAllowed?: bool, blobCacheTimeout?: int, clientCredentials?: record, containerName?: string, credential?: string, credentialType?: "None"|"Sas"|"AccountKey"|"ClientCredentials", endpoint?: string, isSas?: bool, protocol?: string, resourceGroup?: string, sasToken?: string, subscriptionId?: string}
 # --glusterFsSection shape: {serverAddress?: string, volumeName?: string}
-export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores create" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,24 +167,24 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --createIfNotExists: oneof<nothing, bool> # If set to true, the call will create an Datastore if it doesn't exist. (default: false)
-  --skipValidation: oneof<nothing, bool> # If set to true, the call will skip Datastore validation. (default: false)
-  --azureDataLakeSection: record # shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, storeName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
-  --azurePostgreSqlSection: record # shape: {databaseName?: string, endpoint?: string, portNumber?: string, resourceGroup?: string, serverName?: string, subscriptionId?: string, userId?: string, userPassword?: string}
-  --azureSqlDatabaseSection: record # shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, databaseName?: string, endpoint?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, serverName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
-  --azureStorageSection: record # shape: {accountKey?: string, accountName?: string, areWorkspaceManagedIdentitiesAllowed?: bool, blobCacheTimeout?: int, clientCredentials?: record, containerName?: string, credential?: string, credentialType?: "None"|"Sas"|"AccountKey"|"ClientCredentials", endpoint?: string, isSas?: bool, protocol?: string, resourceGroup?: string, sasToken?: string, subscriptionId?: string}
-  --dataStoreType: string@dataStoreType-completer # The Azure storage service this datastore points to.
-  --glusterFsSection: record # shape: {serverAddress?: string, volumeName?: string}
-  --hasBeenValidated: oneof<nothing, bool> # A read only property that denotes whether the service datastore has been validated with credentials.
+  --create-if-not-exists: oneof<nothing, bool> # If set to true, the call will create an Datastore if it doesn't exist. (default: false)
+  --skip-validation: oneof<nothing, bool> # If set to true, the call will skip Datastore validation. (default: false)
+  --azure-data-lake-section: record # shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, storeName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
+  --azure-postgre-sql-section: record # shape: {databaseName?: string, endpoint?: string, portNumber?: string, resourceGroup?: string, serverName?: string, subscriptionId?: string, userId?: string, userPassword?: string}
+  --azure-sql-database-section: record # shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, databaseName?: string, endpoint?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, serverName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
+  --azure-storage-section: record # shape: {accountKey?: string, accountName?: string, areWorkspaceManagedIdentitiesAllowed?: bool, blobCacheTimeout?: int, clientCredentials?: record, containerName?: string, credential?: string, credentialType?: "None"|"Sas"|"AccountKey"|"ClientCredentials", endpoint?: string, isSas?: bool, protocol?: string, resourceGroup?: string, sasToken?: string, subscriptionId?: string}
+  --data-store-type: string@data-store-type-completer # The Azure storage service this datastore points to.
+  --gluster-fs-section: record # shape: {serverAddress?: string, volumeName?: string}
+  --has-been-validated: oneof<nothing, bool> # A read only property that denotes whether the service datastore has been validated with credentials.
   --name: string # Name of the datastore
   --tags: record # Tags to datastore
 ]: any -> record<correlation: record, environment: string, error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>, location: string, time: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "createIfNotExists" $createIfNotExists "scalar") (serialize-qp "skipValidation" $skipValidation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/datastore/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningServices/workspaces/($workspaceName)/datastores" $qp)
-  let body = {azureDataLakeSection: $azureDataLakeSection, azurePostgreSqlSection: $azurePostgreSqlSection, azureSqlDatabaseSection: $azureSqlDatabaseSection, azureStorageSection: $azureStorageSection, dataStoreType: $dataStoreType, glusterFsSection: $glusterFsSection, hasBeenValidated: $hasBeenValidated, name: $name, tags: $tags} | compact
+  let qp = [(serialize-qp "createIfNotExists" $create_if_not_exists "scalar") (serialize-qp "skipValidation" $skip_validation "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/datastore/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/datastores") $qp)
+  let body = {"azureDataLakeSection": $azure_data_lake_section, "azurePostgreSqlSection": $azure_postgre_sql_section, "azureSqlDatabaseSection": $azure_sql_database_section, "azureStorageSection": $azure_storage_section, "dataStoreType": $data_store_type, "glusterFsSection": $gluster_fs_section, "hasBeenValidated": $has_been_validated, "name": $name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -195,10 +195,10 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 #
 # DELETE /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/datastores/{name}
 # operationId: DataStores_Delete
-export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,7 +211,7 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 ]: nothing -> record<correlation: record, environment: string, error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>, location: string, time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datastore/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningServices/workspaces/($workspaceName)/datastores/($name)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, name: $name} | format pattern "/datastore/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/datastores/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,10 +221,10 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/datastores/{name}
 # operationId: DataStores_Get
-export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,7 +237,7 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 ]: nothing -> record<azureDataLakeSection: record<authorityUrl: string, certificate: string, clientId: string, clientSecret: string, isCertAuth: bool, resourceGroup: string, resourceUri: string, storeName: string, subscriptionId: string, tenantId: string, thumbprint: string>, azurePostgreSqlSection: record<databaseName: string, endpoint: string, portNumber: string, resourceGroup: string, serverName: string, subscriptionId: string, userId: string, userPassword: string>, azureSqlDatabaseSection: record<authorityUrl: string, certificate: string, clientId: string, clientSecret: string, databaseName: string, endpoint: string, isCertAuth: bool, resourceGroup: string, resourceUri: string, serverName: string, subscriptionId: string, tenantId: string, thumbprint: string>, azureStorageSection: record<accountKey: string, accountName: string, areWorkspaceManagedIdentitiesAllowed: bool, blobCacheTimeout: int, clientCredentials: record<authorityUrl: string, certificate: string, clientId: string, clientSecret: string, isCertAuth: bool, resourceGroup: string, resourceUri: string, subscriptionId: string, tenantId: string, thumbprint: string>, containerName: string, credential: string, credentialType: string, endpoint: string, isSas: bool, protocol: string, resourceGroup: string, sasToken: string, subscriptionId: string>, dataStoreType: string, glusterFsSection: record<serverAddress: string, volumeName: string>, hasBeenValidated: bool, name: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datastore/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningServices/workspaces/($workspaceName)/datastores/($name)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, name: $name} | format pattern "/datastore/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/datastores/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,10 +252,10 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 # --azureSqlDatabaseSection shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, databaseName?: string, endpoint?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, serverName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
 # --azureStorageSection shape: {accountKey?: string, accountName?: string, areWorkspaceManagedIdentitiesAllowed?: bool, blobCacheTimeout?: int, clientCredentials?: record, containerName?: string, credential?: string, credentialType?: "None"|"Sas"|"AccountKey"|"ClientCredentials", endpoint?: string, isSas?: bool, protocol?: string, resourceGroup?: string, sasToken?: string, subscriptionId?: string}
 # --glusterFsSection shape: {serverAddress?: string, volumeName?: string}
-export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-datastores update" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,24 +265,24 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --createIfNotExists: oneof<nothing, bool> # If set to true, the call will create an Datastore if it doesn't exist. (default: false)
-  --skipValidation: oneof<nothing, bool> # If set to true, the call will skip Datastore validation. (default: false)
-  --azureDataLakeSection: record # shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, storeName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
-  --azurePostgreSqlSection: record # shape: {databaseName?: string, endpoint?: string, portNumber?: string, resourceGroup?: string, serverName?: string, subscriptionId?: string, userId?: string, userPassword?: string}
-  --azureSqlDatabaseSection: record # shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, databaseName?: string, endpoint?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, serverName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
-  --azureStorageSection: record # shape: {accountKey?: string, accountName?: string, areWorkspaceManagedIdentitiesAllowed?: bool, blobCacheTimeout?: int, clientCredentials?: record, containerName?: string, credential?: string, credentialType?: "None"|"Sas"|"AccountKey"|"ClientCredentials", endpoint?: string, isSas?: bool, protocol?: string, resourceGroup?: string, sasToken?: string, subscriptionId?: string}
-  --dataStoreType: string@dataStoreType-completer # The Azure storage service this datastore points to.
-  --glusterFsSection: record # shape: {serverAddress?: string, volumeName?: string}
-  --hasBeenValidated: oneof<nothing, bool> # A read only property that denotes whether the service datastore has been validated with credentials.
+  --create-if-not-exists: oneof<nothing, bool> # If set to true, the call will create an Datastore if it doesn't exist. (default: false)
+  --skip-validation: oneof<nothing, bool> # If set to true, the call will skip Datastore validation. (default: false)
+  --azure-data-lake-section: record # shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, storeName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
+  --azure-postgre-sql-section: record # shape: {databaseName?: string, endpoint?: string, portNumber?: string, resourceGroup?: string, serverName?: string, subscriptionId?: string, userId?: string, userPassword?: string}
+  --azure-sql-database-section: record # shape: {authorityUrl?: string, certificate?: string, clientId?: string, clientSecret?: string, databaseName?: string, endpoint?: string, isCertAuth?: bool, resourceGroup?: string, resourceUri?: string, serverName?: string, subscriptionId?: string, tenantId?: string, thumbprint?: string}
+  --azure-storage-section: record # shape: {accountKey?: string, accountName?: string, areWorkspaceManagedIdentitiesAllowed?: bool, blobCacheTimeout?: int, clientCredentials?: record, containerName?: string, credential?: string, credentialType?: "None"|"Sas"|"AccountKey"|"ClientCredentials", endpoint?: string, isSas?: bool, protocol?: string, resourceGroup?: string, sasToken?: string, subscriptionId?: string}
+  --data-store-type: string@data-store-type-completer # The Azure storage service this datastore points to.
+  --gluster-fs-section: record # shape: {serverAddress?: string, volumeName?: string}
+  --has-been-validated: oneof<nothing, bool> # A read only property that denotes whether the service datastore has been validated with credentials.
   --body-name: string # Name of the datastore
   --tags: record # Tags to datastore
 ]: any -> record<correlation: record, environment: string, error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>, location: string, time: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "createIfNotExists" $createIfNotExists "scalar") (serialize-qp "skipValidation" $skipValidation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/datastore/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningServices/workspaces/($workspaceName)/datastores/($name)" $qp)
-  let body = {azureDataLakeSection: $azureDataLakeSection, azurePostgreSqlSection: $azurePostgreSqlSection, azureSqlDatabaseSection: $azureSqlDatabaseSection, azureStorageSection: $azureStorageSection, dataStoreType: $dataStoreType, glusterFsSection: $glusterFsSection, hasBeenValidated: $hasBeenValidated, name: $body_name, tags: $tags} | compact
+  let qp = [(serialize-qp "createIfNotExists" $create_if_not_exists "scalar") (serialize-qp "skipValidation" $skip_validation "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, name: $name} | format pattern "/datastore/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/datastores/{name}") $qp)
+  let body = {"azureDataLakeSection": $azure_data_lake_section, "azurePostgreSqlSection": $azure_postgre_sql_section, "azureSqlDatabaseSection": $azure_sql_database_section, "azureStorageSection": $azure_storage_section, "dataStoreType": $data_store_type, "glusterFsSection": $gluster_fs_section, "hasBeenValidated": $has_been_validated, "name": $body_name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,10 +293,10 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 #
 # GET /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/default
 # operationId: DataStores_GetDefault
-export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-default GetDefault" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-default get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 ]: nothing -> record<azureDataLakeSection: record<authorityUrl: string, certificate: string, clientId: string, clientSecret: string, isCertAuth: bool, resourceGroup: string, resourceUri: string, storeName: string, subscriptionId: string, tenantId: string, thumbprint: string>, azurePostgreSqlSection: record<databaseName: string, endpoint: string, portNumber: string, resourceGroup: string, serverName: string, subscriptionId: string, userId: string, userPassword: string>, azureSqlDatabaseSection: record<authorityUrl: string, certificate: string, clientId: string, clientSecret: string, databaseName: string, endpoint: string, isCertAuth: bool, resourceGroup: string, resourceUri: string, serverName: string, subscriptionId: string, tenantId: string, thumbprint: string>, azureStorageSection: record<accountKey: string, accountName: string, areWorkspaceManagedIdentitiesAllowed: bool, blobCacheTimeout: int, clientCredentials: record<authorityUrl: string, certificate: string, clientId: string, clientSecret: string, isCertAuth: bool, resourceGroup: string, resourceUri: string, subscriptionId: string, tenantId: string, thumbprint: string>, containerName: string, credential: string, credentialType: string, endpoint: string, isSas: bool, protocol: string, resourceGroup: string, sasToken: string, subscriptionId: string>, dataStoreType: string, glusterFsSection: record<serverAddress: string, volumeName: string>, hasBeenValidated: bool, name: string, tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datastore/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningServices/workspaces/($workspaceName)/default")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/datastore/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,10 +318,10 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 #
 # PUT /datastore/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningServices/workspaces/{workspaceName}/default/{name}
 # operationId: DataStores_SetDefault
-export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-default SetDefault" [
-  subscriptionId: string
-  resourceGroupName: string
-  workspaceName: string
+export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-machine-learning-services-workspaces-default put" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "datastore-v10-subscriptions-resource-groups-providers-microsoft-mach
 ]: nothing -> record<correlation: record, environment: string, error: record<code: string, details: list<record>, innerError: record<code: string, innerError: any>, message: string, target: string>, location: string, time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datastore/v1.0/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearningServices/workspaces/($workspaceName)/default/($name)")
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, name: $name} | format pattern "/datastore/v1.0/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/default/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

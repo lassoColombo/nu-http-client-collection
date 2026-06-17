@@ -110,7 +110,7 @@ export def "lat-lon byPoint" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "school_search_radius" $school_search_radius "scalar") (serialize-qp "park_search_radius" $park_search_radius "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/@($lat),($lon)" $qp)
+  let full_url = (build-url $base ({lat: $lat, lon: $lon} | format pattern "/@{lat},{lon}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -136,7 +136,7 @@ export def "postcodes byPostcode" [
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "school_search_radius" $school_search_radius "scalar") (serialize-qp "park_search_radius" $park_search_radius "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/postcodes/($postcode)" $qp)
+  let full_url = (build-url $base ({postcode: $postcode} | format pattern "/postcodes/{postcode}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,7 +146,7 @@ export def "postcodes byPostcode" [
 #
 # GET /usage
 # operationId: usage
-export def "usage usage" [
+export def "usage get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

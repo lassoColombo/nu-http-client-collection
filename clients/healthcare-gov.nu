@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/articles{mediaTypeExtension}
 export def "articles-media-type-extension get" [
-  mediaTypeExtension: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,7 +104,7 @@ export def "articles-media-type-extension get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/articles($mediaTypeExtension)")
+  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/api/articles{media_type_extension}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -114,7 +114,7 @@ export def "articles-media-type-extension get" [
 #
 # GET /api/blog{mediaTypeExtension}
 export def "blog-media-type-extension get" [
-  mediaTypeExtension: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,7 +126,7 @@ export def "blog-media-type-extension get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/blog($mediaTypeExtension)")
+  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/api/blog{media_type_extension}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -136,7 +136,7 @@ export def "blog-media-type-extension get" [
 #
 # GET /api/glossary{mediaTypeExtension}
 export def "glossary-media-type-extension get" [
-  mediaTypeExtension: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,7 +148,7 @@ export def "glossary-media-type-extension get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/glossary($mediaTypeExtension)")
+  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/api/glossary{media_type_extension}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -158,7 +158,7 @@ export def "glossary-media-type-extension get" [
 #
 # GET /api/questions{mediaTypeExtension}
 export def "questions-media-type-extension get" [
-  mediaTypeExtension: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "questions-media-type-extension get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/questions($mediaTypeExtension)")
+  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/api/questions{media_type_extension}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,7 +180,7 @@ export def "questions-media-type-extension get" [
 #
 # GET /api/states{mediaTypeExtension}
 export def "states-media-type-extension get" [
-  mediaTypeExtension: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "states-media-type-extension get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/states($mediaTypeExtension)")
+  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/api/states{media_type_extension}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,7 +202,7 @@ export def "states-media-type-extension get" [
 #
 # GET /api/topics{mediaTypeExtension}
 export def "topics-media-type-extension get" [
-  mediaTypeExtension: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "topics-media-type-extension get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/topics($mediaTypeExtension)")
+  let full_url = (build-url $base ({media_type_extension: $media_type_extension} | format pattern "/api/topics{media_type_extension}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,8 +224,8 @@ export def "topics-media-type-extension get" [
 #
 # GET /blog/{pageName}{mediaTypeExtension}
 export def "blog get" [
-  mediaTypeExtension: string
-  pageName: string
+  page_name: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "blog get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/blog/($pageName)($mediaTypeExtension)")
+  let full_url = (build-url $base ({page_name: $page_name, media_type_extension: $media_type_extension} | format pattern "/blog/{page_name}{media_type_extension}"))
   let accept_val = "application/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,8 +247,8 @@ export def "blog get" [
 #
 # GET /es/blog/{pageName}{mediaTypeExtension}
 export def "es-blog get" [
-  mediaTypeExtension: string
-  pageName: string
+  page_name: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "es-blog get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/es/blog/($pageName)($mediaTypeExtension)")
+  let full_url = (build-url $base ({page_name: $page_name, media_type_extension: $media_type_extension} | format pattern "/es/blog/{page_name}{media_type_extension}"))
   let accept_val = "application/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -270,8 +270,8 @@ export def "es-blog get" [
 #
 # GET /es/glossary/{pageName}{mediaTypeExtension}
 export def "es-glossary get" [
-  mediaTypeExtension: string
-  pageName: string
+  page_name: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "es-glossary get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/es/glossary/($pageName)($mediaTypeExtension)")
+  let full_url = (build-url $base ({page_name: $page_name, media_type_extension: $media_type_extension} | format pattern "/es/glossary/{page_name}{media_type_extension}"))
   let accept_val = "application/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,8 +293,8 @@ export def "es-glossary get" [
 #
 # GET /es/question/{pageName}{mediaTypeExtension}
 export def "es-question get" [
-  mediaTypeExtension: string
-  pageName: string
+  page_name: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "es-question get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/es/question/($pageName)($mediaTypeExtension)")
+  let full_url = (build-url $base ({page_name: $page_name, media_type_extension: $media_type_extension} | format pattern "/es/question/{page_name}{media_type_extension}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,9 +315,9 @@ export def "es-question get" [
 # Returns pages content.
 #
 # GET /es/{pageName}{mediaTypeExtension}
-export def "es get-by-mediaTypeExtension-pageName" [
-  mediaTypeExtension: string
-  pageName: string
+export def "es get-by-pageName-mediaTypeExtension" [
+  page_name: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "es get-by-mediaTypeExtension-pageName" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/es/($pageName)($mediaTypeExtension)")
+  let full_url = (build-url $base ({page_name: $page_name, media_type_extension: $media_type_extension} | format pattern "/es/{page_name}{media_type_extension}"))
   let accept_val = "application/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -338,9 +338,9 @@ export def "es get-by-mediaTypeExtension-pageName" [
 # Returns pages content.
 #
 # GET /es/{stateName}{mediaTypeExtension}
-export def "es get-by-mediaTypeExtension-stateName" [
-  mediaTypeExtension: string
-  stateName: string
+export def "es get-by-stateName-mediaTypeExtension" [
+  state_name: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "es get-by-mediaTypeExtension-stateName" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/es/($stateName)($mediaTypeExtension)")
+  let full_url = (build-url $base ({state_name: $state_name, media_type_extension: $media_type_extension} | format pattern "/es/{state_name}{media_type_extension}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,8 +362,8 @@ export def "es get-by-mediaTypeExtension-stateName" [
 #
 # GET /glossary/{pageName}{mediaTypeExtension}
 export def "glossary get" [
-  mediaTypeExtension: string
-  pageName: string
+  page_name: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "glossary get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/glossary/($pageName)($mediaTypeExtension)")
+  let full_url = (build-url $base ({page_name: $page_name, media_type_extension: $media_type_extension} | format pattern "/glossary/{page_name}{media_type_extension}"))
   let accept_val = "application/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -385,8 +385,8 @@ export def "glossary get" [
 #
 # GET /question/{pageName}{mediaTypeExtension}
 export def "question get" [
-  mediaTypeExtension: string
-  pageName: string
+  page_name: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "question get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/question/($pageName)($mediaTypeExtension)")
+  let full_url = (build-url $base ({page_name: $page_name, media_type_extension: $media_type_extension} | format pattern "/question/{page_name}{media_type_extension}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -407,9 +407,9 @@ export def "question get" [
 # Returns pages content.
 #
 # GET /{pageName}{mediaTypeExtension}
-export def "api get-by-mediaTypeExtension-pageName" [
-  mediaTypeExtension: string
-  pageName: string
+export def "api get-by-pageName-mediaTypeExtension" [
+  page_name: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "api get-by-mediaTypeExtension-pageName" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($pageName)($mediaTypeExtension)")
+  let full_url = (build-url $base ({page_name: $page_name, media_type_extension: $media_type_extension} | format pattern "/{page_name}{media_type_extension}"))
   let accept_val = "application/html"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -430,9 +430,9 @@ export def "api get-by-mediaTypeExtension-pageName" [
 # Returns pages content.
 #
 # GET /{stateName}{mediaTypeExtension}
-export def "api get-by-mediaTypeExtension-stateName" [
-  mediaTypeExtension: string
-  stateName: string
+export def "api get-by-stateName-mediaTypeExtension" [
+  state_name: string
+  media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "api get-by-mediaTypeExtension-stateName" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($stateName)($mediaTypeExtension)")
+  let full_url = (build-url $base ({state_name: $state_name, media_type_extension: $media_type_extension} | format pattern "/{state_name}{media_type_extension}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

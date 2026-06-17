@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-resource-graph-queries List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-resource-graph-queries list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,9 +93,9 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceGraph/queries
 # operationId: GraphQuery_List
-export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries List" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ResourceGraph/queries" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ResourceGraph/queries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,10 +119,10 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceGraph/queries/{resourceName}
 # operationId: GraphQuery_Delete
-export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +136,7 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ResourceGraph/queries/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ResourceGraph/queries/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,10 +146,10 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceGraph/queries/{resourceName}
 # operationId: GraphQuery_Get
-export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ResourceGraph/queries/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ResourceGraph/queries/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,10 +174,10 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceGraph/queries/{resourceName}
 # operationId: GraphQuery_Update
 # --properties shape: {description?: string, query?: string}
-export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --eTag: string # This will be used to handle Optimistic Concurrency. If not present, it will always overwrite the existing resource without checking conflict.
+  --e-tag: string # This will be used to handle Optimistic Concurrency. If not present, it will always overwrite the existing resource without checking conflict.
   --properties: any # Properties that contain a workbook for PATCH operation. — shape: {description?: string, query?: string}
   --tags: record # Resource tags
 ]: any -> record<properties: record<description: string, query: string, resultKind: string, timeModified: string>, eTag: string, id: string, name: string, tags: record, type: string> {
@@ -195,8 +195,8 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ResourceGraph/queries/($resourceName)" $qp)
-  let body = {eTag: $eTag, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ResourceGraph/queries/{resource_name}") $qp)
+  let body = {"eTag": $e_tag, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,10 +208,10 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceGraph/queries/{resourceName}
 # operationId: GraphQuery_CreateOrUpdate
 # --properties shape: {description?: string, query: string}
-export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-resource-graph-queries create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,15 +222,15 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-graph-que
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --properties: any # Properties that contain a graph query. — shape: {description?: string, query: string}
-  --eTag: string # This will be used to handle Optimistic Concurrency. If not present, it will always overwrite the existing resource without checking conflict.
+  --e-tag: string # This will be used to handle Optimistic Concurrency. If not present, it will always overwrite the existing resource without checking conflict.
   --tags: record # Resource tags
 ]: any -> record<properties: record<description: string, query: string, resultKind: string, timeModified: string>, eTag: string, id: string, name: string, tags: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ResourceGraph/queries/($resourceName)" $qp)
-  let body = {properties: $properties, eTag: $eTag, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ResourceGraph/queries/{resource_name}") $qp)
+  let body = {"properties": $properties, "eTag": $e_tag, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

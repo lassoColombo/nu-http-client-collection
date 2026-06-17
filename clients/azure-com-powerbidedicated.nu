@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-power-bi-dedicated-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-power-bi-dedicated-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.PowerBIDedicated/operations
 # operationId: Operations_List
-export def "providers-microsoft-power-bi-dedicated-operations List" [
+export def "providers-microsoft-power-bi-dedicated-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-power-bi-dedicated-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.PowerBIDedicated/capacities
 # operationId: Capacities_List
-export def "subscriptions-providers-microsoft-power-bi-dedicated-capacities List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-power-bi-dedicated-capacities list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "subscriptions-providers-microsoft-power-bi-dedicated-capacities List
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PowerBIDedicated/capacities" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PowerBIDedicated/capacities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,9 +142,9 @@ export def "subscriptions-providers-microsoft-power-bi-dedicated-capacities List
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PowerBIDedicated/locations/{location}/checkNameAvailability
 # operationId: Capacities_CheckNameAvailability
-export def "subscriptions-providers-microsoft-power-bi-dedicated-locations-check-name-availability CheckNameAvailability" [
+export def "subscriptions-providers-microsoft-power-bi-dedicated-locations-check-name-availability check" [
+  subscription_id: string
   location: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,8 +161,8 @@ export def "subscriptions-providers-microsoft-power-bi-dedicated-locations-check
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PowerBIDedicated/locations/($location)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PowerBIDedicated/locations/{location}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -173,8 +173,8 @@ export def "subscriptions-providers-microsoft-power-bi-dedicated-locations-check
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.PowerBIDedicated/skus
 # operationId: Capacities_ListSkus
-export def "subscriptions-providers-microsoft-power-bi-dedicated-skus ListSkus" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-power-bi-dedicated-skus list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "subscriptions-providers-microsoft-power-bi-dedicated-skus ListSkus" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PowerBIDedicated/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PowerBIDedicated/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,9 +198,9 @@ export def "subscriptions-providers-microsoft-power-bi-dedicated-skus ListSkus" 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities
 # operationId: Capacities_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBIDedicated/capacities" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBIDedicated/capacities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,10 +224,10 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities/{dedicatedCapacityName}
 # operationId: Capacities_Delete
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities Delete" [
-  resourceGroupName: string
-  dedicatedCapacityName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities delete" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_capacity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBIDedicated/capacities/($dedicatedCapacityName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, dedicated_capacity_name: $dedicated_capacity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBIDedicated/capacities/{dedicated_capacity_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,10 +251,10 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities/{dedicatedCapacityName}
 # operationId: Capacities_GetDetails
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities GetDetails" [
-  resourceGroupName: string
-  dedicatedCapacityName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities get-details" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_capacity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBIDedicated/capacities/($dedicatedCapacityName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, dedicated_capacity_name: $dedicated_capacity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBIDedicated/capacities/{dedicated_capacity_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -280,10 +280,10 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 # operationId: Capacities_Update
 # --properties shape: {administration?: record}
 # --sku shape: {name: string, tier?: "PBIE_Azure"}
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities Update" [
-  resourceGroupName: string
-  dedicatedCapacityName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities update" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_capacity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,8 +301,8 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBIDedicated/capacities/($dedicatedCapacityName)" $qp)
-  let body = {properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, dedicated_capacity_name: $dedicated_capacity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBIDedicated/capacities/{dedicated_capacity_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,10 +315,10 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 # operationId: Capacities_Create
 # --properties shape: {administration?: record}
 # --sku shape: {name: string, tier?: "PBIE_Azure"}
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities Create" [
-  resourceGroupName: string
-  dedicatedCapacityName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities create" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_capacity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,8 +337,8 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBIDedicated/capacities/($dedicatedCapacityName)" $qp)
-  let body = {properties: $properties, location: $location, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, dedicated_capacity_name: $dedicated_capacity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBIDedicated/capacities/{dedicated_capacity_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -349,10 +349,10 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities/{dedicatedCapacityName}/resume
 # operationId: Capacities_Resume
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities-resume Resume" [
-  resourceGroupName: string
-  dedicatedCapacityName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities-resume post" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_capacity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBIDedicated/capacities/($dedicatedCapacityName)/resume" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, dedicated_capacity_name: $dedicated_capacity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBIDedicated/capacities/{dedicated_capacity_name}/resume") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,10 +376,10 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities/{dedicatedCapacityName}/skus
 # operationId: Capacities_ListSkusForCapacity
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities-skus ListSkusForCapacity" [
-  resourceGroupName: string
-  dedicatedCapacityName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities-skus list-skus-for-capacity" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_capacity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBIDedicated/capacities/($dedicatedCapacityName)/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, dedicated_capacity_name: $dedicated_capacity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBIDedicated/capacities/{dedicated_capacity_name}/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,10 +403,10 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PowerBIDedicated/capacities/{dedicatedCapacityName}/suspend
 # operationId: Capacities_Suspend
-export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities-suspend Suspend" [
-  resourceGroupName: string
-  dedicatedCapacityName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated-capacities-suspend post" [
+  subscription_id: string
+  resource_group_name: string
+  dedicated_capacity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,7 +420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-power-bi-dedicated
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PowerBIDedicated/capacities/($dedicatedCapacityName)/suspend" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, dedicated_capacity_name: $dedicated_capacity_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PowerBIDedicated/capacities/{dedicated_capacity_name}/suspend") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -75,7 +75,7 @@ def kind-completer-1 [] { ["EventGrid" "EventHub" "IotHub"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-kusto-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-kusto-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +99,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Kusto/operations
 # operationId: Operations_List
-export def "providers-microsoft-kusto-operations List" [
+export def "providers-microsoft-kusto-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,8 +123,8 @@ export def "providers-microsoft-kusto-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Kusto/clusters
 # operationId: Clusters_List
-export def "subscriptions-providers-microsoft-kusto-clusters List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-kusto-clusters list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "subscriptions-providers-microsoft-kusto-clusters List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Kusto/clusters" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Kusto/clusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,8 +148,8 @@ export def "subscriptions-providers-microsoft-kusto-clusters List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Kusto/locations/{location}/checkNameAvailability
 # operationId: Clusters_CheckNameAvailability
-export def "subscriptions-providers-microsoft-kusto-locations-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-kusto-locations-check-name-availability check" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,8 +167,8 @@ export def "subscriptions-providers-microsoft-kusto-locations-check-name-availab
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Kusto/locations/($location)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Kusto/locations/{location}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,8 +179,8 @@ export def "subscriptions-providers-microsoft-kusto-locations-check-name-availab
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Kusto/skus
 # operationId: Clusters_ListSkus
-export def "subscriptions-providers-microsoft-kusto-skus ListSkus" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-kusto-skus list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "subscriptions-providers-microsoft-kusto-skus ListSkus" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Kusto/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Kusto/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,9 +204,9 @@ export def "subscriptions-providers-microsoft-kusto-skus ListSkus" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters
 # operationId: Clusters_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,10 +230,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Lis
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}
 # operationId: Clusters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Delete" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Del
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,10 +257,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Del
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}
 # operationId: Clusters_Get
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Get" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters get" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Get
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,10 +287,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Get
 # --identity shape: {type: "None"|"SystemAssigned", userAssignedIdentities?: record}
 # --properties shape: {enableDiskEncryption?: bool, enableStreamingIngest?: bool, keyVaultProperties?: any, optimizedAutoscale?: record, trustedExternalTenants?: list, virtualNetworkConfiguration?: record}
 # --sku shape: {capacity?: int, name: "Standard_DS13_v2+1TB_PS"|"Standard_DS13_v2+2TB_PS"|"Standard_DS14_v2+3TB_PS"|"Standard_DS14_v2+4TB_PS"|"Standard_D13_v2"|"Standard_D14_v2"|"Standard_L8s"|"Standard_L16s"|"Standard_D11_v2"|"Standard_D12_v2"|"Standard_L4s"|"Dev(No SLA)_Standard_D11_v2", tier: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Update" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,8 +310,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Upd
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)" $qp)
-  let body = {identity: $identity, location: $location, properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}") $qp)
+  let body = {"identity": $identity, "location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -325,10 +325,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Upd
 # --identity shape: {type: "None"|"SystemAssigned", userAssignedIdentities?: record}
 # --properties shape: {enableDiskEncryption?: bool, enableStreamingIngest?: bool, keyVaultProperties?: any, optimizedAutoscale?: record, trustedExternalTenants?: list, virtualNetworkConfiguration?: record}
 # --sku shape: {capacity?: int, name: "Standard_DS13_v2+1TB_PS"|"Standard_DS13_v2+2TB_PS"|"Standard_DS14_v2+3TB_PS"|"Standard_DS14_v2+4TB_PS"|"Standard_D13_v2"|"Standard_D14_v2"|"Standard_L8s"|"Standard_L16s"|"Standard_D11_v2"|"Standard_D12_v2"|"Standard_L4s"|"Dev(No SLA)_Standard_D11_v2", tier: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters CreateOrUpdate" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,8 +349,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Cre
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)" $qp)
-  let body = {identity: $identity, properties: $properties, sku: $sku, zones: $zones, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}") $qp)
+  let body = {"identity": $identity, "properties": $properties, "sku": $sku, "zones": $zones, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -361,10 +361,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters Cre
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/attachedDatabaseConfigurations
 # operationId: AttachedDatabaseConfigurations_ListByCluster
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations ListByCluster" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations list-by" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/attachedDatabaseConfigurations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/attachedDatabaseConfigurations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -388,11 +388,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/attachedDatabaseConfigurations/{attachedDatabaseConfigurationName}
 # operationId: AttachedDatabaseConfigurations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations Delete" [
-  resourceGroupName: string
-  clusterName: string
-  attachedDatabaseConfigurationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  attached_database_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +406,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/attachedDatabaseConfigurations/($attachedDatabaseConfigurationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, attached_database_configuration_name: $attached_database_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/attachedDatabaseConfigurations/{attached_database_configuration_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,11 +416,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/attachedDatabaseConfigurations/{attachedDatabaseConfigurationName}
 # operationId: AttachedDatabaseConfigurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations Get" [
-  resourceGroupName: string
-  clusterName: string
-  attachedDatabaseConfigurationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations get" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  attached_database_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/attachedDatabaseConfigurations/($attachedDatabaseConfigurationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, attached_database_configuration_name: $attached_database_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/attachedDatabaseConfigurations/{attached_database_configuration_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -445,11 +445,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/attachedDatabaseConfigurations/{attachedDatabaseConfigurationName}
 # operationId: AttachedDatabaseConfigurations_CreateOrUpdate
 # --properties shape: {clusterResourceId: string, databaseName: string, defaultPrincipalsModificationKind: "Union"|"Replace"|"None"}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations CreateOrUpdate" [
-  resourceGroupName: string
-  clusterName: string
-  attachedDatabaseConfigurationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-attached-database-configurations create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  attached_database_configuration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,8 +466,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/attachedDatabaseConfigurations/($attachedDatabaseConfigurationName)" $qp)
-  let body = {location: $location, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, attached_database_configuration_name: $attached_database_configuration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/attachedDatabaseConfigurations/{attached_database_configuration_name}") $qp)
+  let body = {"location": $location, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -478,10 +478,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-att
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/checkNameAvailability
 # operationId: Databases_CheckNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-check-name-availability CheckNameAvailability" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-check-name-availability check" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,8 +498,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-che
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -510,10 +510,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-che
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases
 # operationId: Databases_ListByCluster
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases ListByCluster" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases list-by" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,7 +527,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -537,11 +537,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}
 # operationId: Databases_Delete
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases Delete" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -565,11 +565,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}
 # operationId: Databases_Get
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases Get" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases get" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,7 +583,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -594,11 +594,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}
 # Discriminator (request): kind
 # operationId: Databases_Update
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases Update" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,8 +615,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)" $qp)
-  let body = {kind: $kind, location: $location} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}") $qp)
+  let body = {"kind": $kind, "location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -628,11 +628,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}
 # Discriminator (request): kind
 # operationId: Databases_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases CreateOrUpdate" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -649,8 +649,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)" $qp)
-  let body = {kind: $kind, location: $location} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}") $qp)
+  let body = {"kind": $kind, "location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -662,11 +662,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/addPrincipals
 # operationId: Databases_AddPrincipals
 # --value item shape: {appId?: string, email?: string, fqn?: string, name: string, role: "Admin"|"Ingestor"|"Monitor"|"User"|"UnrestrictedViewers"|"Viewer", type: "App"|"Group"|"User"}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-add-principals AddPrincipals" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-add-principals create" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -682,8 +682,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)/addPrincipals" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}/addPrincipals") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -694,11 +694,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/checkNameAvailability
 # operationId: DataConnections_CheckNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-check-name-availability CheckNameAvailability" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-check-name-availability check" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,8 +715,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -729,10 +729,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # operationId: DataConnections_dataConnectionValidation
 # --properties shape: {kind: "EventHub"|"EventGrid"|"IotHub", location?: string}
 export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connection-validation dataConnectionValidation" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  subscriptionId: string
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,15 +742,15 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
-  --dataConnectionName: string # The name of the data connection.
+  --data-connection-name: string # The name of the data connection.
   --properties: any # Class representing an data connection. — shape: {kind: "EventHub"|"EventGrid"|"IotHub", location?: string}
 ]: any -> record<value: table<errorMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)/dataConnectionValidation" $qp)
-  let body = {dataConnectionName: $dataConnectionName, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}/dataConnectionValidation") $qp)
+  let body = {"dataConnectionName": $data_connection_name, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -761,11 +761,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnections
 # operationId: DataConnections_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections ListByDatabase" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections list-by" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -779,7 +779,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)/dataConnections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}/dataConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -789,12 +789,12 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnections/{dataConnectionName}
 # operationId: DataConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections Delete" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  dataConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
+  data_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,7 +808,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)/dataConnections/($dataConnectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name, data_connection_name: $data_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}/dataConnections/{data_connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -818,12 +818,12 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnections/{dataConnectionName}
 # operationId: DataConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections Get" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  dataConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections get" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
+  data_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -837,7 +837,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)/dataConnections/($dataConnectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name, data_connection_name: $data_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}/dataConnections/{data_connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -848,12 +848,12 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnections/{dataConnectionName}
 # Discriminator (request): kind
 # operationId: DataConnections_Update
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections Update" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  dataConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
+  data_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -870,8 +870,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)/dataConnections/($dataConnectionName)" $qp)
-  let body = {kind: $kind, location: $location} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name, data_connection_name: $data_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}/dataConnections/{data_connection_name}") $qp)
+  let body = {"kind": $kind, "location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -883,12 +883,12 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/dataConnections/{dataConnectionName}
 # Discriminator (request): kind
 # operationId: DataConnections_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections CreateOrUpdate" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  dataConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-data-connections create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
+  data_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,8 +905,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)/dataConnections/($dataConnectionName)" $qp)
-  let body = {kind: $kind, location: $location} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name, data_connection_name: $data_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}/dataConnections/{data_connection_name}") $qp)
+  let body = {"kind": $kind, "location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -917,11 +917,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/listPrincipals
 # operationId: Databases_ListPrincipals
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-list-principals ListPrincipals" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-list-principals list" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -935,7 +935,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)/listPrincipals" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}/listPrincipals") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -946,11 +946,11 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/databases/{databaseName}/removePrincipals
 # operationId: Databases_RemovePrincipals
 # --value item shape: {appId?: string, email?: string, fqn?: string, name: string, role: "Admin"|"Ingestor"|"Monitor"|"User"|"UnrestrictedViewers"|"Viewer", type: "App"|"Group"|"User"}
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-remove-principals RemovePrincipals" [
-  resourceGroupName: string
-  clusterName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-databases-remove-principals delete" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,8 +966,8 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/databases/($databaseName)/removePrincipals" $qp)
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/databases/{database_name}/removePrincipals") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -978,10 +978,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-dat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/detachFollowerDatabases
 # operationId: Clusters_DetachFollowerDatabases
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-detach-follower-databases DetachFollowerDatabases" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-detach-follower-databases post" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,15 +991,15 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-det
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
-  attachedDatabaseConfigurationName: string # Resource name of the attached database configuration in the follower cluster.
-  clusterResourceId: string # Resource id of the cluster that follows a database owned by this cluster.
+  attached_database_configuration_name: string # Resource name of the attached database configuration in the follower cluster.
+  cluster_resource_id: string # Resource id of the cluster that follows a database owned by this cluster.
 ]: any -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/detachFollowerDatabases" $qp)
-  let body = {attachedDatabaseConfigurationName: $attachedDatabaseConfigurationName, clusterResourceId: $clusterResourceId} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/detachFollowerDatabases") $qp)
+  let body = {"attachedDatabaseConfigurationName": $attached_database_configuration_name, "clusterResourceId": $cluster_resource_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1010,10 +1010,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-det
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/listFollowerDatabases
 # operationId: Clusters_ListFollowerDatabases
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-list-follower-databases ListFollowerDatabases" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-list-follower-databases list" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1027,7 +1027,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-lis
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/listFollowerDatabases" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/listFollowerDatabases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,10 +1037,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-lis
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/skus
 # operationId: Clusters_ListSkusByResource
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-skus ListSkusByResource" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-skus list" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,7 +1054,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-sku
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1064,10 +1064,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-sku
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/start
 # operationId: Clusters_Start
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-start Start" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-start start" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1081,7 +1081,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-sta
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/start" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1091,10 +1091,10 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-sta
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Kusto/clusters/{clusterName}/stop
 # operationId: Clusters_Stop
-export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-stop Stop" [
-  resourceGroupName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-stop stop" [
+  subscription_id: string
+  resource_group_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1108,7 +1108,7 @@ export def "subscriptions-resource-groups-providers-microsoft-kusto-clusters-sto
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Kusto/clusters/($clusterName)/stop" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Kusto/clusters/{cluster_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

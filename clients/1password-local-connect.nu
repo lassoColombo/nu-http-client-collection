@@ -71,7 +71,7 @@ def category-completer [] { ["API_CREDENTIAL" "BANK_ACCOUNT" "CREDIT_CARD" "CUST
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activity GetApiActivity" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activity get-api" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /activity
 # operationId: GetApiActivity
-export def "activity GetApiActivity" [
+export def "activity get-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,7 +120,7 @@ export def "activity GetApiActivity" [
 #
 # GET /health
 # operationId: GetServerHealth
-export def "health GetServerHealth" [
+export def "health get-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,7 +142,7 @@ export def "health GetServerHealth" [
 #
 # GET /heartbeat
 # operationId: GetHeartbeat
-export def "heartbeat GetHeartbeat" [
+export def "heartbeat get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "heartbeat GetHeartbeat" [
 #
 # GET /metrics
 # operationId: GetPrometheusMetrics
-export def "metrics GetPrometheusMetrics" [
+export def "metrics get-prometheus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "metrics GetPrometheusMetrics" [
 #
 # GET /vaults
 # operationId: GetVaults
-export def "vaults GetVaults" [
+export def "vaults list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,8 +210,8 @@ export def "vaults GetVaults" [
 #
 # GET /vaults/{vaultUuid}
 # operationId: GetVaultById
-export def "vaults GetVaultById" [
-  vaultUuid: string
+export def "vaults get" [
+  vault_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "vaults GetVaultById" [
 ]: nothing -> record<attributeVersion: int, contentVersion: int, createdAt: string, description: string, id: string, items: int, name: string, type: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vaults/($vaultUuid)")
+  let full_url = (build-url $base ({vault_uuid: $vault_uuid} | format pattern "/vaults/{vault_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -233,8 +233,8 @@ export def "vaults GetVaultById" [
 #
 # GET /vaults/{vaultUuid}/items
 # operationId: GetVaultItems
-export def "vaults-items GetVaultItems" [
-  vaultUuid: string
+export def "vaults-items list" [
+  vault_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "vaults-items GetVaultItems" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/vaults/($vaultUuid)/items" $qp)
+  let full_url = (build-url $base ({vault_uuid: $vault_uuid} | format pattern "/vaults/{vault_uuid}/items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -263,8 +263,8 @@ export def "vaults-items GetVaultItems" [
 # --fields item shape: {generate?: bool, id: string, label?: string, purpose?: ""|"USERNAME"|"PASSWORD"|"NOTES", recipe?: record, section?: record, type: "STRING"|"EMAIL"|"CONCEALED"|"URL"|"TOTP"|"DATE"|"MONTH_YEAR"|"MENU", value?: string}
 # --files item shape: {content?: string, id?: string, name?: string, section?: record, size?: int}
 # --sections item shape: {id?: string, label?: string}
-export def "vaults-items CreateVaultItem" [
-  vaultUuid: string
+export def "vaults-items create" [
+  vault_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,8 +288,8 @@ export def "vaults-items CreateVaultItem" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vaults/($vaultUuid)/items")
-  let body = {category: $category, favorite: $favorite, id: $id, tags: $tags, title: $title, urls: $urls, vault: $vault, version: $version, fields: $fields, files: $files, sections: $sections} | compact
+  let full_url = (build-url $base ({vault_uuid: $vault_uuid} | format pattern "/vaults/{vault_uuid}/items"))
+  let body = {"category": $category, "favorite": $favorite, "id": $id, "tags": $tags, "title": $title, "urls": $urls, "vault": $vault, "version": $version, "fields": $fields, "files": $files, "sections": $sections} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -300,9 +300,9 @@ export def "vaults-items CreateVaultItem" [
 #
 # DELETE /vaults/{vaultUuid}/items/{itemUuid}
 # operationId: DeleteVaultItem
-export def "vaults-items DeleteVaultItem" [
-  vaultUuid: string
-  itemUuid: string
+export def "vaults-items delete" [
+  vault_uuid: string
+  item_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "vaults-items DeleteVaultItem" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)")
+  let full_url = (build-url $base ({vault_uuid: $vault_uuid, item_uuid: $item_uuid} | format pattern "/vaults/{vault_uuid}/items/{item_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,9 +324,9 @@ export def "vaults-items DeleteVaultItem" [
 #
 # GET /vaults/{vaultUuid}/items/{itemUuid}
 # operationId: GetVaultItemById
-export def "vaults-items GetVaultItemById" [
-  vaultUuid: string
-  itemUuid: string
+export def "vaults-items get" [
+  vault_uuid: string
+  item_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "vaults-items GetVaultItemById" [
 ]: nothing -> record<category: string, createdAt: string, favorite: bool, id: string, lastEditedBy: string, state: string, tags: list<string>, title: string, updatedAt: string, urls: table<href: string, label: string, primary: bool>, vault: record<id: string>, version: int, fields: table<entropy: float, generate: bool, id: string, label: string, purpose: string, recipe: record, section: record, type: string, value: string>, files: table<content: string, content_path: string, id: string, name: string, section: record, size: int>, sections: table<id: string, label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)")
+  let full_url = (build-url $base ({vault_uuid: $vault_uuid, item_uuid: $item_uuid} | format pattern "/vaults/{vault_uuid}/items/{item_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,9 +348,9 @@ export def "vaults-items GetVaultItemById" [
 #
 # PATCH /vaults/{vaultUuid}/items/{itemUuid}
 # operationId: PatchVaultItem
-export def "vaults-items PatchVaultItem" [
-  vaultUuid: string
-  itemUuid: string
+export def "vaults-items update-by-vaultUuid-itemUuid" [
+  vault_uuid: string
+  item_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "vaults-items PatchVaultItem" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)")
+  let full_url = (build-url $base ({vault_uuid: $vault_uuid, item_uuid: $item_uuid} | format pattern "/vaults/{vault_uuid}/items/{item_uuid}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -380,9 +380,9 @@ export def "vaults-items PatchVaultItem" [
 # --fields item shape: {generate?: bool, id: string, label?: string, purpose?: ""|"USERNAME"|"PASSWORD"|"NOTES", recipe?: record, section?: record, type: "STRING"|"EMAIL"|"CONCEALED"|"URL"|"TOTP"|"DATE"|"MONTH_YEAR"|"MENU", value?: string}
 # --files item shape: {content?: string, id?: string, name?: string, section?: record, size?: int}
 # --sections item shape: {id?: string, label?: string}
-export def "vaults-items UpdateVaultItem" [
-  vaultUuid: string
-  itemUuid: string
+export def "vaults-items update-by-vaultUuid-itemUuid-1" [
+  vault_uuid: string
+  item_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,8 +406,8 @@ export def "vaults-items UpdateVaultItem" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)")
-  let body = {category: $category, favorite: $favorite, id: $id, tags: $tags, title: $title, urls: $urls, vault: $vault, version: $version, fields: $fields, files: $files, sections: $sections} | compact
+  let full_url = (build-url $base ({vault_uuid: $vault_uuid, item_uuid: $item_uuid} | format pattern "/vaults/{vault_uuid}/items/{item_uuid}"))
+  let body = {"category": $category, "favorite": $favorite, "id": $id, "tags": $tags, "title": $title, "urls": $urls, "vault": $vault, "version": $version, "fields": $fields, "files": $files, "sections": $sections} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -418,9 +418,9 @@ export def "vaults-items UpdateVaultItem" [
 #
 # GET /vaults/{vaultUuid}/items/{itemUuid}/files
 # operationId: GetItemFiles
-export def "vaults-items-files GetItemFiles" [
-  vaultUuid: string
-  itemUuid: string
+export def "vaults-items-files get" [
+  vault_uuid: string
+  item_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "vaults-items-files GetItemFiles" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "inline_files" $inline_files "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)/files" $qp)
+  let full_url = (build-url $base ({vault_uuid: $vault_uuid, item_uuid: $item_uuid} | format pattern "/vaults/{vault_uuid}/items/{item_uuid}/files") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -444,10 +444,10 @@ export def "vaults-items-files GetItemFiles" [
 #
 # GET /vaults/{vaultUuid}/items/{itemUuid}/files/{fileUuid}
 # operationId: GetDetailsOfFileById
-export def "vaults-items-files GetDetailsOfFileById" [
-  vaultUuid: string
-  itemUuid: string
-  fileUuid: string
+export def "vaults-items-files get-details-of" [
+  vault_uuid: string
+  item_uuid: string
+  file_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "vaults-items-files GetDetailsOfFileById" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "inline_files" $inline_files "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)/files/($fileUuid)" $qp)
+  let full_url = (build-url $base ({vault_uuid: $vault_uuid, item_uuid: $item_uuid, file_uuid: $file_uuid} | format pattern "/vaults/{vault_uuid}/items/{item_uuid}/files/{file_uuid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -471,10 +471,10 @@ export def "vaults-items-files GetDetailsOfFileById" [
 #
 # GET /vaults/{vaultUuid}/items/{itemUuid}/files/{fileUuid}/content
 # operationId: DownloadFileByID
-export def "vaults-items-files-content DownloadFileByID" [
-  vaultUuid: string
-  itemUuid: string
-  fileUuid: string
+export def "vaults-items-files-content download" [
+  vault_uuid: string
+  item_uuid: string
+  file_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "vaults-items-files-content DownloadFileByID" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vaults/($vaultUuid)/items/($itemUuid)/files/($fileUuid)/content")
+  let full_url = (build-url $base ({vault_uuid: $vault_uuid, item_uuid: $item_uuid, file_uuid: $file_uuid} | format pattern "/vaults/{vault_uuid}/items/{item_uuid}/files/{file_uuid}/content"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

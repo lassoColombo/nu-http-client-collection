@@ -67,12 +67,12 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def type-completer [] { ["mediaservices"] }
-def keyType-completer [] { ["Primary" "Secondary"] }
+def key-type-completer [] { ["Primary" "Secondary"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-media-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-media-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 # GET /providers/Microsoft.Media/operations
 # Docs: https://aka.ms/media-manage
 # operationId: Operations_List
-export def "providers-microsoft-media-operations List" [
+export def "providers-microsoft-media-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,8 +122,8 @@ export def "providers-microsoft-media-operations List" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Media/CheckNameAvailability
 # Docs: https://aka.ms/media-manage
 # operationId: MediaService_CheckNameAvailability
-export def "subscriptions-providers-microsoft-media-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-media-check-name-availability check" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,8 +140,8 @@ export def "subscriptions-providers-microsoft-media-check-name-availability Chec
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Media/CheckNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Media/CheckNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -153,9 +153,9 @@ export def "subscriptions-providers-microsoft-media-check-name-availability Chec
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices
 # Docs: https://aka.ms/media-manage
 # operationId: MediaService_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,10 +180,10 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{mediaServiceName}
 # Docs: https://aka.ms/media-manage
 # operationId: MediaService_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  mediaServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices delete" [
+  subscription_id: string
+  resource_group_name: string
+  media_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($mediaServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, media_service_name: $media_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{media_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,10 +208,10 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{mediaServiceName}
 # Docs: https://aka.ms/media-manage
 # operationId: MediaService_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  mediaServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices get" [
+  subscription_id: string
+  resource_group_name: string
+  media_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($mediaServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, media_service_name: $media_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{media_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -237,10 +237,10 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # Docs: https://aka.ms/media-manage
 # operationId: MediaService_Update
 # --properties shape: {storageAccounts?: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  mediaServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices update" [
+  subscription_id: string
+  resource_group_name: string
+  media_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,8 +258,8 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($mediaServiceName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, media_service_name: $media_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{media_service_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -272,10 +272,10 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # Docs: https://aka.ms/media-manage
 # operationId: MediaService_Create
 # --properties shape: {storageAccounts?: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  mediaServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices create" [
+  subscription_id: string
+  resource_group_name: string
+  media_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,8 +293,8 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($mediaServiceName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, media_service_name: $media_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{media_service_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -306,10 +306,10 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{mediaServiceName}/listKeys
 # Docs: https://aka.ms/media-manage
 # operationId: MediaService_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-list-keys ListKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  mediaServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  media_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($mediaServiceName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, media_service_name: $media_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{media_service_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,10 +334,10 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{mediaServiceName}/regenerateKey
 # Docs: https://aka.ms/media-manage
 # operationId: MediaService_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-regenerate-key RegenerateKey" [
-  subscriptionId: string
-  resourceGroupName: string
-  mediaServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-regenerate-key post" [
+  subscription_id: string
+  resource_group_name: string
+  media_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,14 +347,14 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. The current version is 2015-10-01.
-  keyType: string@keyType-completer # The keyType indicating which key you want to regenerate, Primary or Secondary.
+  key_type: string@key-type-completer # The keyType indicating which key you want to regenerate, Primary or Secondary.
 ]: any -> record<key: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($mediaServiceName)/regenerateKey" $qp)
-  let body = {keyType: $keyType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, media_service_name: $media_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{media_service_name}/regenerateKey") $qp)
+  let body = {"keyType": $key_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,10 +366,10 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaservices/{mediaServiceName}/syncStorageKeys
 # Docs: https://aka.ms/media-manage
 # operationId: MediaService_SyncStorageKeys
-export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-sync-storage-keys SyncStorageKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  mediaServiceName: string
+export def "subscriptions-resource-groups-providers-microsoft-media-mediaservices-sync-storage-keys sync" [
+  subscription_id: string
+  resource_group_name: string
+  media_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,8 +385,8 @@ export def "subscriptions-resource-groups-providers-microsoft-media-mediaservice
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Media/mediaservices/($mediaServiceName)/syncStorageKeys" $qp)
-  let body = {id: $id} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, media_service_name: $media_service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Media/mediaservices/{media_service_name}/syncStorageKeys") $qp)
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

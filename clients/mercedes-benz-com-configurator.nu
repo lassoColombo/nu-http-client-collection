@@ -103,11 +103,11 @@ export def "markets marketsGET" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --language: string # This is a ISO language string e.g. 'de' and is spoken in Austria 'AT', Germany 'DE' and Swiss 'CH'. (default: de)
   --country: string # This is a ISO country string e.g. Germany 'DE' or Swiss 'CH'.
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> table<_links: record<bodies: record, classes: record, models: record, productgroups: record, self: record>, country: string, language: string, marketId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "language" $language "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/markets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -119,7 +119,7 @@ export def "markets marketsGET" [
 # GET /markets/{marketId}
 # operationId: marketGET
 export def "markets marketGET" [
-  marketId: string
+  market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,12 +128,12 @@ export def "markets marketGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> record<_links: record<bodies: record<href: string>, classes: record<href: string>, models: record<href: string>, productgroups: record<href: string>, self: record<href: string>>, country: string, language: string, marketId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)" $qp)
+  let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id} | format pattern "/markets/{market_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,7 +144,7 @@ export def "markets marketGET" [
 # GET /markets/{marketId}/bodies
 # operationId: bodiesGET
 export def "markets-bodies bodiesGET" [
-  marketId: string
+  market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,15 +153,15 @@ export def "markets-bodies bodiesGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --classId: string # This is a class id e.g. '176' for 'A-Class' in Germany. (default: 222)
-  --bodyId: string # This is a body id e.g. '1' for 'Limousine' in Germany. (default: 2)
-  --productGroups: list # Specifies to which product groups the vehicles belong which should be returned. The product groups are separated from each other by a comma and are case sensitive. Allowed values are:   * PKW   * VAN   * SMART
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --class-id: string # This is a class id e.g. '176' for 'A-Class' in Germany. (default: 222)
+  --body-id: string # This is a body id e.g. '1' for 'Limousine' in Germany. (default: 2)
+  --product-groups: list # Specifies to which product groups the vehicles belong which should be returned. The product groups are separated from each other by a comma and are case sensitive. Allowed values are:   * PKW   * VAN   * SMART
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> table<_links: record<models: record, self: record>, bodyId: string, bodyName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "classId" $classId "scalar") (serialize-qp "bodyId" $bodyId "scalar") (serialize-qp "productGroups" $productGroups "csv") (serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/bodies" $qp)
+  let qp = [(serialize-qp "classId" $class_id "scalar") (serialize-qp "bodyId" $body_id "scalar") (serialize-qp "productGroups" $product_groups "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id} | format pattern "/markets/{market_id}/bodies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -172,8 +172,8 @@ export def "markets-bodies bodiesGET" [
 # GET /markets/{marketId}/bodies/{bodyId}
 # operationId: bodyGET
 export def "markets-bodies bodyGET" [
-  marketId: string
-  bodyId: string
+  market_id: string
+  body_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,12 +182,12 @@ export def "markets-bodies bodyGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> record<_links: record<models: record<href: string>, self: record<href: string>>, bodyId: string, bodyName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/bodies/($bodyId)" $qp)
+  let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id, body_id: $body_id} | format pattern "/markets/{market_id}/bodies/{body_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +198,7 @@ export def "markets-bodies bodyGET" [
 # GET /markets/{marketId}/classes
 # operationId: classesGET
 export def "markets-classes classesGET" [
-  marketId: string
+  market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,15 +207,15 @@ export def "markets-classes classesGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --classId: string # This is a class id e.g. '176' for 'A-Class' in Germany. (default: 222)
-  --bodyId: string # This is a body id e.g. '1' for 'Limousine' in Germany. (default: 2)
-  --productGroups: list # Specifies to which product groups the vehicles belong which should be returned. The product groups are separated from each other by a comma and are case sensitive. Allowed values are:   * PKW   * VAN   * SMART
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --class-id: string # This is a class id e.g. '176' for 'A-Class' in Germany. (default: 222)
+  --body-id: string # This is a body id e.g. '1' for 'Limousine' in Germany. (default: 2)
+  --product-groups: list # Specifies to which product groups the vehicles belong which should be returned. The product groups are separated from each other by a comma and are case sensitive. Allowed values are:   * PKW   * VAN   * SMART
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> table<_links: record<models: record, self: record>, classId: string, className: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "classId" $classId "scalar") (serialize-qp "bodyId" $bodyId "scalar") (serialize-qp "productGroups" $productGroups "csv") (serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/classes" $qp)
+  let qp = [(serialize-qp "classId" $class_id "scalar") (serialize-qp "bodyId" $body_id "scalar") (serialize-qp "productGroups" $product_groups "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id} | format pattern "/markets/{market_id}/classes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,8 +226,8 @@ export def "markets-classes classesGET" [
 # GET /markets/{marketId}/classes/{classId}
 # operationId: classGET
 export def "markets-classes classGET" [
-  marketId: string
-  classId: string
+  market_id: string
+  class_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,12 +236,12 @@ export def "markets-classes classGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> record<_links: record<models: record<href: string>, self: record<href: string>>, classId: string, className: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/classes/($classId)" $qp)
+  let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id, class_id: $class_id} | format pattern "/markets/{market_id}/classes/{class_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,7 +252,7 @@ export def "markets-classes classGET" [
 # GET /markets/{marketId}/models
 # operationId: modelsGET
 export def "markets-models modelsGET" [
-  marketId: string
+  market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,18 +261,18 @@ export def "markets-models modelsGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --classId: string # This is a class id e.g. '176' for 'A-Class' in Germany. (default: 222)
-  --bodyId: string # This is a body id e.g. '1' for 'Limousine' in Germany. (default: 2)
+  --class-id: string # This is a class id e.g. '176' for 'A-Class' in Germany. (default: 222)
+  --body-id: string # This is a body id e.g. '1' for 'Limousine' in Germany. (default: 2)
   --baumuster4prefix: string # The first four digits of a baumuster are called baumuster4prefix e.g. '1760' for 'Berline' in France.
   --baumuster: string # This is a baumuster e.g. '176042' for 'A 180 Limousine' in Germany.
-  --nationalSalesType: string # This is the national sales type (NST) of a distinct baumuster. There is no predefined pattern for the NST, each market defines its NST. e.g. 'E07' in France, 0001 in Germany and ZA1 in South Africa Using the NST markets can define market specific conditions. e.g. different initial configuration, etc.
-  --productGroups: list # Specifies to which product groups the vehicles belong which should be returned. The product groups are separated from each other by a comma and are case sensitive. Allowed values are:   * PKW   * VAN   * SMART
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --national-sales-type: string # This is the national sales type (NST) of a distinct baumuster. There is no predefined pattern for the NST, each market defines its NST. e.g. 'E07' in France, 0001 in Germany and ZA1 in South Africa Using the NST markets can define market specific conditions. e.g. different initial configuration, etc.
+  --product-groups: list # Specifies to which product groups the vehicles belong which should be returned. The product groups are separated from each other by a comma and are case sensitive. Allowed values are:   * PKW   * VAN   * SMART
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> table<_links: record<configuration: record, self: record>, baumuster: string, modelId: string, name: string, nationalSalesType: string, priceInformation: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list>, productGroup: record<name: string>, shortName: string, vehicleBody: record<_links: record, bodyId: string, bodyName: string>, vehicleClass: record<_links: record, classId: string, className: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "classId" $classId "scalar") (serialize-qp "bodyId" $bodyId "scalar") (serialize-qp "baumuster4prefix" $baumuster4prefix "scalar") (serialize-qp "baumuster" $baumuster "scalar") (serialize-qp "nationalSalesType" $nationalSalesType "scalar") (serialize-qp "productGroups" $productGroups "csv") (serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/models" $qp)
+  let qp = [(serialize-qp "classId" $class_id "scalar") (serialize-qp "bodyId" $body_id "scalar") (serialize-qp "baumuster4prefix" $baumuster4prefix "scalar") (serialize-qp "baumuster" $baumuster "scalar") (serialize-qp "nationalSalesType" $national_sales_type "scalar") (serialize-qp "productGroups" $product_groups "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id} | format pattern "/markets/{market_id}/models") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,8 +283,8 @@ export def "markets-models modelsGET" [
 # GET /markets/{marketId}/models/{modelId}
 # operationId: modelGET
 export def "markets-models modelGET" [
-  marketId: string
-  modelId: string
+  market_id: string
+  model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,12 +293,12 @@ export def "markets-models modelGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> record<_links: record<configuration: record<href: string>, self: record<href: string>>, baumuster: string, modelId: string, name: string, nationalSalesType: string, priceInformation: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, productGroup: record<name: string>, shortName: string, vehicleBody: record<_links: record<models: record, self: record>, bodyId: string, bodyName: string>, vehicleClass: record<_links: record<models: record, self: record>, classId: string, className: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)" $qp)
+  let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id} | format pattern "/markets/{market_id}/models/{model_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,8 +309,8 @@ export def "markets-models modelGET" [
 # GET /markets/{marketId}/models/{modelId}/configurations/initial
 # operationId: modelConfigurationsGET
 export def "markets-models-configurations-initial modelConfigurationsGET" [
-  marketId: string
-  modelId: string
+  market_id: string
+  model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,12 +319,12 @@ export def "markets-models-configurations-initial modelConfigurationsGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/initial" $qp)
+  let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/initial") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -335,9 +335,9 @@ export def "markets-models-configurations-initial modelConfigurationsGET" [
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}
 # operationId: modelConfigurationGET
 export def "markets-models-configurations modelConfigurationGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
+  market_id: string
+  model_id: string
+  configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,12 +346,12 @@ export def "markets-models-configurations modelConfigurationGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)" $qp)
+  let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,10 +362,10 @@ export def "markets-models-configurations modelConfigurationGET" [
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/alternatives/{componentList}
 # operationId: modelConfigurationAlternativesGET
 export def "markets-models-configurations-alternatives modelConfigurationAlternativesGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
-  componentList: string
+  market_id: string
+  model_id: string
+  configuration_id: string
+  component_list: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,12 +374,12 @@ export def "markets-models-configurations-alternatives modelConfigurationAlterna
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> table<_links: record<imageapi_vehicle: record, selectables: record, self: record>, addedComponents: list<record>, configurationId: string, marketId: string, modelId: string, priceInformation: record, removedComponents: list<record>, updatedComponents: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/alternatives/($componentList)" $qp)
+  let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id, component_list: $component_list} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/alternatives/{component_list}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -390,9 +390,9 @@ export def "markets-models-configurations-alternatives modelConfigurationAlterna
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components
 # operationId: imageComponentsGET
 export def "markets-models-configurations-images-components imageComponentsGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
+  market_id: string
+  model_id: string
+  configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "markets-models-configurations-images-components imageComponentsGET" 
 ]: nothing -> record<components: record<engine: record<url: string>, equipments: record, paint: record<paint1: record, paint2: record>, rim: record<code: string, url: string>, trim: record<code: string, url: string>, upholstery: record<code: string, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/images/components")
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -415,9 +415,9 @@ export def "markets-models-configurations-images-components imageComponentsGET" 
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/engine
 # operationId: imageComponentsEngineGET
 export def "markets-models-configurations-images-components-engine imageComponentsEngineGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
+  market_id: string
+  model_id: string
+  configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "markets-models-configurations-images-components-engine imageComponen
 ]: nothing -> record<engine: record<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/images/components/engine")
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/engine"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -440,9 +440,9 @@ export def "markets-models-configurations-images-components-engine imageComponen
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/equipments
 # operationId: imageComponentsEquipmentsGET
 export def "markets-models-configurations-images-components-equipments imageComponentsEquipmentsGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
+  market_id: string
+  model_id: string
+  configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "markets-models-configurations-images-components-equipments imageComp
 ]: nothing -> record<equipments: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/images/components/equipments")
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/equipments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,10 +465,10 @@ export def "markets-models-configurations-images-components-equipments imageComp
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/equipments/{componentCode}
 # operationId: imageComponentsEquipmentsByCodeGET
 export def "markets-models-configurations-images-components-equipments imageComponentsEquipmentsByCodeGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
-  componentCode: string
+  market_id: string
+  model_id: string
+  configuration_id: string
+  component_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "markets-models-configurations-images-components-equipments imageComp
 ]: nothing -> record<equipment: record<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/images/components/equipments/($componentCode)")
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id, component_code: $component_code} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/equipments/{component_code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -491,9 +491,9 @@ export def "markets-models-configurations-images-components-equipments imageComp
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/paint
 # operationId: imageComponentsPaintGET
 export def "markets-models-configurations-images-components-paint imageComponentsPaintGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
+  market_id: string
+  model_id: string
+  configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "markets-models-configurations-images-components-paint imageComponent
 ]: nothing -> record<paint: record<paint1: record<code: string, url: string>, paint2: record<code: string, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/images/components/paint")
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/paint"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -516,9 +516,9 @@ export def "markets-models-configurations-images-components-paint imageComponent
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/rim
 # operationId: imageComponentsRimGET
 export def "markets-models-configurations-images-components-rim imageComponentsRimGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
+  market_id: string
+  model_id: string
+  configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "markets-models-configurations-images-components-rim imageComponentsR
 ]: nothing -> record<rim: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/images/components/rim")
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/rim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -541,9 +541,9 @@ export def "markets-models-configurations-images-components-rim imageComponentsR
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/trim
 # operationId: imageComponentsTrimGET
 export def "markets-models-configurations-images-components-trim imageComponentsTrimGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
+  market_id: string
+  model_id: string
+  configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "markets-models-configurations-images-components-trim imageComponents
 ]: nothing -> record<trim: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/images/components/trim")
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/trim"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -566,9 +566,9 @@ export def "markets-models-configurations-images-components-trim imageComponents
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/components/upholstery
 # operationId: imageComponentsUpholsteryGET
 export def "markets-models-configurations-images-components-upholstery imageComponentsUpholsteryGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
+  market_id: string
+  model_id: string
+  configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "markets-models-configurations-images-components-upholstery imageComp
 ]: nothing -> record<upholstery: record<code: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/images/components/upholstery")
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/components/upholstery"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -591,9 +591,9 @@ export def "markets-models-configurations-images-components-upholstery imageComp
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/images/vehicle
 # operationId: imageVehicleGET
 export def "markets-models-configurations-images-vehicle imageVehicleGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
+  market_id: string
+  model_id: string
+  configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,13 +603,13 @@ export def "markets-models-configurations-images-vehicle imageVehicleGET" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --perspectives: string # One or more perspectives as a comma separated String list e.g. 'EXT000,EXT010,INT1'.  The following perspectives are available:   * EXT000-EXT350: EXT000 defines the front view, EXT010 defines a rotation of 10 degress and so forth.   * INT1-INT4: These are the 4 available interior perspectives.  The default value is EXT020,INT1 if no value is provided. (default: EXT020,INT1)
-  --roofOpen: oneof<nothing, bool> # Set 'true', if you are looking for images with the roof open. This option is only valid for cabrios. Default is 'false'. (default: false)
+  --roof-open: oneof<nothing, bool> # Set 'true', if you are looking for images with the roof open. This option is only valid for cabrios. Default is 'false'. (default: false)
   --night: oneof<nothing, bool> # Set 'true', if you are looking for images with a darker background and the vehicle's headlights turned on. Default is 'false'. (default: false)
 ]: nothing -> record<vehicle: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "perspectives" $perspectives "scalar") (serialize-qp "roofOpen" $roofOpen "scalar") (serialize-qp "night" $night "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/images/vehicle" $qp)
+  let qp = [(serialize-qp "perspectives" $perspectives "scalar") (serialize-qp "roofOpen" $roof_open "scalar") (serialize-qp "night" $night "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/images/vehicle") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -620,9 +620,9 @@ export def "markets-models-configurations-images-vehicle imageVehicleGET" [
 # GET /markets/{marketId}/models/{modelId}/configurations/{configurationId}/selectables
 # operationId: modelConfigurationSelectablesGET
 export def "markets-models-configurations-selectables modelConfigurationSelectablesGET" [
-  marketId: string
-  modelId: string
-  configurationId: string
+  market_id: string
+  model_id: string
+  configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,13 +631,13 @@ export def "markets-models-configurations-selectables modelConfigurationSelectab
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --componentTypes: list # A list of component types separated by a comma case insensitive. If nothing is defined all component types are returned. Allowed values are:   - WHEELS   - PAINTS   - UPHOLSTERIES   - TRIMS   - PACKAGES   - LINES   - SPECIAL_EDITION   - SPECIAL_EQUIPMENT
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --component-types: list # A list of component types separated by a comma case insensitive. If nothing is defined all component types are returned. Allowed values are:   - WHEELS   - PAINTS   - UPHOLSTERIES   - TRIMS   - PACKAGES   - LINES   - SPECIAL_EDITION   - SPECIAL_EQUIPMENT
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> record<_links: record<self: record<href: string>>, componentCategories: table<cardinality: string, categoryId: string, categoryName: string, categorySortId: float, componentIds: list, subcategories: list>, vehicleComponents: record<componentId: record<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "componentTypes" $componentTypes "csv") (serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/models/($modelId)/configurations/($configurationId)/selectables" $qp)
+  let qp = [(serialize-qp "componentTypes" $component_types "csv") (serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id, model_id: $model_id, configuration_id: $configuration_id} | format pattern "/markets/{market_id}/models/{model_id}/configurations/{configuration_id}/selectables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -648,7 +648,7 @@ export def "markets-models-configurations-selectables modelConfigurationSelectab
 # POST /markets/{marketId}/onlinecode
 # operationId: onlineCodePOST
 export def "markets-onlinecode onlineCodePOST" [
-  marketId: string
+  market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "markets-onlinecode onlineCodePOST" [
 ]: nothing -> record<onlineCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/markets/($marketId)/onlinecode")
+  let full_url = (build-url $base ({market_id: $market_id} | format pattern "/markets/{market_id}/onlinecode"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -671,8 +671,8 @@ export def "markets-onlinecode onlineCodePOST" [
 # GET /markets/{marketId}/onlinecode/{onlineCode}
 # operationId: onlineCodeGET
 export def "markets-onlinecode onlineCodeGET" [
-  onlineCode: string
-  marketId: string
+  market_id: string
+  online_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,12 +681,12 @@ export def "markets-onlinecode onlineCodeGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> record<_links: record<imageapi_vehicle: record<href: string>, selectables: record<href: string>, self: record<href: string>>, changeYear: string, configurationId: string, configurationPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, initialPrice: record<currency: string, instalmentPrice: float, netPrice: float, price: float, taxes: list<record>>, marketId: string, modelId: string, modelYear: string, technicalInformation: record<acceleration: record<unit: string, value: float>, doors: float, energyEfficiencyClass: string, engine: record<alternativeFuelType: string, capacity: record, cylinder: string, driveConcept: string, emissionStandard: string, engineConcept: string, fuelEconomy: record, fuelType: string, powerHp: record, powerHybridExtensionHp: record, powerHybridExtensionKw: record, powerKw: record>, nedc: record<consumption: record, electricRange: record, emission: record, weight: record>, seats: float, topSpeed: record<unit: string, value: float>, transmission: record<code: string, codeType: string, name: string>, wltp: record<consumption: record, emission: record>>, vehicleComponents: table<_links: record, code: string, codeType: string, componentSortId: float, componentType: string, description: string, fixed: bool, hidden: bool, id: string, name: string, priceInformation: record, pseudoCode: bool, selected: bool, standard: bool>, wltpConfiguration: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/onlinecode/($onlineCode)" $qp)
+  let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id, online_code: $online_code} | format pattern "/markets/{market_id}/onlinecode/{online_code}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -697,7 +697,7 @@ export def "markets-onlinecode onlineCodeGET" [
 # GET /markets/{marketId}/productgroups
 # operationId: productGroupsGET
 export def "markets-productgroups productGroupsGET" [
-  marketId: string
+  market_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,12 +706,12 @@ export def "markets-productgroups productGroupsGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldsFilter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
+  --fields-filter: list # Specifies which fields should be included in the result. If this filter is not used, per default all fields are returned.
 ]: nothing -> record<_links: record<models: record<href: string>, self: record<href: string>>, market: record<_links: record<bodies: record, classes: record, models: record, productgroups: record, self: record>, country: string, language: string, marketId: string>, productGroups: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldsFilter" $fieldsFilter "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($marketId)/productgroups" $qp)
+  let qp = [(serialize-qp "fieldsFilter" $fields_filter "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({market_id: $market_id} | format pattern "/markets/{market_id}/productgroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

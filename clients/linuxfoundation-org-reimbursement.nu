@@ -139,8 +139,8 @@ export def "health healthCheck" [
 # operationId: updateReimbursement
 # --Beneficiaries item shape: {EmailAddress?: string, Name?: string}
 # --Owner shape: {EmailAddress?: string, Name?: string}
-export def "reimbursement updateReimbursement" [
-  projectId: string
+export def "reimbursement update" [
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -149,17 +149,17 @@ export def "reimbursement updateReimbursement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Beneficiaries: list # e.g. [{EmailAddress: DaffyDuck@example.org, Name: Daffy Duck}, {EmailAddress: PorkyPig@example.org, Name: Porky Pik}] — item shape: {EmailAddress?: string, Name?: string}
-  Categories: list # e.g. [Anvils, Carrots, Travel]
-  --EntityType: string # e.g. other
-  Owner: record # Contact information — shape: {EmailAddress?: string, Name?: string}
-  ProjectURL: string # e.g. https://funding.dev.platform.linuxfoundation.org/projects/asp-net
+  --beneficiaries: list # e.g. [{EmailAddress: DaffyDuck@example.org, Name: Daffy Duck}, {EmailAddress: PorkyPig@example.org, Name: Porky Pik}] — item shape: {EmailAddress?: string, Name?: string}
+  categories: list # e.g. [Anvils, Carrots, Travel]
+  --entity-type: string # e.g. other
+  owner: record # Contact information — shape: {EmailAddress?: string, Name?: string}
+  project_url: string # e.g. https://funding.dev.platform.linuxfoundation.org/projects/asp-net
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reimbursement/($projectId)")
-  let body = {Beneficiaries: $Beneficiaries, Categories: $Categories, EntityType: $EntityType, Owner: $Owner, ProjectURL: $ProjectURL} | compact
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/reimbursement/{project_id}"))
+  let body = {"Beneficiaries": $beneficiaries, "Categories": $categories, "EntityType": $entity_type, "Owner": $owner, "ProjectURL": $project_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -172,8 +172,8 @@ export def "reimbursement updateReimbursement" [
 # operationId: createReimbursement
 # --Beneficiaries item shape: {EmailAddress?: string, Name?: string}
 # --Owner shape: {EmailAddress?: string, Name?: string}
-export def "reimbursement createReimbursement" [
-  projectId: string
+export def "reimbursement create" [
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,18 +182,18 @@ export def "reimbursement createReimbursement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  ProjectName: string # e.g. The Looney Tunes Show
-  --Beneficiaries: list # e.g. [{EmailAddress: DaffyDuck@example.org, Name: Daffy Duck}, {EmailAddress: PorkyPig@example.org, Name: Porky Pik}] — item shape: {EmailAddress?: string, Name?: string}
-  Categories: list # e.g. [Anvils, Carrots, Travel]
-  --EntityType: string # e.g. other
-  Owner: record # Contact information — shape: {EmailAddress?: string, Name?: string}
-  ProjectURL: string # e.g. https://funding.dev.platform.linuxfoundation.org/projects/asp-net
+  project_name: string # e.g. The Looney Tunes Show
+  --beneficiaries: list # e.g. [{EmailAddress: DaffyDuck@example.org, Name: Daffy Duck}, {EmailAddress: PorkyPig@example.org, Name: Porky Pik}] — item shape: {EmailAddress?: string, Name?: string}
+  categories: list # e.g. [Anvils, Carrots, Travel]
+  --entity-type: string # e.g. other
+  owner: record # Contact information — shape: {EmailAddress?: string, Name?: string}
+  project_url: string # e.g. https://funding.dev.platform.linuxfoundation.org/projects/asp-net
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reimbursement/($projectId)")
-  let body = {ProjectName: $ProjectName, Beneficiaries: $Beneficiaries, Categories: $Categories, EntityType: $EntityType, Owner: $Owner, ProjectURL: $ProjectURL} | compact
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/reimbursement/{project_id}"))
+  let body = {"ProjectName": $project_name, "Beneficiaries": $beneficiaries, "Categories": $categories, "EntityType": $entity_type, "Owner": $owner, "ProjectURL": $project_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -204,7 +204,7 @@ export def "reimbursement createReimbursement" [
 #
 # POST /reset
 # operationId: resetPolicy
-export def "reset resetPolicy" [
+export def "reset reset-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,14 +213,14 @@ export def "reset resetPolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  PolicyID: string # Unique ID of the policy to reset (e.g. F11B6C1D67DC6A3D)
-  --TemplatePolicyID: string # Unique ID of the template policy to copy from (e.g. F11B6C1D67DC6A3D)
+  policy_id: string # Unique ID of the policy to reset (e.g. F11B6C1D67DC6A3D)
+  --template-policy-id: string # Unique ID of the template policy to copy from (e.g. F11B6C1D67DC6A3D)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reset")
-  let body = {PolicyID: $PolicyID, TemplatePolicyID: $TemplatePolicyID} | compact
+  let body = {"PolicyID": $policy_id, "TemplatePolicyID": $template_policy_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

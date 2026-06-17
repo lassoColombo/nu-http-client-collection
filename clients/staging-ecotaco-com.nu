@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "eco-ta-co-api-root Retrieve-the-version-API" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "eco-ta-co-api-root list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: Retrieve the version API
-export def "eco-ta-co-api-root Retrieve-the-version-API" [
+export def "eco-ta-co-api-root list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +114,7 @@ export def "eco-ta-co-api-root Retrieve-the-version-API" [
 #
 # GET /accounts
 # operationId: Get current user
-export def "accounts Get-current-user" [
+export def "accounts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,13 +123,13 @@ export def "accounts Get-current-user" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -140,7 +140,7 @@ export def "accounts Get-current-user" [
 #
 # POST /accounts
 # operationId: Create a new account with an application key
-export def "accounts Create-a-new-account-with-an-application-key" [
+export def "accounts post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -149,13 +149,13 @@ export def "accounts Create-a-new-account-with-an-application-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -166,7 +166,7 @@ export def "accounts Create-a-new-account-with-an-application-key" [
 #
 # PUT /accounts
 # operationId: Update User
-export def "accounts Update-User" [
+export def "accounts put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,13 +175,13 @@ export def "accounts Update-User" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -192,7 +192,7 @@ export def "accounts Update-User" [
 #
 # POST /accounts/password
 # operationId: Forget password with email
-export def "accounts-password Forget-password-with-email" [
+export def "accounts-password post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,13 +201,13 @@ export def "accounts-password Forget-password-with-email" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/password")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -218,7 +218,7 @@ export def "accounts-password Forget-password-with-email" [
 #
 # GET /accounts/payment_methods
 # operationId: Payment Methods
-export def "accounts-payment-methods Payment-Methods" [
+export def "accounts-payment-methods get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,13 +227,13 @@ export def "accounts-payment-methods Payment-Methods" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/payment_methods")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -244,7 +244,7 @@ export def "accounts-payment-methods Payment-Methods" [
 #
 # POST /accounts/settings
 # operationId: Settings
-export def "accounts-settings Settings" [
+export def "accounts-settings post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,13 +253,13 @@ export def "accounts-settings Settings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/settings")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -270,7 +270,7 @@ export def "accounts-settings Settings" [
 #
 # POST /accounts/sign_in
 # operationId: Login with email, password and application key
-export def "accounts-sign-in Login-with-email-password-and-application-key" [
+export def "accounts-sign-in post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,13 +279,13 @@ export def "accounts-sign-in Login-with-email-password-and-application-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/sign_in")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,7 +296,7 @@ export def "accounts-sign-in Login-with-email-password-and-application-key" [
 #
 # PUT /accounts/update_password
 # operationId: Update Password
-export def "accounts-update-password Update-Password" [
+export def "accounts-update-password put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,13 +305,13 @@ export def "accounts-update-password Update-Password" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/update_password")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -322,7 +322,7 @@ export def "accounts-update-password Update-Password" [
 #
 # POST /addresses/places_autocomplete
 # operationId: Get autocomplete places
-export def "addresses-places-autocomplete Get-autocomplete-places" [
+export def "addresses-places-autocomplete post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,13 +331,13 @@ export def "addresses-places-autocomplete Get-autocomplete-places" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addresses/places_autocomplete")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -348,7 +348,7 @@ export def "addresses-places-autocomplete Get-autocomplete-places" [
 #
 # POST /addresses/places_details
 # operationId: Get autocomplete places details
-export def "addresses-places-details Get-autocomplete-places-details" [
+export def "addresses-places-details post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,13 +357,13 @@ export def "addresses-places-details Get-autocomplete-places-details" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addresses/places_details")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -374,7 +374,7 @@ export def "addresses-places-details Get-autocomplete-places-details" [
 #
 # GET /catchement_areas
 # operationId: List all catchement areas
-export def "catchement-areas List-all-catchement-areas" [
+export def "catchement-areas list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,13 +383,13 @@ export def "catchement-areas List-all-catchement-areas" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/catchement_areas")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.geo+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -400,7 +400,7 @@ export def "catchement-areas List-all-catchement-areas" [
 #
 # GET /catchement_areas/{id}
 # operationId: Get a Catchement Area
-export def "catchement-areas Get-a-Catchement-Area" [
+export def "catchement-areas get" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,13 +410,13 @@ export def "catchement-areas Get-a-Catchement-Area" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/catchement_areas/($id)")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/catchement_areas/{id}"))
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.geo+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -427,7 +427,7 @@ export def "catchement-areas Get-a-Catchement-Area" [
 #
 # GET /credit_cards
 # operationId: List all CreditCards for the current User
-export def "credit-cards List-all-CreditCards-for-the-current-User" [
+export def "credit-cards list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,13 +436,13 @@ export def "credit-cards List-all-CreditCards-for-the-current-User" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit_cards")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -453,7 +453,7 @@ export def "credit-cards List-all-CreditCards-for-the-current-User" [
 #
 # GET /credit_cards/{id}
 # operationId: Get a CreditCard
-export def "credit-cards Get-a-CreditCard" [
+export def "credit-cards get" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -466,7 +466,7 @@ export def "credit-cards Get-a-CreditCard" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/credit_cards/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/credit_cards/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -476,7 +476,7 @@ export def "credit-cards Get-a-CreditCard" [
 #
 # GET /products
 # operationId: List all products
-export def "products List-all-products" [
+export def "products list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,13 +485,13 @@ export def "products List-all-products" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/products")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -502,7 +502,7 @@ export def "products List-all-products" [
 #
 # GET /products/{id}
 # operationId: Get a Product
-export def "products Get-a-Product" [
+export def "products get" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,13 +512,13 @@ export def "products Get-a-Product" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($id)")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/products/{id}"))
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -529,7 +529,7 @@ export def "products Get-a-Product" [
 #
 # GET /promotional_codes
 # operationId: Get all promotional codes for user
-export def "promotional-codes Get-all-promotional-codes-for-user" [
+export def "promotional-codes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,13 +538,13 @@ export def "promotional-codes Get-all-promotional-codes-for-user" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/promotional_codes")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -555,7 +555,7 @@ export def "promotional-codes Get-all-promotional-codes-for-user" [
 #
 # POST /promotional_codes
 # operationId: Add a promotional code
-export def "promotional-codes Add-a-promotional-code" [
+export def "promotional-codes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,12 +564,12 @@ export def "promotional-codes Add-a-promotional-code" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/promotional_codes")
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -580,7 +580,7 @@ export def "promotional-codes Add-a-promotional-code" [
 #
 # GET /rides/{id}
 # operationId: Get a ride
-export def "rides Get-a-ride" [
+export def "rides get" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,13 +590,13 @@ export def "rides Get-a-ride" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides/($id)")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rides/{id}"))
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -607,7 +607,7 @@ export def "rides Get-a-ride" [
 #
 # GET /rides/{id}/cancel
 # operationId: Cancel a Ride
-export def "rides-cancel Cancel-a-Ride" [
+export def "rides-cancel get" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -617,13 +617,13 @@ export def "rides-cancel Cancel-a-Ride" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides/($id)/cancel")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rides/{id}/cancel"))
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -634,7 +634,7 @@ export def "rides-cancel Cancel-a-Ride" [
 #
 # GET /rides/{id}/cancel_fees
 # operationId: Cancel fee of a Ride
-export def "rides-cancel-fees Cancel-fee-of-a-Ride" [
+export def "rides-cancel-fees get" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -644,13 +644,13 @@ export def "rides-cancel-fees Cancel-fee-of-a-Ride" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides/($id)/cancel_fees")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rides/{id}/cancel_fees"))
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -661,7 +661,7 @@ export def "rides-cancel-fees Cancel-fee-of-a-Ride" [
 #
 # GET /rides/{id}/estimate
 # operationId: Estimate a ride
-export def "rides-estimate Estimate-a-ride" [
+export def "rides-estimate get" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -671,13 +671,13 @@ export def "rides-estimate Estimate-a-ride" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides/($id)/estimate")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rides/{id}/estimate"))
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -688,7 +688,7 @@ export def "rides-estimate Estimate-a-ride" [
 #
 # POST /rides/{id}/reserve
 # operationId: Reserve a ride
-export def "rides-reserve Reserve-a-ride" [
+export def "rides-reserve post" [
   id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -698,13 +698,13 @@ export def "rides-reserve Reserve-a-ride" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides/($id)/reserve")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rides/{id}/reserve"))
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -715,7 +715,7 @@ export def "rides-reserve Reserve-a-ride" [
 #
 # GET /rides?page={page}&per_page={per_page}
 # operationId: Get all user rides
-export def "rides-page-page-per-page-per-page Get-all-user-rides" [
+export def "rides-page-page-per-page-per-page get" [
   page: float
   per_page: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -726,13 +726,13 @@ export def "rides-page-page-per-page-per-page Get-all-user-rides" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides?page=($page)&per_page=($per_page)")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({page: $page, per_page: $per_page} | format pattern "/rides?page={page}&per_page={per_page}"))
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -743,7 +743,7 @@ export def "rides-page-page-per-page-per-page Get-all-user-rides" [
 #
 # POST /rides?page={page}&per_page={per_page}
 # operationId: Create a ride
-export def "rides-page-page-per-page-per-page Create-a-ride" [
+export def "rides-page-page-per-page-per-page post" [
   page: any
   per_page: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -754,13 +754,13 @@ export def "rides-page-page-per-page-per-page Create-a-ride" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # e.g. application/json (e.g. application/json)
-  --Accept-Language: string # e.g. en (e.g. en)
+  --hdr-accept: string # e.g. application/json (e.g. application/json)
+  --accept-language: string # e.g. en (e.g. en)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rides?page=($page)&per_page=($per_page)")
-  let extra_headers = {"Accept": $Accept, "Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({page: $page, per_page: $per_page} | format pattern "/rides?page={page}&per_page={per_page}"))
+  let extra_headers = {"Accept": $hdr_accept, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -771,7 +771,7 @@ export def "rides-page-page-per-page-per-page Create-a-ride" [
 #
 # GET /{version}
 # operationId: Retrieve the Entry Point on Version
-export def "eco-ta-co-api-root Retrieve-the-Entry-Point-on-Version" [
+export def "eco-ta-co-api-root get" [
   version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -784,7 +784,7 @@ export def "eco-ta-co-api-root Retrieve-the-Entry-Point-on-Version" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($version)")
+  let full_url = (build-url $base ({version: $version} | format pattern "/{version}"))
   let accept_val = "application/vnd.siren+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

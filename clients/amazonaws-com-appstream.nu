@@ -66,76 +66,76 @@ def base-url-completer [] { ["http://appstream2.us-east-1.amazonaws.com" "http:/
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["PhotonAdminProxyService.AssociateApplicationFleet"] }
-def X-Amz-Target-completer-1 [] { ["PhotonAdminProxyService.AssociateApplicationToEntitlement"] }
-def X-Amz-Target-completer-2 [] { ["PhotonAdminProxyService.AssociateFleet"] }
-def X-Amz-Target-completer-3 [] { ["PhotonAdminProxyService.BatchAssociateUserStack"] }
-def X-Amz-Target-completer-4 [] { ["PhotonAdminProxyService.BatchDisassociateUserStack"] }
-def X-Amz-Target-completer-5 [] { ["PhotonAdminProxyService.CopyImage"] }
-def X-Amz-Target-completer-6 [] { ["PhotonAdminProxyService.CreateAppBlock"] }
-def X-Amz-Target-completer-7 [] { ["PhotonAdminProxyService.CreateApplication"] }
-def X-Amz-Target-completer-8 [] { ["PhotonAdminProxyService.CreateDirectoryConfig"] }
-def X-Amz-Target-completer-9 [] { ["PhotonAdminProxyService.CreateEntitlement"] }
-def X-Amz-Target-completer-10 [] { ["PhotonAdminProxyService.CreateFleet"] }
-def X-Amz-Target-completer-11 [] { ["PhotonAdminProxyService.CreateImageBuilder"] }
-def X-Amz-Target-completer-12 [] { ["PhotonAdminProxyService.CreateImageBuilderStreamingURL"] }
-def X-Amz-Target-completer-13 [] { ["PhotonAdminProxyService.CreateStack"] }
-def X-Amz-Target-completer-14 [] { ["PhotonAdminProxyService.CreateStreamingURL"] }
-def X-Amz-Target-completer-15 [] { ["PhotonAdminProxyService.CreateUpdatedImage"] }
-def X-Amz-Target-completer-16 [] { ["PhotonAdminProxyService.CreateUsageReportSubscription"] }
-def X-Amz-Target-completer-17 [] { ["PhotonAdminProxyService.CreateUser"] }
-def X-Amz-Target-completer-18 [] { ["PhotonAdminProxyService.DeleteAppBlock"] }
-def X-Amz-Target-completer-19 [] { ["PhotonAdminProxyService.DeleteApplication"] }
-def X-Amz-Target-completer-20 [] { ["PhotonAdminProxyService.DeleteDirectoryConfig"] }
-def X-Amz-Target-completer-21 [] { ["PhotonAdminProxyService.DeleteEntitlement"] }
-def X-Amz-Target-completer-22 [] { ["PhotonAdminProxyService.DeleteFleet"] }
-def X-Amz-Target-completer-23 [] { ["PhotonAdminProxyService.DeleteImage"] }
-def X-Amz-Target-completer-24 [] { ["PhotonAdminProxyService.DeleteImageBuilder"] }
-def X-Amz-Target-completer-25 [] { ["PhotonAdminProxyService.DeleteImagePermissions"] }
-def X-Amz-Target-completer-26 [] { ["PhotonAdminProxyService.DeleteStack"] }
-def X-Amz-Target-completer-27 [] { ["PhotonAdminProxyService.DeleteUsageReportSubscription"] }
-def X-Amz-Target-completer-28 [] { ["PhotonAdminProxyService.DeleteUser"] }
-def X-Amz-Target-completer-29 [] { ["PhotonAdminProxyService.DescribeAppBlocks"] }
-def X-Amz-Target-completer-30 [] { ["PhotonAdminProxyService.DescribeApplicationFleetAssociations"] }
-def X-Amz-Target-completer-31 [] { ["PhotonAdminProxyService.DescribeApplications"] }
-def X-Amz-Target-completer-32 [] { ["PhotonAdminProxyService.DescribeDirectoryConfigs"] }
-def X-Amz-Target-completer-33 [] { ["PhotonAdminProxyService.DescribeEntitlements"] }
-def X-Amz-Target-completer-34 [] { ["PhotonAdminProxyService.DescribeFleets"] }
-def X-Amz-Target-completer-35 [] { ["PhotonAdminProxyService.DescribeImageBuilders"] }
-def X-Amz-Target-completer-36 [] { ["PhotonAdminProxyService.DescribeImagePermissions"] }
-def X-Amz-Target-completer-37 [] { ["PhotonAdminProxyService.DescribeImages"] }
-def X-Amz-Target-completer-38 [] { ["PhotonAdminProxyService.DescribeSessions"] }
-def X-Amz-Target-completer-39 [] { ["PhotonAdminProxyService.DescribeStacks"] }
-def X-Amz-Target-completer-40 [] { ["PhotonAdminProxyService.DescribeUsageReportSubscriptions"] }
-def X-Amz-Target-completer-41 [] { ["PhotonAdminProxyService.DescribeUserStackAssociations"] }
-def X-Amz-Target-completer-42 [] { ["PhotonAdminProxyService.DescribeUsers"] }
-def X-Amz-Target-completer-43 [] { ["PhotonAdminProxyService.DisableUser"] }
-def X-Amz-Target-completer-44 [] { ["PhotonAdminProxyService.DisassociateApplicationFleet"] }
-def X-Amz-Target-completer-45 [] { ["PhotonAdminProxyService.DisassociateApplicationFromEntitlement"] }
-def X-Amz-Target-completer-46 [] { ["PhotonAdminProxyService.DisassociateFleet"] }
-def X-Amz-Target-completer-47 [] { ["PhotonAdminProxyService.EnableUser"] }
-def X-Amz-Target-completer-48 [] { ["PhotonAdminProxyService.ExpireSession"] }
-def X-Amz-Target-completer-49 [] { ["PhotonAdminProxyService.ListAssociatedFleets"] }
-def X-Amz-Target-completer-50 [] { ["PhotonAdminProxyService.ListAssociatedStacks"] }
-def X-Amz-Target-completer-51 [] { ["PhotonAdminProxyService.ListEntitledApplications"] }
-def X-Amz-Target-completer-52 [] { ["PhotonAdminProxyService.ListTagsForResource"] }
-def X-Amz-Target-completer-53 [] { ["PhotonAdminProxyService.StartFleet"] }
-def X-Amz-Target-completer-54 [] { ["PhotonAdminProxyService.StartImageBuilder"] }
-def X-Amz-Target-completer-55 [] { ["PhotonAdminProxyService.StopFleet"] }
-def X-Amz-Target-completer-56 [] { ["PhotonAdminProxyService.StopImageBuilder"] }
-def X-Amz-Target-completer-57 [] { ["PhotonAdminProxyService.TagResource"] }
-def X-Amz-Target-completer-58 [] { ["PhotonAdminProxyService.UntagResource"] }
-def X-Amz-Target-completer-59 [] { ["PhotonAdminProxyService.UpdateApplication"] }
-def X-Amz-Target-completer-60 [] { ["PhotonAdminProxyService.UpdateDirectoryConfig"] }
-def X-Amz-Target-completer-61 [] { ["PhotonAdminProxyService.UpdateEntitlement"] }
-def X-Amz-Target-completer-62 [] { ["PhotonAdminProxyService.UpdateFleet"] }
-def X-Amz-Target-completer-63 [] { ["PhotonAdminProxyService.UpdateImagePermissions"] }
-def X-Amz-Target-completer-64 [] { ["PhotonAdminProxyService.UpdateStack"] }
+def x-amz-target-completer [] { ["PhotonAdminProxyService.AssociateApplicationFleet"] }
+def x-amz-target-completer-1 [] { ["PhotonAdminProxyService.AssociateApplicationToEntitlement"] }
+def x-amz-target-completer-2 [] { ["PhotonAdminProxyService.AssociateFleet"] }
+def x-amz-target-completer-3 [] { ["PhotonAdminProxyService.BatchAssociateUserStack"] }
+def x-amz-target-completer-4 [] { ["PhotonAdminProxyService.BatchDisassociateUserStack"] }
+def x-amz-target-completer-5 [] { ["PhotonAdminProxyService.CopyImage"] }
+def x-amz-target-completer-6 [] { ["PhotonAdminProxyService.CreateAppBlock"] }
+def x-amz-target-completer-7 [] { ["PhotonAdminProxyService.CreateApplication"] }
+def x-amz-target-completer-8 [] { ["PhotonAdminProxyService.CreateDirectoryConfig"] }
+def x-amz-target-completer-9 [] { ["PhotonAdminProxyService.CreateEntitlement"] }
+def x-amz-target-completer-10 [] { ["PhotonAdminProxyService.CreateFleet"] }
+def x-amz-target-completer-11 [] { ["PhotonAdminProxyService.CreateImageBuilder"] }
+def x-amz-target-completer-12 [] { ["PhotonAdminProxyService.CreateImageBuilderStreamingURL"] }
+def x-amz-target-completer-13 [] { ["PhotonAdminProxyService.CreateStack"] }
+def x-amz-target-completer-14 [] { ["PhotonAdminProxyService.CreateStreamingURL"] }
+def x-amz-target-completer-15 [] { ["PhotonAdminProxyService.CreateUpdatedImage"] }
+def x-amz-target-completer-16 [] { ["PhotonAdminProxyService.CreateUsageReportSubscription"] }
+def x-amz-target-completer-17 [] { ["PhotonAdminProxyService.CreateUser"] }
+def x-amz-target-completer-18 [] { ["PhotonAdminProxyService.DeleteAppBlock"] }
+def x-amz-target-completer-19 [] { ["PhotonAdminProxyService.DeleteApplication"] }
+def x-amz-target-completer-20 [] { ["PhotonAdminProxyService.DeleteDirectoryConfig"] }
+def x-amz-target-completer-21 [] { ["PhotonAdminProxyService.DeleteEntitlement"] }
+def x-amz-target-completer-22 [] { ["PhotonAdminProxyService.DeleteFleet"] }
+def x-amz-target-completer-23 [] { ["PhotonAdminProxyService.DeleteImage"] }
+def x-amz-target-completer-24 [] { ["PhotonAdminProxyService.DeleteImageBuilder"] }
+def x-amz-target-completer-25 [] { ["PhotonAdminProxyService.DeleteImagePermissions"] }
+def x-amz-target-completer-26 [] { ["PhotonAdminProxyService.DeleteStack"] }
+def x-amz-target-completer-27 [] { ["PhotonAdminProxyService.DeleteUsageReportSubscription"] }
+def x-amz-target-completer-28 [] { ["PhotonAdminProxyService.DeleteUser"] }
+def x-amz-target-completer-29 [] { ["PhotonAdminProxyService.DescribeAppBlocks"] }
+def x-amz-target-completer-30 [] { ["PhotonAdminProxyService.DescribeApplicationFleetAssociations"] }
+def x-amz-target-completer-31 [] { ["PhotonAdminProxyService.DescribeApplications"] }
+def x-amz-target-completer-32 [] { ["PhotonAdminProxyService.DescribeDirectoryConfigs"] }
+def x-amz-target-completer-33 [] { ["PhotonAdminProxyService.DescribeEntitlements"] }
+def x-amz-target-completer-34 [] { ["PhotonAdminProxyService.DescribeFleets"] }
+def x-amz-target-completer-35 [] { ["PhotonAdminProxyService.DescribeImageBuilders"] }
+def x-amz-target-completer-36 [] { ["PhotonAdminProxyService.DescribeImagePermissions"] }
+def x-amz-target-completer-37 [] { ["PhotonAdminProxyService.DescribeImages"] }
+def x-amz-target-completer-38 [] { ["PhotonAdminProxyService.DescribeSessions"] }
+def x-amz-target-completer-39 [] { ["PhotonAdminProxyService.DescribeStacks"] }
+def x-amz-target-completer-40 [] { ["PhotonAdminProxyService.DescribeUsageReportSubscriptions"] }
+def x-amz-target-completer-41 [] { ["PhotonAdminProxyService.DescribeUserStackAssociations"] }
+def x-amz-target-completer-42 [] { ["PhotonAdminProxyService.DescribeUsers"] }
+def x-amz-target-completer-43 [] { ["PhotonAdminProxyService.DisableUser"] }
+def x-amz-target-completer-44 [] { ["PhotonAdminProxyService.DisassociateApplicationFleet"] }
+def x-amz-target-completer-45 [] { ["PhotonAdminProxyService.DisassociateApplicationFromEntitlement"] }
+def x-amz-target-completer-46 [] { ["PhotonAdminProxyService.DisassociateFleet"] }
+def x-amz-target-completer-47 [] { ["PhotonAdminProxyService.EnableUser"] }
+def x-amz-target-completer-48 [] { ["PhotonAdminProxyService.ExpireSession"] }
+def x-amz-target-completer-49 [] { ["PhotonAdminProxyService.ListAssociatedFleets"] }
+def x-amz-target-completer-50 [] { ["PhotonAdminProxyService.ListAssociatedStacks"] }
+def x-amz-target-completer-51 [] { ["PhotonAdminProxyService.ListEntitledApplications"] }
+def x-amz-target-completer-52 [] { ["PhotonAdminProxyService.ListTagsForResource"] }
+def x-amz-target-completer-53 [] { ["PhotonAdminProxyService.StartFleet"] }
+def x-amz-target-completer-54 [] { ["PhotonAdminProxyService.StartImageBuilder"] }
+def x-amz-target-completer-55 [] { ["PhotonAdminProxyService.StopFleet"] }
+def x-amz-target-completer-56 [] { ["PhotonAdminProxyService.StopImageBuilder"] }
+def x-amz-target-completer-57 [] { ["PhotonAdminProxyService.TagResource"] }
+def x-amz-target-completer-58 [] { ["PhotonAdminProxyService.UntagResource"] }
+def x-amz-target-completer-59 [] { ["PhotonAdminProxyService.UpdateApplication"] }
+def x-amz-target-completer-60 [] { ["PhotonAdminProxyService.UpdateDirectoryConfig"] }
+def x-amz-target-completer-61 [] { ["PhotonAdminProxyService.UpdateEntitlement"] }
+def x-amz-target-completer-62 [] { ["PhotonAdminProxyService.UpdateFleet"] }
+def x-amz-target-completer-63 [] { ["PhotonAdminProxyService.UpdateImagePermissions"] }
+def x-amz-target-completer-64 [] { ["PhotonAdminProxyService.UpdateStack"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-photon-admin-proxy-service-associate-application-fleet AssociateApplicationFleet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-photon-admin-proxy-service-associate-application-fleet post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.AssociateApplicationFleet
 # operationId: AssociateApplicationFleet
-export def "x-amz-target-photon-admin-proxy-service-associate-application-fleet AssociateApplicationFleet" [
+export def "x-amz-target-photon-admin-proxy-service-associate-application-fleet post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,24 +168,24 @@ export def "x-amz-target-photon-admin-proxy-service-associate-application-fleet 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  FleetName: any
-  ApplicationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  fleet_name: any
+  application_arn: any
 ]: any -> record<ApplicationFleetAssociation: record<FleetName: record, ApplicationArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.AssociateApplicationFleet")
-  let body = {FleetName: $FleetName, ApplicationArn: $ApplicationArn} | compact
+  let body = {"FleetName": $fleet_name, "ApplicationArn": $application_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -196,7 +196,7 @@ export def "x-amz-target-photon-admin-proxy-service-associate-application-fleet 
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.AssociateApplicationToEntitlement
 # operationId: AssociateApplicationToEntitlement
-export def "x-amz-target-photon-admin-proxy-service-associate-application-to-entitlement AssociateApplicationToEntitlement" [
+export def "x-amz-target-photon-admin-proxy-service-associate-application-to-entitlement post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,25 +205,25 @@ export def "x-amz-target-photon-admin-proxy-service-associate-application-to-ent
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  StackName: any
-  EntitlementName: any
-  ApplicationIdentifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  stack_name: any
+  entitlement_name: any
+  application_identifier: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.AssociateApplicationToEntitlement")
-  let body = {StackName: $StackName, EntitlementName: $EntitlementName, ApplicationIdentifier: $ApplicationIdentifier} | compact
+  let body = {"StackName": $stack_name, "EntitlementName": $entitlement_name, "ApplicationIdentifier": $application_identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -234,7 +234,7 @@ export def "x-amz-target-photon-admin-proxy-service-associate-application-to-ent
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.AssociateFleet
 # operationId: AssociateFleet
-export def "x-amz-target-photon-admin-proxy-service-associate-fleet AssociateFleet" [
+export def "x-amz-target-photon-admin-proxy-service-associate-fleet post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,24 +243,24 @@ export def "x-amz-target-photon-admin-proxy-service-associate-fleet AssociateFle
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  FleetName: any
-  StackName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  fleet_name: any
+  stack_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.AssociateFleet")
-  let body = {FleetName: $FleetName, StackName: $StackName} | compact
+  let body = {"FleetName": $fleet_name, "StackName": $stack_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -271,7 +271,7 @@ export def "x-amz-target-photon-admin-proxy-service-associate-fleet AssociateFle
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.BatchAssociateUserStack
 # operationId: BatchAssociateUserStack
-export def "x-amz-target-photon-admin-proxy-service-batch-associate-user-stack BatchAssociateUserStack" [
+export def "x-amz-target-photon-admin-proxy-service-batch-associate-user-stack post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,23 +280,23 @@ export def "x-amz-target-photon-admin-proxy-service-batch-associate-user-stack B
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  UserStackAssociations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  user_stack_associations: any
 ]: any -> record<errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.BatchAssociateUserStack")
-  let body = {UserStackAssociations: $UserStackAssociations} | compact
+  let body = {"UserStackAssociations": $user_stack_associations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,7 +307,7 @@ export def "x-amz-target-photon-admin-proxy-service-batch-associate-user-stack B
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.BatchDisassociateUserStack
 # operationId: BatchDisassociateUserStack
-export def "x-amz-target-photon-admin-proxy-service-batch-disassociate-user-stack BatchDisassociateUserStack" [
+export def "x-amz-target-photon-admin-proxy-service-batch-disassociate-user-stack post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,23 +316,23 @@ export def "x-amz-target-photon-admin-proxy-service-batch-disassociate-user-stac
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  UserStackAssociations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  user_stack_associations: any
 ]: any -> record<errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.BatchDisassociateUserStack")
-  let body = {UserStackAssociations: $UserStackAssociations} | compact
+  let body = {"UserStackAssociations": $user_stack_associations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -343,7 +343,7 @@ export def "x-amz-target-photon-admin-proxy-service-batch-disassociate-user-stac
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CopyImage
 # operationId: CopyImage
-export def "x-amz-target-photon-admin-proxy-service-copy-image CopyImage" [
+export def "x-amz-target-photon-admin-proxy-service-copy-image copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,26 +352,26 @@ export def "x-amz-target-photon-admin-proxy-service-copy-image CopyImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  SourceImageName: any
-  DestinationImageName: any
-  DestinationRegion: any
-  --DestinationImageDescription: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  source_image_name: any
+  destination_image_name: any
+  destination_region: any
+  --destination-image-description: any
 ]: any -> record<DestinationImageName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CopyImage")
-  let body = {SourceImageName: $SourceImageName, DestinationImageName: $DestinationImageName, DestinationRegion: $DestinationRegion, DestinationImageDescription: $DestinationImageDescription} | compact
+  let body = {"SourceImageName": $source_image_name, "DestinationImageName": $destination_image_name, "DestinationRegion": $destination_region, "DestinationImageDescription": $destination_image_description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -382,7 +382,7 @@ export def "x-amz-target-photon-admin-proxy-service-copy-image CopyImage" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateAppBlock
 # operationId: CreateAppBlock
-export def "x-amz-target-photon-admin-proxy-service-create-app-block CreateAppBlock" [
+export def "x-amz-target-photon-admin-proxy-service-create-app-block create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,28 +391,28 @@ export def "x-amz-target-photon-admin-proxy-service-create-app-block CreateAppBl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  Name: any
-  --Description: any
-  --DisplayName: any
-  SourceS3Location: any
-  SetupScriptDetails: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  name: any
+  --description: any
+  --display-name: any
+  source_s3_location: any
+  setup_script_details: any
+  --tags: any
 ]: any -> record<AppBlock: record<Name: record, Arn: record, Description: record, DisplayName: record, SourceS3Location: record<S3Bucket: record, S3Key: record>, SetupScriptDetails: record<ScriptS3Location: record, ExecutablePath: record, ExecutableParameters: record, TimeoutInSeconds: record>, CreatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateAppBlock")
-  let body = {Name: $Name, Description: $Description, DisplayName: $DisplayName, SourceS3Location: $SourceS3Location, SetupScriptDetails: $SetupScriptDetails, Tags: $Tags} | compact
+  let body = {"Name": $name, "Description": $description, "DisplayName": $display_name, "SourceS3Location": $source_s3_location, "SetupScriptDetails": $setup_script_details, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,7 +423,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-app-block CreateAppBl
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateApplication
 # operationId: CreateApplication
-export def "x-amz-target-photon-admin-proxy-service-create-application CreateApplication" [
+export def "x-amz-target-photon-admin-proxy-service-create-application create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,33 +432,33 @@ export def "x-amz-target-photon-admin-proxy-service-create-application CreateApp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  Name: any
-  --DisplayName: any
-  --Description: any
-  IconS3Location: any
-  LaunchPath: any
-  --WorkingDirectory: any
-  --LaunchParameters: any
-  Platforms: any
-  InstanceFamilies: any
-  AppBlockArn: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  name: any
+  --display-name: any
+  --description: any
+  icon_s3_location: any
+  launch_path: any
+  --working-directory: any
+  --launch-parameters: any
+  platforms: any
+  instance_families: any
+  app_block_arn: any
+  --tags: any
 ]: any -> record<Application: record<Name: record, DisplayName: record, IconURL: record, LaunchPath: record, LaunchParameters: record, Enabled: record, Metadata: record, WorkingDirectory: record, Description: record, Arn: record, AppBlockArn: record, IconS3Location: record<S3Bucket: record, S3Key: record>, Platforms: record, InstanceFamilies: record, CreatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateApplication")
-  let body = {Name: $Name, DisplayName: $DisplayName, Description: $Description, IconS3Location: $IconS3Location, LaunchPath: $LaunchPath, WorkingDirectory: $WorkingDirectory, LaunchParameters: $LaunchParameters, Platforms: $Platforms, InstanceFamilies: $InstanceFamilies, AppBlockArn: $AppBlockArn, Tags: $Tags} | compact
+  let body = {"Name": $name, "DisplayName": $display_name, "Description": $description, "IconS3Location": $icon_s3_location, "LaunchPath": $launch_path, "WorkingDirectory": $working_directory, "LaunchParameters": $launch_parameters, "Platforms": $platforms, "InstanceFamilies": $instance_families, "AppBlockArn": $app_block_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -469,7 +469,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-application CreateApp
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateDirectoryConfig
 # operationId: CreateDirectoryConfig
-export def "x-amz-target-photon-admin-proxy-service-create-directory-config CreateDirectoryConfig" [
+export def "x-amz-target-photon-admin-proxy-service-create-directory-config create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,26 +478,26 @@ export def "x-amz-target-photon-admin-proxy-service-create-directory-config Crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  DirectoryName: any
-  OrganizationalUnitDistinguishedNames: any
-  --ServiceAccountCredentials: any
-  --CertificateBasedAuthProperties: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  directory_name: any
+  organizational_unit_distinguished_names: any
+  --service-account-credentials: any
+  --certificate-based-auth-properties: any
 ]: any -> record<DirectoryConfig: record<DirectoryName: record, OrganizationalUnitDistinguishedNames: record, ServiceAccountCredentials: record<AccountName: record, AccountPassword: record>, CreatedTime: record, CertificateBasedAuthProperties: record<Status: record, CertificateAuthorityArn: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateDirectoryConfig")
-  let body = {DirectoryName: $DirectoryName, OrganizationalUnitDistinguishedNames: $OrganizationalUnitDistinguishedNames, ServiceAccountCredentials: $ServiceAccountCredentials, CertificateBasedAuthProperties: $CertificateBasedAuthProperties} | compact
+  let body = {"DirectoryName": $directory_name, "OrganizationalUnitDistinguishedNames": $organizational_unit_distinguished_names, "ServiceAccountCredentials": $service_account_credentials, "CertificateBasedAuthProperties": $certificate_based_auth_properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -508,7 +508,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-directory-config Crea
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateEntitlement
 # operationId: CreateEntitlement
-export def "x-amz-target-photon-admin-proxy-service-create-entitlement CreateEntitlement" [
+export def "x-amz-target-photon-admin-proxy-service-create-entitlement create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,27 +517,27 @@ export def "x-amz-target-photon-admin-proxy-service-create-entitlement CreateEnt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  Name: any
-  StackName: any
-  --Description: any
-  AppVisibility: any
-  Attributes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  name: any
+  stack_name: any
+  --description: any
+  app_visibility: any
+  attributes: any
 ]: any -> record<Entitlement: record<Name: record, StackName: record, Description: record, AppVisibility: record, Attributes: record, CreatedTime: record, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateEntitlement")
-  let body = {Name: $Name, StackName: $StackName, Description: $Description, AppVisibility: $AppVisibility, Attributes: $Attributes} | compact
+  let body = {"Name": $name, "StackName": $stack_name, "Description": $description, "AppVisibility": $app_visibility, "Attributes": $attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -548,7 +548,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-entitlement CreateEnt
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateFleet
 # operationId: CreateFleet
-export def "x-amz-target-photon-admin-proxy-service-create-fleet CreateFleet" [
+export def "x-amz-target-photon-admin-proxy-service-create-fleet create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,43 +557,43 @@ export def "x-amz-target-photon-admin-proxy-service-create-fleet CreateFleet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  Name: any
-  --ImageName: any
-  --ImageArn: any
-  InstanceType: any
-  --FleetType: any
-  --ComputeCapacity: any
-  --VpcConfig: any
-  --MaxUserDurationInSeconds: any
-  --DisconnectTimeoutInSeconds: any
-  --Description: any
-  --DisplayName: any
-  --EnableDefaultInternetAccess: any
-  --DomainJoinInfo: any
-  --Tags: any
-  --IdleDisconnectTimeoutInSeconds: any
-  --IamRoleArn: any
-  --StreamView: any
-  --Platform: any
-  --MaxConcurrentSessions: any
-  --UsbDeviceFilterStrings: any
-  --SessionScriptS3Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  name: any
+  --image-name: any
+  --image-arn: any
+  instance_type: any
+  --fleet-type: any
+  --compute-capacity: any
+  --vpc-config: any
+  --max-user-duration-in-seconds: any
+  --disconnect-timeout-in-seconds: any
+  --description: any
+  --display-name: any
+  --enable-default-internet-access: any
+  --domain-join-info: any
+  --tags: any
+  --idle-disconnect-timeout-in-seconds: any
+  --iam-role-arn: any
+  --stream-view: any
+  --platform: any
+  --max-concurrent-sessions: any
+  --usb-device-filter-strings: any
+  --session-script-s3-location: any
 ]: any -> record<Fleet: record<Arn: record, Name: record, DisplayName: record, Description: record, ImageName: record, ImageArn: record, InstanceType: record, FleetType: record, ComputeCapacityStatus: record<Desired: record, Running: record, InUse: record, Available: record>, MaxUserDurationInSeconds: record, DisconnectTimeoutInSeconds: record, State: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, CreatedTime: record, FleetErrors: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, IdleDisconnectTimeoutInSeconds: record, IamRoleArn: record, StreamView: record, Platform: record, MaxConcurrentSessions: record, UsbDeviceFilterStrings: record, SessionScriptS3Location: record<S3Bucket: record, S3Key: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateFleet")
-  let body = {Name: $Name, ImageName: $ImageName, ImageArn: $ImageArn, InstanceType: $InstanceType, FleetType: $FleetType, ComputeCapacity: $ComputeCapacity, VpcConfig: $VpcConfig, MaxUserDurationInSeconds: $MaxUserDurationInSeconds, DisconnectTimeoutInSeconds: $DisconnectTimeoutInSeconds, Description: $Description, DisplayName: $DisplayName, EnableDefaultInternetAccess: $EnableDefaultInternetAccess, DomainJoinInfo: $DomainJoinInfo, Tags: $Tags, IdleDisconnectTimeoutInSeconds: $IdleDisconnectTimeoutInSeconds, IamRoleArn: $IamRoleArn, StreamView: $StreamView, Platform: $Platform, MaxConcurrentSessions: $MaxConcurrentSessions, UsbDeviceFilterStrings: $UsbDeviceFilterStrings, SessionScriptS3Location: $SessionScriptS3Location} | compact
+  let body = {"Name": $name, "ImageName": $image_name, "ImageArn": $image_arn, "InstanceType": $instance_type, "FleetType": $fleet_type, "ComputeCapacity": $compute_capacity, "VpcConfig": $vpc_config, "MaxUserDurationInSeconds": $max_user_duration_in_seconds, "DisconnectTimeoutInSeconds": $disconnect_timeout_in_seconds, "Description": $description, "DisplayName": $display_name, "EnableDefaultInternetAccess": $enable_default_internet_access, "DomainJoinInfo": $domain_join_info, "Tags": $tags, "IdleDisconnectTimeoutInSeconds": $idle_disconnect_timeout_in_seconds, "IamRoleArn": $iam_role_arn, "StreamView": $stream_view, "Platform": $platform, "MaxConcurrentSessions": $max_concurrent_sessions, "UsbDeviceFilterStrings": $usb_device_filter_strings, "SessionScriptS3Location": $session_script_s3_location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -604,7 +604,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-fleet CreateFleet" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateImageBuilder
 # operationId: CreateImageBuilder
-export def "x-amz-target-photon-admin-proxy-service-create-image-builder CreateImageBuilder" [
+export def "x-amz-target-photon-admin-proxy-service-create-image-builder create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,35 +613,35 @@ export def "x-amz-target-photon-admin-proxy-service-create-image-builder CreateI
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  Name: any
-  --ImageName: any
-  --ImageArn: any
-  InstanceType: any
-  --Description: any
-  --DisplayName: any
-  --VpcConfig: any
-  --IamRoleArn: any
-  --EnableDefaultInternetAccess: any
-  --DomainJoinInfo: any
-  --AppstreamAgentVersion: any
-  --Tags: any
-  --AccessEndpoints: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  name: any
+  --image-name: any
+  --image-arn: any
+  instance_type: any
+  --description: any
+  --display-name: any
+  --vpc-config: any
+  --iam-role-arn: any
+  --enable-default-internet-access: any
+  --domain-join-info: any
+  --appstream-agent-version: any
+  --tags: any
+  --access-endpoints: any
 ]: any -> record<ImageBuilder: record<Name: record, Arn: record, ImageArn: record, Description: record, DisplayName: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, InstanceType: record, Platform: record, IamRoleArn: record, State: record, StateChangeReason: record<Code: record, Message: record>, CreatedTime: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, NetworkAccessConfiguration: record<EniPrivateIpAddress: record, EniId: record>, ImageBuilderErrors: record, AppstreamAgentVersion: record, AccessEndpoints: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateImageBuilder")
-  let body = {Name: $Name, ImageName: $ImageName, ImageArn: $ImageArn, InstanceType: $InstanceType, Description: $Description, DisplayName: $DisplayName, VpcConfig: $VpcConfig, IamRoleArn: $IamRoleArn, EnableDefaultInternetAccess: $EnableDefaultInternetAccess, DomainJoinInfo: $DomainJoinInfo, AppstreamAgentVersion: $AppstreamAgentVersion, Tags: $Tags, AccessEndpoints: $AccessEndpoints} | compact
+  let body = {"Name": $name, "ImageName": $image_name, "ImageArn": $image_arn, "InstanceType": $instance_type, "Description": $description, "DisplayName": $display_name, "VpcConfig": $vpc_config, "IamRoleArn": $iam_role_arn, "EnableDefaultInternetAccess": $enable_default_internet_access, "DomainJoinInfo": $domain_join_info, "AppstreamAgentVersion": $appstream_agent_version, "Tags": $tags, "AccessEndpoints": $access_endpoints} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -652,7 +652,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-image-builder CreateI
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateImageBuilderStreamingURL
 # operationId: CreateImageBuilderStreamingURL
-export def "x-amz-target-photon-admin-proxy-service-create-image-builder-streaming-url CreateImageBuilderStreamingURL" [
+export def "x-amz-target-photon-admin-proxy-service-create-image-builder-streaming-url create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,24 +661,24 @@ export def "x-amz-target-photon-admin-proxy-service-create-image-builder-streami
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  Name: any
-  --Validity: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  name: any
+  --validity: any
 ]: any -> record<StreamingURL: record, Expires: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateImageBuilderStreamingURL")
-  let body = {Name: $Name, Validity: $Validity} | compact
+  let body = {"Name": $name, "Validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -689,7 +689,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-image-builder-streami
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateStack
 # operationId: CreateStack
-export def "x-amz-target-photon-admin-proxy-service-create-stack CreateStack" [
+export def "x-amz-target-photon-admin-proxy-service-create-stack create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,34 +698,34 @@ export def "x-amz-target-photon-admin-proxy-service-create-stack CreateStack" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  Name: any
-  --Description: any
-  --DisplayName: any
-  --StorageConnectors: any
-  --RedirectURL: any
-  --FeedbackURL: any
-  --UserSettings: any
-  --ApplicationSettings: any
-  --Tags: any
-  --AccessEndpoints: any
-  --EmbedHostDomains: any
-  --StreamingExperienceSettings: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  name: any
+  --description: any
+  --display-name: any
+  --storage-connectors: any
+  --redirect-url: any
+  --feedback-url: any
+  --user-settings: any
+  --application-settings: any
+  --tags: any
+  --access-endpoints: any
+  --embed-host-domains: any
+  --streaming-experience-settings: any
 ]: any -> record<Stack: record<Arn: record, Name: record, Description: record, DisplayName: record, CreatedTime: record, StorageConnectors: record, RedirectURL: record, FeedbackURL: record, StackErrors: record, UserSettings: record, ApplicationSettings: record<Enabled: record, SettingsGroup: record, S3BucketName: record>, AccessEndpoints: record, EmbedHostDomains: record, StreamingExperienceSettings: record<PreferredProtocol: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateStack")
-  let body = {Name: $Name, Description: $Description, DisplayName: $DisplayName, StorageConnectors: $StorageConnectors, RedirectURL: $RedirectURL, FeedbackURL: $FeedbackURL, UserSettings: $UserSettings, ApplicationSettings: $ApplicationSettings, Tags: $Tags, AccessEndpoints: $AccessEndpoints, EmbedHostDomains: $EmbedHostDomains, StreamingExperienceSettings: $StreamingExperienceSettings} | compact
+  let body = {"Name": $name, "Description": $description, "DisplayName": $display_name, "StorageConnectors": $storage_connectors, "RedirectURL": $redirect_url, "FeedbackURL": $feedback_url, "UserSettings": $user_settings, "ApplicationSettings": $application_settings, "Tags": $tags, "AccessEndpoints": $access_endpoints, "EmbedHostDomains": $embed_host_domains, "StreamingExperienceSettings": $streaming_experience_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -736,7 +736,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-stack CreateStack" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateStreamingURL
 # operationId: CreateStreamingURL
-export def "x-amz-target-photon-admin-proxy-service-create-streaming-url CreateStreamingURL" [
+export def "x-amz-target-photon-admin-proxy-service-create-streaming-url create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,28 +745,28 @@ export def "x-amz-target-photon-admin-proxy-service-create-streaming-url CreateS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  StackName: any
-  FleetName: any
-  UserId: any
-  --ApplicationId: any
-  --Validity: any
-  --SessionContext: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  stack_name: any
+  fleet_name: any
+  user_id: any
+  --application-id: any
+  --validity: any
+  --session-context: any
 ]: any -> record<StreamingURL: record, Expires: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateStreamingURL")
-  let body = {StackName: $StackName, FleetName: $FleetName, UserId: $UserId, ApplicationId: $ApplicationId, Validity: $Validity, SessionContext: $SessionContext} | compact
+  let body = {"StackName": $stack_name, "FleetName": $fleet_name, "UserId": $user_id, "ApplicationId": $application_id, "Validity": $validity, "SessionContext": $session_context} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -777,7 +777,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-streaming-url CreateS
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateUpdatedImage
 # operationId: CreateUpdatedImage
-export def "x-amz-target-photon-admin-proxy-service-create-updated-image CreateUpdatedImage" [
+export def "x-amz-target-photon-admin-proxy-service-create-updated-image create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -786,28 +786,28 @@ export def "x-amz-target-photon-admin-proxy-service-create-updated-image CreateU
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  existingImageName: any
-  newImageName: any
-  --newImageDescription: any
-  --newImageDisplayName: any
-  --newImageTags: any
-  --dryRun: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  existing_image_name: any
+  new_image_name: any
+  --new-image-description: any
+  --new-image-display-name: any
+  --new-image-tags: any
+  --body-dry-run: any
 ]: any -> record<image: record<Name: record, Arn: record, BaseImageArn: record, DisplayName: record, State: record, Visibility: record, ImageBuilderSupported: record, ImageBuilderName: record, Platform: record, Description: record, StateChangeReason: record<Code: record, Message: record>, Applications: record, CreatedTime: record, PublicBaseImageReleasedDate: record, AppstreamAgentVersion: record, ImagePermissions: record<allowFleet: record, allowImageBuilder: record>, ImageErrors: record>, canUpdateImage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateUpdatedImage")
-  let body = {existingImageName: $existingImageName, newImageName: $newImageName, newImageDescription: $newImageDescription, newImageDisplayName: $newImageDisplayName, newImageTags: $newImageTags, dryRun: $dryRun} | compact
+  let body = {"existingImageName": $existing_image_name, "newImageName": $new_image_name, "newImageDescription": $new_image_description, "newImageDisplayName": $new_image_display_name, "newImageTags": $new_image_tags, "dryRun": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -818,7 +818,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-updated-image CreateU
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateUsageReportSubscription
 # operationId: CreateUsageReportSubscription
-export def "x-amz-target-photon-admin-proxy-service-create-usage-report-subscription CreateUsageReportSubscription" [
+export def "x-amz-target-photon-admin-proxy-service-create-usage-report-subscription create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,14 +827,14 @@ export def "x-amz-target-photon-admin-proxy-service-create-usage-report-subscrip
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
   --body: record
 ]: any -> record<S3BucketName: record, Schedule: record> {
   let input = $in
@@ -842,7 +842,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-usage-report-subscrip
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateUsageReportSubscription")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -853,7 +853,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-usage-report-subscrip
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.CreateUser
 # operationId: CreateUser
-export def "x-amz-target-photon-admin-proxy-service-create-user CreateUser" [
+export def "x-amz-target-photon-admin-proxy-service-create-user create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,27 +862,27 @@ export def "x-amz-target-photon-admin-proxy-service-create-user CreateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  UserName: any
-  --MessageAction: any
-  --FirstName: any
-  --LastName: any
-  AuthenticationType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  user_name: any
+  --message-action: any
+  --first-name: any
+  --last-name: any
+  authentication_type: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.CreateUser")
-  let body = {UserName: $UserName, MessageAction: $MessageAction, FirstName: $FirstName, LastName: $LastName, AuthenticationType: $AuthenticationType} | compact
+  let body = {"UserName": $user_name, "MessageAction": $message_action, "FirstName": $first_name, "LastName": $last_name, "AuthenticationType": $authentication_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -893,7 +893,7 @@ export def "x-amz-target-photon-admin-proxy-service-create-user CreateUser" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteAppBlock
 # operationId: DeleteAppBlock
-export def "x-amz-target-photon-admin-proxy-service-delete-app-block DeleteAppBlock" [
+export def "x-amz-target-photon-admin-proxy-service-delete-app-block delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,23 +902,23 @@ export def "x-amz-target-photon-admin-proxy-service-delete-app-block DeleteAppBl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteAppBlock")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -929,7 +929,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-app-block DeleteAppBl
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteApplication
 # operationId: DeleteApplication
-export def "x-amz-target-photon-admin-proxy-service-delete-application DeleteApplication" [
+export def "x-amz-target-photon-admin-proxy-service-delete-application delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -938,23 +938,23 @@ export def "x-amz-target-photon-admin-proxy-service-delete-application DeleteApp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteApplication")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -965,7 +965,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-application DeleteApp
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteDirectoryConfig
 # operationId: DeleteDirectoryConfig
-export def "x-amz-target-photon-admin-proxy-service-delete-directory-config DeleteDirectoryConfig" [
+export def "x-amz-target-photon-admin-proxy-service-delete-directory-config delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,23 +974,23 @@ export def "x-amz-target-photon-admin-proxy-service-delete-directory-config Dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  DirectoryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  directory_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteDirectoryConfig")
-  let body = {DirectoryName: $DirectoryName} | compact
+  let body = {"DirectoryName": $directory_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1001,7 +1001,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-directory-config Dele
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteEntitlement
 # operationId: DeleteEntitlement
-export def "x-amz-target-photon-admin-proxy-service-delete-entitlement DeleteEntitlement" [
+export def "x-amz-target-photon-admin-proxy-service-delete-entitlement delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1010,24 +1010,24 @@ export def "x-amz-target-photon-admin-proxy-service-delete-entitlement DeleteEnt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  Name: any
-  StackName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  name: any
+  stack_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteEntitlement")
-  let body = {Name: $Name, StackName: $StackName} | compact
+  let body = {"Name": $name, "StackName": $stack_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1038,7 +1038,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-entitlement DeleteEnt
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteFleet
 # operationId: DeleteFleet
-export def "x-amz-target-photon-admin-proxy-service-delete-fleet DeleteFleet" [
+export def "x-amz-target-photon-admin-proxy-service-delete-fleet delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,23 +1047,23 @@ export def "x-amz-target-photon-admin-proxy-service-delete-fleet DeleteFleet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteFleet")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1074,7 +1074,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-fleet DeleteFleet" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteImage
 # operationId: DeleteImage
-export def "x-amz-target-photon-admin-proxy-service-delete-image DeleteImage" [
+export def "x-amz-target-photon-admin-proxy-service-delete-image delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1083,23 +1083,23 @@ export def "x-amz-target-photon-admin-proxy-service-delete-image DeleteImage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  name: any
 ]: any -> record<Image: record<Name: record, Arn: record, BaseImageArn: record, DisplayName: record, State: record, Visibility: record, ImageBuilderSupported: record, ImageBuilderName: record, Platform: record, Description: record, StateChangeReason: record<Code: record, Message: record>, Applications: record, CreatedTime: record, PublicBaseImageReleasedDate: record, AppstreamAgentVersion: record, ImagePermissions: record<allowFleet: record, allowImageBuilder: record>, ImageErrors: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteImage")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1110,7 +1110,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-image DeleteImage" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteImageBuilder
 # operationId: DeleteImageBuilder
-export def "x-amz-target-photon-admin-proxy-service-delete-image-builder DeleteImageBuilder" [
+export def "x-amz-target-photon-admin-proxy-service-delete-image-builder delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1119,23 +1119,23 @@ export def "x-amz-target-photon-admin-proxy-service-delete-image-builder DeleteI
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  name: any
 ]: any -> record<ImageBuilder: record<Name: record, Arn: record, ImageArn: record, Description: record, DisplayName: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, InstanceType: record, Platform: record, IamRoleArn: record, State: record, StateChangeReason: record<Code: record, Message: record>, CreatedTime: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, NetworkAccessConfiguration: record<EniPrivateIpAddress: record, EniId: record>, ImageBuilderErrors: record, AppstreamAgentVersion: record, AccessEndpoints: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteImageBuilder")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1146,7 +1146,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-image-builder DeleteI
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteImagePermissions
 # operationId: DeleteImagePermissions
-export def "x-amz-target-photon-admin-proxy-service-delete-image-permissions DeleteImagePermissions" [
+export def "x-amz-target-photon-admin-proxy-service-delete-image-permissions delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,24 +1155,24 @@ export def "x-amz-target-photon-admin-proxy-service-delete-image-permissions Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  Name: any
-  SharedAccountId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  name: any
+  shared_account_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteImagePermissions")
-  let body = {Name: $Name, SharedAccountId: $SharedAccountId} | compact
+  let body = {"Name": $name, "SharedAccountId": $shared_account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1183,7 +1183,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-image-permissions Del
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteStack
 # operationId: DeleteStack
-export def "x-amz-target-photon-admin-proxy-service-delete-stack DeleteStack" [
+export def "x-amz-target-photon-admin-proxy-service-delete-stack delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,23 +1192,23 @@ export def "x-amz-target-photon-admin-proxy-service-delete-stack DeleteStack" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteStack")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1219,7 +1219,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-stack DeleteStack" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteUsageReportSubscription
 # operationId: DeleteUsageReportSubscription
-export def "x-amz-target-photon-admin-proxy-service-delete-usage-report-subscription DeleteUsageReportSubscription" [
+export def "x-amz-target-photon-admin-proxy-service-delete-usage-report-subscription delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1228,14 +1228,14 @@ export def "x-amz-target-photon-admin-proxy-service-delete-usage-report-subscrip
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
   --body: record
 ]: any -> record {
   let input = $in
@@ -1243,7 +1243,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-usage-report-subscrip
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteUsageReportSubscription")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1254,7 +1254,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-usage-report-subscrip
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DeleteUser
 # operationId: DeleteUser
-export def "x-amz-target-photon-admin-proxy-service-delete-user DeleteUser" [
+export def "x-amz-target-photon-admin-proxy-service-delete-user delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1263,24 +1263,24 @@ export def "x-amz-target-photon-admin-proxy-service-delete-user DeleteUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  UserName: any
-  AuthenticationType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  user_name: any
+  authentication_type: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DeleteUser")
-  let body = {UserName: $UserName, AuthenticationType: $AuthenticationType} | compact
+  let body = {"UserName": $user_name, "AuthenticationType": $authentication_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1291,7 +1291,7 @@ export def "x-amz-target-photon-admin-proxy-service-delete-user DeleteUser" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeAppBlocks
 # operationId: DescribeAppBlocks
-export def "x-amz-target-photon-admin-proxy-service-describe-app-blocks DescribeAppBlocks" [
+export def "x-amz-target-photon-admin-proxy-service-describe-app-blocks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,25 +1300,25 @@ export def "x-amz-target-photon-admin-proxy-service-describe-app-blocks Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --Arns: any
-  --NextToken: any
-  --MaxResults: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --arns: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<AppBlocks: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeAppBlocks")
-  let body = {Arns: $Arns, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Arns": $arns, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1329,7 +1329,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-app-blocks Describe
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeApplicationFleetAssociations
 # operationId: DescribeApplicationFleetAssociations
-export def "x-amz-target-photon-admin-proxy-service-describe-application-fleet-associations DescribeApplicationFleetAssociations" [
+export def "x-amz-target-photon-admin-proxy-service-describe-application-fleet-associations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1338,26 +1338,26 @@ export def "x-amz-target-photon-admin-proxy-service-describe-application-fleet-a
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  --FleetName: any
-  --ApplicationArn: any
-  --MaxResults: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  --fleet-name: any
+  --application-arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ApplicationFleetAssociations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeApplicationFleetAssociations")
-  let body = {FleetName: $FleetName, ApplicationArn: $ApplicationArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"FleetName": $fleet_name, "ApplicationArn": $application_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1368,7 +1368,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-application-fleet-a
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeApplications
 # operationId: DescribeApplications
-export def "x-amz-target-photon-admin-proxy-service-describe-applications DescribeApplications" [
+export def "x-amz-target-photon-admin-proxy-service-describe-applications post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1377,25 +1377,25 @@ export def "x-amz-target-photon-admin-proxy-service-describe-applications Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  --Arns: any
-  --NextToken: any
-  --MaxResults: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  --arns: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Applications: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeApplications")
-  let body = {Arns: $Arns, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Arns": $arns, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1406,7 +1406,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-applications Descri
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeDirectoryConfigs
 # operationId: DescribeDirectoryConfigs
-export def "x-amz-target-photon-admin-proxy-service-describe-directory-configs DescribeDirectoryConfigs" [
+export def "x-amz-target-photon-admin-proxy-service-describe-directory-configs post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,25 +1415,25 @@ export def "x-amz-target-photon-admin-proxy-service-describe-directory-configs D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --DirectoryNames: any
-  --MaxResults: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --directory-names: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<DirectoryConfigs: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeDirectoryConfigs")
-  let body = {DirectoryNames: $DirectoryNames, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"DirectoryNames": $directory_names, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1444,7 +1444,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-directory-configs D
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeEntitlements
 # operationId: DescribeEntitlements
-export def "x-amz-target-photon-admin-proxy-service-describe-entitlements DescribeEntitlements" [
+export def "x-amz-target-photon-admin-proxy-service-describe-entitlements post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1453,26 +1453,26 @@ export def "x-amz-target-photon-admin-proxy-service-describe-entitlements Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  --Name: any
-  StackName: any
-  --NextToken: any
-  --MaxResults: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  --name: any
+  stack_name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Entitlements: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeEntitlements")
-  let body = {Name: $Name, StackName: $StackName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Name": $name, "StackName": $stack_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1483,7 +1483,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-entitlements Descri
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeFleets
 # operationId: DescribeFleets
-export def "x-amz-target-photon-admin-proxy-service-describe-fleets DescribeFleets" [
+export def "x-amz-target-photon-admin-proxy-service-describe-fleets post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1492,24 +1492,24 @@ export def "x-amz-target-photon-admin-proxy-service-describe-fleets DescribeFlee
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  --Names: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  --names: any
+  --next-token: any
 ]: any -> record<Fleets: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeFleets")
-  let body = {Names: $Names, NextToken: $NextToken} | compact
+  let body = {"Names": $names, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1520,7 +1520,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-fleets DescribeFlee
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeImageBuilders
 # operationId: DescribeImageBuilders
-export def "x-amz-target-photon-admin-proxy-service-describe-image-builders DescribeImageBuilders" [
+export def "x-amz-target-photon-admin-proxy-service-describe-image-builders post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1529,25 +1529,25 @@ export def "x-amz-target-photon-admin-proxy-service-describe-image-builders Desc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  --Names: any
-  --MaxResults: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  --names: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ImageBuilders: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeImageBuilders")
-  let body = {Names: $Names, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"Names": $names, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1558,7 +1558,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-image-builders Desc
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeImagePermissions
 # operationId: DescribeImagePermissions
-export def "x-amz-target-photon-admin-proxy-service-describe-image-permissions DescribeImagePermissions" [
+export def "x-amz-target-photon-admin-proxy-service-describe-image-permissions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1567,29 +1567,29 @@ export def "x-amz-target-photon-admin-proxy-service-describe-image-permissions D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  Name: any
-  --MaxResults: any
-  --SharedAwsAccountIds: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  name: any
+  --max-results: any
+  --shared-aws-account-ids: any
+  --next-token: any
 ]: any -> record<Name: record, SharedImagePermissionsList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeImagePermissions" $qp)
-  let body = {Name: $Name, MaxResults: $MaxResults, SharedAwsAccountIds: $SharedAwsAccountIds, NextToken: $NextToken} | compact
+  let body = {"Name": $name, "MaxResults": $max_results, "SharedAwsAccountIds": $shared_aws_account_ids, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1600,7 +1600,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-image-permissions D
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeImages
 # operationId: DescribeImages
-export def "x-amz-target-photon-admin-proxy-service-describe-images DescribeImages" [
+export def "x-amz-target-photon-admin-proxy-service-describe-images post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1609,30 +1609,30 @@ export def "x-amz-target-photon-admin-proxy-service-describe-images DescribeImag
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  --Names: any
-  --Arns: any
-  --Type: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  --names: any
+  --arns: any
+  --type: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Images: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeImages" $qp)
-  let body = {Names: $Names, Arns: $Arns, Type: $Type, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Names": $names, "Arns": $arns, "Type": $type, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1643,7 +1643,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-images DescribeImag
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeSessions
 # operationId: DescribeSessions
-export def "x-amz-target-photon-admin-proxy-service-describe-sessions DescribeSessions" [
+export def "x-amz-target-photon-admin-proxy-service-describe-sessions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1652,28 +1652,28 @@ export def "x-amz-target-photon-admin-proxy-service-describe-sessions DescribeSe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  StackName: any
-  FleetName: any
-  --UserId: any
-  --NextToken: any
-  --Limit: any
-  --AuthenticationType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  stack_name: any
+  fleet_name: any
+  --user-id: any
+  --next-token: any
+  --limit: any
+  --authentication-type: any
 ]: any -> record<Sessions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeSessions")
-  let body = {StackName: $StackName, FleetName: $FleetName, UserId: $UserId, NextToken: $NextToken, Limit: $Limit, AuthenticationType: $AuthenticationType} | compact
+  let body = {"StackName": $stack_name, "FleetName": $fleet_name, "UserId": $user_id, "NextToken": $next_token, "Limit": $limit, "AuthenticationType": $authentication_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1684,7 +1684,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-sessions DescribeSe
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeStacks
 # operationId: DescribeStacks
-export def "x-amz-target-photon-admin-proxy-service-describe-stacks DescribeStacks" [
+export def "x-amz-target-photon-admin-proxy-service-describe-stacks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1693,24 +1693,24 @@ export def "x-amz-target-photon-admin-proxy-service-describe-stacks DescribeStac
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  --Names: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  --names: any
+  --next-token: any
 ]: any -> record<Stacks: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeStacks")
-  let body = {Names: $Names, NextToken: $NextToken} | compact
+  let body = {"Names": $names, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1721,7 +1721,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-stacks DescribeStac
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeUsageReportSubscriptions
 # operationId: DescribeUsageReportSubscriptions
-export def "x-amz-target-photon-admin-proxy-service-describe-usage-report-subscriptions DescribeUsageReportSubscriptions" [
+export def "x-amz-target-photon-admin-proxy-service-describe-usage-report-subscriptions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1730,24 +1730,24 @@ export def "x-amz-target-photon-admin-proxy-service-describe-usage-report-subscr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  --MaxResults: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  --max-results: any
+  --next-token: any
 ]: any -> record<UsageReportSubscriptions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeUsageReportSubscriptions")
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1758,7 +1758,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-usage-report-subscr
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeUserStackAssociations
 # operationId: DescribeUserStackAssociations
-export def "x-amz-target-photon-admin-proxy-service-describe-user-stack-associations DescribeUserStackAssociations" [
+export def "x-amz-target-photon-admin-proxy-service-describe-user-stack-associations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1767,27 +1767,27 @@ export def "x-amz-target-photon-admin-proxy-service-describe-user-stack-associat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  --StackName: any
-  --UserName: any
-  --AuthenticationType: any
-  --MaxResults: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  --stack-name: any
+  --user-name: any
+  --authentication-type: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<UserStackAssociations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeUserStackAssociations")
-  let body = {StackName: $StackName, UserName: $UserName, AuthenticationType: $AuthenticationType, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"StackName": $stack_name, "UserName": $user_name, "AuthenticationType": $authentication_type, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1798,7 +1798,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-user-stack-associat
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DescribeUsers
 # operationId: DescribeUsers
-export def "x-amz-target-photon-admin-proxy-service-describe-users DescribeUsers" [
+export def "x-amz-target-photon-admin-proxy-service-describe-users post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1807,25 +1807,25 @@ export def "x-amz-target-photon-admin-proxy-service-describe-users DescribeUsers
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  AuthenticationType: any
-  --MaxResults: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  authentication_type: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Users: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DescribeUsers")
-  let body = {AuthenticationType: $AuthenticationType, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AuthenticationType": $authentication_type, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1836,7 +1836,7 @@ export def "x-amz-target-photon-admin-proxy-service-describe-users DescribeUsers
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DisableUser
 # operationId: DisableUser
-export def "x-amz-target-photon-admin-proxy-service-disable-user DisableUser" [
+export def "x-amz-target-photon-admin-proxy-service-disable-user disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1845,24 +1845,24 @@ export def "x-amz-target-photon-admin-proxy-service-disable-user DisableUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  UserName: any
-  AuthenticationType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  user_name: any
+  authentication_type: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DisableUser")
-  let body = {UserName: $UserName, AuthenticationType: $AuthenticationType} | compact
+  let body = {"UserName": $user_name, "AuthenticationType": $authentication_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1873,7 +1873,7 @@ export def "x-amz-target-photon-admin-proxy-service-disable-user DisableUser" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DisassociateApplicationFleet
 # operationId: DisassociateApplicationFleet
-export def "x-amz-target-photon-admin-proxy-service-disassociate-application-fleet DisassociateApplicationFleet" [
+export def "x-amz-target-photon-admin-proxy-service-disassociate-application-fleet post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1882,24 +1882,24 @@ export def "x-amz-target-photon-admin-proxy-service-disassociate-application-fle
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  FleetName: any
-  ApplicationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  fleet_name: any
+  application_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DisassociateApplicationFleet")
-  let body = {FleetName: $FleetName, ApplicationArn: $ApplicationArn} | compact
+  let body = {"FleetName": $fleet_name, "ApplicationArn": $application_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1910,7 +1910,7 @@ export def "x-amz-target-photon-admin-proxy-service-disassociate-application-fle
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DisassociateApplicationFromEntitlement
 # operationId: DisassociateApplicationFromEntitlement
-export def "x-amz-target-photon-admin-proxy-service-disassociate-application-from-entitlement DisassociateApplicationFromEntitlement" [
+export def "x-amz-target-photon-admin-proxy-service-disassociate-application-from-entitlement post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1919,25 +1919,25 @@ export def "x-amz-target-photon-admin-proxy-service-disassociate-application-fro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  StackName: any
-  EntitlementName: any
-  ApplicationIdentifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  stack_name: any
+  entitlement_name: any
+  application_identifier: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DisassociateApplicationFromEntitlement")
-  let body = {StackName: $StackName, EntitlementName: $EntitlementName, ApplicationIdentifier: $ApplicationIdentifier} | compact
+  let body = {"StackName": $stack_name, "EntitlementName": $entitlement_name, "ApplicationIdentifier": $application_identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1948,7 +1948,7 @@ export def "x-amz-target-photon-admin-proxy-service-disassociate-application-fro
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.DisassociateFleet
 # operationId: DisassociateFleet
-export def "x-amz-target-photon-admin-proxy-service-disassociate-fleet DisassociateFleet" [
+export def "x-amz-target-photon-admin-proxy-service-disassociate-fleet post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1957,24 +1957,24 @@ export def "x-amz-target-photon-admin-proxy-service-disassociate-fleet Disassoci
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  FleetName: any
-  StackName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  fleet_name: any
+  stack_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.DisassociateFleet")
-  let body = {FleetName: $FleetName, StackName: $StackName} | compact
+  let body = {"FleetName": $fleet_name, "StackName": $stack_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1985,7 +1985,7 @@ export def "x-amz-target-photon-admin-proxy-service-disassociate-fleet Disassoci
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.EnableUser
 # operationId: EnableUser
-export def "x-amz-target-photon-admin-proxy-service-enable-user EnableUser" [
+export def "x-amz-target-photon-admin-proxy-service-enable-user enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1994,24 +1994,24 @@ export def "x-amz-target-photon-admin-proxy-service-enable-user EnableUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  UserName: any
-  AuthenticationType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  user_name: any
+  authentication_type: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.EnableUser")
-  let body = {UserName: $UserName, AuthenticationType: $AuthenticationType} | compact
+  let body = {"UserName": $user_name, "AuthenticationType": $authentication_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2022,7 +2022,7 @@ export def "x-amz-target-photon-admin-proxy-service-enable-user EnableUser" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.ExpireSession
 # operationId: ExpireSession
-export def "x-amz-target-photon-admin-proxy-service-expire-session ExpireSession" [
+export def "x-amz-target-photon-admin-proxy-service-expire-session post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,23 +2031,23 @@ export def "x-amz-target-photon-admin-proxy-service-expire-session ExpireSession
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  SessionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  session_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.ExpireSession")
-  let body = {SessionId: $SessionId} | compact
+  let body = {"SessionId": $session_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2058,7 +2058,7 @@ export def "x-amz-target-photon-admin-proxy-service-expire-session ExpireSession
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.ListAssociatedFleets
 # operationId: ListAssociatedFleets
-export def "x-amz-target-photon-admin-proxy-service-list-associated-fleets ListAssociatedFleets" [
+export def "x-amz-target-photon-admin-proxy-service-list-associated-fleets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2067,24 +2067,24 @@ export def "x-amz-target-photon-admin-proxy-service-list-associated-fleets ListA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  StackName: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  stack_name: any
+  --next-token: any
 ]: any -> record<Names: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.ListAssociatedFleets")
-  let body = {StackName: $StackName, NextToken: $NextToken} | compact
+  let body = {"StackName": $stack_name, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2095,7 +2095,7 @@ export def "x-amz-target-photon-admin-proxy-service-list-associated-fleets ListA
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.ListAssociatedStacks
 # operationId: ListAssociatedStacks
-export def "x-amz-target-photon-admin-proxy-service-list-associated-stacks ListAssociatedStacks" [
+export def "x-amz-target-photon-admin-proxy-service-list-associated-stacks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2104,24 +2104,24 @@ export def "x-amz-target-photon-admin-proxy-service-list-associated-stacks ListA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  FleetName: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  fleet_name: any
+  --next-token: any
 ]: any -> record<Names: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.ListAssociatedStacks")
-  let body = {FleetName: $FleetName, NextToken: $NextToken} | compact
+  let body = {"FleetName": $fleet_name, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2132,7 +2132,7 @@ export def "x-amz-target-photon-admin-proxy-service-list-associated-stacks ListA
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.ListEntitledApplications
 # operationId: ListEntitledApplications
-export def "x-amz-target-photon-admin-proxy-service-list-entitled-applications ListEntitledApplications" [
+export def "x-amz-target-photon-admin-proxy-service-list-entitled-applications list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2141,26 +2141,26 @@ export def "x-amz-target-photon-admin-proxy-service-list-entitled-applications L
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  StackName: any
-  EntitlementName: any
-  --NextToken: any
-  --MaxResults: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  stack_name: any
+  entitlement_name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<EntitledApplications: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.ListEntitledApplications")
-  let body = {StackName: $StackName, EntitlementName: $EntitlementName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"StackName": $stack_name, "EntitlementName": $entitlement_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2171,7 +2171,7 @@ export def "x-amz-target-photon-admin-proxy-service-list-entitled-applications L
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-photon-admin-proxy-service-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-photon-admin-proxy-service-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2180,23 +2180,23 @@ export def "x-amz-target-photon-admin-proxy-service-list-tags-for-resource ListT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.ListTagsForResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2207,7 +2207,7 @@ export def "x-amz-target-photon-admin-proxy-service-list-tags-for-resource ListT
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.StartFleet
 # operationId: StartFleet
-export def "x-amz-target-photon-admin-proxy-service-start-fleet StartFleet" [
+export def "x-amz-target-photon-admin-proxy-service-start-fleet start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2216,23 +2216,23 @@ export def "x-amz-target-photon-admin-proxy-service-start-fleet StartFleet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.StartFleet")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2243,7 +2243,7 @@ export def "x-amz-target-photon-admin-proxy-service-start-fleet StartFleet" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.StartImageBuilder
 # operationId: StartImageBuilder
-export def "x-amz-target-photon-admin-proxy-service-start-image-builder StartImageBuilder" [
+export def "x-amz-target-photon-admin-proxy-service-start-image-builder start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2252,24 +2252,24 @@ export def "x-amz-target-photon-admin-proxy-service-start-image-builder StartIma
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  Name: any
-  --AppstreamAgentVersion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  name: any
+  --appstream-agent-version: any
 ]: any -> record<ImageBuilder: record<Name: record, Arn: record, ImageArn: record, Description: record, DisplayName: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, InstanceType: record, Platform: record, IamRoleArn: record, State: record, StateChangeReason: record<Code: record, Message: record>, CreatedTime: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, NetworkAccessConfiguration: record<EniPrivateIpAddress: record, EniId: record>, ImageBuilderErrors: record, AppstreamAgentVersion: record, AccessEndpoints: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.StartImageBuilder")
-  let body = {Name: $Name, AppstreamAgentVersion: $AppstreamAgentVersion} | compact
+  let body = {"Name": $name, "AppstreamAgentVersion": $appstream_agent_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2280,7 +2280,7 @@ export def "x-amz-target-photon-admin-proxy-service-start-image-builder StartIma
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.StopFleet
 # operationId: StopFleet
-export def "x-amz-target-photon-admin-proxy-service-stop-fleet StopFleet" [
+export def "x-amz-target-photon-admin-proxy-service-stop-fleet stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2289,23 +2289,23 @@ export def "x-amz-target-photon-admin-proxy-service-stop-fleet StopFleet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.StopFleet")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2316,7 +2316,7 @@ export def "x-amz-target-photon-admin-proxy-service-stop-fleet StopFleet" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.StopImageBuilder
 # operationId: StopImageBuilder
-export def "x-amz-target-photon-admin-proxy-service-stop-image-builder StopImageBuilder" [
+export def "x-amz-target-photon-admin-proxy-service-stop-image-builder stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2325,23 +2325,23 @@ export def "x-amz-target-photon-admin-proxy-service-stop-image-builder StopImage
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  name: any
 ]: any -> record<ImageBuilder: record<Name: record, Arn: record, ImageArn: record, Description: record, DisplayName: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, InstanceType: record, Platform: record, IamRoleArn: record, State: record, StateChangeReason: record<Code: record, Message: record>, CreatedTime: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, NetworkAccessConfiguration: record<EniPrivateIpAddress: record, EniId: record>, ImageBuilderErrors: record, AppstreamAgentVersion: record, AccessEndpoints: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.StopImageBuilder")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2352,7 +2352,7 @@ export def "x-amz-target-photon-admin-proxy-service-stop-image-builder StopImage
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.TagResource
 # operationId: TagResource
-export def "x-amz-target-photon-admin-proxy-service-tag-resource TagResource" [
+export def "x-amz-target-photon-admin-proxy-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2361,24 +2361,24 @@ export def "x-amz-target-photon-admin-proxy-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2389,7 +2389,7 @@ export def "x-amz-target-photon-admin-proxy-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-photon-admin-proxy-service-untag-resource UntagResource" [
+export def "x-amz-target-photon-admin-proxy-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,24 +2398,24 @@ export def "x-amz-target-photon-admin-proxy-service-untag-resource UntagResource
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2426,7 +2426,7 @@ export def "x-amz-target-photon-admin-proxy-service-untag-resource UntagResource
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.UpdateApplication
 # operationId: UpdateApplication
-export def "x-amz-target-photon-admin-proxy-service-update-application UpdateApplication" [
+export def "x-amz-target-photon-admin-proxy-service-update-application update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2435,31 +2435,31 @@ export def "x-amz-target-photon-admin-proxy-service-update-application UpdateApp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
-  Name: any
-  --DisplayName: any
-  --Description: any
-  --IconS3Location: any
-  --LaunchPath: any
-  --WorkingDirectory: any
-  --LaunchParameters: any
-  --AppBlockArn: any
-  --AttributesToDelete: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
+  name: any
+  --display-name: any
+  --description: any
+  --icon-s3-location: any
+  --launch-path: any
+  --working-directory: any
+  --launch-parameters: any
+  --app-block-arn: any
+  --attributes-to-delete: any
 ]: any -> record<Application: record<Name: record, DisplayName: record, IconURL: record, LaunchPath: record, LaunchParameters: record, Enabled: record, Metadata: record, WorkingDirectory: record, Description: record, Arn: record, AppBlockArn: record, IconS3Location: record<S3Bucket: record, S3Key: record>, Platforms: record, InstanceFamilies: record, CreatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.UpdateApplication")
-  let body = {Name: $Name, DisplayName: $DisplayName, Description: $Description, IconS3Location: $IconS3Location, LaunchPath: $LaunchPath, WorkingDirectory: $WorkingDirectory, LaunchParameters: $LaunchParameters, AppBlockArn: $AppBlockArn, AttributesToDelete: $AttributesToDelete} | compact
+  let body = {"Name": $name, "DisplayName": $display_name, "Description": $description, "IconS3Location": $icon_s3_location, "LaunchPath": $launch_path, "WorkingDirectory": $working_directory, "LaunchParameters": $launch_parameters, "AppBlockArn": $app_block_arn, "AttributesToDelete": $attributes_to_delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2470,7 +2470,7 @@ export def "x-amz-target-photon-admin-proxy-service-update-application UpdateApp
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.UpdateDirectoryConfig
 # operationId: UpdateDirectoryConfig
-export def "x-amz-target-photon-admin-proxy-service-update-directory-config UpdateDirectoryConfig" [
+export def "x-amz-target-photon-admin-proxy-service-update-directory-config update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2479,26 +2479,26 @@ export def "x-amz-target-photon-admin-proxy-service-update-directory-config Upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  DirectoryName: any
-  --OrganizationalUnitDistinguishedNames: any
-  --ServiceAccountCredentials: any
-  --CertificateBasedAuthProperties: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  directory_name: any
+  --organizational-unit-distinguished-names: any
+  --service-account-credentials: any
+  --certificate-based-auth-properties: any
 ]: any -> record<DirectoryConfig: record<DirectoryName: record, OrganizationalUnitDistinguishedNames: record, ServiceAccountCredentials: record<AccountName: record, AccountPassword: record>, CreatedTime: record, CertificateBasedAuthProperties: record<Status: record, CertificateAuthorityArn: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.UpdateDirectoryConfig")
-  let body = {DirectoryName: $DirectoryName, OrganizationalUnitDistinguishedNames: $OrganizationalUnitDistinguishedNames, ServiceAccountCredentials: $ServiceAccountCredentials, CertificateBasedAuthProperties: $CertificateBasedAuthProperties} | compact
+  let body = {"DirectoryName": $directory_name, "OrganizationalUnitDistinguishedNames": $organizational_unit_distinguished_names, "ServiceAccountCredentials": $service_account_credentials, "CertificateBasedAuthProperties": $certificate_based_auth_properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2509,7 +2509,7 @@ export def "x-amz-target-photon-admin-proxy-service-update-directory-config Upda
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.UpdateEntitlement
 # operationId: UpdateEntitlement
-export def "x-amz-target-photon-admin-proxy-service-update-entitlement UpdateEntitlement" [
+export def "x-amz-target-photon-admin-proxy-service-update-entitlement update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2518,27 +2518,27 @@ export def "x-amz-target-photon-admin-proxy-service-update-entitlement UpdateEnt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  Name: any
-  StackName: any
-  --Description: any
-  --AppVisibility: any
-  --Attributes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  name: any
+  stack_name: any
+  --description: any
+  --app-visibility: any
+  --attributes: any
 ]: any -> record<Entitlement: record<Name: record, StackName: record, Description: record, AppVisibility: record, Attributes: record, CreatedTime: record, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.UpdateEntitlement")
-  let body = {Name: $Name, StackName: $StackName, Description: $Description, AppVisibility: $AppVisibility, Attributes: $Attributes} | compact
+  let body = {"Name": $name, "StackName": $stack_name, "Description": $description, "AppVisibility": $app_visibility, "Attributes": $attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2549,7 +2549,7 @@ export def "x-amz-target-photon-admin-proxy-service-update-entitlement UpdateEnt
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.UpdateFleet
 # operationId: UpdateFleet
-export def "x-amz-target-photon-admin-proxy-service-update-fleet UpdateFleet" [
+export def "x-amz-target-photon-admin-proxy-service-update-fleet update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2558,43 +2558,43 @@ export def "x-amz-target-photon-admin-proxy-service-update-fleet UpdateFleet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  --ImageName: any
-  --ImageArn: any
-  --Name: any
-  --InstanceType: any
-  --ComputeCapacity: any
-  --VpcConfig: any
-  --MaxUserDurationInSeconds: any
-  --DisconnectTimeoutInSeconds: any
-  --DeleteVpcConfig: any
-  --Description: any
-  --DisplayName: any
-  --EnableDefaultInternetAccess: any
-  --DomainJoinInfo: any
-  --IdleDisconnectTimeoutInSeconds: any
-  --AttributesToDelete: any
-  --IamRoleArn: any
-  --StreamView: any
-  --Platform: any
-  --MaxConcurrentSessions: any
-  --UsbDeviceFilterStrings: any
-  --SessionScriptS3Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  --image-name: any
+  --image-arn: any
+  --name: any
+  --instance-type: any
+  --compute-capacity: any
+  --vpc-config: any
+  --max-user-duration-in-seconds: any
+  --disconnect-timeout-in-seconds: any
+  --delete-vpc-config: any
+  --description: any
+  --display-name: any
+  --enable-default-internet-access: any
+  --domain-join-info: any
+  --idle-disconnect-timeout-in-seconds: any
+  --attributes-to-delete: any
+  --iam-role-arn: any
+  --stream-view: any
+  --platform: any
+  --max-concurrent-sessions: any
+  --usb-device-filter-strings: any
+  --session-script-s3-location: any
 ]: any -> record<Fleet: record<Arn: record, Name: record, DisplayName: record, Description: record, ImageName: record, ImageArn: record, InstanceType: record, FleetType: record, ComputeCapacityStatus: record<Desired: record, Running: record, InUse: record, Available: record>, MaxUserDurationInSeconds: record, DisconnectTimeoutInSeconds: record, State: record, VpcConfig: record<SubnetIds: record, SecurityGroupIds: record>, CreatedTime: record, FleetErrors: record, EnableDefaultInternetAccess: record, DomainJoinInfo: record<DirectoryName: record, OrganizationalUnitDistinguishedName: record>, IdleDisconnectTimeoutInSeconds: record, IamRoleArn: record, StreamView: record, Platform: record, MaxConcurrentSessions: record, UsbDeviceFilterStrings: record, SessionScriptS3Location: record<S3Bucket: record, S3Key: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.UpdateFleet")
-  let body = {ImageName: $ImageName, ImageArn: $ImageArn, Name: $Name, InstanceType: $InstanceType, ComputeCapacity: $ComputeCapacity, VpcConfig: $VpcConfig, MaxUserDurationInSeconds: $MaxUserDurationInSeconds, DisconnectTimeoutInSeconds: $DisconnectTimeoutInSeconds, DeleteVpcConfig: $DeleteVpcConfig, Description: $Description, DisplayName: $DisplayName, EnableDefaultInternetAccess: $EnableDefaultInternetAccess, DomainJoinInfo: $DomainJoinInfo, IdleDisconnectTimeoutInSeconds: $IdleDisconnectTimeoutInSeconds, AttributesToDelete: $AttributesToDelete, IamRoleArn: $IamRoleArn, StreamView: $StreamView, Platform: $Platform, MaxConcurrentSessions: $MaxConcurrentSessions, UsbDeviceFilterStrings: $UsbDeviceFilterStrings, SessionScriptS3Location: $SessionScriptS3Location} | compact
+  let body = {"ImageName": $image_name, "ImageArn": $image_arn, "Name": $name, "InstanceType": $instance_type, "ComputeCapacity": $compute_capacity, "VpcConfig": $vpc_config, "MaxUserDurationInSeconds": $max_user_duration_in_seconds, "DisconnectTimeoutInSeconds": $disconnect_timeout_in_seconds, "DeleteVpcConfig": $delete_vpc_config, "Description": $description, "DisplayName": $display_name, "EnableDefaultInternetAccess": $enable_default_internet_access, "DomainJoinInfo": $domain_join_info, "IdleDisconnectTimeoutInSeconds": $idle_disconnect_timeout_in_seconds, "AttributesToDelete": $attributes_to_delete, "IamRoleArn": $iam_role_arn, "StreamView": $stream_view, "Platform": $platform, "MaxConcurrentSessions": $max_concurrent_sessions, "UsbDeviceFilterStrings": $usb_device_filter_strings, "SessionScriptS3Location": $session_script_s3_location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2605,7 +2605,7 @@ export def "x-amz-target-photon-admin-proxy-service-update-fleet UpdateFleet" [
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.UpdateImagePermissions
 # operationId: UpdateImagePermissions
-export def "x-amz-target-photon-admin-proxy-service-update-image-permissions UpdateImagePermissions" [
+export def "x-amz-target-photon-admin-proxy-service-update-image-permissions update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2614,25 +2614,25 @@ export def "x-amz-target-photon-admin-proxy-service-update-image-permissions Upd
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-63
-  Name: any
-  SharedAccountId: any
-  ImagePermissions: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-63
+  name: any
+  shared_account_id: any
+  image_permissions: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.UpdateImagePermissions")
-  let body = {Name: $Name, SharedAccountId: $SharedAccountId, ImagePermissions: $ImagePermissions} | compact
+  let body = {"Name": $name, "SharedAccountId": $shared_account_id, "ImagePermissions": $image_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2643,7 +2643,7 @@ export def "x-amz-target-photon-admin-proxy-service-update-image-permissions Upd
 #
 # POST /#X-Amz-Target=PhotonAdminProxyService.UpdateStack
 # operationId: UpdateStack
-export def "x-amz-target-photon-admin-proxy-service-update-stack UpdateStack" [
+export def "x-amz-target-photon-admin-proxy-service-update-stack update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2652,35 +2652,35 @@ export def "x-amz-target-photon-admin-proxy-service-update-stack UpdateStack" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-64
-  --DisplayName: any
-  --Description: any
-  Name: any
-  --StorageConnectors: any
-  --DeleteStorageConnectors: any
-  --RedirectURL: any
-  --FeedbackURL: any
-  --AttributesToDelete: any
-  --UserSettings: any
-  --ApplicationSettings: any
-  --AccessEndpoints: any
-  --EmbedHostDomains: any
-  --StreamingExperienceSettings: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-64
+  --display-name: any
+  --description: any
+  name: any
+  --storage-connectors: any
+  --delete-storage-connectors: any
+  --redirect-url: any
+  --feedback-url: any
+  --attributes-to-delete: any
+  --user-settings: any
+  --application-settings: any
+  --access-endpoints: any
+  --embed-host-domains: any
+  --streaming-experience-settings: any
 ]: any -> record<Stack: record<Arn: record, Name: record, Description: record, DisplayName: record, CreatedTime: record, StorageConnectors: record, RedirectURL: record, FeedbackURL: record, StackErrors: record, UserSettings: record, ApplicationSettings: record<Enabled: record, SettingsGroup: record, S3BucketName: record>, AccessEndpoints: record, EmbedHostDomains: record, StreamingExperienceSettings: record<PreferredProtocol: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=PhotonAdminProxyService.UpdateStack")
-  let body = {DisplayName: $DisplayName, Description: $Description, Name: $Name, StorageConnectors: $StorageConnectors, DeleteStorageConnectors: $DeleteStorageConnectors, RedirectURL: $RedirectURL, FeedbackURL: $FeedbackURL, AttributesToDelete: $AttributesToDelete, UserSettings: $UserSettings, ApplicationSettings: $ApplicationSettings, AccessEndpoints: $AccessEndpoints, EmbedHostDomains: $EmbedHostDomains, StreamingExperienceSettings: $StreamingExperienceSettings} | compact
+  let body = {"DisplayName": $display_name, "Description": $description, "Name": $name, "StorageConnectors": $storage_connectors, "DeleteStorageConnectors": $delete_storage_connectors, "RedirectURL": $redirect_url, "FeedbackURL": $feedback_url, "AttributesToDelete": $attributes_to_delete, "UserSettings": $user_settings, "ApplicationSettings": $application_settings, "AccessEndpoints": $access_endpoints, "EmbedHostDomains": $embed_host_domains, "StreamingExperienceSettings": $streaming_experience_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

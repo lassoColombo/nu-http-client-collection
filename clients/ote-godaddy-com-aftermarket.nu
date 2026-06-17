@@ -119,7 +119,7 @@ export def "aftermarket-listings delete" [
 #
 # POST /v1/aftermarket/listings/expiry
 # operationId: addExpiryListings
-export def "aftermarket-listings-expiry addExpiryListings" [
+export def "aftermarket-listings-expiry create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

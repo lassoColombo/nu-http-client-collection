@@ -77,7 +77,7 @@ def wt-completer-1 [] { ["json" "xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "enm-investigation get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "enm-investigation get-investigation-results" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /enm/{db}/investigation
 # operationId: getInvestigationResults
-export def "enm-investigation get" [
+export def "enm-investigation get-investigation-results" [
   db: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -122,7 +122,7 @@ export def "enm-investigation get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "inchikey" $inchikey "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/investigation" $qp)
+  let full_url = (build-url $base ({db: $db} | format pattern "/enm/{db}/investigation") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -133,7 +133,7 @@ export def "enm-investigation get" [
 # GET /enm/{db}/query/compound/{term}/{representation}
 # Docs: http://ambit.sf.net — Learn more about operations provided by this API.
 # operationId: searchByIdentifier
-export def "enm-query-compound searchByIdentifier" [
+export def "enm-query-compound list-by-identifier" [
   db: string
   term: string
   representation: string
@@ -156,7 +156,7 @@ export def "enm-query-compound searchByIdentifier" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "b64search" $b64search "scalar") (serialize-qp "casesens" $casesens "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "sameas" $sameas "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/query/compound/($term)/($representation)" $qp)
+  let full_url = (build-url $base ({db: $db, term: $term, representation: $representation} | format pattern "/enm/{db}/query/compound/{term}/{representation}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,7 +167,7 @@ export def "enm-query-compound searchByIdentifier" [
 # GET /enm/{db}/query/similarity
 # Docs: http://ambit.sf.net — Learn more about operations provided by this API.
 # operationId: searchBySimilarity
-export def "enm-query-similarity searchBySimilarity" [
+export def "enm-query-similarity list-by" [
   db: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,7 +182,7 @@ export def "enm-query-similarity searchBySimilarity" [
   --type: string@type-completer-1 # Defines the expected content of the search parameter
   --threshold: float # Similarity threshold
   --dataset-uri: string # Restrict the search within the AMBIT dataset specified with the URI
-  --filterBySubstance: oneof<nothing, bool> # Restrict the search within the set of structures with assigned substances
+  --filter-by-substance: oneof<nothing, bool> # Restrict the search within the set of structures with assigned substances
   --bundle-uri: string # If the structure is used in the specified bundle URI, the selection tag will be returned
   --sameas: string # Ontology URI to define groups of columns
   --mol: oneof<nothing, bool> # Only for application/json; to include mol as JSON field
@@ -191,8 +191,8 @@ export def "enm-query-similarity searchBySimilarity" [
 ]: nothing -> record<dataEntry: record, feature: record, model_uri: string, query: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "b64search" $b64search "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "dataset_uri" $dataset_uri "scalar") (serialize-qp "filterBySubstance" $filterBySubstance "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "sameas" $sameas "scalar") (serialize-qp "mol" $mol "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/query/similarity" $qp)
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "b64search" $b64search "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "threshold" $threshold "scalar") (serialize-qp "dataset_uri" $dataset_uri "scalar") (serialize-qp "filterBySubstance" $filter_by_substance "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "sameas" $sameas "scalar") (serialize-qp "mol" $mol "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({db: $db} | format pattern "/enm/{db}/query/similarity") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,7 +203,7 @@ export def "enm-query-similarity searchBySimilarity" [
 # GET /enm/{db}/query/smarts
 # Docs: http://ambit.sf.net — Learn more about operations provided by this API.
 # operationId: searchBySmarts
-export def "enm-query-smarts searchBySmarts" [
+export def "enm-query-smarts list-by" [
   db: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +217,7 @@ export def "enm-query-smarts searchBySmarts" [
   --b64search: string # Base64 encoded mol file; if included, will be used instead of the 'search' parameter
   --type: string@type-completer-1 # Defines the expected content of the search parameter
   --dataset-uri: string # Restrict the search within the AMBIT dataset specified with the URI
-  --filterBySubstance: oneof<nothing, bool> # Restrict the search within the set of structures with assigned substances
+  --filter-by-substance: oneof<nothing, bool> # Restrict the search within the set of structures with assigned substances
   --bundle-uri: string # If the structure is used in the specified bundle URI, the selection tag will be returned
   --sameas: string # Ontology URI to define groups of columns
   --mol: oneof<nothing, bool> # Only for application/json; to include mol as JSON field
@@ -226,8 +226,8 @@ export def "enm-query-smarts searchBySmarts" [
 ]: nothing -> record<dataEntry: record, feature: record, model_uri: string, query: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "b64search" $b64search "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "dataset_uri" $dataset_uri "scalar") (serialize-qp "filterBySubstance" $filterBySubstance "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "sameas" $sameas "scalar") (serialize-qp "mol" $mol "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/query/smarts" $qp)
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "b64search" $b64search "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "dataset_uri" $dataset_uri "scalar") (serialize-qp "filterBySubstance" $filter_by_substance "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "sameas" $sameas "scalar") (serialize-qp "mol" $mol "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({db: $db} | format pattern "/enm/{db}/query/smarts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -237,7 +237,7 @@ export def "enm-query-smarts searchBySmarts" [
 #
 # GET /enm/{db}/query/study
 # operationId: getEndpointSummary
-export def "enm-query-study get" [
+export def "enm-query-study get-endpoint-summary" [
   db: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,7 +253,7 @@ export def "enm-query-study get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "top" $top "scalar") (serialize-qp "category" $category "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/query/study" $qp)
+  let full_url = (build-url $base ({db: $db} | format pattern "/enm/{db}/query/study") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,15 +277,15 @@ export def "enm-substance list" [
   --type: string@type-completer-2
   --compound-uri: string # If type=related finds all substances containing this compound; if typ =reference - finds all substances with this compound as reference structure
   --bundle-uri: string # Retrieves if selected in this bundle
-  --addDummySubstance: oneof<nothing, bool> # Adds a compound record as substance in JSON; only if type=related
+  --add-dummy-substance: oneof<nothing, bool> # Adds a compound record as substance in JSON; only if type=related
   --studysummary: oneof<nothing, bool> # If true retrieves study summary for each substance
   --page: int # Starting page (e.g. 0)
   --pagesize: int # Page size (e.g. 10)
 ]: nothing -> record<substance: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "compound_uri" $compound_uri "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "addDummySubstance" $addDummySubstance "scalar") (serialize-qp "studysummary" $studysummary "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/substance" $qp)
+  let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "compound_uri" $compound_uri "scalar") (serialize-qp "bundle_uri" $bundle_uri "scalar") (serialize-qp "addDummySubstance" $add_dummy_substance "scalar") (serialize-qp "studysummary" $studysummary "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({db: $db} | format pattern "/enm/{db}/substance") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -313,7 +313,7 @@ export def "enm-substance get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "property_uris[]" $property_uris "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/substance/($uuid)" $qp)
+  let full_url = (build-url $base ({db: $db, uuid: $uuid} | format pattern "/enm/{db}/substance/{uuid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,7 +341,7 @@ export def "enm-substance-composition get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/substance/($uuid)/composition" $qp)
+  let full_url = (build-url $base ({db: $db, uuid: $uuid} | format pattern "/enm/{db}/substance/{uuid}/composition") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -368,7 +368,7 @@ export def "enm-substance-structures get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/substance/($uuid)/structures" $qp)
+  let full_url = (build-url $base ({db: $db, uuid: $uuid} | format pattern "/enm/{db}/substance/{uuid}/structures") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -400,7 +400,7 @@ export def "enm-substance-study get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "top" $top "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "property_uri" $property_uri "scalar") (serialize-qp "property" $property "scalar") (serialize-qp "investigation_uuid" $investigation_uuid "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/substance/($uuid)/study" $qp)
+  let full_url = (build-url $base ({db: $db, uuid: $uuid} | format pattern "/enm/{db}/substance/{uuid}/study") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -432,7 +432,7 @@ export def "enm-substance-study-summary get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "top" $top "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "property_uri" $property_uri "scalar") (serialize-qp "property" $property "scalar") (serialize-qp "result" $result "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/enm/($db)/substance/($uuid)/studySummary" $qp)
+  let full_url = (build-url $base ({db: $db, uuid: $uuid} | format pattern "/enm/{db}/substance/{uuid}/studySummary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -492,7 +492,7 @@ export def "select post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wt" $wt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/select" $qp)
-  let body = {facet: $facet, params: $params} | compact
+  let body = {"facet": $facet, "params": $params} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

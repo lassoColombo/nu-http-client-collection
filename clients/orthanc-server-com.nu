@@ -197,13 +197,13 @@ export def "instances list" [
   --expand: string # If present, retrieve detailed information about the individual instances
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
   --limit: float # Limit the number of results
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/instances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,7 +250,7 @@ export def "instances delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -270,13 +270,13 @@ export def "instances get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,21 +295,21 @@ export def "instances-anonymize post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DicomVersion: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
-  --Force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --Keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --KeepPrivateTags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
-  --KeepSource: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
-  --PrivateCreator: string # The private creator to be used for private tags in `Replace`
-  --Remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --dicom-version: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
+  --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
+  --keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --keep-private-tags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
+  --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
+  --private-creator: string # The private creator to be used for private tags in `Replace`
+  --remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/anonymize")
-  let body = {DicomVersion: $DicomVersion, Force: $Force, Keep: $Keep, KeepPrivateTags: $KeepPrivateTags, KeepSource: $KeepSource, PrivateCreator: $PrivateCreator, Remove: $Remove, Replace: $Replace, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/anonymize"))
+  let body = {"DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/dicom"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -334,7 +334,7 @@ export def "instances-attachments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/attachments" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -354,12 +354,12 @@ export def "instances-attachments delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
+  --if-match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -380,12 +380,12 @@ export def "instances-attachments get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -406,15 +406,15 @@ export def "instances-attachments put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the attachment, if this is not the first time this attachment is set.
+  --if-match: string # Revision of the attachment, if this is not the first time this attachment is set.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -438,7 +438,7 @@ export def "instances-attachments-compress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/compress")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/compress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -458,12 +458,12 @@ export def "instances-attachments-compressed-data get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/compressed-data")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/compressed-data"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -484,12 +484,12 @@ export def "instances-attachments-compressed-md5 get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/compressed-md5")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/compressed-md5"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -510,12 +510,12 @@ export def "instances-attachments-compressed-size get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/compressed-size")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/compressed-size"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -536,12 +536,12 @@ export def "instances-attachments-data get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/data")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/data"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,12 +562,12 @@ export def "instances-attachments-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/info")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/info"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -588,12 +588,12 @@ export def "instances-attachments-is-compressed get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/is-compressed")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/is-compressed"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -614,12 +614,12 @@ export def "instances-attachments-md5 get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/md5")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/md5"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -640,12 +640,12 @@ export def "instances-attachments-size get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/size")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/size"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -669,7 +669,7 @@ export def "instances-attachments-uncompress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/uncompress")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/uncompress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -692,7 +692,7 @@ export def "instances-attachments-verify-md5 post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/attachments/($name)/verify-md5")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/attachments/{name}/verify-md5"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -716,7 +716,7 @@ export def "instances-content get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "..." $param "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/content" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/content") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -740,7 +740,7 @@ export def "instances-export post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/export")
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/export"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -761,12 +761,12 @@ export def "instances-file get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Accept: string # This HTTP header can be set to retrieve the DICOM instance in DICOMweb format
+  --hdr-accept: string # This HTTP header can be set to retrieve the DICOM instance in DICOMweb format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/file")
-  let extra_headers = {"Accept": $Accept} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/file"))
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/dicom")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -789,7 +789,7 @@ export def "instances-frames list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/frames")
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/frames"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -799,8 +799,8 @@ export def "instances-frames list" [
 #
 # GET /instances/{id}/frames/{frame}
 export def "instances-frames get" [
-  frame: string
   id: string
+  frame: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,7 +812,7 @@ export def "instances-frames get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/frames/($frame)")
+  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -822,8 +822,8 @@ export def "instances-frames get" [
 #
 # GET /instances/{id}/frames/{frame}/image-int16
 export def "instances-frames-image-int16 get" [
-  frame: float
   id: string
+  frame: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,14 +834,14 @@ export def "instances-frames-image-int16 get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --quality: float # Quality for JPEG images (between 1 and 100, defaults to 90)
-  --returnUnsupportedImage: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
-  --Accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
+  --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
+  --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $returnUnsupportedImage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/frames/($frame)/image-int16" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/image-int16") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -852,8 +852,8 @@ export def "instances-frames-image-int16 get" [
 #
 # GET /instances/{id}/frames/{frame}/image-uint16
 export def "instances-frames-image-uint16 get" [
-  frame: float
   id: string
+  frame: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -864,14 +864,14 @@ export def "instances-frames-image-uint16 get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --quality: float # Quality for JPEG images (between 1 and 100, defaults to 90)
-  --returnUnsupportedImage: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
-  --Accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
+  --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
+  --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $returnUnsupportedImage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/frames/($frame)/image-uint16" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/image-uint16") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -882,8 +882,8 @@ export def "instances-frames-image-uint16 get" [
 #
 # GET /instances/{id}/frames/{frame}/image-uint8
 export def "instances-frames-image-uint8 get" [
-  frame: float
   id: string
+  frame: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,14 +894,14 @@ export def "instances-frames-image-uint8 get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --quality: float # Quality for JPEG images (between 1 and 100, defaults to 90)
-  --returnUnsupportedImage: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
-  --Accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
+  --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
+  --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $returnUnsupportedImage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/frames/($frame)/image-uint8" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/image-uint8") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -912,8 +912,8 @@ export def "instances-frames-image-uint8 get" [
 #
 # GET /instances/{id}/frames/{frame}/matlab
 export def "instances-frames-matlab get" [
-  frame: float
   id: string
+  frame: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "instances-frames-matlab get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/frames/($frame)/matlab")
+  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/matlab"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -935,8 +935,8 @@ export def "instances-frames-matlab get" [
 #
 # GET /instances/{id}/frames/{frame}/numpy
 export def "instances-frames-numpy get" [
-  frame: float
   id: string
+  frame: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -951,7 +951,7 @@ export def "instances-frames-numpy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "compress" $compress "scalar") (serialize-qp "rescale" $rescale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/frames/($frame)/numpy" $qp)
+  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/numpy") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -961,8 +961,8 @@ export def "instances-frames-numpy get" [
 #
 # GET /instances/{id}/frames/{frame}/preview
 export def "instances-frames-preview get" [
-  frame: float
   id: string
+  frame: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -973,14 +973,14 @@ export def "instances-frames-preview get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --quality: float # Quality for JPEG images (between 1 and 100, defaults to 90)
-  --returnUnsupportedImage: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
-  --Accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
+  --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
+  --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $returnUnsupportedImage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/frames/($frame)/preview" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/preview") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -991,8 +991,8 @@ export def "instances-frames-preview get" [
 #
 # GET /instances/{id}/frames/{frame}/raw
 export def "instances-frames-raw get" [
-  frame: float
   id: string
+  frame: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,7 +1004,7 @@ export def "instances-frames-raw get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/frames/($frame)/raw")
+  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/raw"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1014,8 +1014,8 @@ export def "instances-frames-raw get" [
 #
 # GET /instances/{id}/frames/{frame}/raw.gz
 export def "instances-frames-rawgz get" [
-  frame: float
   id: string
+  frame: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1027,7 +1027,7 @@ export def "instances-frames-rawgz get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/frames/($frame)/raw.gz")
+  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/raw.gz"))
   let accept_val = "application/gzip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1037,8 +1037,8 @@ export def "instances-frames-rawgz get" [
 #
 # GET /instances/{id}/frames/{frame}/rendered
 export def "instances-frames-rendered get" [
-  frame: float
   id: string
+  frame: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,18 +1050,18 @@ export def "instances-frames-rendered get" [
   --accept: string@accept-completer-1 # Response content type
   --height: float # Height of the resized image
   --quality: float # Quality for JPEG images (between 1 and 100, defaults to 90)
-  --returnUnsupportedImage: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
+  --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
   --smooth: oneof<nothing, bool> # Whether to smooth image on resize
   --width: float # Width of the resized image
   --window-center: float # Windowing center
   --window-width: float # Windowing width
-  --Accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
+  --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $returnUnsupportedImage "scalar") (serialize-qp "smooth" $smooth "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "window-center" $window_center "scalar") (serialize-qp "window-width" $window_width "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/frames/($frame)/rendered" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar") (serialize-qp "smooth" $smooth "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "window-center" $window_center "scalar") (serialize-qp "window-width" $window_width "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, frame: $frame} | format pattern "/instances/{id}/frames/{frame}/rendered") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1087,7 +1087,7 @@ export def "instances-header get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/header" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/header") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1108,14 +1108,14 @@ export def "instances-image-int16 get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --quality: float # Quality for JPEG images (between 1 and 100, defaults to 90)
-  --returnUnsupportedImage: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
-  --Accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
+  --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
+  --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $returnUnsupportedImage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/image-int16" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/image-int16") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1137,14 +1137,14 @@ export def "instances-image-uint16 get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --quality: float # Quality for JPEG images (between 1 and 100, defaults to 90)
-  --returnUnsupportedImage: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
-  --Accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
+  --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
+  --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $returnUnsupportedImage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/image-uint16" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/image-uint16") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1166,14 +1166,14 @@ export def "instances-image-uint8 get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --quality: float # Quality for JPEG images (between 1 and 100, defaults to 90)
-  --returnUnsupportedImage: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
-  --Accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
+  --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
+  --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $returnUnsupportedImage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/image-uint8" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/image-uint8") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1196,7 +1196,7 @@ export def "instances-matlab get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/matlab")
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/matlab"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1220,7 +1220,7 @@ export def "instances-metadata list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/metadata" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1240,12 +1240,12 @@ export def "instances-metadata delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
+  --if-match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/metadata/($name)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/metadata/{name}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1266,12 +1266,12 @@ export def "instances-metadata get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/metadata/($name)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/metadata/{name}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1292,15 +1292,15 @@ export def "instances-metadata put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the metadata, if this is not the first time this metadata is set.
+  --if-match: string # Revision of the metadata, if this is not the first time this metadata is set.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/metadata/($name)")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/instances/{id}/metadata/{name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1320,20 +1320,20 @@ export def "instances-modify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --Keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
-  --KeepSource: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
-  --PrivateCreator: string # The private creator to be used for private tags in `Replace`
-  --Remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --RemovePrivateTags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
-  --Replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
+  --keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
+  --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
+  --private-creator: string # The private creator to be used for private tags in `Replace`
+  --remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove-private-tags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
+  --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/modify")
-  let body = {Force: $Force, Keep: $Keep, KeepSource: $KeepSource, PrivateCreator: $PrivateCreator, Remove: $Remove, RemovePrivateTags: $RemovePrivateTags, Replace: $Replace, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/modify"))
+  let body = {"Force": $force, "Keep": $keep, "KeepSource": $keep_source, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/dicom"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1360,7 +1360,7 @@ export def "instances-module get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/module" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/module") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1385,7 +1385,7 @@ export def "instances-numpy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "compress" $compress "scalar") (serialize-qp "rescale" $rescale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/numpy" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/numpy") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1405,13 +1405,13 @@ export def "instances-patient get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/patient" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/patient") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1433,7 +1433,7 @@ export def "instances-pdf get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/pdf")
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/pdf"))
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1454,14 +1454,14 @@ export def "instances-preview get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --quality: float # Quality for JPEG images (between 1 and 100, defaults to 90)
-  --returnUnsupportedImage: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
-  --Accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
+  --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
+  --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $returnUnsupportedImage "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/preview" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/preview") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1481,13 +1481,13 @@ export def "instances-reconstruct post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ReconstructFiles: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
+  --reconstruct-files: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/reconstruct")
-  let body = {ReconstructFiles: $ReconstructFiles} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/reconstruct"))
+  let body = {"ReconstructFiles": $reconstruct_files} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1510,18 +1510,18 @@ export def "instances-rendered get" [
   --accept: string@accept-completer-1 # Response content type
   --height: float # Height of the resized image
   --quality: float # Quality for JPEG images (between 1 and 100, defaults to 90)
-  --returnUnsupportedImage: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
+  --return-unsupported-image: oneof<nothing, bool> # Returns an unsupported.png placeholder image if unable to provide the image instead of returning a 415 HTTP error (defaults to false)
   --smooth: oneof<nothing, bool> # Whether to smooth image on resize
   --width: float # Width of the resized image
   --window-center: float # Windowing center
   --window-width: float # Windowing width
-  --Accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
+  --hdr-accept: string # Format of the resulting image. Can be `image/png` (default), `image/jpeg` or `image/x-portable-arbitrarymap`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $returnUnsupportedImage "scalar") (serialize-qp "smooth" $smooth "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "window-center" $window_center "scalar") (serialize-qp "window-width" $window_width "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/rendered" $qp)
-  let extra_headers = {"Accept": $Accept} | compact
+  let qp = [(serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "returnUnsupportedImage" $return_unsupported_image "scalar") (serialize-qp "smooth" $smooth "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "window-center" $window_center "scalar") (serialize-qp "window-width" $window_width "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/rendered") $qp)
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1542,13 +1542,13 @@ export def "instances-series get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/series" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1572,7 +1572,7 @@ export def "instances-simplified-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/simplified-tags" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/simplified-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1594,7 +1594,7 @@ export def "instances-statistics get" [
 ]: nothing -> record<DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/instances/($id)/statistics")
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1614,13 +1614,13 @@ export def "instances-study get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/study" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/study") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1646,7 +1646,7 @@ export def "instances-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/instances/($id)/tags" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/instances/{id}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1691,7 +1691,7 @@ export def "jobs get-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1713,7 +1713,7 @@ export def "jobs-cancel post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)/cancel")
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1735,7 +1735,7 @@ export def "jobs-pause post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)/pause")
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/pause"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1757,7 +1757,7 @@ export def "jobs-resubmit post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)/resubmit")
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/resubmit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1779,7 +1779,7 @@ export def "jobs-resume post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)/resume")
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1802,7 +1802,7 @@ export def "jobs get-by-id-key" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)/($key)")
+  let full_url = (build-url $base ({id: $id, key: $key} | format pattern "/jobs/{id}/{key}"))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1847,7 +1847,7 @@ export def "modalities delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1869,7 +1869,7 @@ export def "modalities get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1888,25 +1888,25 @@ export def "modalities put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AET: string # AET of the remote DICOM modality
-  --AllowEcho: oneof<nothing, bool> # Whether to accept C-ECHO SCU commands issued by the remote modality
-  --AllowFind: oneof<nothing, bool> # Whether to accept C-FIND SCU commands issued by the remote modality
-  --AllowFindWorklist: oneof<nothing, bool> # Whether to accept C-FIND SCU commands for worklists issued by the remote modality
-  --AllowGet: oneof<nothing, bool> # Whether to accept C-GET SCU commands issued by the remote modality
-  --AllowMove: oneof<nothing, bool> # Whether to accept C-MOVE SCU commands issued by the remote modality
-  --AllowStorageCommitment: oneof<nothing, bool> # Whether to accept storage commitment requests issued by the remote modality
-  --AllowStore: oneof<nothing, bool> # Whether to accept C-STORE SCU commands issued by the remote modality
-  --AllowTranscoding: oneof<nothing, bool> # Whether to allow transcoding for operations initiated by this modality. This option applies to Orthanc C-GET SCP and to Orthanc C-STORE SCU. It only has an effect if the global option `EnableTranscoding` is set to `true`.
-  --Host: string # Host address of the remote DICOM modality (typically, an IP address)
-  --Manufacturer: string # Manufacturer of the remote DICOM modality (check configuration option `DicomModalities` for possible values
-  --Port: float # TCP port of the remote DICOM modality
-  --UseDicomTls: oneof<nothing, bool> # Whether to use DICOM TLS in the SCU connection initiated by Orthanc (new in Orthanc 1.9.0)
+  --aet: string # AET of the remote DICOM modality
+  --allow-echo: oneof<nothing, bool> # Whether to accept C-ECHO SCU commands issued by the remote modality
+  --allow-find: oneof<nothing, bool> # Whether to accept C-FIND SCU commands issued by the remote modality
+  --allow-find-worklist: oneof<nothing, bool> # Whether to accept C-FIND SCU commands for worklists issued by the remote modality
+  --allow-get: oneof<nothing, bool> # Whether to accept C-GET SCU commands issued by the remote modality
+  --allow-move: oneof<nothing, bool> # Whether to accept C-MOVE SCU commands issued by the remote modality
+  --allow-storage-commitment: oneof<nothing, bool> # Whether to accept storage commitment requests issued by the remote modality
+  --allow-store: oneof<nothing, bool> # Whether to accept C-STORE SCU commands issued by the remote modality
+  --allow-transcoding: oneof<nothing, bool> # Whether to allow transcoding for operations initiated by this modality. This option applies to Orthanc C-GET SCP and to Orthanc C-STORE SCU. It only has an effect if the global option `EnableTranscoding` is set to `true`.
+  --host: string # Host address of the remote DICOM modality (typically, an IP address)
+  --manufacturer: string # Manufacturer of the remote DICOM modality (check configuration option `DicomModalities` for possible values
+  --port: float # TCP port of the remote DICOM modality
+  --use-dicom-tls: oneof<nothing, bool> # Whether to use DICOM TLS in the SCU connection initiated by Orthanc (new in Orthanc 1.9.0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)")
-  let body = {AET: $AET, AllowEcho: $AllowEcho, AllowFind: $AllowFind, AllowFindWorklist: $AllowFindWorklist, AllowGet: $AllowGet, AllowMove: $AllowMove, AllowStorageCommitment: $AllowStorageCommitment, AllowStore: $AllowStore, AllowTranscoding: $AllowTranscoding, Host: $Host, Manufacturer: $Manufacturer, Port: $Port, UseDicomTls: $UseDicomTls} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}"))
+  let body = {"AET": $aet, "AllowEcho": $allow_echo, "AllowFind": $allow_find, "AllowFindWorklist": $allow_find_worklist, "AllowGet": $allow_get, "AllowMove": $allow_move, "AllowStorageCommitment": $allow_storage_commitment, "AllowStore": $allow_store, "AllowTranscoding": $allow_transcoding, "Host": $host, "Manufacturer": $manufacturer, "Port": $port, "UseDicomTls": $use_dicom_tls} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1929,7 +1929,7 @@ export def "modalities-configuration get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/configuration")
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1948,14 +1948,14 @@ export def "modalities-echo post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CheckFind: oneof<nothing, bool> # Issue a dummy C-FIND command after the C-GET SCU, in order to check whether the remote modality knows about Orthanc. This field defaults to the value of the `DicomEchoChecksFind` configuration option. New in Orthanc 1.8.1.
-  --Timeout: float # Timeout for the C-ECHO command, in seconds
+  --check-find: oneof<nothing, bool> # Issue a dummy C-FIND command after the C-GET SCU, in order to check whether the remote modality knows about Orthanc. This field defaults to the value of the `DicomEchoChecksFind` configuration option. New in Orthanc 1.8.1.
+  --timeout: float # Timeout for the C-ECHO command, in seconds
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/echo")
-  let body = {CheckFind: $CheckFind, Timeout: $Timeout} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/echo"))
+  let body = {"CheckFind": $check_find, "Timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1982,7 +1982,7 @@ export def "modalities-find post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/find")
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2009,7 +2009,7 @@ export def "modalities-find-instance post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/find-instance")
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find-instance"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2036,7 +2036,7 @@ export def "modalities-find-patient post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/find-patient")
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find-patient"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2063,7 +2063,7 @@ export def "modalities-find-series post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/find-series")
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find-series"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2090,7 +2090,7 @@ export def "modalities-find-study post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/find-study")
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find-study"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2110,15 +2110,15 @@ export def "modalities-find-worklist post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --Query: record # Associative array containing the filter on the values of the DICOM tags
-  --Short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
+  --full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
+  --query: record # Associative array containing the filter on the values of the DICOM tags
+  --short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/find-worklist")
-  let body = {Full: $Full, Query: $Query, Short: $Short} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/find-worklist"))
+  let body = {"Full": $full, "Query": $query, "Short": $short} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2138,21 +2138,21 @@ export def "modalities-move post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --Level: string # Level of the query (`Patient`, `Study`, `Series` or `Instance`)
-  --LocalAet: string # Local AET that is used for this commands, defaults to `DicomAet` configuration option. Ignored if `DicomModalities` already sets `LocalAet` for this modality.
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Resources: list # List of queries identifying all the DICOM resources to be sent
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --TargetAet: string # Target AET that will be used by the remote DICOM modality as a target for its C-STORE SCU commands, defaults to `DicomAet` configuration option in order to do a simple query/retrieve
-  --Timeout: float # Timeout for the C-MOVE command, in seconds
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --level: string # Level of the query (`Patient`, `Study`, `Series` or `Instance`)
+  --local-aet: string # Local AET that is used for this commands, defaults to `DicomAet` configuration option. Ignored if `DicomModalities` already sets `LocalAet` for this modality.
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --resources: list # List of queries identifying all the DICOM resources to be sent
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --target-aet: string # Target AET that will be used by the remote DICOM modality as a target for its C-STORE SCU commands, defaults to `DicomAet` configuration option in order to do a simple query/retrieve
+  --timeout: float # Timeout for the C-MOVE command, in seconds
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/move")
-  let body = {Asynchronous: $Asynchronous, Level: $Level, LocalAet: $LocalAet, Permissive: $Permissive, Priority: $Priority, Resources: $Resources, Synchronous: $Synchronous, TargetAet: $TargetAet, Timeout: $Timeout} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/move"))
+  let body = {"Asynchronous": $asynchronous, "Level": $level, "LocalAet": $local_aet, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2172,17 +2172,17 @@ export def "modalities-query post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Level: string # Level of the query (`Patient`, `Study`, `Series` or `Instance`)
-  --LocalAet: string # Local AET that is used for this commands, defaults to `DicomAet` configuration option. Ignored if `DicomModalities` already sets `LocalAet` for this modality.
-  --Normalize: oneof<nothing, bool> # Whether to normalize the query, i.e. whether to wipe out from the query, the DICOM tags that are not applicable for the query-retrieve level of interest
-  --Query: record # Associative array containing the filter on the values of the DICOM tags
-  --Timeout: float # Timeout for the C-FIND command and subsequent C-MOVE retrievals, in seconds (new in Orthanc 1.9.1)
+  --level: string # Level of the query (`Patient`, `Study`, `Series` or `Instance`)
+  --local-aet: string # Local AET that is used for this commands, defaults to `DicomAet` configuration option. Ignored if `DicomModalities` already sets `LocalAet` for this modality.
+  --normalize: oneof<nothing, bool> # Whether to normalize the query, i.e. whether to wipe out from the query, the DICOM tags that are not applicable for the query-retrieve level of interest
+  --query: record # Associative array containing the filter on the values of the DICOM tags
+  --timeout: float # Timeout for the C-FIND command and subsequent C-MOVE retrievals, in seconds (new in Orthanc 1.9.1)
 ]: any -> record<ID: record, Path: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/query")
-  let body = {Level: $Level, LocalAet: $LocalAet, Normalize: $Normalize, Query: $Query, Timeout: $Timeout} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/query"))
+  let body = {"Level": $level, "LocalAet": $local_aet, "Normalize": $normalize, "Query": $query, "Timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2202,15 +2202,15 @@ export def "modalities-storage-commitment post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DicomInstances: list # List of DICOM resources that are not necessarily stored within Orthanc, but that must be checked by storage commitment. This is a list of JSON objects that must contain the `SOPClassUID` and `SOPInstanceUID` fields.
-  --Resources: list # List of the Orthanc identifiers of the DICOM resources to be checked by storage commitment
-  --Timeout: float # Timeout for the storage commitment command (new in Orthanc 1.9.1)
+  --dicom-instances: list # List of DICOM resources that are not necessarily stored within Orthanc, but that must be checked by storage commitment. This is a list of JSON objects that must contain the `SOPClassUID` and `SOPInstanceUID` fields.
+  --resources: list # List of the Orthanc identifiers of the DICOM resources to be checked by storage commitment
+  --timeout: float # Timeout for the storage commitment command (new in Orthanc 1.9.1)
 ]: any -> record<ID: record, Path: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/storage-commitment")
-  let body = {DicomInstances: $DicomInstances, Resources: $Resources, Timeout: $Timeout} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/storage-commitment"))
+  let body = {"DicomInstances": $dicom_instances, "Resources": $resources, "Timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2230,25 +2230,25 @@ export def "modalities-store post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --CalledAet: string # Called AET that is used for this commands, defaults to `AET` configuration option. Allows you to overwrite the destination AET for a specific operation.
-  --Host: string # Host that is used for this commands, defaults to `Host` configuration option. Allows you to overwrite the destination host for a specific operation.
-  --LocalAet: string # Local AET that is used for this commands, defaults to `DicomAet` configuration option. Ignored if `DicomModalities` already sets `LocalAet` for this modality.
-  --MoveOriginatorAet: string # Move originator AET that is used for this commands, in order to fake a C-MOVE SCU
-  --MoveOriginatorID: float # Move originator ID that is used for this commands, in order to fake a C-MOVE SCU
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Port: float # Port that is used for this commands, defaults to `Port` configuration option. Allows you to overwrite the destination port for a specific operation.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Resources: list # List of the Orthanc identifiers of all the DICOM resources to be sent
-  --StorageCommitment: oneof<nothing, bool> # Whether to chain C-STORE with DICOM storage commitment to validate the success of the transmission: https://book.orthanc-server.com/users/storage-commitment.html#chaining-c-store-with-storage-commitment
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --Timeout: float # Timeout for the C-STORE command, in seconds
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --called-aet: string # Called AET that is used for this commands, defaults to `AET` configuration option. Allows you to overwrite the destination AET for a specific operation.
+  --host: string # Host that is used for this commands, defaults to `Host` configuration option. Allows you to overwrite the destination host for a specific operation.
+  --local-aet: string # Local AET that is used for this commands, defaults to `DicomAet` configuration option. Ignored if `DicomModalities` already sets `LocalAet` for this modality.
+  --move-originator-aet: string # Move originator AET that is used for this commands, in order to fake a C-MOVE SCU
+  --move-originator-id: float # Move originator ID that is used for this commands, in order to fake a C-MOVE SCU
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --port: float # Port that is used for this commands, defaults to `Port` configuration option. Allows you to overwrite the destination port for a specific operation.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --resources: list # List of the Orthanc identifiers of all the DICOM resources to be sent
+  --storage-commitment: oneof<nothing, bool> # Whether to chain C-STORE with DICOM storage commitment to validate the success of the transmission: https://book.orthanc-server.com/users/storage-commitment.html#chaining-c-store-with-storage-commitment
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --timeout: float # Timeout for the C-STORE command, in seconds
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/store")
-  let body = {Asynchronous: $Asynchronous, CalledAet: $CalledAet, Host: $Host, LocalAet: $LocalAet, MoveOriginatorAet: $MoveOriginatorAet, MoveOriginatorID: $MoveOriginatorID, Permissive: $Permissive, Port: $Port, Priority: $Priority, Resources: $Resources, StorageCommitment: $StorageCommitment, Synchronous: $Synchronous, Timeout: $Timeout} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/store"))
+  let body = {"Asynchronous": $asynchronous, "CalledAet": $called_aet, "Host": $host, "LocalAet": $local_aet, "MoveOriginatorAet": $move_originator_aet, "MoveOriginatorID": $move_originator_id, "Permissive": $permissive, "Port": $port, "Priority": $priority, "Resources": $resources, "StorageCommitment": $storage_commitment, "Synchronous": $synchronous, "Timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2273,7 +2273,7 @@ export def "modalities-store-straight post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/modalities/($id)/store-straight")
+  let full_url = (build-url $base ({id: $id} | format pattern "/modalities/{id}/store-straight"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2295,13 +2295,13 @@ export def "patients list" [
   --expand: string # If present, retrieve detailed information about the individual patients
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
   --limit: float # Limit the number of results
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/patients" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2324,7 +2324,7 @@ export def "patients delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2344,13 +2344,13 @@ export def "patients get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2369,25 +2369,25 @@ export def "patients-anonymize post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --DicomVersion: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
-  --Force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --Keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --KeepPrivateTags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
-  --KeepSource: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --PrivateCreator: string # The private creator to be used for private tags in `Replace`
-  --Remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --Transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --dicom-version: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
+  --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
+  --keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --keep-private-tags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
+  --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --private-creator: string # The private creator to be used for private tags in `Replace`
+  --remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/anonymize")
-  let body = {Asynchronous: $Asynchronous, DicomVersion: $DicomVersion, Force: $Force, Keep: $Keep, KeepPrivateTags: $KeepPrivateTags, KeepSource: $KeepSource, Permissive: $Permissive, Priority: $Priority, PrivateCreator: $PrivateCreator, Remove: $Remove, Replace: $Replace, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/anonymize"))
+  let body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2413,7 +2413,7 @@ export def "patients-archive get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)/archive" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/archive") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2433,16 +2433,16 @@ export def "patients-archive post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --Asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
-  --Transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
+  --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/archive")
-  let body = {Asynchronous: $Asynchronous, Priority: $Priority, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/archive"))
+  let body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2467,7 +2467,7 @@ export def "patients-attachments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)/attachments" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2487,12 +2487,12 @@ export def "patients-attachments delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
+  --if-match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2513,12 +2513,12 @@ export def "patients-attachments get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2539,15 +2539,15 @@ export def "patients-attachments put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the attachment, if this is not the first time this attachment is set.
+  --if-match: string # Revision of the attachment, if this is not the first time this attachment is set.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2571,7 +2571,7 @@ export def "patients-attachments-compress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/compress")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/compress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2591,12 +2591,12 @@ export def "patients-attachments-compressed-data get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/compressed-data")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/compressed-data"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2617,12 +2617,12 @@ export def "patients-attachments-compressed-md5 get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/compressed-md5")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/compressed-md5"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2643,12 +2643,12 @@ export def "patients-attachments-compressed-size get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/compressed-size")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/compressed-size"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2669,12 +2669,12 @@ export def "patients-attachments-data get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/data")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/data"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2695,12 +2695,12 @@ export def "patients-attachments-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/info")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/info"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2721,12 +2721,12 @@ export def "patients-attachments-is-compressed get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/is-compressed")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/is-compressed"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2747,12 +2747,12 @@ export def "patients-attachments-md5 get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/md5")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/md5"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2773,12 +2773,12 @@ export def "patients-attachments-size get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/size")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/size"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2802,7 +2802,7 @@ export def "patients-attachments-uncompress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/uncompress")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/uncompress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2825,7 +2825,7 @@ export def "patients-attachments-verify-md5 post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/attachments/($name)/verify-md5")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/attachments/{name}/verify-md5"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2845,13 +2845,13 @@ export def "patients-instances get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)/instances" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2877,7 +2877,7 @@ export def "patients-instances-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)/instances-tags" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/instances-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2903,7 +2903,7 @@ export def "patients-media get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "extended" $extended "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)/media" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/media") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2923,17 +2923,17 @@ export def "patients-media post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --Asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
-  --Extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `false`.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
-  --Transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
+  --extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `false`.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
+  --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/media")
-  let body = {Asynchronous: $Asynchronous, Extended: $Extended, Priority: $Priority, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/media"))
+  let body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2958,7 +2958,7 @@ export def "patients-metadata list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)/metadata" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2978,12 +2978,12 @@ export def "patients-metadata delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
+  --if-match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/metadata/($name)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/metadata/{name}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3004,12 +3004,12 @@ export def "patients-metadata get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/metadata/($name)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/metadata/{name}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3030,15 +3030,15 @@ export def "patients-metadata put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the metadata, if this is not the first time this metadata is set.
+  --if-match: string # Revision of the metadata, if this is not the first time this metadata is set.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/metadata/($name)")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/patients/{id}/metadata/{name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3058,24 +3058,24 @@ export def "patients-modify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --Force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --Keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
-  --KeepSource: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --PrivateCreator: string # The private creator to be used for private tags in `Replace`
-  --Remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --RemovePrivateTags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
-  --Replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --Transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
+  --keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
+  --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --private-creator: string # The private creator to be used for private tags in `Replace`
+  --remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove-private-tags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
+  --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/modify")
-  let body = {Asynchronous: $Asynchronous, Force: $Force, Keep: $Keep, KeepSource: $KeepSource, Permissive: $Permissive, Priority: $Priority, PrivateCreator: $PrivateCreator, Remove: $Remove, RemovePrivateTags: $RemovePrivateTags, Replace: $Replace, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/modify"))
+  let body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3102,7 +3102,7 @@ export def "patients-module get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)/module" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/module") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3124,7 +3124,7 @@ export def "patients-protected get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/protected")
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/protected"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3146,7 +3146,7 @@ export def "patients-protected put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/protected")
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/protected"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3165,13 +3165,13 @@ export def "patients-reconstruct post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ReconstructFiles: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
+  --reconstruct-files: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/reconstruct")
-  let body = {ReconstructFiles: $ReconstructFiles} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/reconstruct"))
+  let body = {"ReconstructFiles": $reconstruct_files} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3192,13 +3192,13 @@ export def "patients-series get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)/series" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3223,7 +3223,7 @@ export def "patients-shared-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)/shared-tags" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/shared-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3245,7 +3245,7 @@ export def "patients-statistics get" [
 ]: nothing -> record<CountInstances: float, CountSeries: float, CountStudies: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/patients/($id)/statistics")
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3265,13 +3265,13 @@ export def "patients-studies get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/patients/($id)/studies" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/patients/{id}/studies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3316,7 +3316,7 @@ export def "peers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/peers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3338,7 +3338,7 @@ export def "peers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/peers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3357,19 +3357,19 @@ export def "peers put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CertificateFile: string # SSL certificate for the HTTPS connections
-  --CertificateKeyFile: string # Key file for the SSL certificate for the HTTPS connections
-  --CertificateKeyPassword: string # Key password for the SSL certificate for the HTTPS connections
-  --HttpHeaders: record # HTTP headers to be used for the connections to the remote peer
-  --Password: string # Password for the credentials
-  --URL: string # URL of the root of the REST API of the remote Orthanc peer, for instance `http://localhost:8042/`
-  --Username: string # Username for the credentials
+  --certificate-file: string # SSL certificate for the HTTPS connections
+  --certificate-key-file: string # Key file for the SSL certificate for the HTTPS connections
+  --certificate-key-password: string # Key password for the SSL certificate for the HTTPS connections
+  --http-headers: record # HTTP headers to be used for the connections to the remote peer
+  --password: string # Password for the credentials
+  --body-url: string # URL of the root of the REST API of the remote Orthanc peer, for instance `http://localhost:8042/`
+  --username: string # Username for the credentials
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/peers/($id)")
-  let body = {CertificateFile: $CertificateFile, CertificateKeyFile: $CertificateKeyFile, CertificateKeyPassword: $CertificateKeyPassword, HttpHeaders: $HttpHeaders, Password: $Password, URL: $URL, Username: $Username} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}"))
+  let body = {"CertificateFile": $certificate_file, "CertificateKeyFile": $certificate_key_file, "CertificateKeyPassword": $certificate_key_password, "HttpHeaders": $http_headers, "Password": $password, "URL": $body_url, "Username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3392,7 +3392,7 @@ export def "peers-configuration get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/peers/($id)/configuration")
+  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}/configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3411,19 +3411,19 @@ export def "peers-store post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --Compress: oneof<nothing, bool> # Whether to compress the DICOM instances using gzip before the actual sending
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Resources: list # List of the Orthanc identifiers of all the DICOM resources to be sent
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --Transcode: string # Transcode to the provided DICOM transfer syntax before the actual sending
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --compress: oneof<nothing, bool> # Whether to compress the DICOM instances using gzip before the actual sending
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --resources: list # List of the Orthanc identifiers of all the DICOM resources to be sent
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --transcode: string # Transcode to the provided DICOM transfer syntax before the actual sending
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/peers/($id)/store")
-  let body = {Asynchronous: $Asynchronous, Compress: $Compress, Permissive: $Permissive, Priority: $Priority, Resources: $Resources, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}/store"))
+  let body = {"Asynchronous": $asynchronous, "Compress": $compress, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3448,7 +3448,7 @@ export def "peers-store-straight post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/peers/($id)/store-straight")
+  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}/store-straight"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3471,7 +3471,7 @@ export def "peers-system get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/peers/($id)/system")
+  let full_url = (build-url $base ({id: $id} | format pattern "/peers/{id}/system"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3535,7 +3535,7 @@ export def "plugins get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/plugins/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/plugins/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3578,7 +3578,7 @@ export def "queries delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queries/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3600,7 +3600,7 @@ export def "queries get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queries/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3626,7 +3626,7 @@ export def "queries-answers list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/queries/($id)/answers" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}/answers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3649,7 +3649,7 @@ export def "queries-answers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queries/($id)/answers/($index)")
+  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3675,7 +3675,7 @@ export def "queries-answers-content get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/queries/($id)/answers/($index)/content" $qp)
+  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}/content") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3695,14 +3695,14 @@ export def "queries-answers-query-instances post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Query: record # Associative array containing the filter on the values of the DICOM tags
-  --Timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
+  --query: record # Associative array containing the filter on the values of the DICOM tags
+  --timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
 ]: any -> record<ID: record, Path: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queries/($id)/answers/($index)/query-instances")
-  let body = {Query: $Query, Timeout: $Timeout} | compact
+  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}/query-instances"))
+  let body = {"Query": $query, "Timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3723,14 +3723,14 @@ export def "queries-answers-query-series post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Query: record # Associative array containing the filter on the values of the DICOM tags
-  --Timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
+  --query: record # Associative array containing the filter on the values of the DICOM tags
+  --timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
 ]: any -> record<ID: record, Path: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queries/($id)/answers/($index)/query-series")
-  let body = {Query: $Query, Timeout: $Timeout} | compact
+  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}/query-series"))
+  let body = {"Query": $query, "Timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3751,14 +3751,14 @@ export def "queries-answers-query-studies post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Query: record # Associative array containing the filter on the values of the DICOM tags
-  --Timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
+  --query: record # Associative array containing the filter on the values of the DICOM tags
+  --timeout: float # Timeout for the C-FIND command, in seconds (new in Orthanc 1.9.1)
 ]: any -> record<ID: record, Path: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queries/($id)/answers/($index)/query-studies")
-  let body = {Query: $Query, Timeout: $Timeout} | compact
+  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}/query-studies"))
+  let body = {"Query": $query, "Timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3779,20 +3779,20 @@ export def "queries-answers-retrieve post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --Full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Simplify: oneof<nothing, bool> # If set to `true`, report the DICOM tags in human-readable format (using the symbolic name of the tags)
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --TargetAet: string # AET of the target modality. By default, the AET of Orthanc is used, as defined in the `DicomAet` configuration option.
-  --Timeout: float # Timeout for the C-MOVE command, in seconds
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --simplify: oneof<nothing, bool> # If set to `true`, report the DICOM tags in human-readable format (using the symbolic name of the tags)
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --target-aet: string # AET of the target modality. By default, the AET of Orthanc is used, as defined in the `DicomAet` configuration option.
+  --timeout: float # Timeout for the C-MOVE command, in seconds
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queries/($id)/answers/($index)/retrieve")
-  let body = {Asynchronous: $Asynchronous, Full: $Full, Permissive: $Permissive, Priority: $Priority, Simplify: $Simplify, Synchronous: $Synchronous, TargetAet: $TargetAet, Timeout: $Timeout} | compact
+  let full_url = (build-url $base ({id: $id, index: $index} | format pattern "/queries/{id}/answers/{index}/retrieve"))
+  let body = {"Asynchronous": $asynchronous, "Full": $full, "Permissive": $permissive, "Priority": $priority, "Simplify": $simplify, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3815,7 +3815,7 @@ export def "queries-level get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queries/($id)/level")
+  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}/level"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3837,7 +3837,7 @@ export def "queries-modality get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queries/($id)/modality")
+  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}/modality"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3862,7 +3862,7 @@ export def "queries-query get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/queries/($id)/query" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}/query") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3881,20 +3881,20 @@ export def "queries-retrieve post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --Full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Simplify: oneof<nothing, bool> # If set to `true`, report the DICOM tags in human-readable format (using the symbolic name of the tags)
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --TargetAet: string # AET of the target modality. By default, the AET of Orthanc is used, as defined in the `DicomAet` configuration option.
-  --Timeout: float # Timeout for the C-MOVE command, in seconds
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --simplify: oneof<nothing, bool> # If set to `true`, report the DICOM tags in human-readable format (using the symbolic name of the tags)
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --target-aet: string # AET of the target modality. By default, the AET of Orthanc is used, as defined in the `DicomAet` configuration option.
+  --timeout: float # Timeout for the C-MOVE command, in seconds
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queries/($id)/retrieve")
-  let body = {Asynchronous: $Asynchronous, Full: $Full, Permissive: $Permissive, Priority: $Priority, Simplify: $Simplify, Synchronous: $Synchronous, TargetAet: $TargetAet, Timeout: $Timeout} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/queries/{id}/retrieve"))
+  let body = {"Asynchronous": $asynchronous, "Full": $full, "Permissive": $permissive, "Priority": $priority, "Simplify": $simplify, "Synchronous": $synchronous, "TargetAet": $target_aet, "Timeout": $timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3916,13 +3916,13 @@ export def "series list" [
   --expand: string # If present, retrieve detailed information about the individual series
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
   --limit: float # Limit the number of results
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3945,7 +3945,7 @@ export def "series delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3965,13 +3965,13 @@ export def "series get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3990,25 +3990,25 @@ export def "series-anonymize post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --DicomVersion: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
-  --Force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --Keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --KeepPrivateTags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
-  --KeepSource: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --PrivateCreator: string # The private creator to be used for private tags in `Replace`
-  --Remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --Transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --dicom-version: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
+  --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
+  --keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --keep-private-tags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
+  --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --private-creator: string # The private creator to be used for private tags in `Replace`
+  --remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/anonymize")
-  let body = {Asynchronous: $Asynchronous, DicomVersion: $DicomVersion, Force: $Force, Keep: $Keep, KeepPrivateTags: $KeepPrivateTags, KeepSource: $KeepSource, Permissive: $Permissive, Priority: $Priority, PrivateCreator: $PrivateCreator, Remove: $Remove, Replace: $Replace, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/anonymize"))
+  let body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4034,7 +4034,7 @@ export def "series-archive get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/archive" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/archive") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4054,16 +4054,16 @@ export def "series-archive post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --Asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
-  --Transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
+  --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/archive")
-  let body = {Asynchronous: $Asynchronous, Priority: $Priority, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/archive"))
+  let body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4088,7 +4088,7 @@ export def "series-attachments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/attachments" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4108,12 +4108,12 @@ export def "series-attachments delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
+  --if-match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4134,12 +4134,12 @@ export def "series-attachments get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4160,15 +4160,15 @@ export def "series-attachments put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the attachment, if this is not the first time this attachment is set.
+  --if-match: string # Revision of the attachment, if this is not the first time this attachment is set.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4192,7 +4192,7 @@ export def "series-attachments-compress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/compress")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/compress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4212,12 +4212,12 @@ export def "series-attachments-compressed-data get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/compressed-data")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/compressed-data"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4238,12 +4238,12 @@ export def "series-attachments-compressed-md5 get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/compressed-md5")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/compressed-md5"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4264,12 +4264,12 @@ export def "series-attachments-compressed-size get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/compressed-size")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/compressed-size"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4290,12 +4290,12 @@ export def "series-attachments-data get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/data")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/data"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4316,12 +4316,12 @@ export def "series-attachments-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/info")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/info"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4342,12 +4342,12 @@ export def "series-attachments-is-compressed get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/is-compressed")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/is-compressed"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4368,12 +4368,12 @@ export def "series-attachments-md5 get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/md5")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/md5"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4394,12 +4394,12 @@ export def "series-attachments-size get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/size")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/size"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4423,7 +4423,7 @@ export def "series-attachments-uncompress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/uncompress")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/uncompress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4446,7 +4446,7 @@ export def "series-attachments-verify-md5 post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/attachments/($name)/verify-md5")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/attachments/{name}/verify-md5"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4466,13 +4466,13 @@ export def "series-instances get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/instances" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4498,7 +4498,7 @@ export def "series-instances-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/instances-tags" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/instances-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4524,7 +4524,7 @@ export def "series-media get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "extended" $extended "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/media" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/media") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4544,17 +4544,17 @@ export def "series-media post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --Asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
-  --Extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `false`.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
-  --Transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
+  --extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `false`.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
+  --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/media")
-  let body = {Asynchronous: $Asynchronous, Extended: $Extended, Priority: $Priority, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/media"))
+  let body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4579,7 +4579,7 @@ export def "series-metadata list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/metadata" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4599,12 +4599,12 @@ export def "series-metadata delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
+  --if-match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/metadata/($name)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/metadata/{name}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4625,12 +4625,12 @@ export def "series-metadata get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/metadata/($name)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/metadata/{name}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4651,15 +4651,15 @@ export def "series-metadata put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the metadata, if this is not the first time this metadata is set.
+  --if-match: string # Revision of the metadata, if this is not the first time this metadata is set.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/metadata/($name)")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/series/{id}/metadata/{name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4679,24 +4679,24 @@ export def "series-modify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --Force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --Keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
-  --KeepSource: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --PrivateCreator: string # The private creator to be used for private tags in `Replace`
-  --Remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --RemovePrivateTags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
-  --Replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --Transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
+  --keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
+  --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --private-creator: string # The private creator to be used for private tags in `Replace`
+  --remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove-private-tags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
+  --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/modify")
-  let body = {Asynchronous: $Asynchronous, Force: $Force, Keep: $Keep, KeepSource: $KeepSource, Permissive: $Permissive, Priority: $Priority, PrivateCreator: $PrivateCreator, Remove: $Remove, RemovePrivateTags: $RemovePrivateTags, Replace: $Replace, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/modify"))
+  let body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4723,7 +4723,7 @@ export def "series-module get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/module" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/module") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4748,7 +4748,7 @@ export def "series-numpy get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "compress" $compress "scalar") (serialize-qp "rescale" $rescale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/numpy" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/numpy") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4772,7 +4772,7 @@ export def "series-ordered-slices get" [
 ]: nothing -> record<Dicom: list<string>, Slices: list<string>, SlicesShort: list<record>, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/ordered-slices")
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/ordered-slices"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4792,13 +4792,13 @@ export def "series-patient get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/patient" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/patient") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4817,13 +4817,13 @@ export def "series-reconstruct post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ReconstructFiles: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
+  --reconstruct-files: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/reconstruct")
-  let body = {ReconstructFiles: $ReconstructFiles} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/reconstruct"))
+  let body = {"ReconstructFiles": $reconstruct_files} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4849,7 +4849,7 @@ export def "series-shared-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/shared-tags" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/shared-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4871,7 +4871,7 @@ export def "series-statistics get" [
 ]: nothing -> record<CountInstances: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/series/($id)/statistics")
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4891,13 +4891,13 @@ export def "series-study get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/series/($id)/study" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/series/{id}/study") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4940,7 +4940,7 @@ export def "storage-commitment get" [
 ]: nothing -> record<Failures: list<record>, RemoteAET: string, Status: string, Success: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/storage-commitment/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/storage-commitment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4962,7 +4962,7 @@ export def "storage-commitment-remove post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/storage-commitment/($id)/remove")
+  let full_url = (build-url $base ({id: $id} | format pattern "/storage-commitment/{id}/remove"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4983,13 +4983,13 @@ export def "studies list" [
   --expand: string # If present, retrieve detailed information about the individual studies
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
   --limit: float # Limit the number of results
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
   --since: float # Show only the resources since the provided index
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "full" $full "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/studies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5012,7 +5012,7 @@ export def "studies delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5032,13 +5032,13 @@ export def "studies get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5057,25 +5057,25 @@ export def "studies-anonymize post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --DicomVersion: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
-  --Force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --Keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --KeepPrivateTags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
-  --KeepSource: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --PrivateCreator: string # The private creator to be used for private tags in `Replace`
-  --Remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --Transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --dicom-version: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
+  --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
+  --keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --keep-private-tags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
+  --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --private-creator: string # The private creator to be used for private tags in `Replace`
+  --remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/anonymize")
-  let body = {Asynchronous: $Asynchronous, DicomVersion: $DicomVersion, Force: $Force, Keep: $Keep, KeepPrivateTags: $KeepPrivateTags, KeepSource: $KeepSource, Permissive: $Permissive, Priority: $Priority, PrivateCreator: $PrivateCreator, Remove: $Remove, Replace: $Replace, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/anonymize"))
+  let body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5101,7 +5101,7 @@ export def "studies-archive get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/archive" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/archive") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5121,16 +5121,16 @@ export def "studies-archive post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --Asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
-  --Transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
+  --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/archive")
-  let body = {Asynchronous: $Asynchronous, Priority: $Priority, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/archive"))
+  let body = {"Asynchronous": $asynchronous, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5155,7 +5155,7 @@ export def "studies-attachments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full" $full "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/attachments" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/attachments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5175,12 +5175,12 @@ export def "studies-attachments delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
+  --if-match: string # Revision of the attachment, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5201,12 +5201,12 @@ export def "studies-attachments get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5227,15 +5227,15 @@ export def "studies-attachments put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the attachment, if this is not the first time this attachment is set.
+  --if-match: string # Revision of the attachment, if this is not the first time this attachment is set.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5259,7 +5259,7 @@ export def "studies-attachments-compress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/compress")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/compress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5279,12 +5279,12 @@ export def "studies-attachments-compressed-data get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/compressed-data")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/compressed-data"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5305,12 +5305,12 @@ export def "studies-attachments-compressed-md5 get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/compressed-md5")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/compressed-md5"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5331,12 +5331,12 @@ export def "studies-attachments-compressed-size get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/compressed-size")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/compressed-size"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5357,12 +5357,12 @@ export def "studies-attachments-data get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/data")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/data"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5383,12 +5383,12 @@ export def "studies-attachments-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/info")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/info"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5409,12 +5409,12 @@ export def "studies-attachments-is-compressed get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/is-compressed")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/is-compressed"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5435,12 +5435,12 @@ export def "studies-attachments-md5 get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/md5")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/md5"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5461,12 +5461,12 @@ export def "studies-attachments-size get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the attachment, to check if its content has changed
+  --if-none-match: string # Optional revision of the attachment, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/size")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/size"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5490,7 +5490,7 @@ export def "studies-attachments-uncompress post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/uncompress")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/uncompress"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5513,7 +5513,7 @@ export def "studies-attachments-verify-md5 post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/attachments/($name)/verify-md5")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/attachments/{name}/verify-md5"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5533,13 +5533,13 @@ export def "studies-instances get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/instances" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/instances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5565,7 +5565,7 @@ export def "studies-instances-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/instances-tags" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/instances-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5591,7 +5591,7 @@ export def "studies-media get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "extended" $extended "scalar") (serialize-qp "filename" $filename "scalar") (serialize-qp "transcode" $transcode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/media" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/media") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5611,17 +5611,17 @@ export def "studies-media post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --Asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
-  --Extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `false`.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
-  --Transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
+  --extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `false`.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
+  --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/media")
-  let body = {Asynchronous: $Asynchronous, Extended: $Extended, Priority: $Priority, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/media"))
+  let body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5641,18 +5641,18 @@ export def "studies-merge post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --KeepSource: oneof<nothing, bool> # If set to `true`, instructs Orthanc to keep a copy of the original resources in their source study. By default, the original resources are deleted from Orthanc.
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Resources: list # The list of DICOM resources (studies, series, and/or instances) to be merged into the study of interest (mandatory option)
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --keep-source: oneof<nothing, bool> # If set to `true`, instructs Orthanc to keep a copy of the original resources in their source study. By default, the original resources are deleted from Orthanc.
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --resources: list # The list of DICOM resources (studies, series, and/or instances) to be merged into the study of interest (mandatory option)
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/merge")
-  let body = {Asynchronous: $Asynchronous, KeepSource: $KeepSource, Permissive: $Permissive, Priority: $Priority, Resources: $Resources, Synchronous: $Synchronous} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/merge"))
+  let body = {"Asynchronous": $asynchronous, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5677,7 +5677,7 @@ export def "studies-metadata list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/metadata" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5697,12 +5697,12 @@ export def "studies-metadata delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
+  --if-match: string # Revision of the metadata, to check if its content has not changed and can be deleted. This header is mandatory if `CheckRevisions` option is `true`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/metadata/($name)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/metadata/{name}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5723,12 +5723,12 @@ export def "studies-metadata get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # Optional revision of the metadata, to check if its content has changed
+  --if-none-match: string # Optional revision of the metadata, to check if its content has changed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/metadata/($name)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/metadata/{name}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5749,15 +5749,15 @@ export def "studies-metadata put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # Revision of the metadata, if this is not the first time this metadata is set.
+  --if-match: string # Revision of the metadata, if this is not the first time this metadata is set.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/metadata/($name)")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/studies/{id}/metadata/{name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5777,24 +5777,24 @@ export def "studies-modify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --Force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --Keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
-  --KeepSource: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --PrivateCreator: string # The private creator to be used for private tags in `Replace`
-  --Remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --RemovePrivateTags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
-  --Replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --Transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
+  --keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
+  --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --private-creator: string # The private creator to be used for private tags in `Replace`
+  --remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove-private-tags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
+  --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/modify")
-  let body = {Asynchronous: $Asynchronous, Force: $Force, Keep: $Keep, KeepSource: $KeepSource, Permissive: $Permissive, Priority: $Priority, PrivateCreator: $PrivateCreator, Remove: $Remove, RemovePrivateTags: $RemovePrivateTags, Replace: $Replace, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/modify"))
+  let body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5821,7 +5821,7 @@ export def "studies-module get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/module" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/module") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5847,7 +5847,7 @@ export def "studies-module-patient get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore-length" $ignore_length "multi") (serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/module-patient" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/module-patient") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5867,13 +5867,13 @@ export def "studies-patient get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/patient" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/patient") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5892,13 +5892,13 @@ export def "studies-reconstruct post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ReconstructFiles: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
+  --reconstruct-files: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/reconstruct")
-  let body = {ReconstructFiles: $ReconstructFiles} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/reconstruct"))
+  let body = {"ReconstructFiles": $reconstruct_files} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5919,13 +5919,13 @@ export def "studies-series get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --full: oneof<nothing, bool> # If present, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --requestedTags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
+  --requested-tags: string # If present, list the DICOM Tags you want to list in the response.  This argument is a semi-column separated list of DICOM Tags identifiers; e.g: 'requestedTags=0010,0010;PatientBirthDate'.  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return 
   --short: oneof<nothing, bool> # If present, report the DICOM tags in hexadecimal format
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requestedTags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/series" $qp)
+  let qp = [(serialize-qp "full" $full "scalar") (serialize-qp "requestedTags" $requested_tags "scalar") (serialize-qp "short" $short "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/series") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5950,7 +5950,7 @@ export def "studies-shared-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "short" $short "scalar") (serialize-qp "simplify" $simplify "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/studies/($id)/shared-tags" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/shared-tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5969,21 +5969,21 @@ export def "studies-split post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --Instances: list # The list of instances to be separated from the parent study. These instances must all be children of the same source study, that is specified in the URI.
-  --KeepSource: oneof<nothing, bool> # If set to `true`, instructs Orthanc to keep a copy of the original series/instances in the source study. By default, the original series/instances are deleted from Orthanc.
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Remove: list # List of tags that must be removed in the new study (from the same modules as in the `Replace` option)
-  --Replace: record # Associative array to change the value of some DICOM tags in the new study. These tags must be part of the "Patient Module Attributes" or the "General Study Module Attributes", as specified by the DICOM 2011 standard in Tables C.7-1 and C.7-3.
-  --Series: list # The list of series to be separated from the parent study. These series must all be children of the same source study, that is specified in the URI.
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --instances: list # The list of instances to be separated from the parent study. These instances must all be children of the same source study, that is specified in the URI.
+  --keep-source: oneof<nothing, bool> # If set to `true`, instructs Orthanc to keep a copy of the original series/instances in the source study. By default, the original series/instances are deleted from Orthanc.
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --remove: list # List of tags that must be removed in the new study (from the same modules as in the `Replace` option)
+  --replace: record # Associative array to change the value of some DICOM tags in the new study. These tags must be part of the "Patient Module Attributes" or the "General Study Module Attributes", as specified by the DICOM 2011 standard in Tables C.7-1 and C.7-3.
+  --series: list # The list of series to be separated from the parent study. These series must all be children of the same source study, that is specified in the URI.
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/split")
-  let body = {Asynchronous: $Asynchronous, Instances: $Instances, KeepSource: $KeepSource, Permissive: $Permissive, Priority: $Priority, Remove: $Remove, Replace: $Replace, Series: $Series, Synchronous: $Synchronous} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/split"))
+  let body = {"Asynchronous": $asynchronous, "Instances": $instances, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "Remove": $remove, "Replace": $replace, "Series": $series, "Synchronous": $synchronous} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6006,7 +6006,7 @@ export def "studies-statistics get" [
 ]: nothing -> record<CountInstances: float, CountSeries: float, DicomDiskSize: string, DicomDiskSizeMB: float, DicomUncompressedSize: string, DicomUncompressedSizeMB: float, DiskSize: string, DiskSizeMB: float, UncompressedSize: string, UncompressedSizeMB: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/studies/($id)/statistics")
+  let full_url = (build-url $base ({id: $id} | format pattern "/studies/{id}/statistics"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6111,26 +6111,26 @@ export def "tools-bulk-anonymize post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --DicomVersion: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
-  --Force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --Keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --KeepPrivateTags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
-  --KeepSource: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --PrivateCreator: string # The private creator to be used for private tags in `Replace`
-  --Remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --Transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --dicom-version: string # Version of the DICOM standard to be used for anonymization. Check out configuration option `DeidentifyLogsDicomVersion` for possible values.
+  --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
+  --keep: list # List of DICOM tags whose value must not be destroyed by the anonymization. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --keep-private-tags: oneof<nothing, bool> # Keep the private tags from the DICOM instances (defaults to `false`)
+  --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --private-creator: string # The private creator to be used for private tags in `Replace`
+  --remove: list # List of additional tags to be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/bulk-anonymize")
-  let body = {Asynchronous: $Asynchronous, DicomVersion: $DicomVersion, Force: $Force, Keep: $Keep, KeepPrivateTags: $KeepPrivateTags, KeepSource: $KeepSource, Permissive: $Permissive, Priority: $Priority, PrivateCreator: $PrivateCreator, Remove: $Remove, Replace: $Replace, Resources: $Resources, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let body = {"Asynchronous": $asynchronous, "DicomVersion": $dicom_version, "Force": $force, "Keep": $keep, "KeepPrivateTags": $keep_private_tags, "KeepSource": $keep_source, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "Replace": $replace, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6149,17 +6149,17 @@ export def "tools-bulk-content post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --Level: string # This optional argument specifies the level of interest (can be `Patient`, `Study`, `Series` or `Instance`). Orthanc will loop over the items inside `Resources`, and explore upward or downward in the DICOM hierarchy in order to find the level of interest.
-  --Metadata: oneof<nothing, bool> # If set to `true` (default value), the metadata associated with the resources will also be retrieved.
-  --Resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
-  --Short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
+  --full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
+  --level: string # This optional argument specifies the level of interest (can be `Patient`, `Study`, `Series` or `Instance`). Orthanc will loop over the items inside `Resources`, and explore upward or downward in the DICOM hierarchy in order to find the level of interest.
+  --metadata: oneof<nothing, bool> # If set to `true` (default value), the metadata associated with the resources will also be retrieved.
+  --resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
+  --short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/bulk-content")
-  let body = {Full: $Full, Level: $Level, Metadata: $Metadata, Resources: $Resources, Short: $Short} | compact
+  let body = {"Full": $full, "Level": $level, "Metadata": $metadata, "Resources": $resources, "Short": $short} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6178,13 +6178,13 @@ export def "tools-bulk-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
+  --resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/bulk-delete")
-  let body = {Resources: $Resources} | compact
+  let body = {"Resources": $resources} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6203,26 +6203,26 @@ export def "tools-bulk-modify post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
-  --Force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
-  --Keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
-  --KeepSource: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
-  --Level: string # Level of the modification (`Patient`, `Study`, `Series` or `Instance`). If absent, the level defaults to `Instance`, but is set to `Patient` if `PatientID` is modified, to `Study` if `StudyInstanceUID` is modified, or to `Series` if `SeriesInstancesUID` is modified. (new in Orthanc 1.9.7)
-  --Permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --PrivateCreator: string # The private creator to be used for private tags in `Replace`
-  --Remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --RemovePrivateTags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
-  --Replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
-  --Resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
-  --Synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
-  --Transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, run the job in asynchronous mode, which means that the REST API call will immediately return, reporting the identifier of a job. Prefer this flavor wherever possible.
+  --force: oneof<nothing, bool> # Allow the modification of tags related to DICOM identifiers, at the risk of breaking the DICOM model of the real world
+  --keep: list # Keep the original value of the specified tags, to be chosen among the `StudyInstanceUID`, `SeriesInstanceUID` and `SOPInstanceUID` tags. Avoid this feature as much as possible, as this breaks the DICOM model of the real world.
+  --keep-source: oneof<nothing, bool> # If set to `false`, instructs Orthanc to the remove original resources. By default, the original resources are kept in Orthanc.
+  --level: string # Level of the modification (`Patient`, `Study`, `Series` or `Instance`). If absent, the level defaults to `Instance`, but is set to `Patient` if `PatientID` is modified, to `Study` if `StudyInstanceUID` is modified, or to `Series` if `SeriesInstancesUID` is modified. (new in Orthanc 1.9.7)
+  --permissive: oneof<nothing, bool> # If `true`, ignore errors during the individual steps of the job.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --private-creator: string # The private creator to be used for private tags in `Replace`
+  --remove: list # List of tags that must be removed from the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --remove-private-tags: oneof<nothing, bool> # Remove the private tags from the DICOM instances (defaults to `false`)
+  --replace: record # Associative array to change the value of some DICOM tags in the DICOM instances. Starting with Orthanc 1.9.4, paths to subsequences can be provided using the same syntax as the `dcmodify` command-line tool (wildcards are supported as well).
+  --resources: list # List of the Orthanc identifiers of the patients/studies/series/instances of interest.
+  --synchronous: oneof<nothing, bool> # If `true`, run the job in synchronous mode, which means that the HTTP answer will directly contain the result of the job. This is the default, easy behavior, but it is *not* desirable for long jobs, as it might lead to network timeouts.
+  --transcode: string # Transcode the DICOM instances to the provided DICOM transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/bulk-modify")
-  let body = {Asynchronous: $Asynchronous, Force: $Force, Keep: $Keep, KeepSource: $KeepSource, Level: $Level, Permissive: $Permissive, Priority: $Priority, PrivateCreator: $PrivateCreator, Remove: $Remove, RemovePrivateTags: $RemovePrivateTags, Replace: $Replace, Resources: $Resources, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let body = {"Asynchronous": $asynchronous, "Force": $force, "Keep": $keep, "KeepSource": $keep_source, "Level": $level, "Permissive": $permissive, "Priority": $priority, "PrivateCreator": $private_creator, "Remove": $remove, "RemovePrivateTags": $remove_private_tags, "Replace": $replace, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6242,17 +6242,17 @@ export def "tools-create-archive post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --Asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Resources: list # The list of Orthanc identifiers of interest.
-  --Synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
-  --Transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --resources: list # The list of Orthanc identifiers of interest.
+  --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
+  --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/create-archive")
-  let body = {Asynchronous: $Asynchronous, Priority: $Priority, Resources: $Resources, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let body = {"Asynchronous": $asynchronous, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6271,18 +6271,18 @@ export def "tools-create-dicom post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content: string # This field can be used to embed an image (pixel data) or a PDF inside the created DICOM instance. The PNG image, the JPEG image or the PDF file must be provided using their [data URI scheme encoding](https://en.wikipedia.org/wiki/Data_URI_scheme). This field can possibly contain a JSON array, in which case a DICOM series is created containing one DICOM instance for each item in the `Content` field.
-  --Force: oneof<nothing, bool> # Avoid the consistency checks for the DICOM tags that enforce the DICOM model of the real-world. You can notably use this flag if you need to manually set the tags `StudyInstanceUID`, `SeriesInstanceUID`, or `SOPInstanceUID`. Be careful with this feature.
-  --InterpretBinaryTags: oneof<nothing, bool> # If some value in the `Tags` associative array is formatted according to some [data URI scheme encoding](https://en.wikipedia.org/wiki/Data_URI_scheme), whether this value is decoded to a binary value or kept as such (`true` by default)
-  --Parent: string # If present, the newly created instance will be attached to the parent DICOM resource whose Orthanc identifier is contained in this field. The DICOM tags of the parent modules in the DICOM hierarchy will be automatically copied to the newly created instance.
-  --PrivateCreator: string # The private creator to be used for private tags in `Tags`
-  --Tags: record # Associative array containing the tags of the new instance to be created
+  --content: string # This field can be used to embed an image (pixel data) or a PDF inside the created DICOM instance. The PNG image, the JPEG image or the PDF file must be provided using their [data URI scheme encoding](https://en.wikipedia.org/wiki/Data_URI_scheme). This field can possibly contain a JSON array, in which case a DICOM series is created containing one DICOM instance for each item in the `Content` field.
+  --force: oneof<nothing, bool> # Avoid the consistency checks for the DICOM tags that enforce the DICOM model of the real-world. You can notably use this flag if you need to manually set the tags `StudyInstanceUID`, `SeriesInstanceUID`, or `SOPInstanceUID`. Be careful with this feature.
+  --interpret-binary-tags: oneof<nothing, bool> # If some value in the `Tags` associative array is formatted according to some [data URI scheme encoding](https://en.wikipedia.org/wiki/Data_URI_scheme), whether this value is decoded to a binary value or kept as such (`true` by default)
+  --parent: string # If present, the newly created instance will be attached to the parent DICOM resource whose Orthanc identifier is contained in this field. The DICOM tags of the parent modules in the DICOM hierarchy will be automatically copied to the newly created instance.
+  --private-creator: string # The private creator to be used for private tags in `Tags`
+  --tags: record # Associative array containing the tags of the new instance to be created
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/create-dicom")
-  let body = {Content: $Content, Force: $Force, InterpretBinaryTags: $InterpretBinaryTags, Parent: $Parent, PrivateCreator: $PrivateCreator, Tags: $Tags} | compact
+  let body = {"Content": $content, "Force": $force, "InterpretBinaryTags": $interpret_binary_tags, "Parent": $parent, "PrivateCreator": $private_creator, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6302,18 +6302,18 @@ export def "tools-create-media post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --Asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
-  --Extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `false`.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Resources: list # The list of Orthanc identifiers of interest.
-  --Synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
-  --Transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
+  --extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `false`.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --resources: list # The list of Orthanc identifiers of interest.
+  --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
+  --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/create-media")
-  let body = {Asynchronous: $Asynchronous, Extended: $Extended, Priority: $Priority, Resources: $Resources, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6333,18 +6333,18 @@ export def "tools-create-media-extended post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-  --Asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
-  --Extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `true`.
-  --Priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
-  --Resources: list # The list of Orthanc identifiers of interest.
-  --Synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
-  --Transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
+  --asynchronous: oneof<nothing, bool> # If `true`, create the archive in asynchronous mode, which means that a job is submitted to create the archive in background.
+  --extended: oneof<nothing, bool> # If `true`, will include additional tags such as `SeriesDescription`, leading to a so-called *extended DICOMDIR*. Default value is `true`.
+  --priority: float # In asynchronous mode, the priority of the job. The lower the value, the higher the priority.
+  --resources: list # The list of Orthanc identifiers of interest.
+  --synchronous: oneof<nothing, bool> # If `true`, create the archive in synchronous mode, which means that the HTTP answer will directly contain the ZIP file. This is the default, easy behavior. However, if global configuration option "SynchronousZipStream" is set to "false", asynchronous transfers should be preferred for large amount of data, as the creation of the temporary file might lead to network timeouts.
+  --transcode: string # If present, the DICOM files in the archive will be transcoded to the provided transfer syntax: https://book.orthanc-server.com/faq/transcoding.html
 ]: any -> record<ID: string, Path: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/create-media-extended")
-  let body = {Asynchronous: $Asynchronous, Extended: $Extended, Priority: $Priority, Resources: $Resources, Synchronous: $Synchronous, Transcode: $Transcode} | compact
+  let body = {"Asynchronous": $asynchronous, "Extended": $extended, "Priority": $priority, "Resources": $resources, "Synchronous": $synchronous, "Transcode": $transcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6429,19 +6429,19 @@ export def "tools-dicom-echo post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AET: string # AET of the remote DICOM modality
-  --CheckFind: oneof<nothing, bool> # Issue a dummy C-FIND command after the C-GET SCU, in order to check whether the remote modality knows about Orthanc. This field defaults to the value of the `DicomEchoChecksFind` configuration option. New in Orthanc 1.8.1.
-  --Host: string # Host address of the remote DICOM modality (typically, an IP address)
-  --Manufacturer: string # Manufacturer of the remote DICOM modality (check configuration option `DicomModalities` for possible values
-  --Port: float # TCP port of the remote DICOM modality
-  --Timeout: float # Timeout for the C-ECHO command, in seconds
-  --UseDicomTls: oneof<nothing, bool> # Whether to use DICOM TLS in the SCU connection initiated by Orthanc (new in Orthanc 1.9.0)
+  --aet: string # AET of the remote DICOM modality
+  --check-find: oneof<nothing, bool> # Issue a dummy C-FIND command after the C-GET SCU, in order to check whether the remote modality knows about Orthanc. This field defaults to the value of the `DicomEchoChecksFind` configuration option. New in Orthanc 1.8.1.
+  --host: string # Host address of the remote DICOM modality (typically, an IP address)
+  --manufacturer: string # Manufacturer of the remote DICOM modality (check configuration option `DicomModalities` for possible values
+  --port: float # TCP port of the remote DICOM modality
+  --timeout: float # Timeout for the C-ECHO command, in seconds
+  --use-dicom-tls: oneof<nothing, bool> # Whether to use DICOM TLS in the SCU connection initiated by Orthanc (new in Orthanc 1.9.0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/dicom-echo")
-  let body = {AET: $AET, CheckFind: $CheckFind, Host: $Host, Manufacturer: $Manufacturer, Port: $Port, Timeout: $Timeout, UseDicomTls: $UseDicomTls} | compact
+  let body = {"AET": $aet, "CheckFind": $check_find, "Host": $host, "Manufacturer": $manufacturer, "Port": $port, "Timeout": $timeout, "UseDicomTls": $use_dicom_tls} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6484,21 +6484,21 @@ export def "tools-find post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CaseSensitive: oneof<nothing, bool> # Enable case-sensitive search for PN value representations (defaults to configuration option `CaseSensitivePN`)
-  --Expand: oneof<nothing, bool> # Also retrieve the content of the matching resources, not only their Orthanc identifiers
-  --Full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
-  --Level: string # Level of the query (`Patient`, `Study`, `Series` or `Instance`)
-  --Limit: float # Limit the number of reported resources
-  --Query: record # Associative array containing the filter on the values of the DICOM tags
-  --RequestedTags: list # A list of DICOM tags to include in the response (applicable only if "Expand" is set to true).  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return all Main Dicom Tags to keep backward compatibility with Orthanc prior to 1.11.0.
-  --Short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
-  --Since: float # Show only the resources since the provided index (in conjunction with `Limit`)
+  --case-sensitive: oneof<nothing, bool> # Enable case-sensitive search for PN value representations (defaults to configuration option `CaseSensitivePN`)
+  --expand: oneof<nothing, bool> # Also retrieve the content of the matching resources, not only their Orthanc identifiers
+  --full: oneof<nothing, bool> # If set to `true`, report the DICOM tags in full format (tags indexed by their hexadecimal format, associated with their symbolic name and their value)
+  --level: string # Level of the query (`Patient`, `Study`, `Series` or `Instance`)
+  --limit: float # Limit the number of reported resources
+  --query: record # Associative array containing the filter on the values of the DICOM tags
+  --requested-tags: list # A list of DICOM tags to include in the response (applicable only if "Expand" is set to true).  The tags requested tags are returned in the 'RequestedTags' field in the response.  Note that, if you are requesting tags that are not listed in the Main Dicom Tags stored in DB, building the response might be slow since Orthanc will need to access the DICOM files.  If not specified, Orthanc will return all Main Dicom Tags to keep backward compatibility with Orthanc prior to 1.11.0.
+  --short: oneof<nothing, bool> # If set to `true`, report the DICOM tags in hexadecimal format
+  --since: float # Show only the resources since the provided index (in conjunction with `Limit`)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/find")
-  let body = {CaseSensitive: $CaseSensitive, Expand: $Expand, Full: $Full, Level: $Level, Limit: $Limit, Query: $Query, RequestedTags: $RequestedTags, Short: $Short, Since: $Since} | compact
+  let body = {"CaseSensitive": $case_sensitive, "Expand": $expand, "Full": $full, "Level": $level, "Limit": $limit, "Query": $query, "RequestedTags": $requested_tags, "Short": $short, "Since": $since} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7053,13 +7053,13 @@ export def "tools-reconstruct post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ReconstructFiles: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
+  --reconstruct-files: oneof<nothing, bool> # Also reconstruct the files of the resources (e.g: apply IngestTranscoding, StorageCompression). 'false' by default. (New in Orthanc 1.11.0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tools/reconstruct")
-  let body = {ReconstructFiles: $ReconstructFiles} | compact
+  let body = {"ReconstructFiles": $reconstruct_files} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

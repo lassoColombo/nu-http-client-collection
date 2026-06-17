@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-bus-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-service-bus-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ServiceBus/operations
 # operationId: Operations_List
-export def "providers-microsoft-service-bus-operations List" [
+export def "providers-microsoft-service-bus-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,8 +118,8 @@ export def "providers-microsoft-service-bus-operations List" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ServiceBus/namespaces
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639412.aspx
 # operationId: Namespaces_List
-export def "subscriptions-providers-microsoft-service-bus-namespaces List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-service-bus-namespaces list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +133,7 @@ export def "subscriptions-providers-microsoft-service-bus-namespaces List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ServiceBus/namespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ServiceBus/namespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,9 +144,9 @@ export def "subscriptions-providers-microsoft-service-bus-namespaces List" [
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639412.aspx
 # operationId: Namespaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,10 +171,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639389.aspx
 # operationId: Namespaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces Delete" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,10 +199,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639379.aspx
 # operationId: Namespaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces Get" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,10 +228,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # operationId: Namespaces_Update
 # --properties shape: {encryption?: any, identity?: any, zoneRedundant?: bool}
 # --sku shape: {capacity?: int, name: "Basic"|"Standard"|"Premium", tier?: "Basic"|"Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces Update" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,8 +250,8 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)" $qp)
-  let body = {properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -265,10 +265,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # operationId: Namespaces_CreateOrUpdate
 # --properties shape: {encryption?: any, identity?: any, zoneRedundant?: bool}
 # --sku shape: {capacity?: int, name: "Basic"|"Standard"|"Premium", tier?: "Basic"|"Standard"|"Premium"}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces CreateOrUpdate" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,8 +287,8 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)" $qp)
-  let body = {properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -299,10 +299,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/ipfilterrules
 # operationId: Namespaces_ListIpFilterRules
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules ListIpFilterRules" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules list-ip-filter-rules" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)/ipfilterrules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}/ipfilterrules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,11 +326,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/ipfilterrules/{ipFilterRuleName}
 # operationId: Namespaces_DeleteIpFilterRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules DeleteIpFilterRule" [
-  resourceGroupName: string
-  namespaceName: string
-  ipFilterRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules delete-ip-filter-rule" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  ip_filter_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)/ipfilterrules/($ipFilterRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, ip_filter_rule_name: $ip_filter_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}/ipfilterrules/{ip_filter_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -354,11 +354,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/ipfilterrules/{ipFilterRuleName}
 # operationId: Namespaces_GetIpFilterRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules GetIpFilterRule" [
-  resourceGroupName: string
-  namespaceName: string
-  ipFilterRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules get-ip-filter-rule" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  ip_filter_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)/ipfilterrules/($ipFilterRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, ip_filter_rule_name: $ip_filter_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}/ipfilterrules/{ip_filter_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -383,11 +383,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/ipfilterrules/{ipFilterRuleName}
 # operationId: Namespaces_CreateOrUpdateIpFilterRule
 # --properties shape: {action?: "Accept"|"Reject", filterName?: string, ipMask?: string}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules CreateOrUpdateIpFilterRule" [
-  resourceGroupName: string
-  namespaceName: string
-  ipFilterRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-ipfilterrules create-or-update-ip-filter-rule" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  ip_filter_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,8 +403,8 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)/ipfilterrules/($ipFilterRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, ip_filter_rule_name: $ip_filter_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}/ipfilterrules/{ip_filter_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,10 +415,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/networkrulesets/default
 # operationId: Namespaces_GetNetworkRuleSet
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-networkrulesets-default GetNetworkRuleSet" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-networkrulesets-default get-network-rule-set" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,7 +432,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)/networkrulesets/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}/networkrulesets/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -443,10 +443,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/networkrulesets/default
 # operationId: Namespaces_CreateOrUpdateNetworkRuleSet
 # --properties shape: {defaultAction?: "Allow"|"Deny", ipRules?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-networkrulesets-default CreateOrUpdateNetworkRuleSet" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-networkrulesets-default create-or-update-network-rule-set" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,8 +462,8 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)/networkrulesets/default" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}/networkrulesets/default") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -474,10 +474,10 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/virtualnetworkrules
 # operationId: Namespaces_ListVirtualNetworkRules
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules ListVirtualNetworkRules" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules list-virtual-network-rules" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)/virtualnetworkrules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}/virtualnetworkrules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -501,11 +501,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/virtualnetworkrules/{virtualNetworkRuleName}
 # operationId: Namespaces_DeleteVirtualNetworkRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules DeleteVirtualNetworkRule" [
-  resourceGroupName: string
-  namespaceName: string
-  virtualNetworkRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules delete-virtual-network-rule" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  virtual_network_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)/virtualnetworkrules/($virtualNetworkRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, virtual_network_rule_name: $virtual_network_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}/virtualnetworkrules/{virtual_network_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -529,11 +529,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/virtualnetworkrules/{virtualNetworkRuleName}
 # operationId: Namespaces_GetVirtualNetworkRule
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules GetVirtualNetworkRule" [
-  resourceGroupName: string
-  namespaceName: string
-  virtualNetworkRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules get-virtual-network-rule" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  virtual_network_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)/virtualnetworkrules/($virtualNetworkRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, virtual_network_rule_name: $virtual_network_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}/virtualnetworkrules/{virtual_network_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,11 +558,11 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/virtualnetworkrules/{virtualNetworkRuleName}
 # operationId: Namespaces_CreateOrUpdateVirtualNetworkRule
 # --properties shape: {virtualNetworkSubnetId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules CreateOrUpdateVirtualNetworkRule" [
-  resourceGroupName: string
-  namespaceName: string
-  virtualNetworkRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-virtualnetworkrules create-or-update-virtual-network-rule" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  virtual_network_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,8 +578,8 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ServiceBus/namespaces/($namespaceName)/virtualnetworkrules/($virtualNetworkRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, virtual_network_rule_name: $virtual_network_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ServiceBus/namespaces/{namespace_name}/virtualnetworkrules/{virtual_network_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -67,7 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def status-completer [] { ["active" "inactive"] }
 def ordering-completer [] { ["-digest" "-last_activity" "digest" "last_activity"] }
-def sortOrder-completer [] { ["ascending" "descending"] }
+def sort-order-completer [] { ["ascending" "descending"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -135,7 +135,7 @@ export def "access-tokens post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/access-tokens")
-  let body = {scopes: $scopes, token_label: $token_label} | compact
+  let body = {"scopes": $scopes, "token_label": $token_label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -158,7 +158,7 @@ export def "access-tokens delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/access-tokens/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/v2/access-tokens/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,7 +180,7 @@ export def "access-tokens get" [
 ]: nothing -> record<client_id: string, created_at: string, creator_ip: string, creator_ua: string, generated_by: string, is_active: bool, last_used: string, scopes: list<string>, token: string, token_label: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/access-tokens/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/v2/access-tokens/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,8 +205,8 @@ export def "access-tokens patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/access-tokens/($uuid)")
-  let body = {is_active: $is_active, token_label: $token_label} | compact
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/v2/access-tokens/{uuid}"))
+  let body = {"is_active": $is_active, "token_label": $token_label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -217,7 +217,7 @@ export def "access-tokens patch" [
 #
 # GET /v2/auditlogs/{account}
 # operationId: AuditLogs_GetAuditLogs
-export def "auditlogs GetAuditLogs" [
+export def "auditlogs get" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -238,7 +238,7 @@ export def "auditlogs GetAuditLogs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "actor" $actor "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/auditlogs/($account)" $qp)
+  let full_url = (build-url $base ({account: $account} | format pattern "/v2/auditlogs/{account}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,7 +248,7 @@ export def "auditlogs GetAuditLogs" [
 #
 # GET /v2/auditlogs/{account}/actions
 # operationId: AuditLogs_GetAuditActions
-export def "auditlogs-actions GetAuditActions" [
+export def "auditlogs-actions get-audit" [
   account: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "auditlogs-actions GetAuditActions" [
 ]: nothing -> record<actions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/auditlogs/($account)/actions")
+  let full_url = (build-url $base ({account: $account} | format pattern "/v2/auditlogs/{account}/actions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,7 +273,7 @@ export def "auditlogs-actions GetAuditActions" [
 # operationId: PostNamespacesDeleteImages
 # --ignore_warnings item shape: {digest: string, repository: string, tags?: list, warning: "is_active"|"current_tag"}
 # --manifests item shape: {digest: string, repository: string}
-export def "namespaces-delete-images PostNamespacesDeleteImages" [
+export def "namespaces-delete-images create" [
   namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,8 +291,8 @@ export def "namespaces-delete-images PostNamespacesDeleteImages" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/delete-images")
-  let body = {active_from: $active_from, dry_run: $body_dry_run, ignore_warnings: $ignore_warnings, manifests: $manifests} | compact
+  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/v2/namespaces/{namespace}/delete-images"))
+  let body = {"active_from": $active_from, "dry_run": $body_dry_run, "ignore_warnings": $ignore_warnings, "manifests": $manifests} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -303,7 +303,7 @@ export def "namespaces-delete-images PostNamespacesDeleteImages" [
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/images
 # operationId: GetNamespacesRepositoriesImages
-export def "namespaces-repositories-images GetNamespacesRepositoriesImages" [
+export def "namespaces-repositories-images get" [
   namespace: string
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -324,7 +324,7 @@ export def "namespaces-repositories-images GetNamespacesRepositoriesImages" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "currently_tagged" $currently_tagged "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "active_from" $active_from "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/images" $qp)
+  let full_url = (build-url $base ({namespace: $namespace, repository: $repository} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/images") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,7 +334,7 @@ export def "namespaces-repositories-images GetNamespacesRepositoriesImages" [
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/images-summary
 # operationId: GetNamespacesRepositoriesImagesSummary
-export def "namespaces-repositories-images-summary GetNamespacesRepositoriesImagesSummary" [
+export def "namespaces-repositories-images-summary get" [
   namespace: string
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -350,7 +350,7 @@ export def "namespaces-repositories-images-summary GetNamespacesRepositoriesImag
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "active_from" $active_from "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/images-summary" $qp)
+  let full_url = (build-url $base ({namespace: $namespace, repository: $repository} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/images-summary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,7 +360,7 @@ export def "namespaces-repositories-images-summary GetNamespacesRepositoriesImag
 #
 # GET /v2/namespaces/{namespace}/repositories/{repository}/images/{digest}/tags
 # operationId: GetNamespacesRepositoriesImagesTags
-export def "namespaces-repositories-images-tags GetNamespacesRepositoriesImagesTags" [
+export def "namespaces-repositories-images-tags get" [
   namespace: string
   repository: string
   digest: string
@@ -378,7 +378,7 @@ export def "namespaces-repositories-images-tags GetNamespacesRepositoriesImagesT
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/images/($digest)/tags" $qp)
+  let full_url = (build-url $base ({namespace: $namespace, repository: $repository, digest: $digest} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/images/{digest}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -404,7 +404,7 @@ export def "namespaces-repositories-tags list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/tags" $qp)
+  let full_url = (build-url $base ({namespace: $namespace, repository: $repository} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -427,7 +427,7 @@ export def "namespaces-repositories-tags head-by-namespace-repository" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/tags")
+  let full_url = (build-url $base ({namespace: $namespace, repository: $repository} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -451,7 +451,7 @@ export def "namespaces-repositories-tags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/tags/($tag)")
+  let full_url = (build-url $base ({namespace: $namespace, repository: $repository, tag: $tag} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,7 +475,7 @@ export def "namespaces-repositories-tags head-by-namespace-repository-tag" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/namespaces/($namespace)/repositories/($repository)/tags/($tag)")
+  let full_url = (build-url $base ({namespace: $namespace, repository: $repository, tag: $tag} | format pattern "/v2/namespaces/{namespace}/repositories/{repository}/tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "head" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -497,7 +497,7 @@ export def "orgs-settings get" [
 ]: nothing -> record<restricted_images: record<allow_official_images: bool, allow_verified_publishers: bool, enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/orgs/($name)/settings")
+  let full_url = (build-url $base ({name: $name} | format pattern "/v2/orgs/{name}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -521,8 +521,8 @@ export def "orgs-settings put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/orgs/($name)/settings")
-  let body = {restricted_images: $restricted_images} | compact
+  let full_url = (build-url $base ({name: $name} | format pattern "/v2/orgs/{name}/settings"))
+  let body = {"restricted_images": $restricted_images} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -566,7 +566,7 @@ export def "scim-20-resource-types get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/scim/2.0/ResourceTypes/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/v2/scim/2.0/ResourceTypes/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -609,7 +609,7 @@ export def "scim-20-schemas get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/scim/2.0/Schemas/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v2/scim/2.0/Schemas/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -648,16 +648,16 @@ export def "scim-20-users list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # e.g. 1
+  --start-index: int # e.g. 1
   --count: int # e.g. 10
   --filter: string # e.g. userName eq "jon.snow@docker.com"
   --attributes: string # Comma delimited list of attributes to limit to in the response. (e.g. userName,displayName)
-  --sortOrder: string@sortOrder-completer
-  --sortBy: string # User attribute to sort by. (e.g. userName)
+  --sort-order: string@sort-order-completer
+  --sort-by: string # User attribute to sort by. (e.g. userName)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "sortBy" $sortBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/scim/2.0/Users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -704,7 +704,7 @@ export def "scim-20-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/scim/2.0/Users/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v2/scim/2.0/Users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -728,7 +728,7 @@ export def "scim-20-users put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/scim/2.0/Users/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v2/scim/2.0/Users/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -739,7 +739,7 @@ export def "scim-20-users put" [
 #
 # POST /v2/users/2fa-login
 # operationId: PostUsers2FALogin
-export def "users-2fa-login PostUsers2FALogin" [
+export def "users-2fa-login create-users2-fa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "users-2fa-login PostUsers2FALogin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/2fa-login")
-  let body = {code: $code, login_2fa_token: $login_2fa_token} | compact
+  let body = {"code": $code, "login_2fa_token": $login_2fa_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -766,7 +766,7 @@ export def "users-2fa-login PostUsers2FALogin" [
 #
 # POST /v2/users/login
 # operationId: PostUsersLogin
-export def "users-login PostUsersLogin" [
+export def "users-login create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +782,7 @@ export def "users-login PostUsersLogin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/users/login")
-  let body = {password: $password, username: $username} | compact
+  let body = {"password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

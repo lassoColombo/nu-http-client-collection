@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classifier-business-batch get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classifier-business-batch get-batch-of-business-transaction-classification-results" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /classifier/business/batch/{id}
 # operationId: getABatchOfBusinessTransactionClassificationResults
-export def "classifier-business-batch get" [
+export def "classifier-business-batch get-batch-of-business-transaction-classification-results" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -105,7 +105,7 @@ export def "classifier-business-batch get" [
 ]: nothing -> record<id: string, progress: float, results: table<labels: list, logo: string, merchant: string, transaction_id: string, website: string>, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/classifier/business/batch/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/classifier/business/batch/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -115,7 +115,7 @@ export def "classifier-business-batch get" [
 #
 # GET /classifier/consumer/batch/{id}
 # operationId: getABatchOfConsumerTransactionClassificationResults
-export def "classifier-consumer-batch get" [
+export def "classifier-consumer-batch get-batch-of-consumer-transaction-classification-results" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -128,7 +128,7 @@ export def "classifier-consumer-batch get" [
 ]: nothing -> record<id: string, progress: float, results: table<contact: record, labels: list, location: record, logo: string, merchant: string, person: string, rating: record, transaction_id: string, website: string>, status: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/classifier/consumer/batch/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/classifier/consumer/batch/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

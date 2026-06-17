@@ -66,21 +66,21 @@ def base-url-completer [] { ["https://api.beezup.com"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
 # Completers for enum parameters
-def dateSearchType-completer [] { ["MarketPlaceModification" "Modification" "Purchase"] }
-def productState-completer [] { ["All" "Disabled" "Enabled"] }
-def reportType-completer [] { ["ByCategory" "ByChannel" "ByDay" "ByProduct"] }
-def optimisationActionName-completer [] { ["disable" "reenable"] }
+def date-search-type-completer [] { ["MarketPlaceModification" "Modification" "Purchase"] }
+def product-state-completer [] { ["All" "Disabled" "Enabled"] }
+def report-type-completer [] { ["ByCategory" "ByChannel" "ByDay" "ByProduct"] }
+def optimisation-action-name-completer [] { ["disable" "reenable"] }
 def format-completer [] { ["csv" "xlsx"] }
-def costType-completer [] { ["CPA_ByCategory" "CPA_Global" "CPC_ByCategory" "CPC_Global" "Fixed_Global"] }
-def profilePictureSelected-completer [] { ["gravatar" "initials" "uploaded"] }
-def feedType-completer [] { ["Images" "Inventory" "Offers" "Pricing" "Products" "Relationships" "Unpublish"] }
-def publicationStrategyKind-completer [] { ["Delta" "Full"] }
+def cost-type-completer [] { ["CPA_ByCategory" "CPA_Global" "CPC_ByCategory" "CPC_Global" "Fixed_Global"] }
+def profile-picture-selected-completer [] { ["gravatar" "initials" "uploaded"] }
+def feed-type-completer [] { ["Images" "Inventory" "Offers" "Pricing" "Products" "Relationships" "Unpublish"] }
+def publication-strategy-kind-completer [] { ["Delta" "Full"] }
 def format-completer-1 [] { ["csv"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "orders-batches-change-orders ChangeOrderListV3" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "orders-batches-change-orders post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -105,7 +105,7 @@ export def commands []: nothing -> table {
 # POST /orders/v3/batches/changeOrders
 # operationId: ChangeOrderListV3
 # --changeOrders item shape: {changeOrderRequest?: record, order: any}
-export def "orders-batches-change-orders ChangeOrderListV3" [
+export def "orders-batches-change-orders post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,16 +114,16 @@ export def "orders-batches-change-orders ChangeOrderListV3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userName: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
-  --testMode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
-  changeOrders: list # The change order operations — item shape: {changeOrderRequest?: record, order: any}
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
+  change_orders: list # The change order operations — item shape: {changeOrderRequest?: record, order: any}
 ]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar") (serialize-qp "testMode" $testMode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/batches/changeOrders" $qp)
-  let body = {changeOrders: $changeOrders} | compact
+  let body = {"changeOrders": $change_orders} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -135,8 +135,8 @@ export def "orders-batches-change-orders ChangeOrderListV3" [
 # POST /orders/v3/batches/changeOrders/{changeOrderType}
 # operationId: ChangeOrderListV2
 # --changeOrders item shape: {changeOrderRequest?: record, order: record}
-export def "orders-batches-change-orders ChangeOrderListV2" [
-  changeOrderType: string
+export def "orders-batches-change-orders post-by-changeOrderType" [
+  change_order_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,16 +145,16 @@ export def "orders-batches-change-orders ChangeOrderListV2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userName: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
-  --testMode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
-  changeOrders: list # The change order operations — item shape: {changeOrderRequest?: record, order: record}
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
+  change_orders: list # The change order operations — item shape: {changeOrderRequest?: record, order: record}
 ]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar") (serialize-qp "testMode" $testMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orders/v3/batches/changeOrders/($changeOrderType)" $qp)
-  let body = {changeOrders: $changeOrders} | compact
+  let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({change_order_type: $change_order_type} | format pattern "/orders/v3/batches/changeOrders/{change_order_type}") $qp)
+  let body = {"changeOrders": $change_orders} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -166,7 +166,7 @@ export def "orders-batches-change-orders ChangeOrderListV2" [
 # POST /orders/v3/batches/clearMerchantOrderInfos
 # operationId: ClearMerchantOrderInfoListV3
 # --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string}
-export def "orders-batches-clear-merchant-order-infos ClearMerchantOrderInfoListV3" [
+export def "orders-batches-clear-merchant-order-infos post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,15 +175,15 @@ export def "orders-batches-clear-merchant-order-infos ClearMerchantOrderInfoList
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --testMode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
+  --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
   orders: list # e.g. [{accountId: 1234, beezUPOrderId: 0, marketplaceTechnicalCode: Amazon}, {accountId: 5678, beezUPOrderId: 0, marketplaceTechnicalCode: Amazon}, {accountId: 9876, beezUPOrderId: 0, marketplaceTechnicalCode: Ebay}] — item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string}
 ]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "testMode" $testMode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/batches/clearMerchantOrderInfos" $qp)
-  let body = {orders: $orders} | compact
+  let body = {"orders": $orders} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -195,7 +195,7 @@ export def "orders-batches-clear-merchant-order-infos ClearMerchantOrderInfoList
 # POST /orders/v3/batches/setMerchantOrderInfos
 # operationId: SetMerchantOrderInfoListV3
 # --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string, order_MerchantOrderId: string}
-export def "orders-batches-set-merchant-order-infos SetMerchantOrderInfoListV3" [
+export def "orders-batches-set-merchant-order-infos post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,17 +204,17 @@ export def "orders-batches-set-merchant-order-infos SetMerchantOrderInfoListV3" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --testMode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
-  order_MerchantECommerceSoftwareName: string # The e-commerce software name of the merchant (e.g. Prestashop)
-  order_MerchantECommerceSoftwareVersion: string # The e-commece software version of the merchant (e.g. 123.0.1)
+  --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
+  order_merchant_e_commerce_software_name: string # The e-commerce software name of the merchant (e.g. Prestashop)
+  order_merchant_e_commerce_software_version: string # The e-commece software version of the merchant (e.g. 123.0.1)
   orders: list # e.g. [{accountId: 1234, beezUPOrderId: 8D47FF1427A26B064ca98e95f644361ada5a5be0bbb3b53, marketplaceTechnicalCode: Amazon, order_MerchantOrderId: BX1234}, {accountId: 5678, beezUPOrderId: 8D47FF149F213D055f26e3c413e4c9ba5c5cfda460547a4, marketplaceTechnicalCode: Amazon, order_MerchantOrderId: BX5678}, {accountId: 9876, beezUPOrderId: 8D47FF150217B60bdec05ab61c445d1a59e3da050b52823, marketplaceTechnicalCode: Ebay, order_MerchantOrderId: BX9876}] — item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string, order_MerchantOrderId: string}
 ]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "testMode" $testMode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/batches/setMerchantOrderInfos" $qp)
-  let body = {order_MerchantECommerceSoftwareName: $order_MerchantECommerceSoftwareName, order_MerchantECommerceSoftwareVersion: $order_MerchantECommerceSoftwareVersion, orders: $orders} | compact
+  let body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "orders": $orders} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -225,7 +225,7 @@ export def "orders-batches-set-merchant-order-infos SetMerchantOrderInfoListV3" 
 #
 # POST /orders/v3/harvest
 # operationId: HarvestAllV3
-export def "orders-harvest HarvestAllV3" [
+export def "orders-harvest post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,11 +234,11 @@ export def "orders-harvest HarvestAllV3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --storeId: string # The StoreId to filter by (format: StoreId, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
+  --store-id: string # The StoreId to filter by (format: StoreId, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storeId" $storeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/harvest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -249,7 +249,7 @@ export def "orders-harvest HarvestAllV3" [
 #
 # POST /orders/v3/list/full
 # operationId: GetOrderListFullV3
-export def "orders-list-full GetOrderListFullV3" [
+export def "orders-list-full get-order-list-full-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,30 +258,30 @@ export def "orders-list-full GetOrderListFullV3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
-  --accountIds: list # Account Id list (e.g. [12345])
-  --beezUPOrderStatuses: list # e.g. [InProgress]
-  beginPeriodUtcDate: string # The begin period you want to make the search. \ The period MUST not be greater than 62 days. The begin period MUST be lower than the end period.  (format: date-time, e.g. 2017-03-01T13:10:01Z)
-  --dateSearchType: string@dateSearchType-completer # Indicates on which date you want to make the filter (default: Modification)
-  endPeriodUtcDate: string # The end period of you search. \ The period MUST not be greater than 62 days. \ The end period MUST be greater than the begin period. The end period MUST be lower to the current date.  (format: date-time, e.g. 2017-04-01T13:10:01Z)
-  --invoiceAvailabilityType: string # Indicates on which invoice availability to filter (e.g. All)
-  --marketplaceBusinessCodes: list # e.g. [PRICEMINISTER]
-  --marketplaceOrderIds: list # e.g. [AmazonOrderId1234]
-  --marketplaceTechnicalCodes: list # e.g. [PriceMinister]
-  --orderMerchantInfoSynchronizationStatus: string # Indicates on which order merchant info synchronization status to filter (e.g. All)
-  --order-Buyer-Name: string # Buyer full name (e.g. Monroe)
-  --order-MerchantOrderIds: list # Merchant order id list (e.g. [MyOrderId1234])
-  --storeIds: list # Store Id list
-  pageNumber: int # Indicates the page number (format: int32, default: 1, e.g. 1)
-  pageSize: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
+  --accept-encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
+  --account-ids: list # Account Id list (e.g. [12345])
+  --beez-up-order-statuses: list # e.g. [InProgress]
+  begin_period_utc_date: string # The begin period you want to make the search. \ The period MUST not be greater than 62 days. The begin period MUST be lower than the end period.  (format: date-time, e.g. 2017-03-01T13:10:01Z)
+  --date-search-type: string@date-search-type-completer # Indicates on which date you want to make the filter (default: Modification)
+  end_period_utc_date: string # The end period of you search. \ The period MUST not be greater than 62 days. \ The end period MUST be greater than the begin period. The end period MUST be lower to the current date.  (format: date-time, e.g. 2017-04-01T13:10:01Z)
+  --invoice-availability-type: string # Indicates on which invoice availability to filter (e.g. All)
+  --marketplace-business-codes: list # e.g. [PRICEMINISTER]
+  --marketplace-order-ids: list # e.g. [AmazonOrderId1234]
+  --marketplace-technical-codes: list # e.g. [PriceMinister]
+  --order-merchant-info-synchronization-status: string # Indicates on which order merchant info synchronization status to filter (e.g. All)
+  --order-buyer-name: string # Buyer full name (e.g. Monroe)
+  --order-merchant-order-ids: list # Merchant order id list (e.g. [MyOrderId1234])
+  --store-ids: list # Store Id list
+  page_number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
+  page_size: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
 ]: any -> record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<links: record, transitionLinks: list>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders/v3/list/full")
-  let body = {accountIds: $accountIds, beezUPOrderStatuses: $beezUPOrderStatuses, beginPeriodUtcDate: $beginPeriodUtcDate, dateSearchType: $dateSearchType, endPeriodUtcDate: $endPeriodUtcDate, invoiceAvailabilityType: $invoiceAvailabilityType, marketplaceBusinessCodes: $marketplaceBusinessCodes, marketplaceOrderIds: $marketplaceOrderIds, marketplaceTechnicalCodes: $marketplaceTechnicalCodes, orderMerchantInfoSynchronizationStatus: $orderMerchantInfoSynchronizationStatus, order_Buyer_Name: $order_Buyer_Name, order_MerchantOrderIds: $order_MerchantOrderIds, storeIds: $storeIds, pageNumber: $pageNumber, pageSize: $pageSize} | compact
+  let body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -292,7 +292,7 @@ export def "orders-list-full GetOrderListFullV3" [
 #
 # POST /orders/v3/list/light
 # operationId: GetOrderListLightV3
-export def "orders-list-light GetOrderListLightV3" [
+export def "orders-list-light get-order-list-light-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,27 +301,27 @@ export def "orders-list-light GetOrderListLightV3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountIds: list # Account Id list (e.g. [12345])
-  --beezUPOrderStatuses: list # e.g. [InProgress]
-  beginPeriodUtcDate: string # The begin period you want to make the search. \ The period MUST not be greater than 62 days. The begin period MUST be lower than the end period.  (format: date-time, e.g. 2017-03-01T13:10:01Z)
-  --dateSearchType: string@dateSearchType-completer # Indicates on which date you want to make the filter (default: Modification)
-  endPeriodUtcDate: string # The end period of you search. \ The period MUST not be greater than 62 days. \ The end period MUST be greater than the begin period. The end period MUST be lower to the current date.  (format: date-time, e.g. 2017-04-01T13:10:01Z)
-  --invoiceAvailabilityType: string # Indicates on which invoice availability to filter (e.g. All)
-  --marketplaceBusinessCodes: list # e.g. [PRICEMINISTER]
-  --marketplaceOrderIds: list # e.g. [AmazonOrderId1234]
-  --marketplaceTechnicalCodes: list # e.g. [PriceMinister]
-  --orderMerchantInfoSynchronizationStatus: string # Indicates on which order merchant info synchronization status to filter (e.g. All)
-  --order-Buyer-Name: string # Buyer full name (e.g. Monroe)
-  --order-MerchantOrderIds: list # Merchant order id list (e.g. [MyOrderId1234])
-  --storeIds: list # Store Id list
-  pageNumber: int # Indicates the page number (format: int32, default: 1, e.g. 1)
-  pageSize: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
+  --account-ids: list # Account Id list (e.g. [12345])
+  --beez-up-order-statuses: list # e.g. [InProgress]
+  begin_period_utc_date: string # The begin period you want to make the search. \ The period MUST not be greater than 62 days. The begin period MUST be lower than the end period.  (format: date-time, e.g. 2017-03-01T13:10:01Z)
+  --date-search-type: string@date-search-type-completer # Indicates on which date you want to make the filter (default: Modification)
+  end_period_utc_date: string # The end period of you search. \ The period MUST not be greater than 62 days. \ The end period MUST be greater than the begin period. The end period MUST be lower to the current date.  (format: date-time, e.g. 2017-04-01T13:10:01Z)
+  --invoice-availability-type: string # Indicates on which invoice availability to filter (e.g. All)
+  --marketplace-business-codes: list # e.g. [PRICEMINISTER]
+  --marketplace-order-ids: list # e.g. [AmazonOrderId1234]
+  --marketplace-technical-codes: list # e.g. [PriceMinister]
+  --order-merchant-info-synchronization-status: string # Indicates on which order merchant info synchronization status to filter (e.g. All)
+  --order-buyer-name: string # Buyer full name (e.g. Monroe)
+  --order-merchant-order-ids: list # Merchant order id list (e.g. [MyOrderId1234])
+  --store-ids: list # Store Id list
+  page_number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
+  page_size: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
 ]: any -> record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders/v3/list/light")
-  let body = {accountIds: $accountIds, beezUPOrderStatuses: $beezUPOrderStatuses, beginPeriodUtcDate: $beginPeriodUtcDate, dateSearchType: $dateSearchType, endPeriodUtcDate: $endPeriodUtcDate, invoiceAvailabilityType: $invoiceAvailabilityType, marketplaceBusinessCodes: $marketplaceBusinessCodes, marketplaceOrderIds: $marketplaceOrderIds, marketplaceTechnicalCodes: $marketplaceTechnicalCodes, orderMerchantInfoSynchronizationStatus: $orderMerchantInfoSynchronizationStatus, order_Buyer_Name: $order_Buyer_Name, order_MerchantOrderIds: $order_MerchantOrderIds, storeIds: $storeIds, pageNumber: $pageNumber, pageSize: $pageSize} | compact
+  let body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -332,7 +332,7 @@ export def "orders-list-light GetOrderListLightV3" [
 #
 # GET /orders/v3/lov/orderManagementReadyMarketplaceBusinessCode
 # operationId: GetOrderManagementReadyMarketplaceBusinessCode
-export def "orders-lov-order-management-ready-marketplace-business-code GetOrderManagementReadyMarketplaceBusinessCode" [
+export def "orders-lov-order-management-ready-marketplace-business-code get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,14 +341,14 @@ export def "orders-lov-order-management-ready-marketplace-business-code GetOrder
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --storeIds: list # StoredIds to filter
-  --Accept-Language: list # Indicates that the client accepts the following languages.
+  --store-ids: list # StoredIds to filter
+  --accept-language: list # Indicates that the client accepts the following languages.
 ]: nothing -> table<codeIdentifier: string, intIdentifier: int, position: int, translationText: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storeIds" $storeIds "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "storeIds" $store_ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/lov/orderManagementReadyMarketplaceBusinessCode" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -359,7 +359,7 @@ export def "orders-lov-order-management-ready-marketplace-business-code GetOrder
 #
 # GET /orders/v3/status
 # operationId: GetMarketplaceAccountsSynchronizationV3
-export def "orders-status GetMarketplaceAccountsSynchronizationV3" [
+export def "orders-status get-marketplace-accounts-synchronization-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,14 +368,14 @@ export def "orders-status GetMarketplaceAccountsSynchronizationV3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --storeIds: list # StoredIds to filter
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --store-ids: list # StoredIds to filter
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<accountSynchronizations: table<accountId: int, completedHarvestSynchroUtcDate: string, marketplaceBusinessCode: string, marketplaceTechnicalCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storeIds" $storeIds "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "storeIds" $store_ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/status" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -386,9 +386,9 @@ export def "orders-status GetMarketplaceAccountsSynchronizationV3" [
 #
 # POST /orders/v3/{marketplaceTechnicalCode}/{accountId}/harvest
 # operationId: HarvestAccount
-export def "orders-harvest HarvestAccount" [
-  marketplaceTechnicalCode: string
-  accountId: int
+export def "orders-harvest post-by-marketplaceTechnicalCode-accountId" [
+  marketplace_technical_code: string
+  account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,13 +397,13 @@ export def "orders-harvest HarvestAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketplaceOrderId: string
-  --beezUPOrderId: string
+  --marketplace-order-id: string
+  --beez-up-order-id: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "marketplaceOrderId" $marketplaceOrderId "scalar") (serialize-qp "beezUPOrderId" $beezUPOrderId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orders/v3/($marketplaceTechnicalCode)/($accountId)/harvest" $qp)
+  let qp = [(serialize-qp "marketplaceOrderId" $marketplace_order_id "scalar") (serialize-qp "beezUPOrderId" $beez_up_order_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/harvest") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -413,10 +413,10 @@ export def "orders-harvest HarvestAccount" [
 #
 # GET /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}
 # operationId: GetOrderV3
-export def "orders GetOrderV3" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "orders get-order-v3" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,12 +425,12 @@ export def "orders GetOrderV3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, clearMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, history: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, transitionLinks: table<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/v3/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -441,10 +441,10 @@ export def "orders GetOrderV3" [
 #
 # HEAD /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}
 # operationId: HeadOrderV3
-export def "orders HeadOrderV3" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "orders head" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,12 +453,12 @@ export def "orders HeadOrderV3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/v3/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -469,10 +469,10 @@ export def "orders HeadOrderV3" [
 #
 # POST /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/clearMerchantOrderInfo
 # operationId: ClearMerchantOrderInfoV3
-export def "orders-clear-merchant-order-info ClearMerchantOrderInfoV3" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "orders-clear-merchant-order-info post" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,12 +481,12 @@ export def "orders-clear-merchant-order-info ClearMerchantOrderInfoV3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --testMode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
+  --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "testMode" $testMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orders/v3/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/clearMerchantOrderInfo" $qp)
+  let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/clearMerchantOrderInfo") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -496,10 +496,10 @@ export def "orders-clear-merchant-order-info ClearMerchantOrderInfoV3" [
 #
 # POST /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/harvest
 # operationId: HarvestOrderV3
-export def "orders-harvest HarvestOrderV3" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "orders-harvest post-by-marketplaceTechnicalCode-accountId-beezUPOrderId" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,7 +511,7 @@ export def "orders-harvest HarvestOrderV3" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/v3/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/harvest")
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/harvest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -521,10 +521,10 @@ export def "orders-harvest HarvestOrderV3" [
 #
 # GET /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/history
 # operationId: GetOrderHistoryV3
-export def "orders-history GetOrderHistoryV3" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "orders-history get-order-history-v3" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,7 +536,7 @@ export def "orders-history GetOrderHistoryV3" [
 ]: nothing -> record<changeOrderReportings: table<changeOrderType: string, creationUtcDate: string, details: record, errorMessage: string, executionUUID: string, ipAddress: string, lastUpdateUtcDate: string, processingStatus: string, sourceType: string, sourceUserId: string, sourceUserName: string, testMode: bool>, harvestOrderReportings: table<beezUPForcedStatus: string, beezUPStatus: string, creationUtcDate: string, errorMessage: string, executionUUID: string, lastUpdateUtcDate: string, marketplaceStatus: string, processingStatus: string, warningMessage: string>, lastModificationUtcDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/v3/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/history")
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -546,11 +546,11 @@ export def "orders-history GetOrderHistoryV3" [
 #
 # GET /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/history/{orderChangeExecutionUUID}
 # operationId: GetOrderChangeReportingV3
-export def "orders-history GetOrderChangeReportingV3" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
-  orderChangeExecutionUUID: string
+export def "orders-history get-order-change-reporting-v3" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
+  order_change_execution_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "orders-history GetOrderChangeReportingV3" [
 ]: nothing -> record<changeOrderType: string, creationUtcDate: string, details: record, errorMessage: string, executionUUID: string, ipAddress: string, lastUpdateUtcDate: string, processingStatus: string, sourceType: string, sourceUserId: string, sourceUserName: string, testMode: bool> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/v3/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/history/($orderChangeExecutionUUID)")
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id, order_change_execution_uuid: $order_change_execution_uuid} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history/{order_change_execution_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -572,10 +572,10 @@ export def "orders-history GetOrderChangeReportingV3" [
 #
 # POST /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/setMerchantOrderInfo
 # operationId: SetMerchantOrderInfoV3
-export def "orders-set-merchant-order-info SetMerchantOrderInfoV3" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "orders-set-merchant-order-info post" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,17 +584,17 @@ export def "orders-set-merchant-order-info SetMerchantOrderInfoV3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --testMode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
-  order_MerchantECommerceSoftwareName: string # The e-commerce software name of the merchant (e.g. Prestashop)
-  order_MerchantECommerceSoftwareVersion: string # The e-commece software version of the merchant (e.g. 123.0.1)
-  order_MerchantOrderId: string # The order merchant identifier (e.g. MyOrderMerchantId)
+  --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
+  order_merchant_e_commerce_software_name: string # The e-commerce software name of the merchant (e.g. Prestashop)
+  order_merchant_e_commerce_software_version: string # The e-commece software version of the merchant (e.g. 123.0.1)
+  order_merchant_order_id: string # The order merchant identifier (e.g. MyOrderMerchantId)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "testMode" $testMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orders/v3/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/setMerchantOrderInfo" $qp)
-  let body = {order_MerchantECommerceSoftwareName: $order_MerchantECommerceSoftwareName, order_MerchantECommerceSoftwareVersion: $order_MerchantECommerceSoftwareVersion, order_MerchantOrderId: $order_MerchantOrderId} | compact
+  let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/setMerchantOrderInfo") $qp)
+  let body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "order_MerchantOrderId": $order_merchant_order_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -605,11 +605,11 @@ export def "orders-set-merchant-order-info SetMerchantOrderInfoV3" [
 #
 # POST /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}/{changeOrderType}
 # operationId: ChangeOrderV3
-export def "orders ChangeOrderV3" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
-  changeOrderType: string
+export def "orders post" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
+  change_order_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,15 +618,15 @@ export def "orders ChangeOrderV3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userName: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
-  --testMode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar") (serialize-qp "testMode" $testMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orders/v3/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/($changeOrderType)" $qp)
+  let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id, change_order_type: $change_order_type} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/{change_order_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -637,7 +637,7 @@ export def "orders ChangeOrderV3" [
 #
 # GET /v2/public/channels/
 # operationId: GetChannelsIndex
-export def "public-channels GetChannelsIndex" [
+export def "public-channels get-channels-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,12 +646,12 @@ export def "public-channels GetChannelsIndex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<channels: record, links: record<channelCountryLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, channelTypeLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, sectorLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/public/channels/")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -662,8 +662,8 @@ export def "public-channels GetChannelsIndex" [
 #
 # GET /v2/public/channels/{countryIsoCode}
 # operationId: GetChannels
-export def "public-channels GetChannels" [
-  countryIsoCode: string
+export def "public-channels get" [
+  country_iso_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -672,13 +672,13 @@ export def "public-channels GetChannels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: list # Allows the client to indicate whether it accepts a compressed encoding to reduce traffic size.
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --accept-encoding: list # Allows the client to indicate whether it accepts a compressed encoding to reduce traffic size.
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<channels: table<homeUrl: string, logoUrl: string, name: string, sectors: list, types: list>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/public/channels/($countryIsoCode)")
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({country_iso_code: $country_iso_code} | format pattern "/v2/public/channels/{country_iso_code}"))
+  let extra_headers = {"Accept-Encoding": $accept_encoding, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -689,7 +689,7 @@ export def "public-channels GetChannels" [
 #
 # GET /v2/public/lov/
 # operationId: GetPublicLovIndex
-export def "public-lov GetPublicLovIndex" [
+export def "public-lov get-public-lov-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,12 +698,12 @@ export def "public-lov GetPublicLovIndex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<links: record<lists: record, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/public/lov/")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -714,8 +714,8 @@ export def "public-lov GetPublicLovIndex" [
 #
 # GET /v2/public/lov/{listName}
 # operationId: GetPublicListOfValues
-export def "public-lov GetPublicListOfValues" [
-  listName: string
+export def "public-lov get-public-list-of-values" [
+  list_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,13 +724,13 @@ export def "public-lov GetPublicListOfValues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: list # Indicates that the client accepts the following languages.
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --accept-language: list # Indicates that the client accepts the following languages.
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<items: table<codeIdentifier: string, intIdentifier: int, position: int, translationText: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/public/lov/($listName)")
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({list_name: $list_name} | format pattern "/v2/public/lov/{list_name}"))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -741,7 +741,7 @@ export def "public-lov GetPublicListOfValues" [
 #
 # POST /v2/public/security/login
 # operationId: Login
-export def "public-security-login Login" [
+export def "public-security-login post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,7 +757,7 @@ export def "public-security-login Login" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/public/security/login")
-  let body = {login: $login, password: $password} | compact
+  let body = {"login": $login, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -768,7 +768,7 @@ export def "public-security-login Login" [
 #
 # POST /v2/public/security/lostpassword
 # operationId: LostPassword
-export def "public-security-lostpassword LostPassword" [
+export def "public-security-lostpassword post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -793,7 +793,7 @@ export def "public-security-lostpassword LostPassword" [
 #
 # POST /v2/public/security/register
 # operationId: Register
-export def "public-security-register Register" [
+export def "public-security-register create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,8 +802,8 @@ export def "public-security-register Register" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --commercialOwnerUserId: string # The user id of your commercial in BeezUP. (format: uuid, e.g. 47ea14ab-195d-4f9a-a24e-32c329ee40f6)
-  --cultureName: string # Can be null. Default: en-GB. The culture name you want to use. FYI. \ The email activation will use this culture.  (e.g. en-GB)
+  --commercial-owner-user-id: string # The user id of your commercial in BeezUP. (format: uuid, e.g. 47ea14ab-195d-4f9a-a24e-32c329ee40f6)
+  --culture-name: string # Can be null. Default: en-GB. The culture name you want to use. FYI. \ The email activation will use this culture.  (e.g. en-GB)
   email: string # Your email. We refuse disposable email. (e.g. myemail@mycompany.com)
   password: string # The password you want to use for your new account. \ The password length must be greater or equals to 6 and lower or equals to 128. \ The password must contains at least one number and one special character  (e.g. I@mW0nder$Full)
 ]: any -> any {
@@ -811,7 +811,7 @@ export def "public-security-register Register" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/public/security/register")
-  let body = {commercialOwnerUserId: $commercialOwnerUserId, cultureName: $cultureName, email: $email, password: $password} | compact
+  let body = {"commercialOwnerUserId": $commercial_owner_user_id, "cultureName": $culture_name, "email": $email, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -822,7 +822,7 @@ export def "public-security-register Register" [
 #
 # GET /v2/user/analytics/
 # operationId: AnalyticsIndex
-export def "user-analytics AnalyticsIndex" [
+export def "user-analytics list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "user-analytics AnalyticsIndex" [
 # POST /v2/user/analytics/reports/byday
 # operationId: GetStoreReportByDayPerStore
 # --advancedFilters shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
-export def "user-analytics-reports-byday GetStoreReportByDayPerStore" [
+export def "user-analytics-reports-byday get-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,18 +854,18 @@ export def "user-analytics-reports-byday GetStoreReportByDayPerStore" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --advancedFilters: record # shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
-  beginPeriodUtcDate: string # The begin date of the period for the report (format: date, e.g. 2006-11-20T00:00:00Z)
-  --catalogCategoryId: string # The catalog category identifier (format: guid, e.g. 81a058a6-0451-4b79-84ef-94c58d0ed4ac)
-  --channelIds: list # Indicate the channel identifier list (e.g. [2dc136a7-0d3d-4cc9-a825-a28a42c53e28])
-  endPeriodUtcDate: string # The end date of the period for the report (format: date, e.g. 2006-12-20T00:00:00Z)
-  --productId: string # The product identifier (format: guid, e.g. 578419df-1bbf-41a6-96fa-862e42182b67)
+  --advanced-filters: record # shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
+  begin_period_utc_date: string # The begin date of the period for the report (format: date, e.g. 2006-11-20T00:00:00Z)
+  --catalog-category-id: string # The catalog category identifier (format: guid, e.g. 81a058a6-0451-4b79-84ef-94c58d0ed4ac)
+  --channel-ids: list # Indicate the channel identifier list (e.g. [2dc136a7-0d3d-4cc9-a825-a28a42c53e28])
+  end_period_utc_date: string # The end date of the period for the report (format: date, e.g. 2006-12-20T00:00:00Z)
+  --product-id: string # The product identifier (format: guid, e.g. 578419df-1bbf-41a6-96fa-862e42182b67)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/analytics/reports/byday")
-  let body = {advancedFilters: $advancedFilters, beginPeriodUtcDate: $beginPeriodUtcDate, catalogCategoryId: $catalogCategoryId, channelIds: $channelIds, endPeriodUtcDate: $endPeriodUtcDate, productId: $productId} | compact
+  let body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "catalogCategoryId": $catalog_category_id, "channelIds": $channel_ids, "endPeriodUtcDate": $end_period_utc_date, "productId": $product_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -876,7 +876,7 @@ export def "user-analytics-reports-byday GetStoreReportByDayPerStore" [
 #
 # GET /v2/user/analytics/tracking/status
 # operationId: GetTrackingStatus
-export def "user-analytics-tracking-status GetTrackingStatus" [
+export def "user-analytics-tracking-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,8 +898,8 @@ export def "user-analytics-tracking-status GetTrackingStatus" [
 #
 # GET /v2/user/analytics/{storeId}
 # operationId: AnalyticsStoreIndex
-export def "user-analytics AnalyticsStoreIndex" [
-  storeId: string
+export def "user-analytics get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -911,7 +911,7 @@ export def "user-analytics AnalyticsStoreIndex" [
 ]: nothing -> record<links: record<optimise: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseAll: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseByCategory: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseByChannel: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseByProduct: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByCategory: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByChannel: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByDay: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByProduct: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportFilters: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, rules: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackedClicks: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackedExternalOrders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackedOrders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackingStatus: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -922,9 +922,9 @@ export def "user-analytics AnalyticsStoreIndex" [
 # POST /v2/user/analytics/{storeId}/optimisations/all/{actionName}
 # operationId: OptimiseAll
 # --analyticsProductColumnFilters shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
-export def "user-analytics-optimisations-all OptimiseAll" [
-  storeId: string
-  actionName: string
+export def "user-analytics-optimisations-all post" [
+  store_id: string
+  action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,16 +933,16 @@ export def "user-analytics-optimisations-all OptimiseAll" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --analyticsProductColumnFilters: record # shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
-  --productColumnsToDisplay: list # e.g. [4b460e31-3d1f-4117-922d-b159a64ec1d2]
-  --productState: string@productState-completer # You can filter on the product state. (default: All, e.g. All)
-  reportType: string@reportType-completer # The report type (e.g. ByProduct)
+  --analytics-product-column-filters: record # shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
+  --product-columns-to-display: list # e.g. [4b460e31-3d1f-4117-922d-b159a64ec1d2]
+  --product-state: string@product-state-completer # You can filter on the product state. (default: All, e.g. All)
+  report_type: string@report-type-completer # The report type (e.g. ByProduct)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/optimisations/all/($actionName)")
-  let body = {analyticsProductColumnFilters: $analyticsProductColumnFilters, productColumnsToDisplay: $productColumnsToDisplay, productState: $productState, reportType: $reportType} | compact
+  let full_url = (build-url $base ({store_id: $store_id, action_name: $action_name} | format pattern "/v2/user/analytics/{store_id}/optimisations/all/{action_name}"))
+  let body = {"analyticsProductColumnFilters": $analytics_product_column_filters, "productColumnsToDisplay": $product_columns_to_display, "productState": $product_state, "reportType": $report_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -953,10 +953,10 @@ export def "user-analytics-optimisations-all OptimiseAll" [
 #
 # POST /v2/user/analytics/{storeId}/optimisations/bycategory/{catalogCategoryId}/{actionName}
 # operationId: OptimiseByCategory
-export def "user-analytics-optimisations-bycategory OptimiseByCategory" [
-  storeId: string
-  catalogCategoryId: string
-  actionName: string
+export def "user-analytics-optimisations-bycategory post" [
+  store_id: string
+  catalog_category_id: string
+  action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "user-analytics-optimisations-bycategory OptimiseByCategory" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/optimisations/bycategory/($catalogCategoryId)/($actionName)")
+  let full_url = (build-url $base ({store_id: $store_id, catalog_category_id: $catalog_category_id, action_name: $action_name} | format pattern "/v2/user/analytics/{store_id}/optimisations/bycategory/{catalog_category_id}/{action_name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -981,10 +981,10 @@ export def "user-analytics-optimisations-bycategory OptimiseByCategory" [
 #
 # POST /v2/user/analytics/{storeId}/optimisations/bychannel/{channelId}/{actionName}
 # operationId: OptimiseByChannel
-export def "user-analytics-optimisations-bychannel OptimiseByChannel" [
-  storeId: string
-  channelId: string
-  actionName: string
+export def "user-analytics-optimisations-bychannel post" [
+  store_id: string
+  channel_id: string
+  action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,7 +996,7 @@ export def "user-analytics-optimisations-bychannel OptimiseByChannel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/optimisations/bychannel/($channelId)/($actionName)")
+  let full_url = (build-url $base ({store_id: $store_id, channel_id: $channel_id, action_name: $action_name} | format pattern "/v2/user/analytics/{store_id}/optimisations/bychannel/{channel_id}/{action_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1006,10 +1006,10 @@ export def "user-analytics-optimisations-bychannel OptimiseByChannel" [
 #
 # POST /v2/user/analytics/{storeId}/optimisations/byproduct/{productId}/{actionName}
 # operationId: OptimiseByProduct
-export def "user-analytics-optimisations-byproduct OptimiseByProduct" [
-  storeId: string
-  productId: string
-  actionName: string
+export def "user-analytics-optimisations-byproduct post" [
+  store_id: string
+  product_id: string
+  action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,7 +1023,7 @@ export def "user-analytics-optimisations-byproduct OptimiseByProduct" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/optimisations/byproduct/($productId)/($actionName)")
+  let full_url = (build-url $base ({store_id: $store_id, product_id: $product_id, action_name: $action_name} | format pattern "/v2/user/analytics/{store_id}/optimisations/byproduct/{product_id}/{action_name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1034,8 +1034,8 @@ export def "user-analytics-optimisations-byproduct OptimiseByProduct" [
 #
 # POST /v2/user/analytics/{storeId}/optimisations/copy
 # operationId: CopyOptimisation
-export def "user-analytics-optimisations-copy CopyOptimisation" [
-  storeId: string
+export def "user-analytics-optimisations-copy copy" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,15 +1044,15 @@ export def "user-analytics-optimisations-copy CopyOptimisation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  channelIdSource: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
-  channelIdTarget: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
-  --keepExistingOptimisation: oneof<nothing, bool> # If true the existing optimisation will be kept (e.g. false)
+  channel_id_source: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
+  channel_id_target: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
+  --keep-existing-optimisation: oneof<nothing, bool> # If true the existing optimisation will be kept (e.g. false)
 ]: any -> record<catalogProductCount: int, channel: record<channelId: string, channelImageUrl: string, channelName: string>, enabledProductCount: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/optimisations/copy")
-  let body = {channelIdSource: $channelIdSource, channelIdTarget: $channelIdTarget, keepExistingOptimisation: $keepExistingOptimisation} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/optimisations/copy"))
+  let body = {"channelIdSource": $channel_id_source, "channelIdTarget": $channel_id_target, "keepExistingOptimisation": $keep_existing_optimisation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1063,9 +1063,9 @@ export def "user-analytics-optimisations-copy CopyOptimisation" [
 #
 # POST /v2/user/analytics/{storeId}/optimisations/{actionName}
 # operationId: Optimise
-export def "user-analytics-optimisations Optimise" [
-  storeId: string
-  actionName: string
+export def "user-analytics-optimisations post" [
+  store_id: string
+  action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,14 +1074,14 @@ export def "user-analytics-optimisations Optimise" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageNumber: int # Indicates the page number (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
+  --page-number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
+  --page-size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/optimisations/($actionName)")
-  let body = {pageNumber: $pageNumber, pageSize: $pageSize} | compact
+  let full_url = (build-url $base ({store_id: $store_id, action_name: $action_name} | format pattern "/v2/user/analytics/{store_id}/optimisations/{action_name}"))
+  let body = {"pageNumber": $page_number, "pageSize": $page_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1092,8 +1092,8 @@ export def "user-analytics-optimisations Optimise" [
 #
 # POST /v2/user/analytics/{storeId}/reports/bycategory
 # operationId: GetStoreReportByCategory
-export def "user-analytics-reports-bycategory GetStoreReportByCategory" [
-  storeId: string
+export def "user-analytics-reports-bycategory get-store" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1102,14 +1102,14 @@ export def "user-analytics-reports-bycategory GetStoreReportByCategory" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageNumber: int # Indicates the page number (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
+  --page-number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
+  --page-size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
 ]: any -> record<categories: table<allProductCount: int, catalogCategoryId: string, catalogCategoryPath: list, catalogProductCount: int, clickCount: int, cost: float, enabledProductCount: int, links: record, margin: float, orderCount: int, performanceIndicator: float, roi: float, soldProductCount: int, totalSales: float>, currencyCode: string, links: record<disableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/reports/bycategory")
-  let body = {pageNumber: $pageNumber, pageSize: $pageSize} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/reports/bycategory"))
+  let body = {"pageNumber": $page_number, "pageSize": $page_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1120,8 +1120,8 @@ export def "user-analytics-reports-bycategory GetStoreReportByCategory" [
 #
 # POST /v2/user/analytics/{storeId}/reports/bychannel
 # operationId: GetStoreReportByChannel
-export def "user-analytics-reports-bychannel GetStoreReportByChannel" [
-  storeId: string
+export def "user-analytics-reports-bychannel get-store" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,14 +1130,14 @@ export def "user-analytics-reports-bychannel GetStoreReportByChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageNumber: int # Indicates the page number (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
+  --page-number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
+  --page-size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
 ]: any -> record<channels: table<catalogProductCount: int, channel: record, clickCount: int, cost: float, enabledProductCount: int, links: record, margin: float, orderCount: int, performanceIndicator: float, roi: float, soldProductCount: int, totalSales: float>, currencyCode: string, links: record<disableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/reports/bychannel")
-  let body = {pageNumber: $pageNumber, pageSize: $pageSize} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/reports/bychannel"))
+  let body = {"pageNumber": $page_number, "pageSize": $page_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1149,8 +1149,8 @@ export def "user-analytics-reports-bychannel GetStoreReportByChannel" [
 # POST /v2/user/analytics/{storeId}/reports/byday
 # operationId: GetStoreReportByDay
 # --advancedFilters shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
-export def "user-analytics-reports-byday GetStoreReportByDay" [
-  storeId: string
+export def "user-analytics-reports-byday get-store-by-storeId" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1159,18 +1159,18 @@ export def "user-analytics-reports-byday GetStoreReportByDay" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --advancedFilters: record # shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
-  beginPeriodUtcDate: string # The begin date of the period for the report (format: date, e.g. 2006-11-20T00:00:00Z)
-  --catalogCategoryId: string # The catalog category identifier (format: guid, e.g. 81a058a6-0451-4b79-84ef-94c58d0ed4ac)
-  --channelIds: list # Indicate the channel identifier list (e.g. [2dc136a7-0d3d-4cc9-a825-a28a42c53e28])
-  endPeriodUtcDate: string # The end date of the period for the report (format: date, e.g. 2006-12-20T00:00:00Z)
-  --productId: string # The product identifier (format: guid, e.g. 578419df-1bbf-41a6-96fa-862e42182b67)
+  --advanced-filters: record # shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
+  begin_period_utc_date: string # The begin date of the period for the report (format: date, e.g. 2006-11-20T00:00:00Z)
+  --catalog-category-id: string # The catalog category identifier (format: guid, e.g. 81a058a6-0451-4b79-84ef-94c58d0ed4ac)
+  --channel-ids: list # Indicate the channel identifier list (e.g. [2dc136a7-0d3d-4cc9-a825-a28a42c53e28])
+  end_period_utc_date: string # The end date of the period for the report (format: date, e.g. 2006-12-20T00:00:00Z)
+  --product-id: string # The product identifier (format: guid, e.g. 578419df-1bbf-41a6-96fa-862e42182b67)
 ]: any -> record<currencyCode: string, days: table<allChannels: record, byChannels: list, day: string>, globalPerformanceIndicators: record<allChannels: record<performanceIndicator: float>, byChannels: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/reports/byday")
-  let body = {advancedFilters: $advancedFilters, beginPeriodUtcDate: $beginPeriodUtcDate, catalogCategoryId: $catalogCategoryId, channelIds: $channelIds, endPeriodUtcDate: $endPeriodUtcDate, productId: $productId} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/reports/byday"))
+  let body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "catalogCategoryId": $catalog_category_id, "channelIds": $channel_ids, "endPeriodUtcDate": $end_period_utc_date, "productId": $product_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1182,8 +1182,8 @@ export def "user-analytics-reports-byday GetStoreReportByDay" [
 # POST /v2/user/analytics/{storeId}/reports/byproduct
 # operationId: GetStoreReportByProduct
 # --analyticsProductColumnFilters shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
-export def "user-analytics-reports-byproduct GetStoreReportByProduct" [
-  storeId: string
+export def "user-analytics-reports-byproduct get-store" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,17 +1192,17 @@ export def "user-analytics-reports-byproduct GetStoreReportByProduct" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageNumber: int # Indicates the page number (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
-  --analyticsProductColumnFilters: record # shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
-  --productColumnsToDisplay: list # e.g. [4b460e31-3d1f-4117-922d-b159a64ec1d2]
-  productState: string@productState-completer # You can filter on the product state. (default: All, e.g. All)
+  --page-number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
+  --page-size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
+  --analytics-product-column-filters: record # shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
+  --product-columns-to-display: list # e.g. [4b460e31-3d1f-4117-922d-b159a64ec1d2]
+  product_state: string@product-state-completer # You can filter on the product state. (default: All, e.g. All)
 ]: any -> record<currencyCode: string, links: record<disableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, products: table<channelCount: int, clickCount: int, cost: float, enabledOnChannelCount: int, links: record, margin: float, orderCount: int, performanceIndicator: float, product: record, roi: float, soldProductCount: int, totalSales: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/reports/byproduct")
-  let body = {pageNumber: $pageNumber, pageSize: $pageSize, analyticsProductColumnFilters: $analyticsProductColumnFilters, productColumnsToDisplay: $productColumnsToDisplay, productState: $productState} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/reports/byproduct"))
+  let body = {"pageNumber": $page_number, "pageSize": $page_size, "analyticsProductColumnFilters": $analytics_product_column_filters, "productColumnsToDisplay": $product_columns_to_display, "productState": $product_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1213,8 +1213,8 @@ export def "user-analytics-reports-byproduct GetStoreReportByProduct" [
 #
 # GET /v2/user/analytics/{storeId}/reports/filters
 # operationId: GetReportFilters
-export def "user-analytics-reports-filters GetReportFilters" [
-  storeId: string
+export def "user-analytics-reports-filters list" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,7 +1226,7 @@ export def "user-analytics-reports-filters GetReportFilters" [
 ]: nothing -> record<links: record<save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, reportFilters: table<links: record, reportFilterId: string, reportFilterName: string, reportType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/reports/filters")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/reports/filters"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1236,9 +1236,9 @@ export def "user-analytics-reports-filters GetReportFilters" [
 #
 # DELETE /v2/user/analytics/{storeId}/reports/filters/{reportFilterId}
 # operationId: DeleteReportFilter
-export def "user-analytics-reports-filters DeleteReportFilter" [
-  storeId: string
-  reportFilterId: string
+export def "user-analytics-reports-filters delete" [
+  store_id: string
+  report_filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1250,7 +1250,7 @@ export def "user-analytics-reports-filters DeleteReportFilter" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/reports/filters/($reportFilterId)")
+  let full_url = (build-url $base ({store_id: $store_id, report_filter_id: $report_filter_id} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1260,9 +1260,9 @@ export def "user-analytics-reports-filters DeleteReportFilter" [
 #
 # GET /v2/user/analytics/{storeId}/reports/filters/{reportFilterId}
 # operationId: GetReportFilter
-export def "user-analytics-reports-filters GetReportFilter" [
-  storeId: string
-  reportFilterId: string
+export def "user-analytics-reports-filters get" [
+  store_id: string
+  report_filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1274,7 +1274,7 @@ export def "user-analytics-reports-filters GetReportFilter" [
 ]: nothing -> record<links: record<delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, parameters: record<advancedFilters: record<globalMarginPercent: int, linkClickToOrderMaxDay: int, linkClickToOrderType: string, marginType: string, onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record>, beginPeriodUtcDate: string, categoryFilter: record<categoryPath: list>, channelId: string, endPeriodUtcDate: string, performanceIndicatorFilters: list<record>, periodType: string, analyticsProductColumnFilters: record<additionalAnalyticsProductColumnFilters: record, sku: string, title: string>, productColumnsToDisplay: list<string>, productState: string, reportType: string>, reportFilterId: string, reportFilterName: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/reports/filters/($reportFilterId)")
+  let full_url = (build-url $base ({store_id: $store_id, report_filter_id: $report_filter_id} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1284,9 +1284,9 @@ export def "user-analytics-reports-filters GetReportFilter" [
 #
 # PUT /v2/user/analytics/{storeId}/reports/filters/{reportFilterId}
 # operationId: SaveReportFilter
-export def "user-analytics-reports-filters SaveReportFilter" [
-  storeId: string
-  reportFilterId: string
+export def "user-analytics-reports-filters put" [
+  store_id: string
+  report_filter_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1296,13 +1296,13 @@ export def "user-analytics-reports-filters SaveReportFilter" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   parameters: any
-  reportFilterName: string # Report filter name (e.g. My report filter)
+  report_filter_name: string # Report filter name (e.g. My report filter)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/reports/filters/($reportFilterId)")
-  let body = {parameters: $parameters, reportFilterName: $reportFilterName} | compact
+  let full_url = (build-url $base ({store_id: $store_id, report_filter_id: $report_filter_id} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}"))
+  let body = {"parameters": $parameters, "reportFilterName": $report_filter_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1313,8 +1313,8 @@ export def "user-analytics-reports-filters SaveReportFilter" [
 #
 # GET /v2/user/analytics/{storeId}/rules
 # operationId: GetRules
-export def "user-analytics-rules GetRules" [
-  storeId: string
+export def "user-analytics-rules list" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1326,7 +1326,7 @@ export def "user-analytics-rules GetRules" [
 ]: nothing -> record<links: record<create: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, history: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, run: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, rules: table<actionName: string, enabled: bool, lastExecutionStatus: string, lastExecutionUtcDate: string, links: record, position: int, reportFilterId: string, ruleId: string, ruleName: string, validityEndUtcDate: string, validityStartUtcDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/rules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1336,8 +1336,8 @@ export def "user-analytics-rules GetRules" [
 #
 # POST /v2/user/analytics/{storeId}/rules
 # operationId: CreateRule
-export def "user-analytics-rules CreateRule" [
-  storeId: string
+export def "user-analytics-rules create" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1346,17 +1346,17 @@ export def "user-analytics-rules CreateRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --endUtcDate: string # The end validity utc date of the rule (format: date-time, e.g. 2017-09-30T10:42:40.001Z)
-  optimisationActionName: string@optimisationActionName-completer # The optimisation action (e.g. reenable)
-  reportFilterId: string # The report filter to use for the rule (format: guid, e.g. fb19c53c-2f63-4262-9d94-2d7faa500acd)
-  ruleName: string # The name of the rule (e.g. My rule)
-  --startUtcDate: string # The start validity utc date of the rule (format: date-time, e.g. 2016-08-29T09:12:33.001Z)
+  --end-utc-date: string # The end validity utc date of the rule (format: date-time, e.g. 2017-09-30T10:42:40.001Z)
+  optimisation_action_name: string@optimisation-action-name-completer # The optimisation action (e.g. reenable)
+  report_filter_id: string # The report filter to use for the rule (format: guid, e.g. fb19c53c-2f63-4262-9d94-2d7faa500acd)
+  rule_name: string # The name of the rule (e.g. My rule)
+  --start-utc-date: string # The start validity utc date of the rule (format: date-time, e.g. 2016-08-29T09:12:33.001Z)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules")
-  let body = {endUtcDate: $endUtcDate, optimisationActionName: $optimisationActionName, reportFilterId: $reportFilterId, ruleName: $ruleName, startUtcDate: $startUtcDate} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/rules"))
+  let body = {"endUtcDate": $end_utc_date, "optimisationActionName": $optimisation_action_name, "reportFilterId": $report_filter_id, "ruleName": $rule_name, "startUtcDate": $start_utc_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1367,8 +1367,8 @@ export def "user-analytics-rules CreateRule" [
 #
 # GET /v2/user/analytics/{storeId}/rules/executions
 # operationId: GetRulesExecutions
-export def "user-analytics-rules-executions GetRulesExecutions" [
-  storeId: string
+export def "user-analytics-rules-executions get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1377,13 +1377,13 @@ export def "user-analytics-rules-executions GetRulesExecutions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageNumber: int # The page to retrieve (default: 1)
-  --pageSize: int # The count of rule history to retrieve (default: 10)
+  --page-number: int # The page to retrieve (default: 1)
+  --page-size: int # The count of rule history to retrieve (default: 10)
 ]: nothing -> record<executions: table<activeAffectedProductCount: int, affectedChannelCount: int, affectedProductCount: int, completedUtcDate: string, errorType: string, executionSource: string, links: record, optimisationActionName: string, reportUrl: string, ruleId: string, ruleName: string, startedUtcDate: string, status: string, userId: string>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules/executions" $qp)
+  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/rules/executions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1393,8 +1393,8 @@ export def "user-analytics-rules-executions GetRulesExecutions" [
 #
 # POST /v2/user/analytics/{storeId}/rules/run
 # operationId: RunRules
-export def "user-analytics-rules-run RunRules" [
-  storeId: string
+export def "user-analytics-rules-run post-by-storeId" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,7 +1406,7 @@ export def "user-analytics-rules-run RunRules" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules/run")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/rules/run"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1416,9 +1416,9 @@ export def "user-analytics-rules-run RunRules" [
 #
 # DELETE /v2/user/analytics/{storeId}/rules/{ruleId}
 # operationId: DeleteRule
-export def "user-analytics-rules DeleteRule" [
-  storeId: string
-  ruleId: string
+export def "user-analytics-rules delete" [
+  store_id: string
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,7 +1430,7 @@ export def "user-analytics-rules DeleteRule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules/($ruleId)")
+  let full_url = (build-url $base ({store_id: $store_id, rule_id: $rule_id} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1440,9 +1440,9 @@ export def "user-analytics-rules DeleteRule" [
 #
 # GET /v2/user/analytics/{storeId}/rules/{ruleId}
 # operationId: GetRule
-export def "user-analytics-rules GetRule" [
-  storeId: string
-  ruleId: string
+export def "user-analytics-rules get" [
+  store_id: string
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1454,7 +1454,7 @@ export def "user-analytics-rules GetRule" [
 ]: nothing -> record<actionName: string, enabled: bool, lastExecutionStatus: string, lastExecutionUtcDate: string, links: record<delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, movedown: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, moveup: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportFilter: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, run: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, update: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, position: int, reportFilterId: string, ruleId: string, ruleName: string, validityEndUtcDate: string, validityStartUtcDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules/($ruleId)")
+  let full_url = (build-url $base ({store_id: $store_id, rule_id: $rule_id} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1464,9 +1464,9 @@ export def "user-analytics-rules GetRule" [
 #
 # PATCH /v2/user/analytics/{storeId}/rules/{ruleId}
 # operationId: UpdateRule
-export def "user-analytics-rules UpdateRule" [
-  storeId: string
-  ruleId: string
+export def "user-analytics-rules update" [
+  store_id: string
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1475,15 +1475,15 @@ export def "user-analytics-rules UpdateRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --endUtcDate: string # Not required. The end validity utc date of the rule (format: date-time, e.g. 2016-08-29T09:12:33.001Z)
-  ruleName: string # The name of the rule (e.g. My Rule Renamed)
-  --startUtcDate: string # Not required. The start validity utc date of the rule. (format: date-time, e.g. 2016-08-29T09:12:33.001Z)
+  --end-utc-date: string # Not required. The end validity utc date of the rule (format: date-time, e.g. 2016-08-29T09:12:33.001Z)
+  rule_name: string # The name of the rule (e.g. My Rule Renamed)
+  --start-utc-date: string # Not required. The start validity utc date of the rule. (format: date-time, e.g. 2016-08-29T09:12:33.001Z)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules/($ruleId)")
-  let body = {endUtcDate: $endUtcDate, ruleName: $ruleName, startUtcDate: $startUtcDate} | compact
+  let full_url = (build-url $base ({store_id: $store_id, rule_id: $rule_id} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}"))
+  let body = {"endUtcDate": $end_utc_date, "ruleName": $rule_name, "startUtcDate": $start_utc_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1494,9 +1494,9 @@ export def "user-analytics-rules UpdateRule" [
 #
 # POST /v2/user/analytics/{storeId}/rules/{ruleId}/disable
 # operationId: DisableRule
-export def "user-analytics-rules-disable DisableRule" [
-  storeId: string
-  ruleId: string
+export def "user-analytics-rules-disable disable" [
+  store_id: string
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1508,7 +1508,7 @@ export def "user-analytics-rules-disable DisableRule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules/($ruleId)/disable")
+  let full_url = (build-url $base ({store_id: $store_id, rule_id: $rule_id} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1518,9 +1518,9 @@ export def "user-analytics-rules-disable DisableRule" [
 #
 # POST /v2/user/analytics/{storeId}/rules/{ruleId}/enable
 # operationId: EnableRule
-export def "user-analytics-rules-enable EnableRule" [
-  storeId: string
-  ruleId: string
+export def "user-analytics-rules-enable enable" [
+  store_id: string
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1532,7 +1532,7 @@ export def "user-analytics-rules-enable EnableRule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules/($ruleId)/enable")
+  let full_url = (build-url $base ({store_id: $store_id, rule_id: $rule_id} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1542,9 +1542,9 @@ export def "user-analytics-rules-enable EnableRule" [
 #
 # POST /v2/user/analytics/{storeId}/rules/{ruleId}/movedown
 # operationId: MoveDownRule
-export def "user-analytics-rules-movedown MoveDownRule" [
-  storeId: string
-  ruleId: string
+export def "user-analytics-rules-movedown move-down" [
+  store_id: string
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1556,7 +1556,7 @@ export def "user-analytics-rules-movedown MoveDownRule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules/($ruleId)/movedown")
+  let full_url = (build-url $base ({store_id: $store_id, rule_id: $rule_id} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/movedown"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1566,9 +1566,9 @@ export def "user-analytics-rules-movedown MoveDownRule" [
 #
 # POST /v2/user/analytics/{storeId}/rules/{ruleId}/moveup
 # operationId: MoveUpRule
-export def "user-analytics-rules-moveup MoveUpRule" [
-  storeId: string
-  ruleId: string
+export def "user-analytics-rules-moveup move-up" [
+  store_id: string
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1580,7 +1580,7 @@ export def "user-analytics-rules-moveup MoveUpRule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules/($ruleId)/moveup")
+  let full_url = (build-url $base ({store_id: $store_id, rule_id: $rule_id} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/moveup"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1590,9 +1590,9 @@ export def "user-analytics-rules-moveup MoveUpRule" [
 #
 # POST /v2/user/analytics/{storeId}/rules/{ruleId}/run
 # operationId: RunRule
-export def "user-analytics-rules-run RunRule" [
-  storeId: string
-  ruleId: string
+export def "user-analytics-rules-run post-by-storeId-ruleId" [
+  store_id: string
+  rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1604,7 +1604,7 @@ export def "user-analytics-rules-run RunRule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/rules/($ruleId)/run")
+  let full_url = (build-url $base ({store_id: $store_id, rule_id: $rule_id} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/run"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1614,8 +1614,8 @@ export def "user-analytics-rules-run RunRule" [
 #
 # GET /v2/user/analytics/{storeId}/tracking/clicks
 # operationId: GetStoreTrackedClicks
-export def "user-analytics-tracking-clicks GetStoreTrackedClicks" [
-  storeId: string
+export def "user-analytics-tracking-clicks get-store-tracked" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1629,7 +1629,7 @@ export def "user-analytics-tracking-clicks GetStoreTrackedClicks" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/tracking/clicks" $qp)
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/tracking/clicks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1639,8 +1639,8 @@ export def "user-analytics-tracking-clicks GetStoreTrackedClicks" [
 #
 # GET /v2/user/analytics/{storeId}/tracking/externalorders
 # operationId: GetStoreTrackedExternalOrders
-export def "user-analytics-tracking-externalorders GetStoreTrackedExternalOrders" [
-  storeId: string
+export def "user-analytics-tracking-externalorders get-store-tracked" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1654,7 +1654,7 @@ export def "user-analytics-tracking-externalorders GetStoreTrackedExternalOrders
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/tracking/externalorders" $qp)
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/tracking/externalorders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1664,8 +1664,8 @@ export def "user-analytics-tracking-externalorders GetStoreTrackedExternalOrders
 #
 # GET /v2/user/analytics/{storeId}/tracking/orders
 # operationId: GetStoreTrackedOrders
-export def "user-analytics-tracking-orders GetStoreTrackedOrders" [
-  storeId: string
+export def "user-analytics-tracking-orders get-store-tracked" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1679,7 +1679,7 @@ export def "user-analytics-tracking-orders GetStoreTrackedOrders" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/tracking/orders" $qp)
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/tracking/orders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1689,8 +1689,8 @@ export def "user-analytics-tracking-orders GetStoreTrackedOrders" [
 #
 # GET /v2/user/analytics/{storeId}/tracking/status
 # operationId: GetStoreTrackingStatus
-export def "user-analytics-tracking-status GetStoreTrackingStatus" [
-  storeId: string
+export def "user-analytics-tracking-status get-store" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1702,7 +1702,7 @@ export def "user-analytics-tracking-status GetStoreTrackingStatus" [
 ]: nothing -> record<clickSynchronizationUtcDate: string, marketplaceOrderSynchonizationUtcDate: string, orderSynchonizationUtcDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/analytics/($storeId)/tracking/status")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/analytics/{store_id}/tracking/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1712,7 +1712,7 @@ export def "user-analytics-tracking-status GetStoreTrackingStatus" [
 #
 # GET /v2/user/catalogs/
 # operationId: CatalogIndex
-export def "user-catalogs CatalogIndex" [
+export def "user-catalogs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1734,7 +1734,7 @@ export def "user-catalogs CatalogIndex" [
 #
 # GET /v2/user/catalogs/beezupColumns
 # operationId: Catalog_GetBeezUPColumns
-export def "user-catalogs-beezup-columns GetBeezUPColumns" [
+export def "user-catalogs-beezup-columns get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1756,7 +1756,7 @@ export def "user-catalogs-beezup-columns GetBeezUPColumns" [
 #
 # GET /v2/user/catalogs/importations
 # operationId: Importation_GetReportingsAllStores
-export def "user-catalogs-importations GetReportingsAllStores" [
+export def "user-catalogs-importations get-reportings-all-stores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1778,8 +1778,8 @@ export def "user-catalogs-importations GetReportingsAllStores" [
 #
 # GET /v2/user/catalogs/{storeId}
 # operationId: CatalogStoreIndex
-export def "user-catalogs CatalogStoreIndex" [
-  storeId: string
+export def "user-catalogs get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1791,7 +1791,7 @@ export def "user-catalogs CatalogStoreIndex" [
 ]: nothing -> record<links: record<autoImportInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, catalogColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, categories: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, computeExpression: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, customColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, importations: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, inputConfiguration: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, products: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, randomProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, startImportation: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1801,8 +1801,8 @@ export def "user-catalogs CatalogStoreIndex" [
 #
 # DELETE /v2/user/catalogs/{storeId}/autoImport
 # operationId: Auto_DeleteAutoImport
-export def "user-catalogs-auto-import DeleteAutoImport" [
-  storeId: string
+export def "user-catalogs-auto-import delete" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1814,7 +1814,7 @@ export def "user-catalogs-auto-import DeleteAutoImport" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/autoImport")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/autoImport"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1824,8 +1824,8 @@ export def "user-catalogs-auto-import DeleteAutoImport" [
 #
 # GET /v2/user/catalogs/{storeId}/autoImport
 # operationId: Auto_GetAutoImportConfiguration
-export def "user-catalogs-auto-import GetAutoImportConfiguration" [
-  storeId: string
+export def "user-catalogs-auto-import get-auto-import-configuration" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1837,7 +1837,7 @@ export def "user-catalogs-auto-import GetAutoImportConfiguration" [
 ]: nothing -> record<duplicateProductConfiguration: record<compareOptions: string, strategy: string>, input: record<files: list<record>, transformFileUrl: string>, inputConfiguredByUserId: string, pauseStatusChangedByUserId: string, pauseStatusChangedUtcDate: string, paused: bool, scheduledByUserId: string, schedulingLocalTimeZoneName: string, schedulingType: string, schedulingValue: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/autoImport")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/autoImport"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1847,8 +1847,8 @@ export def "user-catalogs-auto-import GetAutoImportConfiguration" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/activate
 # operationId: Importation_ActivateAutoImport
-export def "user-catalogs-auto-import-activate ActivateAutoImport" [
-  storeId: string
+export def "user-catalogs-auto-import-activate import" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1860,7 +1860,7 @@ export def "user-catalogs-auto-import-activate ActivateAutoImport" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/autoImport/activate")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/autoImport/activate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1870,8 +1870,8 @@ export def "user-catalogs-auto-import-activate ActivateAutoImport" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/pause
 # operationId: Auto_PauseAutoImport
-export def "user-catalogs-auto-import-pause PauseAutoImport" [
-  storeId: string
+export def "user-catalogs-auto-import-pause pause" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1883,7 +1883,7 @@ export def "user-catalogs-auto-import-pause PauseAutoImport" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/autoImport/pause")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/autoImport/pause"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1893,8 +1893,8 @@ export def "user-catalogs-auto-import-pause PauseAutoImport" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/resume
 # operationId: Auto_ResumeAutoImport
-export def "user-catalogs-auto-import-resume ResumeAutoImport" [
-  storeId: string
+export def "user-catalogs-auto-import-resume import" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1906,7 +1906,7 @@ export def "user-catalogs-auto-import-resume ResumeAutoImport" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/autoImport/resume")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/autoImport/resume"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1916,8 +1916,8 @@ export def "user-catalogs-auto-import-resume ResumeAutoImport" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/scheduling/interval
 # operationId: Auto_ConfigureAutoImportInterval
-export def "user-catalogs-auto-import-scheduling-interval ConfigureAutoImportInterval" [
-  storeId: string
+export def "user-catalogs-auto-import-scheduling-interval post" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1931,8 +1931,8 @@ export def "user-catalogs-auto-import-scheduling-interval ConfigureAutoImportInt
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/autoImport/scheduling/interval")
-  let body = {interval: $interval} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/autoImport/scheduling/interval"))
+  let body = {"interval": $interval} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1943,8 +1943,8 @@ export def "user-catalogs-auto-import-scheduling-interval ConfigureAutoImportInt
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/scheduling/schedules
 # operationId: Auto_ScheduleAutoImport
-export def "user-catalogs-auto-import-scheduling-schedules ScheduleAutoImport" [
-  storeId: string
+export def "user-catalogs-auto-import-scheduling-schedules import" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1953,14 +1953,14 @@ export def "user-catalogs-auto-import-scheduling-schedules ScheduleAutoImport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --localTimeZoneName: string # If null the local time zone name will be "Romance Standard Time" (default: Romance Standard Time, e.g. Romance Standard Time)
+  --local-time-zone-name: string # If null the local time zone name will be "Romance Standard Time" (default: Romance Standard Time, e.g. Romance Standard Time)
   schedules: list # Indicate the time span you want to import your catalog. (i.e. "21:00:00" to import your catalog at 9PM) (e.g. [21:00:00, 23:00:00, 08:30:00])
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/autoImport/scheduling/schedules")
-  let body = {localTimeZoneName: $localTimeZoneName, schedules: $schedules} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/autoImport/scheduling/schedules"))
+  let body = {"localTimeZoneName": $local_time_zone_name, "schedules": $schedules} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1971,8 +1971,8 @@ export def "user-catalogs-auto-import-scheduling-schedules ScheduleAutoImport" [
 #
 # POST /v2/user/catalogs/{storeId}/autoImport/start
 # operationId: Auto_StartAutoImport
-export def "user-catalogs-auto-import-start StartAutoImport" [
-  storeId: string
+export def "user-catalogs-auto-import-start start" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1984,7 +1984,7 @@ export def "user-catalogs-auto-import-start StartAutoImport" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/autoImport/start")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/autoImport/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1994,8 +1994,8 @@ export def "user-catalogs-auto-import-start StartAutoImport" [
 #
 # GET /v2/user/catalogs/{storeId}/catalogColumns
 # operationId: Catalog_GetCatalogColumns
-export def "user-catalogs-catalog-columns GetCatalogColumns" [
-  storeId: string
+export def "user-catalogs-catalog-columns get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2007,7 +2007,7 @@ export def "user-catalogs-catalog-columns GetCatalogColumns" [
 ]: nothing -> record<catalogColumns: table<catalogColumnName: string, configuration: record, duplicateProductValueConfiguration: record, id: string, ignored: bool, links: record, userColumName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/catalogColumns")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/catalogColumns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2017,9 +2017,9 @@ export def "user-catalogs-catalog-columns GetCatalogColumns" [
 #
 # POST /v2/user/catalogs/{storeId}/catalogColumns/{columnId}/rename
 # operationId: Catalog_ChangeCatalogColumnUserName
-export def "user-catalogs-catalog-columns-rename ChangeCatalogColumnUserName" [
-  storeId: string
-  columnId: string
+export def "user-catalogs-catalog-columns-rename post" [
+  store_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2028,13 +2028,13 @@ export def "user-catalogs-catalog-columns-rename ChangeCatalogColumnUserName" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  userColumName: string # Column named by the user (e.g. My SKU)
+  user_colum_name: string # Column named by the user (e.g. My SKU)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/catalogColumns/($columnId)/rename")
-  let body = {userColumName: $userColumName} | compact
+  let full_url = (build-url $base ({store_id: $store_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/catalogColumns/{column_id}/rename"))
+  let body = {"userColumName": $user_colum_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2045,8 +2045,8 @@ export def "user-catalogs-catalog-columns-rename ChangeCatalogColumnUserName" [
 #
 # GET /v2/user/catalogs/{storeId}/categories
 # operationId: Catalog_GetCategories
-export def "user-catalogs-categories GetCategories" [
-  storeId: string
+export def "user-catalogs-categories get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2055,12 +2055,12 @@ export def "user-catalogs-categories GetCategories" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: list # Indicates that the client accepts that the response will be compressed to reduce traffic size.
+  --accept-encoding: list # Indicates that the client accepts that the response will be compressed to reduce traffic size.
 ]: nothing -> record<categories: table<categoryId: string, categoryPath: list, selfProductCount: int, totalProductCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/categories")
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/categories"))
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2071,8 +2071,8 @@ export def "user-catalogs-categories GetCategories" [
 #
 # GET /v2/user/catalogs/{storeId}/customColumns
 # operationId: Catalog_GetCustomColumns
-export def "user-catalogs-custom-columns GetCustomColumns" [
-  storeId: string
+export def "user-catalogs-custom-columns get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2084,7 +2084,7 @@ export def "user-catalogs-custom-columns GetCustomColumns" [
 ]: nothing -> record<customColumns: table<catalogColumnDependencies: list, configuration: record, id: string, links: record, userColumName: string>, links: record<add: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/customColumns")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/customColumns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2094,8 +2094,8 @@ export def "user-catalogs-custom-columns GetCustomColumns" [
 #
 # POST /v2/user/catalogs/{storeId}/customColumns/computeExpression
 # operationId: Catalog_ComputeExpression
-export def "user-catalogs-custom-columns-compute-expression ComputeExpression" [
-  storeId: string
+export def "user-catalogs-custom-columns-compute-expression post" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2104,14 +2104,14 @@ export def "user-catalogs-custom-columns-compute-expression ComputeExpression" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  encryptedExpression: string # The encrypted excel expression of the column (e.g. uziushdczaniodnndonisodndsiondsoidsndoin)
-  productValues: record # The key is the column identifier (e.g. {012929c0-e78b-462a-a96e-25c061575385: http://media.conforama.fr/Medias/500000/80000/5000/500/10/G_585511_A.jpg, 46602e10-bc45-4944-a440-63d5f7ece1f8: 42, 68082b11-4ffd-4bec-964a-465a471c7d37: SKU1234, b6d74510-41ce-42ec-947a-0bdf62e9beee: Refrigerateur, ba270fa0-8482-46be-905a-cae4ca746b92: http://www.conforama.fr/gros-electromenager/encastrable/refrigerateur-encastrable/refrigerateur-combine-161-litres-far-r5115s/p/585511})
+  encrypted_expression: string # The encrypted excel expression of the column (e.g. uziushdczaniodnndonisodndsiondsoidsndoin)
+  product_values: record # The key is the column identifier (e.g. {012929c0-e78b-462a-a96e-25c061575385: http://media.conforama.fr/Medias/500000/80000/5000/500/10/G_585511_A.jpg, 46602e10-bc45-4944-a440-63d5f7ece1f8: 42, 68082b11-4ffd-4bec-964a-465a471c7d37: SKU1234, b6d74510-41ce-42ec-947a-0bdf62e9beee: Refrigerateur, ba270fa0-8482-46be-905a-cae4ca746b92: http://www.conforama.fr/gros-electromenager/encastrable/refrigerateur-encastrable/refrigerateur-combine-161-litres-far-r5115s/p/585511})
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/customColumns/computeExpression")
-  let body = {encryptedExpression: $encryptedExpression, productValues: $productValues} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/customColumns/computeExpression"))
+  let body = {"encryptedExpression": $encrypted_expression, "productValues": $product_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2122,9 +2122,9 @@ export def "user-catalogs-custom-columns-compute-expression ComputeExpression" [
 #
 # DELETE /v2/user/catalogs/{storeId}/customColumns/{columnId}
 # operationId: Catalog_DeleteCustomColumn
-export def "user-catalogs-custom-columns DeleteCustomColumn" [
-  storeId: string
-  columnId: string
+export def "user-catalogs-custom-columns delete" [
+  store_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2136,7 +2136,7 @@ export def "user-catalogs-custom-columns DeleteCustomColumn" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/customColumns/($columnId)")
+  let full_url = (build-url $base ({store_id: $store_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2146,9 +2146,9 @@ export def "user-catalogs-custom-columns DeleteCustomColumn" [
 #
 # PUT /v2/user/catalogs/{storeId}/customColumns/{columnId}
 # operationId: Catalog_SaveCustomColumn
-export def "user-catalogs-custom-columns SaveCustomColumn" [
-  storeId: string
-  columnId: string
+export def "user-catalogs-custom-columns put" [
+  store_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2157,16 +2157,16 @@ export def "user-catalogs-custom-columns SaveCustomColumn" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  displayGroupName: string # Indicate the display group name where the column must be putted (e.g. Category)
-  encryptedBlocklyExpression: string # The encrypted XML Blockly representation of the expression (e.g. apokpoa,opz,sixsoisiosnoisn)
-  encryptedExpression: string # The encrypted excel expression of the column (e.g. uziushdczaniodnndonisodndsiondsoidsndoin)
-  userColumnName: string # Column named by the user (e.g. My SKU)
+  display_group_name: string # Indicate the display group name where the column must be putted (e.g. Category)
+  encrypted_blockly_expression: string # The encrypted XML Blockly representation of the expression (e.g. apokpoa,opz,sixsoisiosnoisn)
+  encrypted_expression: string # The encrypted excel expression of the column (e.g. uziushdczaniodnndonisodndsiondsoidsndoin)
+  user_column_name: string # Column named by the user (e.g. My SKU)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/customColumns/($columnId)")
-  let body = {displayGroupName: $displayGroupName, encryptedBlocklyExpression: $encryptedBlocklyExpression, encryptedExpression: $encryptedExpression, userColumnName: $userColumnName} | compact
+  let full_url = (build-url $base ({store_id: $store_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}"))
+  let body = {"displayGroupName": $display_group_name, "encryptedBlocklyExpression": $encrypted_blockly_expression, "encryptedExpression": $encrypted_expression, "userColumnName": $user_column_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2177,9 +2177,9 @@ export def "user-catalogs-custom-columns SaveCustomColumn" [
 #
 # GET /v2/user/catalogs/{storeId}/customColumns/{columnId}/expression
 # operationId: Catalog_GetCustomColumnExpression
-export def "user-catalogs-custom-columns-expression GetCustomColumnExpression" [
-  storeId: string
-  columnId: string
+export def "user-catalogs-custom-columns-expression get" [
+  store_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2191,7 +2191,7 @@ export def "user-catalogs-custom-columns-expression GetCustomColumnExpression" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/customColumns/($columnId)/expression")
+  let full_url = (build-url $base ({store_id: $store_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/expression"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2201,9 +2201,9 @@ export def "user-catalogs-custom-columns-expression GetCustomColumnExpression" [
 #
 # PUT /v2/user/catalogs/{storeId}/customColumns/{columnId}/expression
 # operationId: Catalog_ChangeCustomColumnExpression
-export def "user-catalogs-custom-columns-expression ChangeCustomColumnExpression" [
-  storeId: string
-  columnId: string
+export def "user-catalogs-custom-columns-expression put" [
+  store_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2212,14 +2212,14 @@ export def "user-catalogs-custom-columns-expression ChangeCustomColumnExpression
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  encryptedBlocklyExpression: string # The encrypted XML Blockly representation of the expression (e.g. apokpoa,opz,sixsoisiosnoisn)
-  encryptedExpression: string # The encrypted excel expression of the column (e.g. uziushdczaniodnndonisodndsiondsoidsndoin)
+  encrypted_blockly_expression: string # The encrypted XML Blockly representation of the expression (e.g. apokpoa,opz,sixsoisiosnoisn)
+  encrypted_expression: string # The encrypted excel expression of the column (e.g. uziushdczaniodnndonisodndsiondsoidsndoin)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/customColumns/($columnId)/expression")
-  let body = {encryptedBlocklyExpression: $encryptedBlocklyExpression, encryptedExpression: $encryptedExpression} | compact
+  let full_url = (build-url $base ({store_id: $store_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/expression"))
+  let body = {"encryptedBlocklyExpression": $encrypted_blockly_expression, "encryptedExpression": $encrypted_expression} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2230,9 +2230,9 @@ export def "user-catalogs-custom-columns-expression ChangeCustomColumnExpression
 #
 # POST /v2/user/catalogs/{storeId}/customColumns/{columnId}/rename
 # operationId: Catalog_ChangeCustomColumnUserName
-export def "user-catalogs-custom-columns-rename ChangeCustomColumnUserName" [
-  storeId: string
-  columnId: string
+export def "user-catalogs-custom-columns-rename post" [
+  store_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2241,13 +2241,13 @@ export def "user-catalogs-custom-columns-rename ChangeCustomColumnUserName" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  userColumName: string # Column named by the user (e.g. My SKU)
+  user_colum_name: string # Column named by the user (e.g. My SKU)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/customColumns/($columnId)/rename")
-  let body = {userColumName: $userColumName} | compact
+  let full_url = (build-url $base ({store_id: $store_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/rename"))
+  let body = {"userColumName": $user_colum_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2258,8 +2258,8 @@ export def "user-catalogs-custom-columns-rename ChangeCustomColumnUserName" [
 #
 # GET /v2/user/catalogs/{storeId}/importations
 # operationId: Importation_GetReportings
-export def "user-catalogs-importations GetReportings" [
-  storeId: string
+export def "user-catalogs-importations get-reportings" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2271,7 +2271,7 @@ export def "user-catalogs-importations GetReportings" [
 ]: nothing -> record<importations: table<autoImported: bool, beginUtcDate: string, endUtcDate: string, errors: list, executionId: string, inputConfigurationUrl: string, lastUpdateUtcDate: string, links: record, stepName: string, steps: record, success: bool, totalProductCount: int, totalProductErrorCount: int, totalProductSuccessCount: int, userId: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, start: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/importations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2283,8 +2283,8 @@ export def "user-catalogs-importations GetReportings" [
 # operationId: Importation_StartManualUpdate
 # --duplicateProductSkuConfiguration shape: {compareOptions: "None"|"IgnoreCase"|"IgnoreNonSpace"|"IgnoreSymbols"|"OrdinalIgnoreCase"|"StringSort"|"Ordinal", strategy: "None"|"SkipAllDuplicateProducts"|"KeepFirstDuplicateProductOnly"|"FailImportationIfAnyDuplicateProduct"}
 # --input shape: {files: list, transformFileUrl?: string}
-export def "user-catalogs-importations-start StartManualUpdate" [
-  storeId: string
+export def "user-catalogs-importations-start start-manual-update" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2293,14 +2293,14 @@ export def "user-catalogs-importations-start StartManualUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --duplicateProductSkuConfiguration: record # Describe how you want to manage the duplication of the product value — shape: {compareOptions: "None"|"IgnoreCase"|"IgnoreNonSpace"|"IgnoreSymbols"|"OrdinalIgnoreCase"|"StringSort"|"Ordinal", strategy: "None"|"SkipAllDuplicateProducts"|"KeepFirstDuplicateProductOnly"|"FailImportationIfAnyDuplicateProduct"}
+  --duplicate-product-sku-configuration: record # Describe how you want to manage the duplication of the product value — shape: {compareOptions: "None"|"IgnoreCase"|"IgnoreNonSpace"|"IgnoreSymbols"|"OrdinalIgnoreCase"|"StringSort"|"Ordinal", strategy: "None"|"SkipAllDuplicateProducts"|"KeepFirstDuplicateProductOnly"|"FailImportationIfAnyDuplicateProduct"}
   input: record # Describe the input configuration — shape: {files: list, transformFileUrl?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/start")
-  let body = {duplicateProductSkuConfiguration: $duplicateProductSkuConfiguration, input: $input} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/importations/start"))
+  let body = {"duplicateProductSkuConfiguration": $duplicate_product_sku_configuration, "input": $input} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2311,9 +2311,9 @@ export def "user-catalogs-importations-start StartManualUpdate" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}
 # operationId: Importation_GetImportationMonitoring
-export def "user-catalogs-importations GetImportationMonitoring" [
-  storeId: string
-  executionId: string
+export def "user-catalogs-importations get-importation-monitoring" [
+  store_id: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2325,7 +2325,7 @@ export def "user-catalogs-importations GetImportationMonitoring" [
 ]: nothing -> record<beginUtcDate: string, errors: table<arguments: list, code: string, cultureName: string, docUrl: string, message: string>, executionId: string, lastUpdateUtcDate: string, links: record<activateAutoImport: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, cancel: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, catalogColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, commit: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, commitColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureRemainingCatalogColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, customColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, productSamples: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, technicalProgression: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, steps: record, success: bool, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2335,9 +2335,9 @@ export def "user-catalogs-importations GetImportationMonitoring" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/cancel
 # operationId: Importation_Cancel
-export def "user-catalogs-importations-cancel Cancel" [
-  storeId: string
-  executionId: string
+export def "user-catalogs-importations-cancel cancel" [
+  store_id: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2349,7 +2349,7 @@ export def "user-catalogs-importations-cancel Cancel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/cancel")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2359,9 +2359,9 @@ export def "user-catalogs-importations-cancel Cancel" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns
 # operationId: Importation_GetDetectedCatalogColumns
-export def "user-catalogs-importations-catalog-columns GetDetectedCatalogColumns" [
-  storeId: string
-  executionId: string
+export def "user-catalogs-importations-catalog-columns get-detected" [
+  store_id: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2373,7 +2373,7 @@ export def "user-catalogs-importations-catalog-columns GetDetectedCatalogColumns
 ]: nothing -> record<detectedCatalogColumns: table<catalogColumnName: string, configuration: record, duplicateProductValueConfiguration: record, id: string, ignored: bool, links: record, userColumName: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/catalogColumns")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2384,10 +2384,10 @@ export def "user-catalogs-importations-catalog-columns GetDetectedCatalogColumns
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}
 # operationId: Importation_ConfigureCatalogColumn
 # --catalogColumn shape: {catalogColumnName: string, configuration: record, duplicateProductValueConfiguration?: record, id: string, ignored?: bool, links: record, userColumName: string}
-export def "user-catalogs-importations-catalog-columns ConfigureCatalogColumn" [
-  storeId: string
-  executionId: string
-  columnId: string
+export def "user-catalogs-importations-catalog-columns post" [
+  store_id: string
+  execution_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2396,13 +2396,13 @@ export def "user-catalogs-importations-catalog-columns ConfigureCatalogColumn" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  catalogColumn: record # The catalog column configuration (e.g. {catalogColumnName: SKU, configuration: {beezUPColumnName: CategoryFirstLevel, canBeTruncated: false, columnCultureName: fr-FR, columnDataType: String, columnFormat: MM/dd/yyyy, columnImportance: Required, displayGroupName: Category}, duplicateProductValueConfiguration: {compareOptions: IgnoreCase, strategy: KeepFirstDuplicateProductOnly}, id: 8a76f06a-fefc-4c0d-bcfe-b210f1482977, ignored: true, userColumName: My SKU}) — shape: {catalogColumnName: string, configuration: record, duplicateProductValueConfiguration?: record, id: string, ignored?: bool, links: record, userColumName: string}
+  catalog_column: record # The catalog column configuration (e.g. {catalogColumnName: SKU, configuration: {beezUPColumnName: CategoryFirstLevel, canBeTruncated: false, columnCultureName: fr-FR, columnDataType: String, columnFormat: MM/dd/yyyy, columnImportance: Required, displayGroupName: Category}, duplicateProductValueConfiguration: {compareOptions: IgnoreCase, strategy: KeepFirstDuplicateProductOnly}, id: 8a76f06a-fefc-4c0d-bcfe-b210f1482977, ignored: true, userColumName: My SKU}) — shape: {catalogColumnName: string, configuration: record, duplicateProductValueConfiguration?: record, id: string, ignored?: bool, links: record, userColumName: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/catalogColumns/($columnId)")
-  let body = {catalogColumn: $catalogColumn} | compact
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}"))
+  let body = {"catalogColumn": $catalog_column} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2413,10 +2413,10 @@ export def "user-catalogs-importations-catalog-columns ConfigureCatalogColumn" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}/ignore
 # operationId: Importation_IgnoreColumn
-export def "user-catalogs-importations-catalog-columns-ignore IgnoreColumn" [
-  storeId: string
-  executionId: string
-  columnId: string
+export def "user-catalogs-importations-catalog-columns-ignore post" [
+  store_id: string
+  execution_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2428,7 +2428,7 @@ export def "user-catalogs-importations-catalog-columns-ignore IgnoreColumn" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/catalogColumns/($columnId)/ignore")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/ignore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2438,10 +2438,10 @@ export def "user-catalogs-importations-catalog-columns-ignore IgnoreColumn" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}/map
 # operationId: Importation_MapCatalogColumn
-export def "user-catalogs-importations-catalog-columns-map MapCatalogColumn" [
-  storeId: string
-  executionId: string
-  columnId: string
+export def "user-catalogs-importations-catalog-columns-map post" [
+  store_id: string
+  execution_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2450,13 +2450,13 @@ export def "user-catalogs-importations-catalog-columns-map MapCatalogColumn" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  beezUPColumnName: string # The BeezUP column name (e.g. CategoryFirstLevel)
+  beez_up_column_name: string # The BeezUP column name (e.g. CategoryFirstLevel)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/catalogColumns/($columnId)/map")
-  let body = {beezUPColumnName: $beezUPColumnName} | compact
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/map"))
+  let body = {"beezUPColumnName": $beez_up_column_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2467,10 +2467,10 @@ export def "user-catalogs-importations-catalog-columns-map MapCatalogColumn" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}/reattend
 # operationId: Importation_ReattendColumn
-export def "user-catalogs-importations-catalog-columns-reattend ReattendColumn" [
-  storeId: string
-  executionId: string
-  columnId: string
+export def "user-catalogs-importations-catalog-columns-reattend post" [
+  store_id: string
+  execution_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2482,7 +2482,7 @@ export def "user-catalogs-importations-catalog-columns-reattend ReattendColumn" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/catalogColumns/($columnId)/reattend")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/reattend"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2492,10 +2492,10 @@ export def "user-catalogs-importations-catalog-columns-reattend ReattendColumn" 
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}/unmap
 # operationId: Importation_UnmapCatalogColumn
-export def "user-catalogs-importations-catalog-columns-unmap UnmapCatalogColumn" [
-  storeId: string
-  executionId: string
-  columnId: string
+export def "user-catalogs-importations-catalog-columns-unmap post" [
+  store_id: string
+  execution_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2507,7 +2507,7 @@ export def "user-catalogs-importations-catalog-columns-unmap UnmapCatalogColumn"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/catalogColumns/($columnId)/unmap")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/unmap"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2517,9 +2517,9 @@ export def "user-catalogs-importations-catalog-columns-unmap UnmapCatalogColumn"
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/commit
 # operationId: Importation_Commit
-export def "user-catalogs-importations-commit Commit" [
-  storeId: string
-  executionId: string
+export def "user-catalogs-importations-commit commit" [
+  store_id: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2531,7 +2531,7 @@ export def "user-catalogs-importations-commit Commit" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/commit")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/commit"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2541,9 +2541,9 @@ export def "user-catalogs-importations-commit Commit" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/commitColumns
 # operationId: Importation_CommitColumns
-export def "user-catalogs-importations-commit-columns CommitColumns" [
-  storeId: string
-  executionId: string
+export def "user-catalogs-importations-commit-columns commit" [
+  store_id: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2555,7 +2555,7 @@ export def "user-catalogs-importations-commit-columns CommitColumns" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/commitColumns")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/commitColumns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2565,9 +2565,9 @@ export def "user-catalogs-importations-commit-columns CommitColumns" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/configureRemainingCatalogColumns
 # operationId: Importation_ConfigureRemainingCatalogColumns
-export def "user-catalogs-importations-configure-remaining-catalog-columns ConfigureRemainingCatalogColumns" [
-  storeId: string
-  executionId: string
+export def "user-catalogs-importations-configure-remaining-catalog-columns post" [
+  store_id: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,7 +2579,7 @@ export def "user-catalogs-importations-configure-remaining-catalog-columns Confi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/configureRemainingCatalogColumns")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/configureRemainingCatalogColumns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2589,9 +2589,9 @@ export def "user-catalogs-importations-configure-remaining-catalog-columns Confi
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns
 # operationId: Importation_GetCustomColumns
-export def "user-catalogs-importations-custom-columns GetCustomColumns" [
-  storeId: string
-  executionId: string
+export def "user-catalogs-importations-custom-columns get" [
+  store_id: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2603,7 +2603,7 @@ export def "user-catalogs-importations-custom-columns GetCustomColumns" [
 ]: nothing -> record<customColumns: table<configuration: record, id: string, links: record, userColumName: string>, links: record<add: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/customColumns")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2613,10 +2613,10 @@ export def "user-catalogs-importations-custom-columns GetCustomColumns" [
 #
 # DELETE /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns/{columnId}
 # operationId: Importation_DeleteCustomColumn
-export def "user-catalogs-importations-custom-columns DeleteCustomColumn" [
-  storeId: string
-  executionId: string
-  columnId: string
+export def "user-catalogs-importations-custom-columns delete" [
+  store_id: string
+  execution_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2628,7 +2628,7 @@ export def "user-catalogs-importations-custom-columns DeleteCustomColumn" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/customColumns/($columnId)")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2638,10 +2638,10 @@ export def "user-catalogs-importations-custom-columns DeleteCustomColumn" [
 #
 # PUT /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns/{columnId}
 # operationId: Importation_SaveCustomColumn
-export def "user-catalogs-importations-custom-columns SaveCustomColumn" [
-  storeId: string
-  executionId: string
-  columnId: string
+export def "user-catalogs-importations-custom-columns put" [
+  store_id: string
+  execution_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2650,15 +2650,15 @@ export def "user-catalogs-importations-custom-columns SaveCustomColumn" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  encryptedBlocklyExpression: string # The encrypted XML Blockly representation of the expression (e.g. apokpoa,opz,sixsoisiosnoisn)
-  encryptedExpression: string # The encrypted excel expression of the column (e.g. uziushdczaniodnndonisodndsiondsoidsndoin)
-  userColumName: string # Column named by the user (e.g. My SKU)
+  encrypted_blockly_expression: string # The encrypted XML Blockly representation of the expression (e.g. apokpoa,opz,sixsoisiosnoisn)
+  encrypted_expression: string # The encrypted excel expression of the column (e.g. uziushdczaniodnndonisodndsiondsoidsndoin)
+  user_colum_name: string # Column named by the user (e.g. My SKU)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/customColumns/($columnId)")
-  let body = {encryptedBlocklyExpression: $encryptedBlocklyExpression, encryptedExpression: $encryptedExpression, userColumName: $userColumName} | compact
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}"))
+  let body = {"encryptedBlocklyExpression": $encrypted_blockly_expression, "encryptedExpression": $encrypted_expression, "userColumName": $user_colum_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2669,10 +2669,10 @@ export def "user-catalogs-importations-custom-columns SaveCustomColumn" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns/{columnId}/expression
 # operationId: Importation_GetCustomColumnExpression
-export def "user-catalogs-importations-custom-columns-expression GetCustomColumnExpression" [
-  storeId: string
-  executionId: string
-  columnId: string
+export def "user-catalogs-importations-custom-columns-expression get" [
+  store_id: string
+  execution_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2684,7 +2684,7 @@ export def "user-catalogs-importations-custom-columns-expression GetCustomColumn
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/customColumns/($columnId)/expression")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/expression"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2694,10 +2694,10 @@ export def "user-catalogs-importations-custom-columns-expression GetCustomColumn
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns/{columnId}/map
 # operationId: Importation_MapCustomColumn
-export def "user-catalogs-importations-custom-columns-map MapCustomColumn" [
-  storeId: string
-  executionId: string
-  columnId: string
+export def "user-catalogs-importations-custom-columns-map post" [
+  store_id: string
+  execution_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2706,13 +2706,13 @@ export def "user-catalogs-importations-custom-columns-map MapCustomColumn" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  beezUPColumnName: string # The BeezUP column name (e.g. CategoryFirstLevel)
+  beez_up_column_name: string # The BeezUP column name (e.g. CategoryFirstLevel)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/customColumns/($columnId)/map")
-  let body = {beezUPColumnName: $beezUPColumnName} | compact
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/map"))
+  let body = {"beezUPColumnName": $beez_up_column_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2723,10 +2723,10 @@ export def "user-catalogs-importations-custom-columns-map MapCustomColumn" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/customColumns/{columnId}/unmap
 # operationId: Importation_UnmapCustomColumn
-export def "user-catalogs-importations-custom-columns-unmap UnmapCustomColumn" [
-  storeId: string
-  executionId: string
-  columnId: string
+export def "user-catalogs-importations-custom-columns-unmap post" [
+  store_id: string
+  execution_id: string
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2738,7 +2738,7 @@ export def "user-catalogs-importations-custom-columns-unmap UnmapCustomColumn" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/customColumns/($columnId)/unmap")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/unmap"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2748,10 +2748,10 @@ export def "user-catalogs-importations-custom-columns-unmap UnmapCustomColumn" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/productSamples/{productSampleIndex}
 # operationId: Importation_GetProductSample
-export def "user-catalogs-importations-product-samples GetProductSample" [
-  storeId: string
-  executionId: string
-  productSampleIndex: int
+export def "user-catalogs-importations-product-samples get" [
+  store_id: string
+  execution_id: string
+  product_sample_index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2763,7 +2763,7 @@ export def "user-catalogs-importations-product-samples GetProductSample" [
 ]: nothing -> record<productValues: record> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/productSamples/($productSampleIndex)")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, product_sample_index: $product_sample_index} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/productSamples/{product_sample_index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2773,11 +2773,11 @@ export def "user-catalogs-importations-product-samples GetProductSample" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/productSamples/{productSampleIndex}/customColumns/{columnId}
 # operationId: Importation_GetProductSampleCustomColumnValue
-export def "user-catalogs-importations-product-samples-custom-columns GetProductSampleCustomColumnValue" [
-  storeId: string
-  executionId: string
-  productSampleIndex: int
-  columnId: string
+export def "user-catalogs-importations-product-samples-custom-columns get-product-sample-custom-column-value" [
+  store_id: string
+  execution_id: string
+  product_sample_index: int
+  column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2789,7 +2789,7 @@ export def "user-catalogs-importations-product-samples-custom-columns GetProduct
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/productSamples/($productSampleIndex)/customColumns/($columnId)")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id, product_sample_index: $product_sample_index, column_id: $column_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/productSamples/{product_sample_index}/customColumns/{column_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2800,9 +2800,9 @@ export def "user-catalogs-importations-product-samples-custom-columns GetProduct
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/products/list
 # operationId: Importation_GetProductsReport
 # --errorCodes item shape: {errorCode?: string, userColumnName?: string}
-export def "user-catalogs-importations-products-list GetProductsReport" [
-  storeId: string
-  executionId: string
+export def "user-catalogs-importations-products-list get-products-report" [
+  store_id: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2812,18 +2812,18 @@ export def "user-catalogs-importations-products-list GetProductsReport" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --ean: string # Filter by EAN (equals)
-  --errorCodes: list # Get Importation Products Report Request Error Codes — item shape: {errorCode?: string, userColumnName?: string}
+  --error-codes: list # Get Importation Products Report Request Error Codes — item shape: {errorCode?: string, userColumnName?: string}
   --mpn: string # Filter by MPN (equals)
-  pageNumber: int # Indicates the page number (format: int32, default: 1, e.g. 1)
-  pageSize: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
+  page_number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
+  page_size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
   --sku: string # Filter by Sku (equals)
   --title: string # Filter by Title (StartsWith)
 ]: any -> record<paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, productErrors: table<ean: string, errors: list, lineNumber: int, mpn: string, sku: string, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/products/list")
-  let body = {ean: $ean, errorCodes: $errorCodes, mpn: $mpn, pageNumber: $pageNumber, pageSize: $pageSize, sku: $sku, title: $title} | compact
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/products/list"))
+  let body = {"ean": $ean, "errorCodes": $error_codes, "mpn": $mpn, "pageNumber": $page_number, "pageSize": $page_size, "sku": $sku, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2834,9 +2834,9 @@ export def "user-catalogs-importations-products-list GetProductsReport" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/report
 # operationId: Importation_GetReport
-export def "user-catalogs-importations-report GetReport" [
-  storeId: string
-  executionId: string
+export def "user-catalogs-importations-report get" [
+  store_id: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2848,7 +2848,7 @@ export def "user-catalogs-importations-report GetReport" [
 ]: nothing -> record<categories: record<createdCount: int, deletedCount: int, unchangedCount: int, updatedCount: int>, columns: record<createdCount: int, deletedCount: int, unchangedCount: int, updatedCount: int>, errors: table<beezUPColumnName: string, errorCode: string, productCount: int, userColumName: string>, executionId: string, importationInfo: record<beginUtcDate: string, endUtcDate: string, inputConfiguration: record<fetch: record, fileNumber: int, read: record>, userId: string>, productMetrics: record<activeCount: int, detectedCount: int, duplicatedCount: int, failedCount: int>, products: record<createdCount: int, deletedCount: int, unchangedCount: int, updatedCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/report")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/report"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2858,9 +2858,9 @@ export def "user-catalogs-importations-report GetReport" [
 #
 # GET /v2/user/catalogs/{storeId}/importations/{executionId}/technicalProgression
 # operationId: Importation_TechnicalProgression
-export def "user-catalogs-importations-technical-progression TechnicalProgression" [
-  storeId: string
-  executionId: string
+export def "user-catalogs-importations-technical-progression get" [
+  store_id: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2872,7 +2872,7 @@ export def "user-catalogs-importations-technical-progression TechnicalProgressio
 ]: nothing -> record<stepsProgression: record> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/importations/($executionId)/technicalProgression")
+  let full_url = (build-url $base ({store_id: $store_id, execution_id: $execution_id} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/technicalProgression"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2882,8 +2882,8 @@ export def "user-catalogs-importations-technical-progression TechnicalProgressio
 #
 # GET /v2/user/catalogs/{storeId}/inputConfiguration
 # operationId: Importation_GetManualUpdateLastInputConfig
-export def "user-catalogs-input-configuration GetManualUpdateLastInputConfig" [
-  storeId: string
+export def "user-catalogs-input-configuration get-manual-update-last-input-config" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2895,7 +2895,7 @@ export def "user-catalogs-input-configuration GetManualUpdateLastInputConfig" [
 ]: nothing -> record<input: record<files: list<record>, transformFileUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/inputConfiguration")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/inputConfiguration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2905,8 +2905,8 @@ export def "user-catalogs-input-configuration GetManualUpdateLastInputConfig" [
 #
 # GET /v2/user/catalogs/{storeId}/products
 # operationId: Catalog_GetProductBySku
-export def "user-catalogs-products GetProductBySku" [
-  storeId: string
+export def "user-catalogs-products list" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2920,7 +2920,7 @@ export def "user-catalogs-products GetProductBySku" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sku" $sku "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/products" $qp)
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2930,8 +2930,8 @@ export def "user-catalogs-products GetProductBySku" [
 #
 # POST /v2/user/catalogs/{storeId}/products/list
 # operationId: Catalog_GetProducts
-export def "user-catalogs-products-list GetProducts" [
-  storeId: string
+export def "user-catalogs-products-list get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2940,24 +2940,24 @@ export def "user-catalogs-products-list GetProducts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --categoryPath: list # The catalog category path (e.g. [Vêtements, Femmes, Chaussures])
-  --columnIdList: list
+  --category-path: list # The catalog category path (e.g. [Vêtements, Femmes, Chaussures])
+  --column-id-list: list
   --ean: string # Search for product by ean (e.g. MySku123)
   --exists: oneof<nothing, bool> # Search for existing products or not. If null you will received both. (e.g. true)
   --mpn: string # Search for product by mpn (e.g. MySku123)
-  --orderByCatalogColumnId: string # The catalog column identifier (catalog or custom column) (format: guid, e.g. bea7c21e-948b-4ac3-9ffd-4396e62c4163)
-  pageNumber: int # Indicates the page number (format: int32, default: 1, e.g. 1)
-  pageSize: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
-  --productIdList: list # Filter with a list of product identifier
+  --order-by-catalog-column-id: string # The catalog column identifier (catalog or custom column) (format: guid, e.g. bea7c21e-948b-4ac3-9ffd-4396e62c4163)
+  page_number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
+  page_size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
+  --product-id-list: list # Filter with a list of product identifier
   --sku: string # Search for product by sku (e.g. MySku123)
   --title: string # Search for products containing this title (e.g. Frigo)
-  --withoutSubCategories: oneof<nothing, bool> # Do not retrieve sub categories. By default, this value is set to false (e.g. false)
+  --without-sub-categories: oneof<nothing, bool> # Do not retrieve sub categories. By default, this value is set to false (e.g. false)
 ]: any -> record<paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, products: table<categoryId: string, exists: bool, productId: string, values: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/products/list")
-  let body = {categoryPath: $categoryPath, columnIdList: $columnIdList, ean: $ean, exists: $exists, mpn: $mpn, orderByCatalogColumnId: $orderByCatalogColumnId, pageNumber: $pageNumber, pageSize: $pageSize, productIdList: $productIdList, sku: $sku, title: $title, withoutSubCategories: $withoutSubCategories} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/products/list"))
+  let body = {"categoryPath": $category_path, "columnIdList": $column_id_list, "ean": $ean, "exists": $exists, "mpn": $mpn, "orderByCatalogColumnId": $order_by_catalog_column_id, "pageNumber": $page_number, "pageSize": $page_size, "productIdList": $product_id_list, "sku": $sku, "title": $title, "withoutSubCategories": $without_sub_categories} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2968,8 +2968,8 @@ export def "user-catalogs-products-list GetProducts" [
 #
 # GET /v2/user/catalogs/{storeId}/products/random
 # operationId: Catalog_GetRandomProducts
-export def "user-catalogs-products-random GetRandomProducts" [
-  storeId: string
+export def "user-catalogs-products-random get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2981,7 +2981,7 @@ export def "user-catalogs-products-random GetRandomProducts" [
 ]: nothing -> record<products: table<categoryId: string, exists: bool, productId: string, values: record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/products/random")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/catalogs/{store_id}/products/random"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2991,9 +2991,9 @@ export def "user-catalogs-products-random GetRandomProducts" [
 #
 # GET /v2/user/catalogs/{storeId}/products/{productId}
 # operationId: Catalog_GetProductByProductId
-export def "user-catalogs-products GetProductByProductId" [
-  storeId: string
-  productId: string
+export def "user-catalogs-products get" [
+  store_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3005,7 +3005,7 @@ export def "user-catalogs-products GetProductByProductId" [
 ]: nothing -> record<categoryId: string, exists: bool, productId: string, values: record> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/catalogs/($storeId)/products/($productId)")
+  let full_url = (build-url $base ({store_id: $store_id, product_id: $product_id} | format pattern "/v2/user/catalogs/{store_id}/products/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3015,7 +3015,7 @@ export def "user-catalogs-products GetProductByProductId" [
 #
 # GET /v2/user/channelCatalogs/
 # operationId: GetChannelCatalogs
-export def "user-channel-catalogs GetChannelCatalogs" [
+export def "user-channel-catalogs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3024,11 +3024,11 @@ export def "user-channel-catalogs GetChannelCatalogs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --storeId: string # The store identifier (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
+  --store-id: string # The store identifier (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
 ]: nothing -> record<channelCatalogs: record, links: record<add: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, beezUPColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, filterOperators: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<channelCatalogExclusionFilterOperatorLov: record<href: string, method: string>, channelCatalogExportCacheStatusLov: record<href: string, method: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storeId" $storeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/channelCatalogs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3039,7 +3039,7 @@ export def "user-channel-catalogs GetChannelCatalogs" [
 #
 # POST /v2/user/channelCatalogs/
 # operationId: AddChannelCatalog
-export def "user-channel-catalogs AddChannelCatalog" [
+export def "user-channel-catalogs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3048,14 +3048,14 @@ export def "user-channel-catalogs AddChannelCatalog" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  channelId: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
-  storeId: string # The store identifier (format: guid, e.g. 64f43358-63a1-47f7-97ec-0301fc39956b)
+  channel_id: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
+  store_id: string # The store identifier (format: guid, e.g. 64f43358-63a1-47f7-97ec-0301fc39956b)
 ]: any -> record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/channelCatalogs/")
-  let body = {channelId: $channelId, storeId: $storeId} | compact
+  let body = {"channelId": $channel_id, "storeId": $store_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3066,7 +3066,7 @@ export def "user-channel-catalogs AddChannelCatalog" [
 #
 # GET /v2/user/channelCatalogs/filterOperators
 # operationId: GetChannelCatalogFilterOperators
-export def "user-channel-catalogs-filter-operators GetChannelCatalogFilterOperators" [
+export def "user-channel-catalogs-filter-operators get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3088,7 +3088,7 @@ export def "user-channel-catalogs-filter-operators GetChannelCatalogFilterOperat
 #
 # POST /v2/user/channelCatalogs/products
 # operationId: GetChannelCatalogProductByChannelCatalog
-export def "user-channel-catalogs-products GetChannelCatalogProductByChannelCatalog" [
+export def "user-channel-catalogs-products get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3097,15 +3097,15 @@ export def "user-channel-catalogs-products GetChannelCatalogProductByChannelCata
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  channelCatalogIds: list # The list of channel catalog identifier
-  productId: string # The product identifier (format: guid, e.g. 578419df-1bbf-41a6-96fa-862e42182b67)
-  storeId: string # The store identifier (format: guid, e.g. 64f43358-63a1-47f7-97ec-0301fc39956b)
+  channel_catalog_ids: list # The list of channel catalog identifier
+  product_id: string # The product identifier (format: guid, e.g. 578419df-1bbf-41a6-96fa-862e42182b67)
+  store_id: string # The store identifier (format: guid, e.g. 64f43358-63a1-47f7-97ec-0301fc39956b)
 ]: any -> record<channelCatalogs: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/channelCatalogs/products")
-  let body = {channelCatalogIds: $channelCatalogIds, productId: $productId, storeId: $storeId} | compact
+  let body = {"channelCatalogIds": $channel_catalog_ids, "productId": $product_id, "storeId": $store_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3116,8 +3116,8 @@ export def "user-channel-catalogs-products GetChannelCatalogProductByChannelCata
 #
 # DELETE /v2/user/channelCatalogs/{channelCatalogId}
 # operationId: DeleteChannelCatalog
-export def "user-channel-catalogs DeleteChannelCatalog" [
-  channelCatalogId: string
+export def "user-channel-catalogs delete" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3129,7 +3129,7 @@ export def "user-channel-catalogs DeleteChannelCatalog" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3139,8 +3139,8 @@ export def "user-channel-catalogs DeleteChannelCatalog" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}
 # operationId: GetChannelCatalog
-export def "user-channel-catalogs GetChannelCatalog" [
-  channelCatalogId: string
+export def "user-channel-catalogs get" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3152,7 +3152,7 @@ export def "user-channel-catalogs GetChannelCatalog" [
 ]: nothing -> record<channelId: string, channelImageUrl: string, channelName: string, categoryMappingSettings: record<categoryMappingDisabledByMerchant: bool>, channelCatalogId: string, channelCategorySettings: record<mappingLeafRequired: bool, mappingRequired: bool>, channelCostSettings: record<costType: string, globalCostValue: float>, columnMappings: table<catalogColumnId: string, channelCategoryPath: list, channelColumnId: string, catalogBeezUPColumnName: string, catalogColumnName: string, channelBeezUPColumnName: string, channelColumnName: string>, costSettings: record<costType: string, globalCostValue: float>, enabled: bool, exclusionFilters: table<channelColumnId: string, enabled: bool, groupId: string, name: string, operatorName: string, position: int, positionInGroup: int, value: string>, exportUrl: string, generalSettings: record<acceptToPublishInfo: bool, activeBeezUPTracking: bool, doNotExportOutOfStockProducts: bool>, isMarketplace: bool, links: record<categoryMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, channelInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureColumnMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureCostSettings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureGeneralSettings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableCategoryMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, exclusionFilters: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, exportationCacheInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, marketplaceSettings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, products: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reenableCategoryMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, state: record<apiSettingsStatus: string, categoryMappingState: record<status: string, uncategorizedProductCount: int, withoutCategoryCostProductCount: int>, columnMappingStatus: string, exportedProductCount: int>, storeId: string, types: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3162,8 +3162,8 @@ export def "user-channel-catalogs GetChannelCatalog" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/categories
 # operationId: GetChannelCatalogCategories
-export def "user-channel-catalogs-categories GetChannelCatalogCategories" [
-  channelCatalogId: string
+export def "user-channel-catalogs-categories get" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3175,7 +3175,7 @@ export def "user-channel-catalogs-categories GetChannelCatalogCategories" [
 ]: nothing -> record<channelCatalogCategoryConfigurations: table<catalogCategoryPath: list, channelCategoryPath: list, costValue: float, links: record>, costStatus: string, links: record<disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reenable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, mappingStatus: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/categories")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3186,8 +3186,8 @@ export def "user-channel-catalogs-categories GetChannelCatalogCategories" [
 # POST /v2/user/channelCatalogs/{channelCatalogId}/categories/configure
 # operationId: ConfigureChannelCatalogCategory
 # --channelCatalogCategories item shape: {autoMapNewSubCategories: bool, catalogCategoryPath: list, channelCategoryPath?: list, costValue?: float}
-export def "user-channel-catalogs-categories-configure ConfigureChannelCatalogCategory" [
-  channelCatalogId: string
+export def "user-channel-catalogs-categories-configure post" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3196,14 +3196,14 @@ export def "user-channel-catalogs-categories-configure ConfigureChannelCatalogCa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  channelCatalogCategories: list # item shape: {autoMapNewSubCategories: bool, catalogCategoryPath: list, channelCategoryPath?: list, costValue?: float}
-  --overrideSubCategoryMappings: oneof<nothing, bool> # Great feature! In case of mapping to parent channel category, you can ask to override the mapping of all sub channel category to this catalog category path (e.g. true)
+  channel_catalog_categories: list # item shape: {autoMapNewSubCategories: bool, catalogCategoryPath: list, channelCategoryPath?: list, costValue?: float}
+  --override-sub-category-mappings: oneof<nothing, bool> # Great feature! In case of mapping to parent channel category, you can ask to override the mapping of all sub channel category to this catalog category path (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/categories/configure")
-  let body = {channelCatalogCategories: $channelCatalogCategories, overrideSubCategoryMappings: $overrideSubCategoryMappings} | compact
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/configure"))
+  let body = {"channelCatalogCategories": $channel_catalog_categories, "overrideSubCategoryMappings": $override_sub_category_mappings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3214,8 +3214,8 @@ export def "user-channel-catalogs-categories-configure ConfigureChannelCatalogCa
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/categories/disableMapping
 # operationId: DisableChannelCatalogCategoryMapping
-export def "user-channel-catalogs-categories-disable-mapping DisableChannelCatalogCategoryMapping" [
-  channelCatalogId: string
+export def "user-channel-catalogs-categories-disable-mapping disable-channel-catalog-category" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3227,7 +3227,7 @@ export def "user-channel-catalogs-categories-disable-mapping DisableChannelCatal
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/categories/disableMapping")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/disableMapping"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3237,8 +3237,8 @@ export def "user-channel-catalogs-categories-disable-mapping DisableChannelCatal
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/categories/reenableMapping
 # operationId: ReenableChannelCatalogCategoryMapping
-export def "user-channel-catalogs-categories-reenable-mapping ReenableChannelCatalogCategoryMapping" [
-  channelCatalogId: string
+export def "user-channel-catalogs-categories-reenable-mapping post" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3250,7 +3250,7 @@ export def "user-channel-catalogs-categories-reenable-mapping ReenableChannelCat
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/categories/reenableMapping")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/reenableMapping"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3260,8 +3260,8 @@ export def "user-channel-catalogs-categories-reenable-mapping ReenableChannelCat
 #
 # PUT /v2/user/channelCatalogs/{channelCatalogId}/columnMappings
 # operationId: ConfigureChannelCatalogColumnMappings
-export def "user-channel-catalogs-column-mappings ConfigureChannelCatalogColumnMappings" [
-  channelCatalogId: string
+export def "user-channel-catalogs-column-mappings put" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3275,7 +3275,7 @@ export def "user-channel-catalogs-column-mappings ConfigureChannelCatalogColumnM
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/columnMappings")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/columnMappings"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3286,8 +3286,8 @@ export def "user-channel-catalogs-column-mappings ConfigureChannelCatalogColumnM
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/disable
 # operationId: DisableChannelCatalog
-export def "user-channel-catalogs-disable DisableChannelCatalog" [
-  channelCatalogId: string
+export def "user-channel-catalogs-disable disable" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3299,7 +3299,7 @@ export def "user-channel-catalogs-disable DisableChannelCatalog" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/disable")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3309,8 +3309,8 @@ export def "user-channel-catalogs-disable DisableChannelCatalog" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/enable
 # operationId: EnableChannelCatalog
-export def "user-channel-catalogs-enable EnableChannelCatalog" [
-  channelCatalogId: string
+export def "user-channel-catalogs-enable enable" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3322,7 +3322,7 @@ export def "user-channel-catalogs-enable EnableChannelCatalog" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/enable")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3332,8 +3332,8 @@ export def "user-channel-catalogs-enable EnableChannelCatalog" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/exclusionFilters
 # operationId: GetChannelCatalogExclusionFilters
-export def "user-channel-catalogs-exclusion-filters GetChannelCatalogExclusionFilters" [
-  channelCatalogId: string
+export def "user-channel-catalogs-exclusion-filters get" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3345,7 +3345,7 @@ export def "user-channel-catalogs-exclusion-filters GetChannelCatalogExclusionFi
 ]: nothing -> record<exclusionFilters: table<channelColumnId: string, enabled: bool, groupId: string, name: string, operatorName: string, position: int, positionInGroup: int, value: string>, links: record<configure: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/exclusionFilters")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exclusionFilters"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3355,8 +3355,8 @@ export def "user-channel-catalogs-exclusion-filters GetChannelCatalogExclusionFi
 #
 # PUT /v2/user/channelCatalogs/{channelCatalogId}/exclusionFilters
 # operationId: ConfigureChannelCatalogExclusionFilters
-export def "user-channel-catalogs-exclusion-filters ConfigureChannelCatalogExclusionFilters" [
-  channelCatalogId: string
+export def "user-channel-catalogs-exclusion-filters put" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3370,7 +3370,7 @@ export def "user-channel-catalogs-exclusion-filters ConfigureChannelCatalogExclu
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/exclusionFilters")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exclusionFilters"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3381,8 +3381,8 @@ export def "user-channel-catalogs-exclusion-filters ConfigureChannelCatalogExclu
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/exportations/cache
 # operationId: GetChannelCatalogExportationCacheInfo
-export def "user-channel-catalogs-exportations-cache GetChannelCatalogExportationCacheInfo" [
-  channelCatalogId: string
+export def "user-channel-catalogs-exportations-cache get-channel-catalog-exportation-cache-info" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3394,7 +3394,7 @@ export def "user-channel-catalogs-exportations-cache GetChannelCatalogExportatio
 ]: nothing -> record<cacheInfo: record<cacheStatus: string, expirationUtcDate: string, feedUrl: string, lastContentChangeUtcDate: string, lastUpdateUtcDate: string>, links: record<clear: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/exportations/cache")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/cache"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3404,8 +3404,8 @@ export def "user-channel-catalogs-exportations-cache GetChannelCatalogExportatio
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/exportations/cache/clear
 # operationId: ClearChannelCatalogExportationCache
-export def "user-channel-catalogs-exportations-cache-clear ClearChannelCatalogExportationCache" [
-  channelCatalogId: string
+export def "user-channel-catalogs-exportations-cache-clear post" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3417,7 +3417,7 @@ export def "user-channel-catalogs-exportations-cache-clear ClearChannelCatalogEx
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/exportations/cache/clear")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/cache/clear"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3427,8 +3427,8 @@ export def "user-channel-catalogs-exportations-cache-clear ClearChannelCatalogEx
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/exportations/history
 # operationId: GetChannelCatalogExportationHistory
-export def "user-channel-catalogs-exportations-history GetChannelCatalogExportationHistory" [
-  channelCatalogId: string
+export def "user-channel-catalogs-exportations-history get" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3437,13 +3437,13 @@ export def "user-channel-catalogs-exportations-history GetChannelCatalogExportat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageNumber: int # The page number you want to get (format: int32, e.g. 1)
-  --pageSize: int # The entry count you want to get (format: int32, e.g. 25)
+  --page-number: int # The page number you want to get (format: int32, e.g. 1)
+  --page-size: int # The entry count you want to get (format: int32, e.g. 25)
 ]: nothing -> record<exportations: table<cacheStatus: string, clientIpAddress: string, clientUserAgent: string, exportationDuration: string, exportationUtcDate: string, exportedProductCount: int>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/exportations/history" $qp)
+  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3457,8 +3457,8 @@ export def "user-channel-catalogs-exportations-history GetChannelCatalogExportat
 # --channelCategoryFilter shape: {categoryPath?: list}
 # --criteria shape: {disabled?: bool, excluded?: bool, exist?: bool, logic: "funnel"|"cumulative", uncategorized?: bool}
 # --productFilters shape: {additionalProductFilters?: record, catalogEans?: list, catalogMpns?: list, catalogSkus?: list, channelEans?: list, channelMpns?: list, channelSkus?: list, title?: string}
-export def "user-channel-catalogs-products GetChannelCatalogProductInfoList" [
-  channelCatalogId: string
+export def "user-channel-catalogs-products get-channel-catalog-product-info-list" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3467,19 +3467,19 @@ export def "user-channel-catalogs-products GetChannelCatalogProductInfoList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --catalogCategoryFilter: record # shape: {categoryPath?: list}
-  --channelCategoryFilter: record # shape: {categoryPath?: list}
+  --catalog-category-filter: record # shape: {categoryPath?: list}
+  --channel-category-filter: record # shape: {categoryPath?: list}
   criteria: record # shape: {disabled?: bool, excluded?: bool, exist?: bool, logic: "funnel"|"cumulative", uncategorized?: bool}
   --overridden: oneof<nothing, bool> # Search overridden products. If null the filter will not be taken in account. (e.g. true)
-  pageNumber: int # format: int32, e.g. 1
-  pageSize: int # format: int32, e.g. 100
-  --productFilters: record # shape: {additionalProductFilters?: record, catalogEans?: list, catalogMpns?: list, catalogSkus?: list, channelEans?: list, channelMpns?: list, channelSkus?: list, title?: string}
+  page_number: int # format: int32, e.g. 1
+  page_size: int # format: int32, e.g. 100
+  --product-filters: record # shape: {additionalProductFilters?: record, catalogEans?: list, catalogMpns?: list, catalogSkus?: list, channelEans?: list, channelMpns?: list, channelSkus?: list, title?: string}
 ]: any -> record<links: record<export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, productInfos: table<productExists: bool, productId: string, productImageUrl: string, productSku: string, productTitle: string, disabled: bool, excluded: bool, excludedBy: list, links: record, overrides: record, uncategorized: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/products")
-  let body = {catalogCategoryFilter: $catalogCategoryFilter, channelCategoryFilter: $channelCategoryFilter, criteria: $criteria, overridden: $overridden, pageNumber: $pageNumber, pageSize: $pageSize, productFilters: $productFilters} | compact
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products"))
+  let body = {"catalogCategoryFilter": $catalog_category_filter, "channelCategoryFilter": $channel_category_filter, "criteria": $criteria, "overridden": $overridden, "pageNumber": $page_number, "pageSize": $page_size, "productFilters": $product_filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3490,8 +3490,8 @@ export def "user-channel-catalogs-products GetChannelCatalogProductInfoList" [
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/products/counters
 # operationId: GetChannelCatalogProductsCounters
-export def "user-channel-catalogs-products-counters GetChannelCatalogProductsCounters" [
-  channelCatalogId: string
+export def "user-channel-catalogs-products-counters get" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3503,7 +3503,7 @@ export def "user-channel-catalogs-products-counters GetChannelCatalogProductsCou
 ]: nothing -> record<disabledProductCountExcludingUncategorized: int, disabledProductCountIncludingUncategorized: int, excludedProductCountExcludingUncategorizedAndDisabled: int, excludedProductCountIncludingUncategorizedAndDisabled: int, existingProductCount: int, uncategorizedProductCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/products/counters")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/counters"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3517,8 +3517,8 @@ export def "user-channel-catalogs-products-counters GetChannelCatalogProductsCou
 # --channelCategoryFilter shape: {categoryPath?: list}
 # --criteria shape: {disabled?: bool, excluded?: bool, exist?: bool, logic: "funnel"|"cumulative", uncategorized?: bool}
 # --productFilters shape: {additionalProductFilters?: record, catalogEans?: list, catalogMpns?: list, catalogSkus?: list, channelEans?: list, channelMpns?: list, channelSkus?: list, title?: string}
-export def "user-channel-catalogs-products-export ExportChannelCatalogProductInfoList" [
-  channelCatalogId: string
+export def "user-channel-catalogs-products-export export-channel-catalog-product-info-list" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3528,20 +3528,20 @@ export def "user-channel-catalogs-products-export ExportChannelCatalogProductInf
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer # The file type of the exportation
-  --catalogCategoryFilter: record # shape: {categoryPath?: list}
-  --channelCategoryFilter: record # shape: {categoryPath?: list}
+  --catalog-category-filter: record # shape: {categoryPath?: list}
+  --channel-category-filter: record # shape: {categoryPath?: list}
   criteria: record # shape: {disabled?: bool, excluded?: bool, exist?: bool, logic: "funnel"|"cumulative", uncategorized?: bool}
   --overridden: oneof<nothing, bool> # Search overridden products. If null the filter will not be taken in account. (e.g. true)
-  pageNumber: int # format: int32, e.g. 1
-  pageSize: int # format: int32, e.g. 100
-  --productFilters: record # shape: {additionalProductFilters?: record, catalogEans?: list, catalogMpns?: list, catalogSkus?: list, channelEans?: list, channelMpns?: list, channelSkus?: list, title?: string}
+  page_number: int # format: int32, e.g. 1
+  page_size: int # format: int32, e.g. 100
+  --product-filters: record # shape: {additionalProductFilters?: record, catalogEans?: list, catalogMpns?: list, catalogSkus?: list, channelEans?: list, channelMpns?: list, channelSkus?: list, title?: string}
 ]: any -> record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/products/export" $qp)
-  let body = {catalogCategoryFilter: $catalogCategoryFilter, channelCategoryFilter: $channelCategoryFilter, criteria: $criteria, overridden: $overridden, pageNumber: $pageNumber, pageSize: $pageSize, productFilters: $productFilters} | compact
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/export") $qp)
+  let body = {"catalogCategoryFilter": $catalog_category_filter, "channelCategoryFilter": $channel_category_filter, "criteria": $criteria, "overridden": $overridden, "pageNumber": $page_number, "pageSize": $page_size, "productFilters": $product_filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3552,9 +3552,9 @@ export def "user-channel-catalogs-products-export ExportChannelCatalogProductInf
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}
 # operationId: GetChannelCatalogProductInfo
-export def "user-channel-catalogs-products GetChannelCatalogProductInfo" [
-  channelCatalogId: string
-  productId: string
+export def "user-channel-catalogs-products get-channel-catalog-product-info" [
+  channel_catalog_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3566,7 +3566,7 @@ export def "user-channel-catalogs-products GetChannelCatalogProductInfo" [
 ]: nothing -> record<productExists: bool, productId: string, productImageUrl: string, productSku: string, productTitle: string, disabled: bool, excluded: bool, excludedBy: list<string>, links: record<disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, override: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reenable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, overrides: record, uncategorized: bool> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/products/($productId)")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id, product_id: $product_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3576,9 +3576,9 @@ export def "user-channel-catalogs-products GetChannelCatalogProductInfo" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/disable
 # operationId: DisableChannelCatalogProduct
-export def "user-channel-catalogs-products-disable DisableChannelCatalogProduct" [
-  channelCatalogId: string
-  productId: string
+export def "user-channel-catalogs-products-disable disable" [
+  channel_catalog_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3590,7 +3590,7 @@ export def "user-channel-catalogs-products-disable DisableChannelCatalogProduct"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/products/($productId)/disable")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id, product_id: $product_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3600,9 +3600,9 @@ export def "user-channel-catalogs-products-disable DisableChannelCatalogProduct"
 #
 # PUT /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/overrides
 # operationId: OverrideChannelCatalogProductValues
-export def "user-channel-catalogs-products-overrides OverrideChannelCatalogProductValues" [
-  channelCatalogId: string
-  productId: string
+export def "user-channel-catalogs-products-overrides put" [
+  channel_catalog_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3616,7 +3616,7 @@ export def "user-channel-catalogs-products-overrides OverrideChannelCatalogProdu
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/products/($productId)/overrides")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id, product_id: $product_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3627,9 +3627,9 @@ export def "user-channel-catalogs-products-overrides OverrideChannelCatalogProdu
 #
 # GET /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/overrides/copy
 # operationId: GetChannelCatalogProductValueOverrideCopy
-export def "user-channel-catalogs-products-overrides-copy GetChannelCatalogProductValueOverrideCopy" [
-  channelCatalogId: string
-  productId: string
+export def "user-channel-catalogs-products-overrides-copy get-channel-catalog-product-value" [
+  channel_catalog_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3641,7 +3641,7 @@ export def "user-channel-catalogs-products-overrides-copy GetChannelCatalogProdu
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/products/($productId)/overrides/copy")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id, product_id: $product_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/copy"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3651,9 +3651,9 @@ export def "user-channel-catalogs-products-overrides-copy GetChannelCatalogProdu
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/overrides/copy
 # operationId: ConfigureChannelCatalogProductValueOverrideCopy
-export def "user-channel-catalogs-products-overrides-copy ConfigureChannelCatalogProductValueOverrideCopy" [
-  channelCatalogId: string
-  productId: string
+export def "user-channel-catalogs-products-overrides-copy copy" [
+  channel_catalog_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3665,7 +3665,7 @@ export def "user-channel-catalogs-products-overrides-copy ConfigureChannelCatalo
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/products/($productId)/overrides/copy")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id, product_id: $product_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/copy"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3675,10 +3675,10 @@ export def "user-channel-catalogs-products-overrides-copy ConfigureChannelCatalo
 #
 # DELETE /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/overrides/{channelColumnId}
 # operationId: DeleteChannelCatalogProductValueOverride
-export def "user-channel-catalogs-products-overrides DeleteChannelCatalogProductValueOverride" [
-  channelCatalogId: string
-  productId: string
-  channelColumnId: string
+export def "user-channel-catalogs-products-overrides delete-channel-catalog-product-value" [
+  channel_catalog_id: string
+  product_id: string
+  channel_column_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3690,7 +3690,7 @@ export def "user-channel-catalogs-products-overrides DeleteChannelCatalogProduct
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/products/($productId)/overrides/($channelColumnId)")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id, product_id: $product_id, channel_column_id: $channel_column_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/{channel_column_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3700,9 +3700,9 @@ export def "user-channel-catalogs-products-overrides DeleteChannelCatalogProduct
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/products/{productId}/reenable
 # operationId: ReenableChannelCatalogProduct
-export def "user-channel-catalogs-products-reenable ReenableChannelCatalogProduct" [
-  channelCatalogId: string
-  productId: string
+export def "user-channel-catalogs-products-reenable post" [
+  channel_catalog_id: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3714,7 +3714,7 @@ export def "user-channel-catalogs-products-reenable ReenableChannelCatalogProduc
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/products/($productId)/reenable")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id, product_id: $product_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/reenable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3724,8 +3724,8 @@ export def "user-channel-catalogs-products-reenable ReenableChannelCatalogProduc
 #
 # PUT /v2/user/channelCatalogs/{channelCatalogId}/settings/cost
 # operationId: ConfigureChannelCatalogCostSettings
-export def "user-channel-catalogs-settings-cost ConfigureChannelCatalogCostSettings" [
-  channelCatalogId: string
+export def "user-channel-catalogs-settings-cost put" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3734,14 +3734,14 @@ export def "user-channel-catalogs-settings-cost ConfigureChannelCatalogCostSetti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  costType: string@costType-completer # CPC means cost per click. CPA means cost per action. You can have CPC/CPA with a global cost value. You can have CPC/CPA by category the cost value MUST be null You can have global fixed price.  (e.g. Fixed_Global)
-  --globalCostValue: float # In case of global cost type, you have to indicate the cost value. (format: decimal, e.g. 10.21)
+  cost_type: string@cost-type-completer # CPC means cost per click. CPA means cost per action. You can have CPC/CPA with a global cost value. You can have CPC/CPA by category the cost value MUST be null You can have global fixed price.  (e.g. Fixed_Global)
+  --global-cost-value: float # In case of global cost type, you have to indicate the cost value. (format: decimal, e.g. 10.21)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/settings/cost")
-  let body = {costType: $costType, globalCostValue: $globalCostValue} | compact
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/settings/cost"))
+  let body = {"costType": $cost_type, "globalCostValue": $global_cost_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3752,8 +3752,8 @@ export def "user-channel-catalogs-settings-cost ConfigureChannelCatalogCostSetti
 #
 # PUT /v2/user/channelCatalogs/{channelCatalogId}/settings/general
 # operationId: ConfigureChannelCatalogGeneralSettings
-export def "user-channel-catalogs-settings-general ConfigureChannelCatalogGeneralSettings" [
-  channelCatalogId: string
+export def "user-channel-catalogs-settings-general put" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3762,15 +3762,15 @@ export def "user-channel-catalogs-settings-general ConfigureChannelCatalogGenera
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --acceptToPublishInfo: oneof<nothing, bool> # If true then you authorize disclosure of my statistics generated from clicks and sales (e.g. true)
-  --activeBeezUPTracking: oneof<nothing, bool> # Activate BeezUP tracking for my statistics (checked by default) (default: true, e.g. true)
-  --doNotExportOutOfStockProducts: oneof<nothing, bool> # Do not export "out of stock" products. Note: this option is not taken into account by the counter.  (e.g. true)
+  --accept-to-publish-info: oneof<nothing, bool> # If true then you authorize disclosure of my statistics generated from clicks and sales (e.g. true)
+  --active-beez-up-tracking: oneof<nothing, bool> # Activate BeezUP tracking for my statistics (checked by default) (default: true, e.g. true)
+  --do-not-export-out-of-stock-products: oneof<nothing, bool> # Do not export "out of stock" products. Note: this option is not taken into account by the counter.  (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channelCatalogs/($channelCatalogId)/settings/general")
-  let body = {acceptToPublishInfo: $acceptToPublishInfo, activeBeezUPTracking: $activeBeezUPTracking, doNotExportOutOfStockProducts: $doNotExportOutOfStockProducts} | compact
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/settings/general"))
+  let body = {"acceptToPublishInfo": $accept_to_publish_info, "activeBeezUPTracking": $active_beez_up_tracking, "doNotExportOutOfStockProducts": $do_not_export_out_of_stock_products} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3781,7 +3781,7 @@ export def "user-channel-catalogs-settings-general ConfigureChannelCatalogGenera
 #
 # GET /v2/user/channels/
 # operationId: GetAvailableChannels
-export def "user-channels GetAvailableChannels" [
+export def "user-channels get-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3790,11 +3790,11 @@ export def "user-channels GetAvailableChannels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --storeId: string # The store identifier (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
+  --store-id: string # The store identifier (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
 ]: nothing -> table<channelId: string, channelLogoUrl: string, channelName: string, links: record<self: record>, types: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storeId" $storeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/channels/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3805,8 +3805,8 @@ export def "user-channels GetAvailableChannels" [
 #
 # GET /v2/user/channels/{channelId}
 # operationId: GetChannelInfo
-export def "user-channels GetChannelInfo" [
-  channelId: string
+export def "user-channels get-channel-info" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3818,7 +3818,7 @@ export def "user-channels GetChannelInfo" [
 ]: nothing -> record<beezUPOffer: string, channelDescription: string, channelId: string, channelLogoUrl: string, channelName: string, details: record<businessModel: string, category: string, channelType: string, costs: string, homeUrl: string, subscriptionLink: string, trackingType: string>, keyNumbers: record<categories: string, products: string, stores: string, viewsPerMonth: string>, salesContact: record<email: string, name: string, phoneNumber: string>, technicalContact: record<email: string, name: string, phoneNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channels/($channelId)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/v2/user/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3828,8 +3828,8 @@ export def "user-channels GetChannelInfo" [
 #
 # GET /v2/user/channels/{channelId}/categories
 # operationId: GetChannelCategories
-export def "user-channels-categories GetChannelCategories" [
-  channelId: string
+export def "user-channels-categories get" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3838,12 +3838,12 @@ export def "user-channels-categories GetChannelCategories" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: list # Indicates that the client accepts that the response will be compressed to reduce traffic size.
+  --accept-encoding: list # Indicates that the client accepts that the response will be compressed to reduce traffic size.
 ]: nothing -> record<firstLevelCategories: table<channelCategoryChannelCode: string, channelCategoryColumnOverrides: record, channelCategoryDefaultCost: float, channelCategoryId: string, channelCategoryLevel: int, channelCategoryName: string, subCategories: list>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channels/($channelId)/categories")
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/v2/user/channels/{channel_id}/categories"))
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3854,8 +3854,8 @@ export def "user-channels-categories GetChannelCategories" [
 #
 # POST /v2/user/channels/{channelId}/columns
 # operationId: GetChannelColumns
-export def "user-channels-columns GetChannelColumns" [
-  channelId: string
+export def "user-channels-columns get" [
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3864,15 +3864,15 @@ export def "user-channels-columns GetChannelColumns" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: list # Indicates that the client accepts that the response will be compressed to reduce traffic size.
+  --accept-encoding: list # Indicates that the client accepts that the response will be compressed to reduce traffic size.
   --body: record
 ]: any -> table<channelColumnDescription: string, channelColumnId: string, channelColumnName: string, configuration: record<beezUPColumnName: string, columnDataType: string, columnImportance: string>, position: int, restrictedValues: record, showInMapping: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/channels/($channelId)/columns")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/v2/user/channels/{channel_id}/columns"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3883,7 +3883,7 @@ export def "user-channels-columns GetChannelColumns" [
 #
 # GET /v2/user/customer/
 # operationId: GetCustomerIndex
-export def "user-customer GetCustomerIndex" [
+export def "user-customer get-customer-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3892,12 +3892,12 @@ export def "user-customer GetCustomerIndex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<links: record<accountInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, billingPeriods: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, contracts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, friendInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getOffer: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, invoices: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, logout: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, standardOffers: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, stores: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<activeOfferLov: record<href: string, method: string>, beezUPTimeZoneLov: record<href: string, method: string>, contractTerminationReasonLov: record<href: string, method: string>, countryLov: record<href: string, method: string>, customerStatusLov: record<href: string, method: string>, invoicePaymentStatusLov: record<href: string, method: string>, offerLov: record<href: string, method: string>, storeCountryLov: record<href: string, method: string>, storeSectorLov: record<href: string, method: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3908,7 +3908,7 @@ export def "user-customer GetCustomerIndex" [
 #
 # GET /v2/user/customer/account
 # operationId: GetUserAccountInfo
-export def "user-customer-account GetUserAccountInfo" [
+export def "user-customer-account get-user-account-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3917,12 +3917,12 @@ export def "user-customer-account GetUserAccountInfo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<commercialOwnerEmail: string, companyInfo: record<accountingEmails: list<string>, address: string, city: string, company: string, countryIsoCodeAlpha3: string, postalCode: string, vatNumber: string>, email: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<activateUserAccount: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, changeEmail: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, changePassword: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getProfilePictureInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveCompanyInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, savePersonalInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveProfilePictureInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, personalInfo: record<beezUPTimeZoneId: int, firstName: string, lastName: string, phoneNumber: string, whatIDo: string>, profilePictureUrl: string, status: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3933,7 +3933,7 @@ export def "user-customer-account GetUserAccountInfo" [
 #
 # POST /v2/user/customer/account/activate
 # operationId: ActivateUserAccount
-export def "user-customer-account-activate ActivateUserAccount" [
+export def "user-customer-account-activate post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3958,7 +3958,7 @@ export def "user-customer-account-activate ActivateUserAccount" [
 #
 # POST /v2/user/customer/account/changeEmail
 # operationId: ChangeEmail
-export def "user-customer-account-change-email ChangeEmail" [
+export def "user-customer-account-change-email post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3967,13 +3967,13 @@ export def "user-customer-account-change-email ChangeEmail" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  newEmail: string # The email (format: email, e.g. paulsimon@mysupercompany.com)
+  new_email: string # The email (format: email, e.g. paulsimon@mysupercompany.com)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/changeEmail")
-  let body = {newEmail: $newEmail} | compact
+  let body = {"newEmail": $new_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3984,7 +3984,7 @@ export def "user-customer-account-change-email ChangeEmail" [
 #
 # POST /v2/user/customer/account/changePassword
 # operationId: ChangePassword
-export def "user-customer-account-change-password ChangePassword" [
+export def "user-customer-account-change-password post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3993,14 +3993,14 @@ export def "user-customer-account-change-password ChangePassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  newPassword: string # Your new password. Which must respect the same constraints as the user registeration (format: password)
-  oldPassword: string # Your current password (format: password)
+  new_password: string # Your new password. Which must respect the same constraints as the user registeration (format: password)
+  old_password: string # Your current password (format: password)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/changePassword")
-  let body = {newPassword: $newPassword, oldPassword: $oldPassword} | compact
+  let body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4011,7 +4011,7 @@ export def "user-customer-account-change-password ChangePassword" [
 #
 # PUT /v2/user/customer/account/companyInfo
 # operationId: SaveCompanyInfo
-export def "user-customer-account-company-info SaveCompanyInfo" [
+export def "user-customer-account-company-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4020,19 +4020,19 @@ export def "user-customer-account-company-info SaveCompanyInfo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountingEmails: list # Your company accounting emails (e.g. [myaccountemail@mysupercompany.com])
+  --accounting-emails: list # Your company accounting emails (e.g. [myaccountemail@mysupercompany.com])
   address: string # Your address (e.g. 21 jump street)
   city: string # Your address city (e.g. New-York)
   company: string # Your company name (e.g. My super company)
-  countryIsoCodeAlpha3: string # The country iso code alpha 3 <a href="https://en.wikipedia.org/wiki/ISO_3166-1_alpha-3">(ISO 3166-1_alpha-3)</a> (e.g. FRA)
-  postalCode: string # Your address postal code (e.g. 13014)
-  --vatNumber: string # Your company VATNumber. Used for french company. This number is checked with official web service before being saved. (e.g. 1234567890)
+  country_iso_code_alpha3: string # The country iso code alpha 3 <a href="https://en.wikipedia.org/wiki/ISO_3166-1_alpha-3">(ISO 3166-1_alpha-3)</a> (e.g. FRA)
+  postal_code: string # Your address postal code (e.g. 13014)
+  --vat-number: string # Your company VATNumber. Used for french company. This number is checked with official web service before being saved. (e.g. 1234567890)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/companyInfo")
-  let body = {accountingEmails: $accountingEmails, address: $address, city: $city, company: $company, countryIsoCodeAlpha3: $countryIsoCodeAlpha3, postalCode: $postalCode, vatNumber: $vatNumber} | compact
+  let body = {"accountingEmails": $accounting_emails, "address": $address, "city": $city, "company": $company, "countryIsoCodeAlpha3": $country_iso_code_alpha3, "postalCode": $postal_code, "vatNumber": $vat_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4043,7 +4043,7 @@ export def "user-customer-account-company-info SaveCompanyInfo" [
 #
 # GET /v2/user/customer/account/creditCardInfo
 # operationId: GetCreditCardInfo
-export def "user-customer-account-credit-card-info GetCreditCardInfo" [
+export def "user-customer-account-credit-card-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4052,12 +4052,12 @@ export def "user-customer-account-credit-card-info GetCreditCardInfo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<creditCardInfo: record<cardNumber: string, cardType: string, expirationMonth: int, expirationYear: int>, currentPaymentMethod: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<saveCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/creditCardInfo")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4068,7 +4068,7 @@ export def "user-customer-account-credit-card-info GetCreditCardInfo" [
 #
 # PUT /v2/user/customer/account/creditCardInfo
 # operationId: SaveCreditCardInfo
-export def "user-customer-account-credit-card-info SaveCreditCardInfo" [
+export def "user-customer-account-credit-card-info get-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4077,16 +4077,16 @@ export def "user-customer-account-credit-card-info SaveCreditCardInfo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  cardNumber: string # Card number (e.g. 1234567890091234)
-  cardVerificationCode: string # Card Verification Code (e.g. 123)
-  expirationMonth: int # Expiration Month (format: int32, e.g. 12)
-  expirationYear: int # Expiration Year (format: int32, e.g. 2017)
+  card_number: string # Card number (e.g. 1234567890091234)
+  card_verification_code: string # Card Verification Code (e.g. 123)
+  expiration_month: int # Expiration Month (format: int32, e.g. 12)
+  expiration_year: int # Expiration Year (format: int32, e.g. 2017)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/creditCardInfo")
-  let body = {cardNumber: $cardNumber, cardVerificationCode: $cardVerificationCode, expirationMonth: $expirationMonth, expirationYear: $expirationYear} | compact
+  let body = {"cardNumber": $card_number, "cardVerificationCode": $card_verification_code, "expirationMonth": $expiration_month, "expirationYear": $expiration_year} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4097,7 +4097,7 @@ export def "user-customer-account-credit-card-info SaveCreditCardInfo" [
 #
 # PUT /v2/user/customer/account/personalInfo
 # operationId: SavePersonalInfo
-export def "user-customer-account-personal-info SavePersonalInfo" [
+export def "user-customer-account-personal-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4106,17 +4106,17 @@ export def "user-customer-account-personal-info SavePersonalInfo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  beezUPTimeZoneId: int # The time zone identifier based on the list of values /v2/user/lov/BeezUPTimeZone (format: int32, e.g. 79)
-  firstName: string # Your first name (e.g. Paul)
-  lastName: string # Your last name (e.g. Simon)
-  phoneNumber: string # Your phone number (e.g. 5551234)
-  --whatIDo: string # Your role in your company (e.g. I'm the Manager on this company)
+  beez_up_time_zone_id: int # The time zone identifier based on the list of values /v2/user/lov/BeezUPTimeZone (format: int32, e.g. 79)
+  first_name: string # Your first name (e.g. Paul)
+  last_name: string # Your last name (e.g. Simon)
+  phone_number: string # Your phone number (e.g. 5551234)
+  --what-i-do: string # Your role in your company (e.g. I'm the Manager on this company)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/personalInfo")
-  let body = {beezUPTimeZoneId: $beezUPTimeZoneId, firstName: $firstName, lastName: $lastName, phoneNumber: $phoneNumber, whatIDo: $whatIDo} | compact
+  let body = {"beezUPTimeZoneId": $beez_up_time_zone_id, "firstName": $first_name, "lastName": $last_name, "phoneNumber": $phone_number, "whatIDo": $what_i_do} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4127,7 +4127,7 @@ export def "user-customer-account-personal-info SavePersonalInfo" [
 #
 # GET /v2/user/customer/account/profilePictureInfo
 # operationId: GetProfilePictureInfo
-export def "user-customer-account-profile-picture-info GetProfilePictureInfo" [
+export def "user-customer-account-profile-picture-info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4136,12 +4136,12 @@ export def "user-customer-account-profile-picture-info GetProfilePictureInfo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<links: record<save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, profilePictureInfo: record<profilePictureSelected: string, profilePictureUrl: string, gravatarProfilePictureUrl: string, initialsProfilePictureUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/profilePictureInfo")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4152,7 +4152,7 @@ export def "user-customer-account-profile-picture-info GetProfilePictureInfo" [
 #
 # PUT /v2/user/customer/account/profilePictureInfo
 # operationId: SaveProfilePictureInfo
-export def "user-customer-account-profile-picture-info SaveProfilePictureInfo" [
+export def "user-customer-account-profile-picture-info get-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4161,14 +4161,14 @@ export def "user-customer-account-profile-picture-info SaveProfilePictureInfo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  profilePictureSelected: string@profilePictureSelected-completer # Your profile picture choice about usage of gravatar picture, initials picture or uploaded picture. (e.g. initials)
-  --profilePictureUrl: string # Indicate the url of your picture profil (e.g. https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Marlon_Brando_%28cropped%29.jpg/220px-Marlon_Brando_%28cropped%29.jpg)
+  profile_picture_selected: string@profile-picture-selected-completer # Your profile picture choice about usage of gravatar picture, initials picture or uploaded picture. (e.g. initials)
+  --profile-picture-url: string # Indicate the url of your picture profil (e.g. https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Marlon_Brando_%28cropped%29.jpg/220px-Marlon_Brando_%28cropped%29.jpg)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/profilePictureInfo")
-  let body = {profilePictureSelected: $profilePictureSelected, profilePictureUrl: $profilePictureUrl} | compact
+  let body = {"profilePictureSelected": $profile_picture_selected, "profilePictureUrl": $profile_picture_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4179,7 +4179,7 @@ export def "user-customer-account-profile-picture-info SaveProfilePictureInfo" [
 #
 # POST /v2/user/customer/account/resendEmailActivation
 # operationId: ResendEmailActivation
-export def "user-customer-account-resend-email-activation ResendEmailActivation" [
+export def "user-customer-account-resend-email-activation post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4201,7 +4201,7 @@ export def "user-customer-account-resend-email-activation ResendEmailActivation"
 #
 # GET /v2/user/customer/billingPeriods
 # operationId: GetBillingPeriods
-export def "user-customer-billing-periods GetBillingPeriods" [
+export def "user-customer-billing-periods get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4210,12 +4210,12 @@ export def "user-customer-billing-periods GetBillingPeriods" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<billingPeriods: table<billingPeriodInMonth: int, discountPercentage: float>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/billingPeriods")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4226,7 +4226,7 @@ export def "user-customer-billing-periods GetBillingPeriods" [
 #
 # GET /v2/user/customer/contracts
 # operationId: GetContracts
-export def "user-customer-contracts GetContracts" [
+export def "user-customer-contracts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4235,12 +4235,12 @@ export def "user-customer-contracts GetContracts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<current: record<additionalClickPrice: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float, clickIncluded: int, commitmentCalculatedFinishUtcDate: string, commitmentPeriodInMonth: int, contractId: string, currencyCode: string, discountDurationInMonth: int, discountEndUtcDate: string, fixedAndVariableClickInfo: record<clickIncludedAndAdditionalClickPrices: list>, fixedPrice: float, ipUserCreation: string, ipUserModification: string, isCommitmentRenewalAutomatically: bool, isModifiableContract: bool, offerId: int, offerName: string, percentDiscount: float, startUtcDate: string, storeCount: int, trialPeriodInMonth: int, variableModelInfo: record<clickIncludedAndVariablePrices: list, overflowClickCount: int, overflowClickPrice: float>, links: record<disable: record, reenable: record>>, links: record<create: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, next: record<additionalClickPrice: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float, clickIncluded: int, commitmentCalculatedFinishUtcDate: string, commitmentPeriodInMonth: int, contractId: string, currencyCode: string, discountDurationInMonth: int, discountEndUtcDate: string, fixedAndVariableClickInfo: record<clickIncludedAndAdditionalClickPrices: list>, fixedPrice: float, ipUserCreation: string, ipUserModification: string, isCommitmentRenewalAutomatically: bool, isModifiableContract: bool, offerId: int, offerName: string, percentDiscount: float, startUtcDate: string, storeCount: int, trialPeriodInMonth: int, variableModelInfo: record<clickIncludedAndVariablePrices: list, overflowClickCount: int, overflowClickPrice: float>, links: record<delete: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/contracts")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4251,7 +4251,7 @@ export def "user-customer-contracts GetContracts" [
 #
 # POST /v2/user/customer/contracts
 # operationId: CreateContract
-export def "user-customer-contracts CreateContract" [
+export def "user-customer-contracts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4260,17 +4260,17 @@ export def "user-customer-contracts CreateContract" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  billingPeriodInMonth: int # Can be null. The billing period in month based on /billingPeriods (format: int32, e.g. 12)
-  --couponDiscountCode: string # The coupon discount code (e.g. I-LOVE-BEEZUP)
-  --couponOfferCode: string # Your special coupon offer identifier (format: guid, e.g. 04efc310-bc25-4710-a83a-faf200284fe5)
-  offerId: int # The offer id based on /offers. Not a free offer of course. (format: int32, e.g. 1)
-  storeCount: int # The store count you want to have in your contract. (format: int32, e.g. 1)
+  billing_period_in_month: int # Can be null. The billing period in month based on /billingPeriods (format: int32, e.g. 12)
+  --coupon-discount-code: string # The coupon discount code (e.g. I-LOVE-BEEZUP)
+  --coupon-offer-code: string # Your special coupon offer identifier (format: guid, e.g. 04efc310-bc25-4710-a83a-faf200284fe5)
+  offer_id: int # The offer id based on /offers. Not a free offer of course. (format: int32, e.g. 1)
+  store_count: int # The store count you want to have in your contract. (format: int32, e.g. 1)
 ]: any -> record<info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<contracts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/contracts")
-  let body = {billingPeriodInMonth: $billingPeriodInMonth, couponDiscountCode: $couponDiscountCode, couponOfferCode: $couponOfferCode, offerId: $offerId, storeCount: $storeCount} | compact
+  let body = {"billingPeriodInMonth": $billing_period_in_month, "couponDiscountCode": $coupon_discount_code, "couponOfferCode": $coupon_offer_code, "offerId": $offer_id, "storeCount": $store_count} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4281,7 +4281,7 @@ export def "user-customer-contracts CreateContract" [
 #
 # POST /v2/user/customer/contracts/current/disableAutoRenewal
 # operationId: TerminateCurrentContract
-export def "user-customer-contracts-current-disable-auto-renewal TerminateCurrentContract" [
+export def "user-customer-contracts-current-disable-auto-renewal post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4290,14 +4290,14 @@ export def "user-customer-contracts-current-disable-auto-renewal TerminateCurren
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contractTerminationReason: string # The termination reason, if your current contract is scheduled to be terminated. (e.g. I'm crazy, I want to leave your splendid service...)
-  contractTerminationReasonType: int # The contract termination reason type identifier, if your current contract is scheduled to be terminated. The value is based on the list of values /user/lov/ContractTerminationReason (format: int32, e.g. 1)
+  --contract-termination-reason: string # The termination reason, if your current contract is scheduled to be terminated. (e.g. I'm crazy, I want to leave your splendid service...)
+  contract_termination_reason_type: int # The contract termination reason type identifier, if your current contract is scheduled to be terminated. The value is based on the list of values /user/lov/ContractTerminationReason (format: int32, e.g. 1)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/contracts/current/disableAutoRenewal")
-  let body = {contractTerminationReason: $contractTerminationReason, contractTerminationReasonType: $contractTerminationReasonType} | compact
+  let body = {"contractTerminationReason": $contract_termination_reason, "contractTerminationReasonType": $contract_termination_reason_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4308,7 +4308,7 @@ export def "user-customer-contracts-current-disable-auto-renewal TerminateCurren
 #
 # POST /v2/user/customer/contracts/current/reenableAutoRenewal
 # operationId: ReactivateCurrentContract
-export def "user-customer-contracts-current-reenable-auto-renewal ReactivateCurrentContract" [
+export def "user-customer-contracts-current-reenable-auto-renewal post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4330,7 +4330,7 @@ export def "user-customer-contracts-current-reenable-auto-renewal ReactivateCurr
 #
 # DELETE /v2/user/customer/contracts/next
 # operationId: DeleteNextContract
-export def "user-customer-contracts-next DeleteNextContract" [
+export def "user-customer-contracts-next delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4352,8 +4352,8 @@ export def "user-customer-contracts-next DeleteNextContract" [
 #
 # GET /v2/user/customer/friends/{userId}
 # operationId: GetFriendInfo
-export def "user-customer-friends GetFriendInfo" [
-  userId: string
+export def "user-customer-friends get-friend-info" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4362,12 +4362,12 @@ export def "user-customer-friends GetFriendInfo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<company: string, countryIsoCodeAlpha3: string, email: string, firstName: string, lastName: string, profilePictureUrl: string, userId: string, whatIDo: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/customer/friends/($userId)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/v2/user/customer/friends/{user_id}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4378,7 +4378,7 @@ export def "user-customer-friends GetFriendInfo" [
 #
 # GET /v2/user/customer/invoices
 # operationId: GetInvoices
-export def "user-customer-invoices GetInvoices" [
+export def "user-customer-invoices get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4387,12 +4387,12 @@ export def "user-customer-invoices GetInvoices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<invoices: table<amount: float, amountToBePaid: float, contractId: string, currencyCode: string, dueDate: string, invoiceDate: string, invoiceNumber: string, invoiceUrl: string, paymentStatus: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/invoices")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4403,7 +4403,7 @@ export def "user-customer-invoices GetInvoices" [
 #
 # GET /v2/user/customer/offers
 # operationId: GetStandardOffers
-export def "user-customer-offers GetStandardOffers" [
+export def "user-customer-offers get-standard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4412,12 +4412,12 @@ export def "user-customer-offers GetStandardOffers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<functionalities: table<code: string, order: int>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, offers: table<additionalClickPrice: float, currencyCode: string, fixedPrice: float, functionalities: list, includedClick: int, isMostPopular: bool, isOldOffer: bool, links: record, name: string, offerId: int, position: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/offers")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4428,7 +4428,7 @@ export def "user-customer-offers GetStandardOffers" [
 #
 # POST /v2/user/customer/offers
 # operationId: GetOffer
-export def "user-customer-offers GetOffer" [
+export def "user-customer-offers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4437,17 +4437,17 @@ export def "user-customer-offers GetOffer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  billingPeriodInMonth: int # Can be null. The billing period in month based on /billingPeriods (format: int32, e.g. 12)
-  --couponDiscountCode: string # The coupon discount code (e.g. I-LOVE-BEEZUP)
-  --couponOfferCode: string # Your special coupon offer identifier (format: guid, e.g. 04efc310-bc25-4710-a83a-faf200284fe5)
-  offerId: int # The offer id based on /offers. Not a free offer of course. (format: int32, e.g. 1)
-  storeCount: int # The store count you want to have in your contract. (format: int32, e.g. 1)
+  billing_period_in_month: int # Can be null. The billing period in month based on /billingPeriods (format: int32, e.g. 12)
+  --coupon-discount-code: string # The coupon discount code (e.g. I-LOVE-BEEZUP)
+  --coupon-offer-code: string # Your special coupon offer identifier (format: guid, e.g. 04efc310-bc25-4710-a83a-faf200284fe5)
+  offer_id: int # The offer id based on /offers. Not a free offer of course. (format: int32, e.g. 1)
+  store_count: int # The store count you want to have in your contract. (format: int32, e.g. 1)
 ]: any -> record<content: record<contractBillingPeriodInfo: record<amountBillingPeriodDiscount: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float>, contractBonusInfo: record<bonuses: list>, contractClickInfo: record<additionalClickPrice: float, clickIncluded: int, initialOfferClickIncluded: int>, contractCommitmentInfo: record<commercialCreatorUserId: string, commercialUserId: string, commitmentCalculatedFinishDate: string, commitmentPeriodInMonth: int, contractType: int, couponOfferCode: string, currentContractId: string, currentContractTerminationDate: string, currentCustomerPaymentMethod: string, fixedAndVariableClickInfo: record, isCustomerWantsToTerminateHisContract: bool, isModelMustBeTransmittedInNewContract: bool, minBillingPeriodInMonths: int, model: string, newContractStartDate: string, offerId: int, offerName: string, paymentDelayInDays: int, paymentMethodAuthorized: string, requestedPaymentMethod: string, trialPeriodFinishDate: string, trialPeriodInMonth: int, variableModelInfo: record>, contractDiscountInfo: record<amountCodePromoDiscount: float, amountCodePromoDiscountPerMonth: float, couponDiscountCode: string, couponDiscountId: int, customerHasActualDiscount: bool, discountDurationInMonth: int, isCouponDiscountLinkedToCouponOffer: bool, percentDiscount: float, promotionalCodeValidity: string>, contractMoneyInfo: record<amountExcludingTaxesAndExcludingCodePromoDiscountIncludingBillingPeriodDiscount: float, amountExcludingTaxesAndExcludingDiscounts: float, amountExcludingTaxesIncludingDiscounts: float, amountExcludingTaxesIncludingDiscountsPerMonth: float, amountIncludingTaxesExcludingDiscountIncludingBillingPeriodDiscount: float, amountIncludingTaxesIncludingDiscounts: float, amountTaxesExcludingDiscountIncludingBillingPeriodDiscount: float, amountTaxesIncludingDiscounts: float, currencyCode: string, initialOfferFixedPrice: float, vatPercent: float>, contractStoreInfo: record<additionalStorePrice: float, maxStoreCount: int, minStoreCount: int, ownedStoreCount: int, storeCount: int, storeIncluded: int>, contractTerminationReason: string, contractTerminationReasonType: int, notifyVatExemption: bool, previousFixPeriodInvoiceProrataInfo: record<amountAfterTax: float, amountToBePaid: float, computedProrataToBeDeducted: float, contractId: string, fixedPeriodEndDate: string, fixedPeriodStartDate: string, invoiceNumber: string>>, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<createContract: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/offers")
-  let body = {billingPeriodInMonth: $billingPeriodInMonth, couponDiscountCode: $couponDiscountCode, couponOfferCode: $couponOfferCode, offerId: $offerId, storeCount: $storeCount} | compact
+  let body = {"billingPeriodInMonth": $billing_period_in_month, "couponDiscountCode": $coupon_discount_code, "couponOfferCode": $coupon_offer_code, "offerId": $offer_id, "storeCount": $store_count} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4458,7 +4458,7 @@ export def "user-customer-offers GetOffer" [
 #
 # POST /v2/user/customer/security/logout
 # operationId: Logout
-export def "user-customer-security-logout Logout" [
+export def "user-customer-security-logout post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4480,7 +4480,7 @@ export def "user-customer-security-logout Logout" [
 #
 # GET /v2/user/customer/stores
 # operationId: GetStores
-export def "user-customer-stores GetStores" [
+export def "user-customer-stores list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4489,12 +4489,12 @@ export def "user-customer-stores GetStores" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<links: record<createStore: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, stores: table<countryIsoCodeAlpha3: string, creationUtcDate: string, currencyCode: string, goVersion: int, isTest: bool, links: record, name: string, offerId: int, offerName: string, ownerUserId: string, sectors: list, shareCount: int, status: string, storeId: string, url: string, userRole: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/stores")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4505,7 +4505,7 @@ export def "user-customer-stores GetStores" [
 #
 # POST /v2/user/customer/stores
 # operationId: CreateStore
-export def "user-customer-stores CreateStore" [
+export def "user-customer-stores create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4514,7 +4514,7 @@ export def "user-customer-stores CreateStore" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  countryIsoCodeAlpha3: string # The country iso code alpha 3 based on the list of values /user/lov/StoreCountry (e.g. DEU)
+  country_iso_code_alpha3: string # The country iso code alpha 3 based on the list of values /user/lov/StoreCountry (e.g. DEU)
   --id: string # The store identifier (format: guid, e.g. 64f43358-63a1-47f7-97ec-0301fc39956b)
   name: string # The store name. Must be unique. (e.g. My Store)
   sectors: list # The store's sectors based on the list of values /user/lov/ParamSector (e.g. [ANIMALERIE, AUTOMOTO])
@@ -4524,7 +4524,7 @@ export def "user-customer-stores CreateStore" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/stores")
-  let body = {countryIsoCodeAlpha3: $countryIsoCodeAlpha3, id: $id, name: $name, sectors: $sectors, url: $body_url} | compact
+  let body = {"countryIsoCodeAlpha3": $country_iso_code_alpha3, "id": $id, "name": $name, "sectors": $sectors, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4535,8 +4535,8 @@ export def "user-customer-stores CreateStore" [
 #
 # DELETE /v2/user/customer/stores/{storeId}
 # operationId: DeleteStore
-export def "user-customer-stores DeleteStore" [
-  storeId: string
+export def "user-customer-stores delete" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4548,7 +4548,7 @@ export def "user-customer-stores DeleteStore" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/customer/stores/($storeId)")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/customer/stores/{store_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4558,8 +4558,8 @@ export def "user-customer-stores DeleteStore" [
 #
 # GET /v2/user/customer/stores/{storeId}
 # operationId: GetStore
-export def "user-customer-stores GetStore" [
-  storeId: string
+export def "user-customer-stores get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4568,12 +4568,12 @@ export def "user-customer-stores GetStore" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<countryIsoCodeAlpha3: string, creationUtcDate: string, currencyCode: string, goVersion: int, isTest: bool, links: record<deleteStore: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, share: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, shares: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, updateStore: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, name: string, offerId: int, offerName: string, ownerUserId: string, sectors: list<string>, shareCount: int, status: string, storeId: string, url: string, userRole: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/customer/stores/($storeId)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/customer/stores/{store_id}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4584,8 +4584,8 @@ export def "user-customer-stores GetStore" [
 #
 # PATCH /v2/user/customer/stores/{storeId}
 # operationId: UpdateStore
-export def "user-customer-stores UpdateStore" [
-  storeId: string
+export def "user-customer-stores update" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4601,8 +4601,8 @@ export def "user-customer-stores UpdateStore" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/customer/stores/($storeId)")
-  let body = {name: $name, sectors: $sectors, url: $body_url} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/customer/stores/{store_id}"))
+  let body = {"name": $name, "sectors": $sectors, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4613,8 +4613,8 @@ export def "user-customer-stores UpdateStore" [
 #
 # GET /v2/user/customer/stores/{storeId}/alerts
 # operationId: GetStoreAlerts
-export def "user-customer-stores-alerts GetStoreAlerts" [
-  storeId: string
+export def "user-customer-stores-alerts get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4623,12 +4623,12 @@ export def "user-customer-stores-alerts GetStoreAlerts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<alerts: table<alertId: int, alertName: string, enabled: bool, links: record, properties: list>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/customer/stores/($storeId)/alerts")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/customer/stores/{store_id}/alerts"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4639,8 +4639,8 @@ export def "user-customer-stores-alerts GetStoreAlerts" [
 #
 # POST /v2/user/customer/stores/{storeId}/alerts
 # operationId: SaveStoreAlerts
-export def "user-customer-stores-alerts SaveStoreAlerts" [
-  storeId: string
+export def "user-customer-stores-alerts post" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4654,7 +4654,7 @@ export def "user-customer-stores-alerts SaveStoreAlerts" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/customer/stores/($storeId)/alerts")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/customer/stores/{store_id}/alerts"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4665,8 +4665,8 @@ export def "user-customer-stores-alerts SaveStoreAlerts" [
 #
 # GET /v2/user/customer/stores/{storeId}/rights
 # operationId: GetRights
-export def "user-customer-stores-rights GetRights" [
-  storeId: string
+export def "user-customer-stores-rights get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4678,7 +4678,7 @@ export def "user-customer-stores-rights GetRights" [
 ]: nothing -> table<functionalityCode: string, maxValueInterger: int, unlimited: bool> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/customer/stores/($storeId)/rights")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/customer/stores/{store_id}/rights"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4688,8 +4688,8 @@ export def "user-customer-stores-rights GetRights" [
 #
 # GET /v2/user/customer/stores/{storeId}/shares
 # operationId: GetStoreShares
-export def "user-customer-stores-shares GetStoreShares" [
-  storeId: string
+export def "user-customer-stores-shares get" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4698,12 +4698,12 @@ export def "user-customer-stores-shares GetStoreShares" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, share: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, shares: table<links: record, userId: string, userRole: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/customer/stores/($storeId)/shares")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/customer/stores/{store_id}/shares"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4714,8 +4714,8 @@ export def "user-customer-stores-shares GetStoreShares" [
 #
 # POST /v2/user/customer/stores/{storeId}/shares
 # operationId: ShareStore
-export def "user-customer-stores-shares ShareStore" [
-  storeId: string
+export def "user-customer-stores-shares post" [
+  store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4729,7 +4729,7 @@ export def "user-customer-stores-shares ShareStore" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/customer/stores/($storeId)/shares")
+  let full_url = (build-url $base ({store_id: $store_id} | format pattern "/v2/user/customer/stores/{store_id}/shares"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4740,9 +4740,9 @@ export def "user-customer-stores-shares ShareStore" [
 #
 # DELETE /v2/user/customer/stores/{storeId}/shares/{userId}
 # operationId: DeleteStoreShare
-export def "user-customer-stores-shares DeleteStoreShare" [
-  storeId: string
-  userId: string
+export def "user-customer-stores-shares delete" [
+  store_id: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4754,7 +4754,7 @@ export def "user-customer-stores-shares DeleteStoreShare" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/customer/stores/($storeId)/shares/($userId)")
+  let full_url = (build-url $base ({store_id: $store_id, user_id: $user_id} | format pattern "/v2/user/customer/stores/{store_id}/shares/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4764,7 +4764,7 @@ export def "user-customer-stores-shares DeleteStoreShare" [
 #
 # GET /v2/user/customer/zendeskToken
 # operationId: ZendeskToken
-export def "user-customer-zendesk-token ZendeskToken" [
+export def "user-customer-zendesk-token get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4786,7 +4786,7 @@ export def "user-customer-zendesk-token ZendeskToken" [
 #
 # GET /v2/user/legacyTracking/channelCatalogs/
 # operationId: GetLegacyTrackingChannelCatalogs
-export def "user-legacy-tracking-channel-catalogs GetLegacyTrackingChannelCatalogs" [
+export def "user-legacy-tracking-channel-catalogs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4795,11 +4795,11 @@ export def "user-legacy-tracking-channel-catalogs GetLegacyTrackingChannelCatalo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --storeId: string # The store identifier (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
+  --store-id: string # The store identifier (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
 ]: nothing -> record<channelCatalogs: record, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storeId" $storeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/legacyTracking/channelCatalogs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4810,8 +4810,8 @@ export def "user-legacy-tracking-channel-catalogs GetLegacyTrackingChannelCatalo
 #
 # GET /v2/user/legacyTracking/channelCatalogs/{channelCatalogId}
 # operationId: GetLegacyTrackingChannelCatalog
-export def "user-legacy-tracking-channel-catalogs GetLegacyTrackingChannelCatalog" [
-  channelCatalogId: string
+export def "user-legacy-tracking-channel-catalogs get" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4823,7 +4823,7 @@ export def "user-legacy-tracking-channel-catalogs GetLegacyTrackingChannelCatalo
 ]: nothing -> record<links: record<migrate: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/legacyTracking/channelCatalogs/($channelCatalogId)")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/legacyTracking/channelCatalogs/{channel_catalog_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4833,8 +4833,8 @@ export def "user-legacy-tracking-channel-catalogs GetLegacyTrackingChannelCatalo
 #
 # POST /v2/user/legacyTracking/channelCatalogs/{channelCatalogId}/migrate
 # operationId: MigrateLegacyTrackingChannelCatalog
-export def "user-legacy-tracking-channel-catalogs-migrate MigrateLegacyTrackingChannelCatalog" [
-  channelCatalogId: string
+export def "user-legacy-tracking-channel-catalogs-migrate post" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4846,7 +4846,7 @@ export def "user-legacy-tracking-channel-catalogs-migrate MigrateLegacyTrackingC
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/legacyTracking/channelCatalogs/($channelCatalogId)/migrate")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/legacyTracking/channelCatalogs/{channel_catalog_id}/migrate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4856,7 +4856,7 @@ export def "user-legacy-tracking-channel-catalogs-migrate MigrateLegacyTrackingC
 #
 # GET /v2/user/lov/
 # operationId: GetUserLovIndex
-export def "user-lov GetUserLovIndex" [
+export def "user-lov get-user-lov-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4878,8 +4878,8 @@ export def "user-lov GetUserLovIndex" [
 #
 # GET /v2/user/lov/{listName}
 # operationId: GetUserListOfValues
-export def "user-lov GetUserListOfValues" [
-  listName: string
+export def "user-lov get-user-list-of-values" [
+  list_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4888,13 +4888,13 @@ export def "user-lov GetUserListOfValues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: list # Indicates that the client accepts the following languages.
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --accept-language: list # Indicates that the client accepts the following languages.
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<items: table<codeIdentifier: string, intIdentifier: int, position: int, translationText: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/lov/($listName)")
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({list_name: $list_name} | format pattern "/v2/user/lov/{list_name}"))
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4905,7 +4905,7 @@ export def "user-lov GetUserListOfValues" [
 #
 # GET /v2/user/marketplaces/channelcatalogs/
 # operationId: GetMarketplaceChannelCatalogs
-export def "user-marketplaces-channelcatalogs GetMarketplaceChannelCatalogs" [
+export def "user-marketplaces-channelcatalogs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4914,11 +4914,11 @@ export def "user-marketplaces-channelcatalogs GetMarketplaceChannelCatalogs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --storeId: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
+  --store-id: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
 ]: nothing -> record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, marketplaceChannelCatalogs: table<apiSettingsStatus: string, beezUPChannelCatalogId: string, beezUPChannelId: string, beezUPMarketplaceName: any, beezUPStoreId: string, beezUPStoreName: string, enabled: bool, links: record, lovLinks: record, marketplaceAccountId: int, marketplaceBusinessCode: string, marketplaceIsoCountryCodeAlpha2: string, marketplaceMarketPlaceId: string, marketplaceMerchantIdentifiers: record, marketplaceTechnicalCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storeId" $storeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/channelcatalogs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4929,9 +4929,9 @@ export def "user-marketplaces-channelcatalogs GetMarketplaceChannelCatalogs" [
 #
 # GET /v2/user/marketplaces/channelcatalogs/publications/{marketplaceTechnicalCode}/{accountId}/history
 # operationId: GetPublications
-export def "user-marketplaces-channelcatalogs-publications-history GetPublications" [
-  marketplaceTechnicalCode: string
-  accountId: int
+export def "user-marketplaces-channelcatalogs-publications-history get" [
+  marketplace_technical_code: string
+  account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4940,14 +4940,14 @@ export def "user-marketplaces-channelcatalogs-publications-history GetPublicatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channelCatalogId: string # Channel Catalog Id by which to filter (optional) (format: guid)
+  --channel-catalog-id: string # Channel Catalog Id by which to filter (optional) (format: guid)
   --count: int # Amount of entries to fetch (optional, default set to 10) (format: int32, default: 10)
-  --publicationTypes: list # Publication types by which to filter (optional)
+  --publication-types: list # Publication types by which to filter (optional)
 ]: nothing -> record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, publications: table<feeds: list, publicationType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "channelCatalogId" $channelCatalogId "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "publicationTypes" $publicationTypes "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/marketplaces/channelcatalogs/publications/($marketplaceTechnicalCode)/($accountId)/history" $qp)
+  let qp = [(serialize-qp "channelCatalogId" $channel_catalog_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "publicationTypes" $publication_types "csv")] | flatten | str join "&"
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id} | format pattern "/v2/user/marketplaces/channelcatalogs/publications/{marketplace_technical_code}/{account_id}/history") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4957,9 +4957,9 @@ export def "user-marketplaces-channelcatalogs-publications-history GetPublicatio
 #
 # POST /v2/user/marketplaces/channelcatalogs/publications/{marketplaceTechnicalCode}/{accountId}/publish
 # operationId: PublishCatalogToMarketplace
-export def "user-marketplaces-channelcatalogs-publications-publish PublishCatalogToMarketplace" [
-  marketplaceTechnicalCode: string
-  accountId: int
+export def "user-marketplaces-channelcatalogs-publications-publish publish-catalog-to" [
+  marketplace_technical_code: string
+  account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4968,15 +4968,15 @@ export def "user-marketplaces-channelcatalogs-publications-publish PublishCatalo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  feedType: string@feedType-completer # The Feed Type (e.g. Offers)
-  publicationStrategyKind: string@publicationStrategyKind-completer # Define the publication strategy kind, for that you have 2 choices  * Delta - This is the recommanded publication strategy kind, this strategy will push to the marketplace only the difference between your catalog and the previous published feeds done by BeezUP.  * Full - If you want to force the publication of all your catalog feeds to the marketplace.        !WARNING! Depending to the marketplace this operation will purge the existing offers on the marketplace that are not in the catalog or unknown from the publication feed referential.  (default: Delta)
-  --withUnpublish: oneof<nothing, bool> # In full publication strategy kind, for some marktetplace, you can ask to unpublish or not your existing feeds on the markeptlace absent from your exported catalog.
+  feed_type: string@feed-type-completer # The Feed Type (e.g. Offers)
+  publication_strategy_kind: string@publication-strategy-kind-completer # Define the publication strategy kind, for that you have 2 choices  * Delta - This is the recommanded publication strategy kind, this strategy will push to the marketplace only the difference between your catalog and the previous published feeds done by BeezUP.  * Full - If you want to force the publication of all your catalog feeds to the marketplace.        !WARNING! Depending to the marketplace this operation will purge the existing offers on the marketplace that are not in the catalog or unknown from the publication feed referential.  (default: Delta)
+  --with-unpublish: oneof<nothing, bool> # In full publication strategy kind, for some marktetplace, you can ask to unpublish or not your existing feeds on the markeptlace absent from your exported catalog.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/channelcatalogs/publications/($marketplaceTechnicalCode)/($accountId)/publish")
-  let body = {feedType: $feedType, publicationStrategyKind: $publicationStrategyKind, withUnpublish: $withUnpublish} | compact
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id} | format pattern "/v2/user/marketplaces/channelcatalogs/publications/{marketplace_technical_code}/{account_id}/publish"))
+  let body = {"feedType": $feed_type, "publicationStrategyKind": $publication_strategy_kind, "withUnpublish": $with_unpublish} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4987,8 +4987,8 @@ export def "user-marketplaces-channelcatalogs-publications-publish PublishCatalo
 #
 # GET /v2/user/marketplaces/channelcatalogs/{channelCatalogId}/properties
 # operationId: GetChannelCatalogMarketplaceProperties
-export def "user-marketplaces-channelcatalogs-properties GetChannelCatalogMarketplaceProperties" [
-  channelCatalogId: string
+export def "user-marketplaces-channelcatalogs-properties get" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4997,14 +4997,14 @@ export def "user-marketplaces-channelcatalogs-properties GetChannelCatalogMarket
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --redirectionPageUrl: string # format: uri
-  --Accept-Language: list # Indicates that the client accepts the following languages.
+  --redirection-page-url: string # format: uri
+  --accept-language: list # Indicates that the client accepts the following languages.
 ]: nothing -> record<info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<externalConfigurationPage: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, settings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, propertyGroups: table<name: string, position: int, properties: list>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "redirectionPageUrl" $redirectionPageUrl "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/marketplaces/channelcatalogs/($channelCatalogId)/properties" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let qp = [(serialize-qp "redirectionPageUrl" $redirection_page_url "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/properties") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5015,8 +5015,8 @@ export def "user-marketplaces-channelcatalogs-properties GetChannelCatalogMarket
 #
 # GET /v2/user/marketplaces/channelcatalogs/{channelCatalogId}/settings
 # operationId: GetChannelCatalogMarketplaceSettings
-export def "user-marketplaces-channelcatalogs-settings GetChannelCatalogMarketplaceSettings" [
-  channelCatalogId: string
+export def "user-marketplaces-channelcatalogs-settings get" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5028,7 +5028,7 @@ export def "user-marketplaces-channelcatalogs-settings GetChannelCatalogMarketpl
 ]: nothing -> record<links: record<save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, settings: table<discriminatorType: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/channelcatalogs/($channelCatalogId)/settings")
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5039,8 +5039,8 @@ export def "user-marketplaces-channelcatalogs-settings GetChannelCatalogMarketpl
 # POST /v2/user/marketplaces/channelcatalogs/{channelCatalogId}/settings
 # operationId: SetChannelCatalogMarketplaceSettings
 # --settings item shape: {discriminatorType: "channelCatalogMarketplaceStringSetting"|"channelCatalogMarketplaceIntegerSetting"|"channelCatalogMarketplaceBooleanSetting"|"channelCatalogMarketplaceNumberSetting", name: string}
-export def "user-marketplaces-channelcatalogs-settings SetChannelCatalogMarketplaceSettings" [
-  channelCatalogId: string
+export def "user-marketplaces-channelcatalogs-settings post" [
+  channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5054,8 +5054,8 @@ export def "user-marketplaces-channelcatalogs-settings SetChannelCatalogMarketpl
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/channelcatalogs/($channelCatalogId)/settings")
-  let body = {settings: $settings} | compact
+  let full_url = (build-url $base ({channel_catalog_id: $channel_catalog_id} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/settings"))
+  let body = {"settings": $settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5068,7 +5068,7 @@ export def "user-marketplaces-channelcatalogs-settings SetChannelCatalogMarketpl
 # DEPRECATED
 # operationId: GetOrderIndex
 @deprecated
-export def "user-marketplaces-orders GetOrderIndex" [
+export def "user-marketplaces-orders get-order-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5077,12 +5077,12 @@ export def "user-marketplaces-orders GetOrderIndex" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<links: record<autoTransitions: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, exportations: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, lightOrders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, orders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<orderChangeBusinessOperationType: record<href: string, method: string>, orderProperty: record<href: string, method: string>, orderPropertyPosted: record<href: string, method: string>, orderState: record<href: string, method: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5093,7 +5093,7 @@ export def "user-marketplaces-orders GetOrderIndex" [
 #
 # GET /v2/user/marketplaces/orders/automaticTransitions
 # operationId: GetAutomaticTransitions
-export def "user-marketplaces-orders-automatic-transitions GetAutomaticTransitions" [
+export def "user-marketplaces-orders-automatic-transitions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5102,14 +5102,14 @@ export def "user-marketplaces-orders-automatic-transitions GetAutomaticTransitio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --storeId: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --store-id: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<automaticTransitionInfos: table<accountId: int, enabled: bool, marketplaceTechnicalCode: string, orderStatusTransitionId: int, beezUPOrderStatus: string, businessOperationType: string, links: record, marketplaceBusinessCode: string>, links: record<configure: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storeId" $storeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/orders/automaticTransitions" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5121,7 +5121,7 @@ export def "user-marketplaces-orders-automatic-transitions GetAutomaticTransitio
 # POST /v2/user/marketplaces/orders/automaticTransitions
 # operationId: ConfigureAutomaticTransitions
 # --automaticTransitions item shape: {accountId: int, enabled: bool, marketplaceTechnicalCode: string, orderStatusTransitionId: int}
-export def "user-marketplaces-orders-automatic-transitions ConfigureAutomaticTransitions" [
+export def "user-marketplaces-orders-automatic-transitions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5130,13 +5130,13 @@ export def "user-marketplaces-orders-automatic-transitions ConfigureAutomaticTra
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  automaticTransitions: list # item shape: {accountId: int, enabled: bool, marketplaceTechnicalCode: string, orderStatusTransitionId: int}
+  automatic_transitions: list # item shape: {accountId: int, enabled: bool, marketplaceTechnicalCode: string, orderStatusTransitionId: int}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/automaticTransitions")
-  let body = {automaticTransitions: $automaticTransitions} | compact
+  let body = {"automaticTransitions": $automatic_transitions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5150,8 +5150,8 @@ export def "user-marketplaces-orders-automatic-transitions ConfigureAutomaticTra
 # operationId: ChangeOrderList
 # --changeOrders item shape: {changeOrderRequest?: record, order: any}
 @deprecated
-export def "user-marketplaces-orders-batches-change-orders ChangeOrderList" [
-  changeOrderType: string
+export def "user-marketplaces-orders-batches-change-orders list" [
+  change_order_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5160,16 +5160,16 @@ export def "user-marketplaces-orders-batches-change-orders ChangeOrderList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userName: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
-  --testMode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
-  changeOrders: list # The change order operations — item shape: {changeOrderRequest?: record, order: any}
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
+  change_orders: list # The change order operations — item shape: {changeOrderRequest?: record, order: any}
 ]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar") (serialize-qp "testMode" $testMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/batches/changeOrders/($changeOrderType)" $qp)
-  let body = {changeOrders: $changeOrders} | compact
+  let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({change_order_type: $change_order_type} | format pattern "/v2/user/marketplaces/orders/batches/changeOrders/{change_order_type}") $qp)
+  let body = {"changeOrders": $change_orders} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5183,7 +5183,7 @@ export def "user-marketplaces-orders-batches-change-orders ChangeOrderList" [
 # operationId: ClearMerchantOrderInfoList
 # --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string}
 @deprecated
-export def "user-marketplaces-orders-batches-clear-merchant-order-infos ClearMerchantOrderInfoList" [
+export def "user-marketplaces-orders-batches-clear-merchant-order-infos list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5198,7 +5198,7 @@ export def "user-marketplaces-orders-batches-clear-merchant-order-infos ClearMer
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/batches/clearMerchantOrderInfos")
-  let body = {orders: $orders} | compact
+  let body = {"orders": $orders} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5212,7 +5212,7 @@ export def "user-marketplaces-orders-batches-clear-merchant-order-infos ClearMer
 # operationId: SetMerchantOrderInfoList
 # --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string, order_MerchantOrderId: string}
 @deprecated
-export def "user-marketplaces-orders-batches-set-merchant-order-infos SetMerchantOrderInfoList" [
+export def "user-marketplaces-orders-batches-set-merchant-order-infos list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5221,15 +5221,15 @@ export def "user-marketplaces-orders-batches-set-merchant-order-infos SetMerchan
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  order_MerchantECommerceSoftwareName: string # The e-commerce software name of the merchant (e.g. Prestashop)
-  order_MerchantECommerceSoftwareVersion: string # The e-commece software version of the merchant (e.g. 123.0.1)
+  order_merchant_e_commerce_software_name: string # The e-commerce software name of the merchant (e.g. Prestashop)
+  order_merchant_e_commerce_software_version: string # The e-commece software version of the merchant (e.g. 123.0.1)
   orders: list # e.g. [{accountId: 1234, beezUPOrderId: 8D47FF1427A26B064ca98e95f644361ada5a5be0bbb3b53, marketplaceTechnicalCode: Amazon, order_MerchantOrderId: BX1234}, {accountId: 5678, beezUPOrderId: 8D47FF149F213D055f26e3c413e4c9ba5c5cfda460547a4, marketplaceTechnicalCode: Amazon, order_MerchantOrderId: BX5678}, {accountId: 9876, beezUPOrderId: 8D47FF150217B60bdec05ab61c445d1a59e3da050b52823, marketplaceTechnicalCode: Ebay, order_MerchantOrderId: BX9876}] — item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string, order_MerchantOrderId: string}
 ]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/batches/setMerchantOrderInfos")
-  let body = {order_MerchantECommerceSoftwareName: $order_MerchantECommerceSoftwareName, order_MerchantECommerceSoftwareVersion: $order_MerchantECommerceSoftwareVersion, orders: $orders} | compact
+  let body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "orders": $orders} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5240,7 +5240,7 @@ export def "user-marketplaces-orders-batches-set-merchant-order-infos SetMerchan
 #
 # GET /v2/user/marketplaces/orders/exportations
 # operationId: GetOrderExportations
-export def "user-marketplaces-orders-exportations GetOrderExportations" [
+export def "user-marketplaces-orders-exportations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5249,16 +5249,16 @@ export def "user-marketplaces-orders-exportations GetOrderExportations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageNumber: int # The page number you want to get (format: int32, e.g. 1)
-  --pageSize: int # The entry count you want to get (format: int32, e.g. 25)
-  --storeId: string # The store identifier to regroup the order exportations (format: guid)
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --page-number: int # The page number you want to get (format: int32, e.g. 1)
+  --page-size: int # The entry count you want to get (format: int32, e.g. 25)
+  --store-id: string # The store identifier to regroup the order exportations (format: guid)
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<exportations: table<abortionUtcDate: string, beginUtcDate: string, blobNameUri: string, endUtcDate: string, enqueuedUtcDate: string, errorMessage: string, executionUUID: string, expirationUtcDate: string, failureUtcDate: string, ipAddress: string, jsonCriteria: string, lastUpdateUtcDate: string, orderCount: int, processingStatus: string, remainingOrderCount: int, resumedUtcDate: string, sourceType: string, sourceUserId: string, sourceUserName: string, suspendedUtcDate: string, timeoutDuration: string, warningMessage: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "storeId" $storeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/orders/exportations" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5270,7 +5270,7 @@ export def "user-marketplaces-orders-exportations GetOrderExportations" [
 # POST /v2/user/marketplaces/orders/exportations
 # operationId: ExportOrders
 # --orderListRequestWithoutPagination shape: {accountIds?: list, beezUPOrderStatuses?: list, beginPeriodUtcDate: string, dateSearchType?: "Modification"|"Purchase"|"MarketPlaceModification", endPeriodUtcDate: string, invoiceAvailabilityType?: string, marketplaceBusinessCodes?: list, marketplaceOrderIds?: list, marketplaceTechnicalCodes?: list, orderMerchantInfoSynchronizationStatus?: string, order_Buyer_Name?: string, order_MerchantOrderIds?: list, storeIds?: list}
-export def "user-marketplaces-orders-exportations ExportOrders" [
+export def "user-marketplaces-orders-exportations export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5280,14 +5280,14 @@ export def "user-marketplaces-orders-exportations ExportOrders" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string@format-completer-1 # The type of the file to export (default: csv, e.g. csv)
-  orderListRequestWithoutPagination: record # shape: {accountIds?: list, beezUPOrderStatuses?: list, beginPeriodUtcDate: string, dateSearchType?: "Modification"|"Purchase"|"MarketPlaceModification", endPeriodUtcDate: string, invoiceAvailabilityType?: string, marketplaceBusinessCodes?: list, marketplaceOrderIds?: list, marketplaceTechnicalCodes?: list, orderMerchantInfoSynchronizationStatus?: string, order_Buyer_Name?: string, order_MerchantOrderIds?: list, storeIds?: list}
-  storeId: string # The store identifier (format: guid, e.g. 64f43358-63a1-47f7-97ec-0301fc39956b)
+  order_list_request_without_pagination: record # shape: {accountIds?: list, beezUPOrderStatuses?: list, beginPeriodUtcDate: string, dateSearchType?: "Modification"|"Purchase"|"MarketPlaceModification", endPeriodUtcDate: string, invoiceAvailabilityType?: string, marketplaceBusinessCodes?: list, marketplaceOrderIds?: list, marketplaceTechnicalCodes?: list, orderMerchantInfoSynchronizationStatus?: string, order_Buyer_Name?: string, order_MerchantOrderIds?: list, storeIds?: list}
+  store_id: string # The store identifier (format: guid, e.g. 64f43358-63a1-47f7-97ec-0301fc39956b)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/exportations")
-  let body = {format: $format, orderListRequestWithoutPagination: $orderListRequestWithoutPagination, storeId: $storeId} | compact
+  let body = {"format": $format, "orderListRequestWithoutPagination": $order_list_request_without_pagination, "storeId": $store_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5300,7 +5300,7 @@ export def "user-marketplaces-orders-exportations ExportOrders" [
 # DEPRECATED
 # operationId: HarvestAll
 @deprecated
-export def "user-marketplaces-orders-harvest HarvestAll" [
+export def "user-marketplaces-orders-harvest post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5309,11 +5309,11 @@ export def "user-marketplaces-orders-harvest HarvestAll" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --storeId: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
+  --store-id: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storeId" $storeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/orders/harvest" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5324,7 +5324,7 @@ export def "user-marketplaces-orders-harvest HarvestAll" [
 #
 # POST /v2/user/marketplaces/orders/invoices/generate
 # operationId: GenerateBatchOrderInvoice
-export def "user-marketplaces-orders-invoices-generate GenerateBatchOrderInvoice" [
+export def "user-marketplaces-orders-invoices-generate post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5333,13 +5333,13 @@ export def "user-marketplaces-orders-invoices-generate GenerateBatchOrderInvoice
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userName: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
   --body: record
 ]: any -> table<accountId: int, beezUPOrderUUID: string, invoiceLocation: string, invoiceSequenceNumber: int, marketplaceTechnicalCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/generate" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -5351,7 +5351,7 @@ export def "user-marketplaces-orders-invoices-generate GenerateBatchOrderInvoice
 #
 # POST /v2/user/marketplaces/orders/invoices/getPdfInvoice
 # operationId: GetOrderInvoicePdf
-export def "user-marketplaces-orders-invoices-get-pdf-invoice GetOrderInvoicePdf" [
+export def "user-marketplaces-orders-invoices-get-pdf-invoice get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5360,13 +5360,13 @@ export def "user-marketplaces-orders-invoices-get-pdf-invoice GetOrderInvoicePdf
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  orderInvoiceUri: string # order invoice url (e.g. http://www.mydomain.com)
+  order_invoice_uri: string # order invoice url (e.g. http://www.mydomain.com)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/getPdfInvoice")
-  let body = {orderInvoiceUri: $orderInvoiceUri} | compact
+  let body = {"orderInvoiceUri": $order_invoice_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/pdf"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5377,7 +5377,7 @@ export def "user-marketplaces-orders-invoices-get-pdf-invoice GetOrderInvoicePdf
 #
 # GET /v2/user/marketplaces/orders/invoices/settings/design
 # operationId: GetOrderInvoiceDesignSettings
-export def "user-marketplaces-orders-invoices-settings-design GetOrderInvoiceDesignSettings" [
+export def "user-marketplaces-orders-invoices-settings-design get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5399,7 +5399,7 @@ export def "user-marketplaces-orders-invoices-settings-design GetOrderInvoiceDes
 #
 # PUT /v2/user/marketplaces/orders/invoices/settings/design
 # operationId: SaveOrderInvoiceDesignSettings
-export def "user-marketplaces-orders-invoices-settings-design SaveOrderInvoiceDesignSettings" [
+export def "user-marketplaces-orders-invoices-settings-design put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5408,14 +5408,14 @@ export def "user-marketplaces-orders-invoices-settings-design SaveOrderInvoiceDe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --footerContentHtml: string # Footer Content HTML
-  --headerContentHtml: string # Header Content HTML
+  --footer-content-html: string # Footer Content HTML
+  --header-content-html: string # Header Content HTML
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design")
-  let body = {footerContentHtml: $footerContentHtml, headerContentHtml: $headerContentHtml} | compact
+  let body = {"footerContentHtml": $footer_content_html, "headerContentHtml": $header_content_html} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5426,7 +5426,7 @@ export def "user-marketplaces-orders-invoices-settings-design SaveOrderInvoiceDe
 #
 # POST /v2/user/marketplaces/orders/invoices/settings/design/preview
 # operationId: GetOrderInvoiceDesignSettingsPreview
-export def "user-marketplaces-orders-invoices-settings-design-preview GetOrderInvoiceDesignSettingsPreview" [
+export def "user-marketplaces-orders-invoices-settings-design-preview get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5435,17 +5435,17 @@ export def "user-marketplaces-orders-invoices-settings-design-preview GetOrderIn
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
-  --footerContentHtml: string # Footer Content HTML
-  --headerContentHtml: string # Header Content HTML
+  --accept-encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
+  --footer-content-html: string # Footer Content HTML
+  --header-content-html: string # Header Content HTML
 ]: any -> record<invoiceHtmlContent: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design/preview")
-  let body = {footerContentHtml: $footerContentHtml, headerContentHtml: $headerContentHtml} | compact
+  let body = {"footerContentHtml": $footer_content_html, "headerContentHtml": $header_content_html} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5456,7 +5456,7 @@ export def "user-marketplaces-orders-invoices-settings-design-preview GetOrderIn
 #
 # GET /v2/user/marketplaces/orders/invoices/settings/general
 # operationId: GetOrderInvoiceGeneralSettings
-export def "user-marketplaces-orders-invoices-settings-general GetOrderInvoiceGeneralSettings" [
+export def "user-marketplaces-orders-invoices-settings-general get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5478,7 +5478,7 @@ export def "user-marketplaces-orders-invoices-settings-general GetOrderInvoiceGe
 #
 # PUT /v2/user/marketplaces/orders/invoices/settings/general
 # operationId: SaveOrderInvoiceGeneralSettings
-export def "user-marketplaces-orders-invoices-settings-general SaveOrderInvoiceGeneralSettings" [
+export def "user-marketplaces-orders-invoices-settings-general put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5487,17 +5487,17 @@ export def "user-marketplaces-orders-invoices-settings-general SaveOrderInvoiceG
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  cultureName: string # If the error is translated, the culture name will be indicated (e.g. en)
-  invoicePrefix: string # Invoice Prefix. Can contain 1 to 50 characters, with alphanumeric characters in lowercase uppercase and #, _, - (e.g. TOTO)
-  invoiceStartingSequenceNumber: int # Invoice Sequence Number (e.g. 879)
-  productVATPercent: float # Product VAT in percent (e.g. 4.0)
-  shippingVATPercent: float # Shipping cost VAT in percent (e.g. 8.0)
+  culture_name: string # If the error is translated, the culture name will be indicated (e.g. en)
+  invoice_prefix: string # Invoice Prefix. Can contain 1 to 50 characters, with alphanumeric characters in lowercase uppercase and #, _, - (e.g. TOTO)
+  invoice_starting_sequence_number: int # Invoice Sequence Number (e.g. 879)
+  product_vat_percent: float # Product VAT in percent (e.g. 4.0)
+  shipping_vat_percent: float # Shipping cost VAT in percent (e.g. 8.0)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/general")
-  let body = {cultureName: $cultureName, invoicePrefix: $invoicePrefix, invoiceStartingSequenceNumber: $invoiceStartingSequenceNumber, productVATPercent: $productVATPercent, shippingVATPercent: $shippingVATPercent} | compact
+  let body = {"cultureName": $culture_name, "invoicePrefix": $invoice_prefix, "invoiceStartingSequenceNumber": $invoice_starting_sequence_number, "productVATPercent": $product_vat_percent, "shippingVATPercent": $shipping_vat_percent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5508,10 +5508,10 @@ export def "user-marketplaces-orders-invoices-settings-general SaveOrderInvoiceG
 #
 # POST /v2/user/marketplaces/orders/invoices/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderUUID}/generate
 # operationId: GenerateOrderInvoice
-export def "user-marketplaces-orders-invoices-generate GenerateOrderInvoice" [
-  marketplaceTechnicalCode: string
-  accountId: string
-  beezUPOrderUUID: string
+export def "user-marketplaces-orders-invoices-generate post-by-marketplaceTechnicalCode-accountId-beezUPOrderUUID" [
+  marketplace_technical_code: string
+  account_id: string
+  beez_up_order_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5520,15 +5520,15 @@ export def "user-marketplaces-orders-invoices-generate GenerateOrderInvoice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userName: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
-  --invoiceSequenceNumber: int # Invoice Sequence Number (e.g. 879)
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --invoice-sequence-number: int # Invoice Sequence Number (e.g. 879)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/invoices/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderUUID)/generate" $qp)
-  let body = {invoiceSequenceNumber: $invoiceSequenceNumber} | compact
+  let qp = [(serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_uuid: $beez_up_order_uuid} | format pattern "/v2/user/marketplaces/orders/invoices/{marketplace_technical_code}/{account_id}/{beez_up_order_uuid}/generate") $qp)
+  let body = {"invoiceSequenceNumber": $invoice_sequence_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5539,10 +5539,10 @@ export def "user-marketplaces-orders-invoices-generate GenerateOrderInvoice" [
 #
 # POST /v2/user/marketplaces/orders/invoices/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderUUID}/preview
 # operationId: GetOrderInvoicePreview
-export def "user-marketplaces-orders-invoices-preview GetOrderInvoicePreview" [
-  marketplaceTechnicalCode: string
-  accountId: string
-  beezUPOrderUUID: string
+export def "user-marketplaces-orders-invoices-preview get" [
+  marketplace_technical_code: string
+  account_id: string
+  beez_up_order_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5551,16 +5551,16 @@ export def "user-marketplaces-orders-invoices-preview GetOrderInvoicePreview" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
-  --invoiceSequenceNumber: int # Invoice Sequence Number (e.g. 879)
+  --accept-encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
+  --invoice-sequence-number: int # Invoice Sequence Number (e.g. 879)
 ]: any -> record<invoiceHtmlContent: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/invoices/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderUUID)/preview")
-  let body = {invoiceSequenceNumber: $invoiceSequenceNumber} | compact
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_uuid: $beez_up_order_uuid} | format pattern "/v2/user/marketplaces/orders/invoices/{marketplace_technical_code}/{account_id}/{beez_up_order_uuid}/preview"))
+  let body = {"invoiceSequenceNumber": $invoice_sequence_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5573,7 +5573,7 @@ export def "user-marketplaces-orders-invoices-preview GetOrderInvoicePreview" [
 # DEPRECATED
 # operationId: GetOrderListFull
 @deprecated
-export def "user-marketplaces-orders-list-full GetOrderListFull" [
+export def "user-marketplaces-orders-list-full get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5582,30 +5582,30 @@ export def "user-marketplaces-orders-list-full GetOrderListFull" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Encoding: list # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
-  --accountIds: list # Account Id list (e.g. [12345])
-  --beezUPOrderStatuses: list # e.g. [InProgress]
-  beginPeriodUtcDate: string # The begin period you want to make the search. \ The period MUST not be greater than 62 days. The begin period MUST be lower than the end period.  (format: date-time, e.g. 2017-03-01T13:10:01Z)
-  --dateSearchType: string@dateSearchType-completer # Indicates on which date you want to make the filter (default: Modification)
-  endPeriodUtcDate: string # The end period of you search. \ The period MUST not be greater than 62 days. \ The end period MUST be greater than the begin period. The end period MUST be lower to the current date.  (format: date-time, e.g. 2017-04-01T13:10:01Z)
-  --invoiceAvailabilityType: string # Indicates on which invoice availability to filter (e.g. All)
-  --marketplaceBusinessCodes: list # e.g. [PRICEMINISTER]
-  --marketplaceOrderIds: list # e.g. [AmazonOrderId1234]
-  --marketplaceTechnicalCodes: list # e.g. [PriceMinister]
-  --orderMerchantInfoSynchronizationStatus: string # Indicates on which order merchant info synchronization status to filter (e.g. All)
-  --order-Buyer-Name: string # Buyer full name (e.g. Monroe)
-  --order-MerchantOrderIds: list # Merchant order id list (e.g. [MyOrderId1234])
-  --storeIds: list # Store Id list
-  pageNumber: int # Indicates the page number (format: int32, default: 1, e.g. 1)
-  pageSize: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
+  --accept-encoding: list # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
+  --account-ids: list # Account Id list (e.g. [12345])
+  --beez-up-order-statuses: list # e.g. [InProgress]
+  begin_period_utc_date: string # The begin period you want to make the search. \ The period MUST not be greater than 62 days. The begin period MUST be lower than the end period.  (format: date-time, e.g. 2017-03-01T13:10:01Z)
+  --date-search-type: string@date-search-type-completer # Indicates on which date you want to make the filter (default: Modification)
+  end_period_utc_date: string # The end period of you search. \ The period MUST not be greater than 62 days. \ The end period MUST be greater than the begin period. The end period MUST be lower to the current date.  (format: date-time, e.g. 2017-04-01T13:10:01Z)
+  --invoice-availability-type: string # Indicates on which invoice availability to filter (e.g. All)
+  --marketplace-business-codes: list # e.g. [PRICEMINISTER]
+  --marketplace-order-ids: list # e.g. [AmazonOrderId1234]
+  --marketplace-technical-codes: list # e.g. [PriceMinister]
+  --order-merchant-info-synchronization-status: string # Indicates on which order merchant info synchronization status to filter (e.g. All)
+  --order-buyer-name: string # Buyer full name (e.g. Monroe)
+  --order-merchant-order-ids: list # Merchant order id list (e.g. [MyOrderId1234])
+  --store-ids: list # Store Id list
+  page_number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
+  page_size: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
 ]: any -> record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool, orderItems: list, order_Buyer_AddressCity: string, order_Buyer_AddressCountryIsoCodeAlpha2: string, order_Buyer_AddressCountryName: string, order_Buyer_AddressLine1: string, order_Buyer_AddressLine2: string, order_Buyer_AddressLine3: string, order_Buyer_AddressPostalCode: string, order_Buyer_AddressStateOrRegion: string, order_Buyer_Civility: string, order_Buyer_CompanyName: string, order_Buyer_Email: string, order_Buyer_FirstName: string, order_Buyer_Identifier: string, order_Buyer_LastName: string, order_Buyer_MobilePhone: string, order_Buyer_Phone: string, order_Comment: string, order_FulfilledBy: string, order_IsBusiness: bool, order_IsPrime: bool, order_MarketPlaceChannel: string, order_OrderItemsSourceUri: string, order_OrderSourceUri: string, order_PayingUtcDate: string, order_PaymentMethod: string, order_Shipping_AddressCity: string, order_Shipping_AddressCountryIsoCodeAlpha2: string, order_Shipping_AddressCountryName: string, order_Shipping_AddressLine1: string, order_Shipping_AddressLine2: string, order_Shipping_AddressLine3: string, order_Shipping_AddressName: string, order_Shipping_AddressPostalCode: string, order_Shipping_AddressStateOrRegion: string, order_Shipping_Civility: string, order_Shipping_CompanyName: string, order_Shipping_EarliestShipUtcDate: string, order_Shipping_Email: string, order_Shipping_FirstName: string, order_Shipping_LastName: string, order_Shipping_LatestShipUtcDate: string, order_Shipping_Method: string, order_Shipping_MobilePhone: string, order_Shipping_Phone: string, order_Shipping_Price: float, order_Shipping_ShippingTax: float, order_TotalCommission: float, order_TotalTax: float, transitionLinks: list>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/list/full")
-  let body = {accountIds: $accountIds, beezUPOrderStatuses: $beezUPOrderStatuses, beginPeriodUtcDate: $beginPeriodUtcDate, dateSearchType: $dateSearchType, endPeriodUtcDate: $endPeriodUtcDate, invoiceAvailabilityType: $invoiceAvailabilityType, marketplaceBusinessCodes: $marketplaceBusinessCodes, marketplaceOrderIds: $marketplaceOrderIds, marketplaceTechnicalCodes: $marketplaceTechnicalCodes, orderMerchantInfoSynchronizationStatus: $orderMerchantInfoSynchronizationStatus, order_Buyer_Name: $order_Buyer_Name, order_MerchantOrderIds: $order_MerchantOrderIds, storeIds: $storeIds, pageNumber: $pageNumber, pageSize: $pageSize} | compact
+  let body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Encoding": $Accept_Encoding} | compact
+  let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5618,7 +5618,7 @@ export def "user-marketplaces-orders-list-full GetOrderListFull" [
 # DEPRECATED
 # operationId: GetOrderListLight
 @deprecated
-export def "user-marketplaces-orders-list-light GetOrderListLight" [
+export def "user-marketplaces-orders-list-light get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5627,27 +5627,27 @@ export def "user-marketplaces-orders-list-light GetOrderListLight" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountIds: list # Account Id list (e.g. [12345])
-  --beezUPOrderStatuses: list # e.g. [InProgress]
-  beginPeriodUtcDate: string # The begin period you want to make the search. \ The period MUST not be greater than 62 days. The begin period MUST be lower than the end period.  (format: date-time, e.g. 2017-03-01T13:10:01Z)
-  --dateSearchType: string@dateSearchType-completer # Indicates on which date you want to make the filter (default: Modification)
-  endPeriodUtcDate: string # The end period of you search. \ The period MUST not be greater than 62 days. \ The end period MUST be greater than the begin period. The end period MUST be lower to the current date.  (format: date-time, e.g. 2017-04-01T13:10:01Z)
-  --invoiceAvailabilityType: string # Indicates on which invoice availability to filter (e.g. All)
-  --marketplaceBusinessCodes: list # e.g. [PRICEMINISTER]
-  --marketplaceOrderIds: list # e.g. [AmazonOrderId1234]
-  --marketplaceTechnicalCodes: list # e.g. [PriceMinister]
-  --orderMerchantInfoSynchronizationStatus: string # Indicates on which order merchant info synchronization status to filter (e.g. All)
-  --order-Buyer-Name: string # Buyer full name (e.g. Monroe)
-  --order-MerchantOrderIds: list # Merchant order id list (e.g. [MyOrderId1234])
-  --storeIds: list # Store Id list
-  pageNumber: int # Indicates the page number (format: int32, default: 1, e.g. 1)
-  pageSize: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
+  --account-ids: list # Account Id list (e.g. [12345])
+  --beez-up-order-statuses: list # e.g. [InProgress]
+  begin_period_utc_date: string # The begin period you want to make the search. \ The period MUST not be greater than 62 days. The begin period MUST be lower than the end period.  (format: date-time, e.g. 2017-03-01T13:10:01Z)
+  --date-search-type: string@date-search-type-completer # Indicates on which date you want to make the filter (default: Modification)
+  end_period_utc_date: string # The end period of you search. \ The period MUST not be greater than 62 days. \ The end period MUST be greater than the begin period. The end period MUST be lower to the current date.  (format: date-time, e.g. 2017-04-01T13:10:01Z)
+  --invoice-availability-type: string # Indicates on which invoice availability to filter (e.g. All)
+  --marketplace-business-codes: list # e.g. [PRICEMINISTER]
+  --marketplace-order-ids: list # e.g. [AmazonOrderId1234]
+  --marketplace-technical-codes: list # e.g. [PriceMinister]
+  --order-merchant-info-synchronization-status: string # Indicates on which order merchant info synchronization status to filter (e.g. All)
+  --order-buyer-name: string # Buyer full name (e.g. Monroe)
+  --order-merchant-order-ids: list # Merchant order id list (e.g. [MyOrderId1234])
+  --store-ids: list # Store Id list
+  page_number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
+  page_size: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
 ]: any -> record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/list/light")
-  let body = {accountIds: $accountIds, beezUPOrderStatuses: $beezUPOrderStatuses, beginPeriodUtcDate: $beginPeriodUtcDate, dateSearchType: $dateSearchType, endPeriodUtcDate: $endPeriodUtcDate, invoiceAvailabilityType: $invoiceAvailabilityType, marketplaceBusinessCodes: $marketplaceBusinessCodes, marketplaceOrderIds: $marketplaceOrderIds, marketplaceTechnicalCodes: $marketplaceTechnicalCodes, orderMerchantInfoSynchronizationStatus: $orderMerchantInfoSynchronizationStatus, order_Buyer_Name: $order_Buyer_Name, order_MerchantOrderIds: $order_MerchantOrderIds, storeIds: $storeIds, pageNumber: $pageNumber, pageSize: $pageSize} | compact
+  let body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5660,7 +5660,7 @@ export def "user-marketplaces-orders-list-light GetOrderListLight" [
 # DEPRECATED
 # operationId: GetMarketplaceAccountsSynchronization
 @deprecated
-export def "user-marketplaces-orders-status GetMarketplaceAccountsSynchronization" [
+export def "user-marketplaces-orders-status get-marketplace-accounts-synchronization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5669,14 +5669,14 @@ export def "user-marketplaces-orders-status GetMarketplaceAccountsSynchronizatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --storeId: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --store-id: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<accountSynchronizations: table<accountId: int, completedHarvestSynchroUtcDate: string, marketplaceBusinessCode: string, marketplaceTechnicalCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "storeId" $storeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/orders/status" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5687,7 +5687,7 @@ export def "user-marketplaces-orders-status GetMarketplaceAccountsSynchronizatio
 #
 # GET /v2/user/marketplaces/orders/subscriptions/
 # operationId: GetSubscriptionList
-export def "user-marketplaces-orders-subscriptions GetSubscriptionList" [
+export def "user-marketplaces-orders-subscriptions get-subscription-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5709,7 +5709,7 @@ export def "user-marketplaces-orders-subscriptions GetSubscriptionList" [
 #
 # DELETE /v2/user/marketplaces/orders/subscriptions/{id}
 # operationId: DeleteSubscription
-export def "user-marketplaces-orders-subscriptions DeleteSubscription" [
+export def "user-marketplaces-orders-subscriptions delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5722,7 +5722,7 @@ export def "user-marketplaces-orders-subscriptions DeleteSubscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/subscriptions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5732,7 +5732,7 @@ export def "user-marketplaces-orders-subscriptions DeleteSubscription" [
 #
 # GET /v2/user/marketplaces/orders/subscriptions/{id}
 # operationId: GetSubscription
-export def "user-marketplaces-orders-subscriptions GetSubscription" [
+export def "user-marketplaces-orders-subscriptions get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5745,7 +5745,7 @@ export def "user-marketplaces-orders-subscriptions GetSubscription" [
 ]: nothing -> record<consumerHealthStatus: string, consumerLastRequestSentUri: string, consumerUnvailableSinceUtcDate: string, id: string, lastErrorMessage: record<errors: list<record>>, lastOrderPushedModificationUtcDate: string, lastRetryUtcDate: string, lastSuccessfulOrderPushedUtcDate: string, maxRetryCount: int, merchantApplicationName: string, merchantApplicationVersion: string, merchantEmailAlert: string, name: string, nextScheduledRetryUtcDate: string, recoverBeginPeriodOrderLastModificationUtcDate: string, recoverEndPeriodOrderLastModificationUtcDate: string, retryCount: int, status: string, targetUrl: string, links: record<activate: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, deactivate: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, reporting: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, retry: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/subscriptions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5755,7 +5755,7 @@ export def "user-marketplaces-orders-subscriptions GetSubscription" [
 #
 # POST /v2/user/marketplaces/orders/subscriptions/{id}
 # operationId: CreateSubscription
-export def "user-marketplaces-orders-subscriptions CreateSubscription" [
+export def "user-marketplaces-orders-subscriptions create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5765,17 +5765,17 @@ export def "user-marketplaces-orders-subscriptions CreateSubscription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  merchantApplicationName: string # The name of your application (e.g. MyApp)
-  merchantApplicationVersion: string # The version of your application (default: 1.0, e.g. 1.0)
-  --merchantEmailAlert: string # The email (format: email, e.g. paulsimon@mysupercompany.com)
+  merchant_application_name: string # The name of your application (e.g. MyApp)
+  merchant_application_version: string # The version of your application (default: 1.0, e.g. 1.0)
+  --merchant-email-alert: string # The email (format: email, e.g. paulsimon@mysupercompany.com)
   name: string # The subscription name you want to use (e.g. MySubscriptionName)
-  targetUrl: string # The URL <a href="https://en.wikipedia.org/wiki/URL">https://en.wikipedia.org/wiki/URL</a> (e.g. http://www.mydomain.com)
+  target_url: string # The URL <a href="https://en.wikipedia.org/wiki/URL">https://en.wikipedia.org/wiki/URL</a> (e.g. http://www.mydomain.com)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/subscriptions/($id)")
-  let body = {merchantApplicationName: $merchantApplicationName, merchantApplicationVersion: $merchantApplicationVersion, merchantEmailAlert: $merchantEmailAlert, name: $name, targetUrl: $targetUrl} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}"))
+  let body = {"merchantApplicationName": $merchant_application_name, "merchantApplicationVersion": $merchant_application_version, "merchantEmailAlert": $merchant_email_alert, "name": $name, "targetUrl": $target_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5786,7 +5786,7 @@ export def "user-marketplaces-orders-subscriptions CreateSubscription" [
 #
 # POST /v2/user/marketplaces/orders/subscriptions/{id}/activate
 # operationId: ActivateSubscription
-export def "user-marketplaces-orders-subscriptions-activate ActivateSubscription" [
+export def "user-marketplaces-orders-subscriptions-activate post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5796,14 +5796,14 @@ export def "user-marketplaces-orders-subscriptions-activate ActivateSubscription
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --recoverBeginPeriodOrderLastModificationUtcDate: string # If set, the date must be in the past the subscription will recover existing orders using the begin period order last modification date. If not set then you will receive new/updated orders in real-time. (format: date-time)
-  --recoverEndPeriodOrderLastModificationUtcDate: string # If end period set, first the date must be in the past, the subscription will recover existing orders using the begin and the end period order last modification date.  If end period is not set and the begin period is set, then you will recover existing orders from the past using the begin period last modification date and after than you will continue to receive new/updated orders in real-time. If begin/end period are not set then you will receive new/updated orders in real-time. REMARK: The begin period is required if the end period is fulfilled. REMARK: If the end period is order last modification date is indicated then once we have push all orders to your target url the subscription will be desactivated. (format: date-time)
+  --recover-begin-period-order-last-modification-utc-date: string # If set, the date must be in the past the subscription will recover existing orders using the begin period order last modification date. If not set then you will receive new/updated orders in real-time. (format: date-time)
+  --recover-end-period-order-last-modification-utc-date: string # If end period set, first the date must be in the past, the subscription will recover existing orders using the begin and the end period order last modification date.  If end period is not set and the begin period is set, then you will recover existing orders from the past using the begin period last modification date and after than you will continue to receive new/updated orders in real-time. If begin/end period are not set then you will receive new/updated orders in real-time. REMARK: The begin period is required if the end period is fulfilled. REMARK: If the end period is order last modification date is indicated then once we have push all orders to your target url the subscription will be desactivated. (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/subscriptions/($id)/activate")
-  let body = {recoverBeginPeriodOrderLastModificationUtcDate: $recoverBeginPeriodOrderLastModificationUtcDate, recoverEndPeriodOrderLastModificationUtcDate: $recoverEndPeriodOrderLastModificationUtcDate} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/activate"))
+  let body = {"recoverBeginPeriodOrderLastModificationUtcDate": $recover_begin_period_order_last_modification_utc_date, "recoverEndPeriodOrderLastModificationUtcDate": $recover_end_period_order_last_modification_utc_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5814,7 +5814,7 @@ export def "user-marketplaces-orders-subscriptions-activate ActivateSubscription
 #
 # POST /v2/user/marketplaces/orders/subscriptions/{id}/deactivate
 # operationId: DeactivateSubscription
-export def "user-marketplaces-orders-subscriptions-deactivate DeactivateSubscription" [
+export def "user-marketplaces-orders-subscriptions-deactivate post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5827,7 +5827,7 @@ export def "user-marketplaces-orders-subscriptions-deactivate DeactivateSubscrip
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/subscriptions/($id)/deactivate")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/deactivate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5837,7 +5837,7 @@ export def "user-marketplaces-orders-subscriptions-deactivate DeactivateSubscrip
 #
 # GET /v2/user/marketplaces/orders/subscriptions/{id}/reporting
 # operationId: GetSubscriptionPushReporting
-export def "user-marketplaces-orders-subscriptions-reporting GetSubscriptionPushReporting" [
+export def "user-marketplaces-orders-subscriptions-reporting get-subscription-push" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5847,13 +5847,13 @@ export def "user-marketplaces-orders-subscriptions-reporting GetSubscriptionPush
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageNumber: int # format: PageNumber
-  --pageSize: int # format: PageSize
+  --page-number: int # format: PageNumber
+  --page-size: int # format: PageSize
 ]: nothing -> table<duration: string, errorMessage: record<errors: list>, eventId: string, httpStatus: int, lastOrderModificationUtcDate: string, maxRetryCount: int, nextScheduledRetryUtcDate: string, orderCount: int, requestUri: string, responseUri: string, retryCount: int, subscriptionId: string, succeed: bool> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "pageSize" $pageSize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/subscriptions/($id)/reporting" $qp)
+  let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/reporting") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5863,7 +5863,7 @@ export def "user-marketplaces-orders-subscriptions-reporting GetSubscriptionPush
 #
 # POST /v2/user/marketplaces/orders/subscriptions/{id}/retry
 # operationId: RetryPushOrders
-export def "user-marketplaces-orders-subscriptions-retry RetryPushOrders" [
+export def "user-marketplaces-orders-subscriptions-retry post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5876,7 +5876,7 @@ export def "user-marketplaces-orders-subscriptions-retry RetryPushOrders" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/subscriptions/($id)/retry")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/retry"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5888,10 +5888,10 @@ export def "user-marketplaces-orders-subscriptions-retry RetryPushOrders" [
 # DEPRECATED
 # operationId: GetOrder
 @deprecated
-export def "user-marketplaces-orders GetOrder" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "user-marketplaces-orders get" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5900,12 +5900,12 @@ export def "user-marketplaces-orders GetOrder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, clearMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, history: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool, orderItems: table<beezUPOrderItemId: string, orderItem_BeezUPStoreId: string, orderItem_Condition: string, orderItem_ImageUrl: string, orderItem_ItemPrice: float, orderItem_ItemTax: float, orderItem_MarketPlaceProductId: string, orderItem_MarketplaceImageUri: string, orderItem_MarketplaceProductUri: string, orderItem_MerchantImportedProductId: string, orderItem_MerchantImportedProductIdColumnName: string, orderItem_MerchantImportedProductUrl: string, orderItem_MerchantProductId: string, orderItem_MerchantProductIdColumnName: string, orderItem_OrderItemType: string, orderItem_Quantity: float, orderItem_Shipping_Price: float, orderItem_Title: string, orderItem_TotalPrice: float, orderItem_gtin: string>, order_Buyer_AddressCity: string, order_Buyer_AddressCountryIsoCodeAlpha2: string, order_Buyer_AddressCountryName: string, order_Buyer_AddressLine1: string, order_Buyer_AddressLine2: string, order_Buyer_AddressLine3: string, order_Buyer_AddressPostalCode: string, order_Buyer_AddressStateOrRegion: string, order_Buyer_Civility: string, order_Buyer_CompanyName: string, order_Buyer_Email: string, order_Buyer_FirstName: string, order_Buyer_Identifier: string, order_Buyer_LastName: string, order_Buyer_MobilePhone: string, order_Buyer_Phone: string, order_Comment: string, order_FulfilledBy: string, order_IsBusiness: bool, order_IsPrime: bool, order_MarketPlaceChannel: string, order_OrderItemsSourceUri: string, order_OrderSourceUri: string, order_PayingUtcDate: string, order_PaymentMethod: string, order_Shipping_AddressCity: string, order_Shipping_AddressCountryIsoCodeAlpha2: string, order_Shipping_AddressCountryName: string, order_Shipping_AddressLine1: string, order_Shipping_AddressLine2: string, order_Shipping_AddressLine3: string, order_Shipping_AddressName: string, order_Shipping_AddressPostalCode: string, order_Shipping_AddressStateOrRegion: string, order_Shipping_Civility: string, order_Shipping_CompanyName: string, order_Shipping_EarliestShipUtcDate: string, order_Shipping_Email: string, order_Shipping_FirstName: string, order_Shipping_LastName: string, order_Shipping_LatestShipUtcDate: string, order_Shipping_Method: string, order_Shipping_MobilePhone: string, order_Shipping_Phone: string, order_Shipping_Price: float, order_Shipping_ShippingTax: float, order_TotalCommission: float, order_TotalTax: float, transitionLinks: table<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5918,10 +5918,10 @@ export def "user-marketplaces-orders GetOrder" [
 # DEPRECATED
 # operationId: HeadOrder
 @deprecated
-export def "user-marketplaces-orders HeadOrder" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "user-marketplaces-orders head" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5930,12 +5930,12 @@ export def "user-marketplaces-orders HeadOrder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5948,10 +5948,10 @@ export def "user-marketplaces-orders HeadOrder" [
 # DEPRECATED
 # operationId: ClearMerchantOrderInfo
 @deprecated
-export def "user-marketplaces-orders-clear-merchant-order-info ClearMerchantOrderInfo" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "user-marketplaces-orders-clear-merchant-order-info get" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5963,7 +5963,7 @@ export def "user-marketplaces-orders-clear-merchant-order-info ClearMerchantOrde
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/clearMerchantOrderInfo")
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/clearMerchantOrderInfo"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5975,10 +5975,10 @@ export def "user-marketplaces-orders-clear-merchant-order-info ClearMerchantOrde
 # DEPRECATED
 # operationId: HarvestOrder
 @deprecated
-export def "user-marketplaces-orders-harvest HarvestOrder" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "user-marketplaces-orders-harvest post-by-marketplaceTechnicalCode-accountId-beezUPOrderId" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5990,7 +5990,7 @@ export def "user-marketplaces-orders-harvest HarvestOrder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/harvest")
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/harvest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6002,10 +6002,10 @@ export def "user-marketplaces-orders-harvest HarvestOrder" [
 # DEPRECATED
 # operationId: GetOrderHistory
 @deprecated
-export def "user-marketplaces-orders-history GetOrderHistory" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "user-marketplaces-orders-history get" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6014,12 +6014,12 @@ export def "user-marketplaces-orders-history GetOrderHistory" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
 ]: nothing -> record<changeOrderReportings: table<changeOrderType: string, creationUtcDate: string, details: record, errorMessage: string, executionUUID: string, ipAddress: string, lastUpdateUtcDate: string, processingStatus: string, sourceType: string, sourceUserId: string, sourceUserName: string, testMode: bool>, harvestOrderReportings: table<beezUPForcedStatus: string, beezUPStatus: string, creationUtcDate: string, errorMessage: string, executionUUID: string, lastUpdateUtcDate: string, marketplaceStatus: string, processingStatus: string, warningMessage: string>, lastModificationUtcDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/history")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6032,10 +6032,10 @@ export def "user-marketplaces-orders-history GetOrderHistory" [
 # DEPRECATED
 # operationId: SetMerchantOrderInfo
 @deprecated
-export def "user-marketplaces-orders-set-merchant-order-info SetMerchantOrderInfo" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
+export def "user-marketplaces-orders-set-merchant-order-info get" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6044,15 +6044,15 @@ export def "user-marketplaces-orders-set-merchant-order-info SetMerchantOrderInf
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  order_MerchantECommerceSoftwareName: string # The e-commerce software name of the merchant (e.g. Prestashop)
-  order_MerchantECommerceSoftwareVersion: string # The e-commece software version of the merchant (e.g. 123.0.1)
-  order_MerchantOrderId: string # The order merchant identifier (e.g. MyOrderMerchantId)
+  order_merchant_e_commerce_software_name: string # The e-commerce software name of the merchant (e.g. Prestashop)
+  order_merchant_e_commerce_software_version: string # The e-commece software version of the merchant (e.g. 123.0.1)
+  order_merchant_order_id: string # The order merchant identifier (e.g. MyOrderMerchantId)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/setMerchantOrderInfo")
-  let body = {order_MerchantECommerceSoftwareName: $order_MerchantECommerceSoftwareName, order_MerchantECommerceSoftwareVersion: $order_MerchantECommerceSoftwareVersion, order_MerchantOrderId: $order_MerchantOrderId} | compact
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/setMerchantOrderInfo"))
+  let body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "order_MerchantOrderId": $order_merchant_order_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6065,11 +6065,11 @@ export def "user-marketplaces-orders-set-merchant-order-info SetMerchantOrderInf
 # DEPRECATED
 # operationId: ChangeOrder
 @deprecated
-export def "user-marketplaces-orders ChangeOrder" [
-  marketplaceTechnicalCode: string
-  accountId: int
-  beezUPOrderId: string
-  changeOrderType: string
+export def "user-marketplaces-orders post" [
+  marketplace_technical_code: string
+  account_id: int
+  beez_up_order_id: string
+  change_order_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6078,18 +6078,18 @@ export def "user-marketplaces-orders ChangeOrder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userName: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
-  --testMode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
-  --If-Match: string # ETag value to identify the last known version of requested resource.\ To ensure that you are making a change on the lastest version of the resource.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
+  --if-match: string # ETag value to identify the last known version of requested resource.\ To ensure that you are making a change on the lastest version of the resource.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userName" $userName "scalar") (serialize-qp "testMode" $testMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/user/marketplaces/orders/($marketplaceTechnicalCode)/($accountId)/($beezUPOrderId)/($changeOrderType)" $qp)
+  let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({marketplace_technical_code: $marketplace_technical_code, account_id: $account_id, beez_up_order_id: $beez_up_order_id, change_order_type: $change_order_type} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/{change_order_type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

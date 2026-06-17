@@ -149,21 +149,21 @@ export def "admin-mappings post" [
   --id: string # This stub mapping's unique identifier
   --metadata: record # Arbitrary metadata to be used for e.g. tagging, documentation. Can also be used to find and remove stubs.
   --name: string # The stub mapping's name
-  --newScenarioState: string # The new state for the scenario to be updated to after this stub is served.
+  --new-scenario-state: string # The new state for the scenario to be updated to after this stub is served.
   --persistent: oneof<nothing, bool> # Indicates that the stub mapping should be persisted immediately on create/update/delete and survive resets to default.
-  --postServeActions: record # A map of the names of post serve action extensions to trigger and their parameters.
+  --post-serve-actions: record # A map of the names of post serve action extensions to trigger and their parameters.
   --priority: int # This stub mapping's priority relative to others. 1 is highest.
   --request: record # e.g. {bodyPatterns: [{equalToJson: { "numbers": [1, 2, 3] }}], headers: {Content-Type: {equalTo: application/json}}, method: POST, url: /some/thing} — shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
-  --requiredScenarioState: string # The required state of the scenario in order for this stub to be matched.
+  --required-scenario-state: string # The required state of the scenario in order for this stub to be matched.
   --response: any
-  --scenarioName: string # The name of the scenario that this stub mapping is part of
+  --scenario-name: string # The name of the scenario that this stub mapping is part of
   --uuid: string # Alias for the id
 ]: any -> record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/mappings")
-  let body = {id: $id, metadata: $metadata, name: $name, newScenarioState: $newScenarioState, persistent: $persistent, postServeActions: $postServeActions, priority: $priority, request: $request, requiredScenarioState: $requiredScenarioState, response: $response, scenarioName: $scenarioName, uuid: $uuid} | compact
+  let body = {"id": $id, "metadata": $metadata, "name": $name, "newScenarioState": $new_scenario_state, "persistent": $persistent, "postServeActions": $post_serve_actions, "priority": $priority, "request": $request, "requiredScenarioState": $required_scenario_state, "response": $response, "scenarioName": $scenario_name, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -182,25 +182,25 @@ export def "admin-mappings-find-by-metadata post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --caseInsensitive: oneof<nothing, bool>
-  --equalTo: oneof<nothing, bool>
+  --case-insensitive: oneof<nothing, bool>
+  --equal-to: oneof<nothing, bool>
   --contains: string
   --matches: string
-  --doesNotMatch: string
-  --equalToJson: string
-  --ignoreArrayOrder: oneof<nothing, bool>
-  --ignoreExtraElements: oneof<nothing, bool>
-  --matchesJsonPath: string
-  --equalToXml: string
-  --matchesXpath: string
+  --does-not-match: string
+  --equal-to-json: string
+  --ignore-array-order: oneof<nothing, bool>
+  --ignore-extra-elements: oneof<nothing, bool>
+  --matches-json-path: string
+  --equal-to-xml: string
+  --matches-xpath: string
   --namespaces: record
-  --valuePattern: record
+  --value-pattern: record
 ]: any -> record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/mappings/find-by-metadata")
-  let body = {caseInsensitive: $caseInsensitive, equalTo: $equalTo, contains: $contains, matches: $matches, doesNotMatch: $doesNotMatch, equalToJson: $equalToJson, ignoreArrayOrder: $ignoreArrayOrder, ignoreExtraElements: $ignoreExtraElements, matchesJsonPath: $matchesJsonPath, equalToXml: $equalToXml, matchesXpath: $matchesXpath, namespaces: $namespaces, valuePattern: $valuePattern} | compact
+  let body = {"caseInsensitive": $case_insensitive, "equalTo": $equal_to, "contains": $contains, "matches": $matches, "doesNotMatch": $does_not_match, "equalToJson": $equal_to_json, "ignoreArrayOrder": $ignore_array_order, "ignoreExtraElements": $ignore_extra_elements, "matchesJsonPath": $matches_json_path, "equalToXml": $equal_to_xml, "matchesXpath": $matches_xpath, "namespaces": $namespaces, "valuePattern": $value_pattern} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -240,25 +240,25 @@ export def "admin-mappings-remove-by-metadata post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --caseInsensitive: oneof<nothing, bool>
-  --equalTo: oneof<nothing, bool>
+  --case-insensitive: oneof<nothing, bool>
+  --equal-to: oneof<nothing, bool>
   --contains: string
   --matches: string
-  --doesNotMatch: string
-  --equalToJson: string
-  --ignoreArrayOrder: oneof<nothing, bool>
-  --ignoreExtraElements: oneof<nothing, bool>
-  --matchesJsonPath: string
-  --equalToXml: string
-  --matchesXpath: string
+  --does-not-match: string
+  --equal-to-json: string
+  --ignore-array-order: oneof<nothing, bool>
+  --ignore-extra-elements: oneof<nothing, bool>
+  --matches-json-path: string
+  --equal-to-xml: string
+  --matches-xpath: string
   --namespaces: record
-  --valuePattern: record
+  --value-pattern: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/mappings/remove-by-metadata")
-  let body = {caseInsensitive: $caseInsensitive, equalTo: $equalTo, contains: $contains, matches: $matches, doesNotMatch: $doesNotMatch, equalToJson: $equalToJson, ignoreArrayOrder: $ignoreArrayOrder, ignoreExtraElements: $ignoreExtraElements, matchesJsonPath: $matchesJsonPath, equalToXml: $equalToXml, matchesXpath: $matchesXpath, namespaces: $namespaces, valuePattern: $valuePattern} | compact
+  let body = {"caseInsensitive": $case_insensitive, "equalTo": $equal_to, "contains": $contains, "matches": $matches, "doesNotMatch": $does_not_match, "equalToJson": $equal_to_json, "ignoreArrayOrder": $ignore_array_order, "ignoreExtraElements": $ignore_extra_elements, "matchesJsonPath": $matches_json_path, "equalToXml": $equal_to_xml, "matchesXpath": $matches_xpath, "namespaces": $namespaces, "valuePattern": $value_pattern} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -311,7 +311,7 @@ export def "admin-mappings-save post" [
 #
 # DELETE /__admin/mappings/{stubMappingId}
 export def "admin-mappings delete-by-stubMappingId" [
-  stubMappingId: string
+  stub_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "admin-mappings delete-by-stubMappingId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/__admin/mappings/($stubMappingId)")
+  let full_url = (build-url $base ({stub_mapping_id: $stub_mapping_id} | format pattern "/__admin/mappings/{stub_mapping_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -333,7 +333,7 @@ export def "admin-mappings delete-by-stubMappingId" [
 #
 # GET /__admin/mappings/{stubMappingId}
 export def "admin-mappings get" [
-  stubMappingId: string
+  stub_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "admin-mappings get" [
 ]: nothing -> record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/__admin/mappings/($stubMappingId)")
+  let full_url = (build-url $base ({stub_mapping_id: $stub_mapping_id} | format pattern "/__admin/mappings/{stub_mapping_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -356,7 +356,7 @@ export def "admin-mappings get" [
 # PUT /__admin/mappings/{stubMappingId}
 # --request shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
 export def "admin-mappings put" [
-  stubMappingId: string
+  stub_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,21 +368,21 @@ export def "admin-mappings put" [
   --id: string # This stub mapping's unique identifier
   --metadata: record # Arbitrary metadata to be used for e.g. tagging, documentation. Can also be used to find and remove stubs.
   --name: string # The stub mapping's name
-  --newScenarioState: string # The new state for the scenario to be updated to after this stub is served.
+  --new-scenario-state: string # The new state for the scenario to be updated to after this stub is served.
   --persistent: oneof<nothing, bool> # Indicates that the stub mapping should be persisted immediately on create/update/delete and survive resets to default.
-  --postServeActions: record # A map of the names of post serve action extensions to trigger and their parameters.
+  --post-serve-actions: record # A map of the names of post serve action extensions to trigger and their parameters.
   --priority: int # This stub mapping's priority relative to others. 1 is highest.
   --request: record # e.g. {bodyPatterns: [{equalToJson: { "numbers": [1, 2, 3] }}], headers: {Content-Type: {equalTo: application/json}}, method: POST, url: /some/thing} — shape: {basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
-  --requiredScenarioState: string # The required state of the scenario in order for this stub to be matched.
+  --required-scenario-state: string # The required state of the scenario in order for this stub to be matched.
   --response: any
-  --scenarioName: string # The name of the scenario that this stub mapping is part of
+  --scenario-name: string # The name of the scenario that this stub mapping is part of
   --uuid: string # Alias for the id
 ]: any -> record<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record<basicAuthCredentials: record<password: string, username: string>, bodyPatterns: list<record>, cookies: record, headers: record, method: string, queryParameters: record, url: string, urlPath: string, urlPathPattern: string, urlPattern: string>, requiredScenarioState: string, response: record<additionalProxyRequestHeaders: record, base64Body: string, body: string, bodyFileName: string, delayDistribution: any, fault: string, fixedDelayMilliseconds: int, fromConfiguredStub: bool, headers: record, jsonBody: record, proxyBaseUrl: string, status: int, statusMessage: string, transformerParameters: record, transformers: list<string>>, scenarioName: string, uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/__admin/mappings/($stubMappingId)")
-  let body = {id: $id, metadata: $metadata, name: $name, newScenarioState: $newScenarioState, persistent: $persistent, postServeActions: $postServeActions, priority: $priority, request: $request, requiredScenarioState: $requiredScenarioState, response: $response, scenarioName: $scenarioName, uuid: $uuid} | compact
+  let full_url = (build-url $base ({stub_mapping_id: $stub_mapping_id} | format pattern "/__admin/mappings/{stub_mapping_id}"))
+  let body = {"id": $id, "metadata": $metadata, "name": $name, "newScenarioState": $new_scenario_state, "persistent": $persistent, "postServeActions": $post_serve_actions, "priority": $priority, "request": $request, "requiredScenarioState": $required_scenario_state, "response": $response, "scenarioName": $scenario_name, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -401,7 +401,7 @@ export def "admin-near-misses-request post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --absoluteUrl: string # The full URL to match against (e.g. http://localhost:56738/received-request/2)
+  --absolute-url: string # The full URL to match against (e.g. http://localhost:56738/received-request/2)
   --body-body: string # Body string to match against (e.g. Hello world)
   --cookies: record # Cookie patterns to match against in the <key>: { "<predicate>": "<value>" } form (e.g. {})
   --headers: record # Header patterns to match against in the <key>: { "<predicate>": "<value>" } form (e.g. {Connection: keep-alive, Host: localhost:56738, User-Agent: Apache-HttpClient/4.5.1 (Java/1.7.0_51)})
@@ -412,7 +412,7 @@ export def "admin-near-misses-request post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/near-misses/request")
-  let body = {absoluteUrl: $absoluteUrl, body: $body_body, cookies: $cookies, headers: $headers, method: $method, url: $body_url} | compact
+  let body = {"absoluteUrl": $absolute_url, "body": $body_body, "cookies": $cookies, "headers": $headers, "method": $method, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -432,22 +432,22 @@ export def "admin-near-misses-request-pattern post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --basicAuthCredentials: record # Pre-emptive basic auth credentials to match against — shape: {password: string, username: string}
-  --bodyPatterns: list # Request body patterns to match against in the <key>: { "<predicate>": "<value>" } form
+  --basic-auth-credentials: record # Pre-emptive basic auth credentials to match against — shape: {password: string, username: string}
+  --body-patterns: list # Request body patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --cookies: record # Cookie patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --headers: record # Header patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --method: string # The HTTP request method e.g. GET
-  --queryParameters: record # Query parameter patterns to match against in the <key>: { "<predicate>": "<value>" } form
+  --query-parameters: record # Query parameter patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --body-url: string # The path and query to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPath: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPathPattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-path: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-path-pattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-pattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
 ]: any -> record<nearMisses: table<absoluteUrl: string, body: string, cookies: record, headers: record, method: string, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/near-misses/request-pattern")
-  let body = {basicAuthCredentials: $basicAuthCredentials, bodyPatterns: $bodyPatterns, cookies: $cookies, headers: $headers, method: $method, queryParameters: $queryParameters, url: $body_url, urlPath: $urlPath, urlPathPattern: $urlPathPattern, urlPattern: $urlPattern} | compact
+  let body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $body_url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -469,12 +469,12 @@ export def "admin-recordings-snapshot post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --captureHeaders: record # Headers from the request to include in the generated stub mappings, mapped to parameter objects. The only parameter available is "caseInsensitive", which defaults to false (e.g. {Accept: {}, Content-Type: {caseInsensitive: true}})
-  --extractBodyCriteria: record # Criteria for extracting response bodies to a separate file instead of including it in the stub mapping (e.g. [{binarySizeThreshold: 1 Mb, textSizeThreshold: 2 kb}]) — shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
+  --capture-headers: record # Headers from the request to include in the generated stub mappings, mapped to parameter objects. The only parameter available is "caseInsensitive", which defaults to false (e.g. {Accept: {}, Content-Type: {caseInsensitive: true}})
+  --extract-body-criteria: record # Criteria for extracting response bodies to a separate file instead of including it in the stub mapping (e.g. [{binarySizeThreshold: 1 Mb, textSizeThreshold: 2 kb}]) — shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
   --persist: oneof<nothing, bool> # Whether to save stub mappings to the file system or just return them (default: true)
-  --repeatsAsScenarios: oneof<nothing, bool> # When true, duplicate requests will be added to a Scenario. When false, duplicates are discarded (default: true)
-  --requestBodyPattern: record # Control the request body matcher used in generated stub mappings — shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
-  --transformerParameters: record # List of names of stub mappings transformers to apply to generated stubs
+  --repeats-as-scenarios: oneof<nothing, bool> # When true, duplicate requests will be added to a Scenario. When false, duplicates are discarded (default: true)
+  --request-body-pattern: record # Control the request body matcher used in generated stub mappings — shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
+  --transformer-parameters: record # List of names of stub mappings transformers to apply to generated stubs
   --transformers: list # Parameters to pass to stub mapping transformers
   --filters: record # shape: {ids?: list, basicAuthCredentials?: record, bodyPatterns?: list, cookies?: record, headers?: record, method?: string, queryParameters?: record, url?: string, urlPath?: string, urlPathPattern?: string, urlPattern?: string}
 ]: any -> record<mappings: table<id: string, metadata: record, name: string, newScenarioState: string, persistent: bool, postServeActions: record, priority: int, request: record, requiredScenarioState: string, response: record, scenarioName: string, uuid: string>, meta: record<total: int>> {
@@ -482,7 +482,7 @@ export def "admin-recordings-snapshot post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/recordings/snapshot")
-  let body = {captureHeaders: $captureHeaders, extractBodyCriteria: $extractBodyCriteria, persist: $persist, repeatsAsScenarios: $repeatsAsScenarios, requestBodyPattern: $requestBodyPattern, transformerParameters: $transformerParameters, transformers: $transformers, filters: $filters} | compact
+  let body = {"captureHeaders": $capture_headers, "extractBodyCriteria": $extract_body_criteria, "persist": $persist, "repeatsAsScenarios": $repeats_as_scenarios, "requestBodyPattern": $request_body_pattern, "transformerParameters": $transformer_parameters, "transformers": $transformers, "filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,21 +503,21 @@ export def "admin-recordings-start post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --captureHeaders: record # Headers from the request to include in the generated stub mappings, mapped to parameter objects. The only parameter available is "caseInsensitive", which defaults to false (e.g. {Accept: {}, Content-Type: {caseInsensitive: true}})
-  --extractBodyCriteria: record # Criteria for extracting response bodies to a separate file instead of including it in the stub mapping (e.g. [{binarySizeThreshold: 1 Mb, textSizeThreshold: 2 kb}]) — shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
+  --capture-headers: record # Headers from the request to include in the generated stub mappings, mapped to parameter objects. The only parameter available is "caseInsensitive", which defaults to false (e.g. {Accept: {}, Content-Type: {caseInsensitive: true}})
+  --extract-body-criteria: record # Criteria for extracting response bodies to a separate file instead of including it in the stub mapping (e.g. [{binarySizeThreshold: 1 Mb, textSizeThreshold: 2 kb}]) — shape: {binarySizeThreshold?: string, textSizeThreshold?: string}
   --persist: oneof<nothing, bool> # Whether to save stub mappings to the file system or just return them (default: true)
-  --repeatsAsScenarios: oneof<nothing, bool> # When true, duplicate requests will be added to a Scenario. When false, duplicates are discarded (default: true)
-  --requestBodyPattern: record # Control the request body matcher used in generated stub mappings — shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
-  --transformerParameters: record # List of names of stub mappings transformers to apply to generated stubs
+  --repeats-as-scenarios: oneof<nothing, bool> # When true, duplicate requests will be added to a Scenario. When false, duplicates are discarded (default: true)
+  --request-body-pattern: record # Control the request body matcher used in generated stub mappings — shape: {caseInsensitive?: bool, ignoreArrayOrder?: bool, ignoreExtraElements?: bool, matcher?: "auto"}
+  --transformer-parameters: record # List of names of stub mappings transformers to apply to generated stubs
   --transformers: list # Parameters to pass to stub mapping transformers
   --filters: any
-  --targetBaseUrl: string # Target URL when using the record and playback API (e.g. http://example.mocklab.io)
+  --target-base-url: string # Target URL when using the record and playback API (e.g. http://example.mocklab.io)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/recordings/start")
-  let body = {captureHeaders: $captureHeaders, extractBodyCriteria: $extractBodyCriteria, persist: $persist, repeatsAsScenarios: $repeatsAsScenarios, requestBodyPattern: $requestBodyPattern, transformerParameters: $transformerParameters, transformers: $transformers, filters: $filters, targetBaseUrl: $targetBaseUrl} | compact
+  let body = {"captureHeaders": $capture_headers, "extractBodyCriteria": $extract_body_criteria, "persist": $persist, "repeatsAsScenarios": $repeats_as_scenarios, "requestBodyPattern": $request_body_pattern, "transformerParameters": $transformer_parameters, "transformers": $transformers, "filters": $filters, "targetBaseUrl": $target_base_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -624,22 +624,22 @@ export def "admin-requests-count post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --basicAuthCredentials: record # Pre-emptive basic auth credentials to match against — shape: {password: string, username: string}
-  --bodyPatterns: list # Request body patterns to match against in the <key>: { "<predicate>": "<value>" } form
+  --basic-auth-credentials: record # Pre-emptive basic auth credentials to match against — shape: {password: string, username: string}
+  --body-patterns: list # Request body patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --cookies: record # Cookie patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --headers: record # Header patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --method: string # The HTTP request method e.g. GET
-  --queryParameters: record # Query parameter patterns to match against in the <key>: { "<predicate>": "<value>" } form
+  --query-parameters: record # Query parameter patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --body-url: string # The path and query to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPath: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPathPattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-path: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-path-pattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-pattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
 ]: any -> record<count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/count")
-  let body = {basicAuthCredentials: $basicAuthCredentials, bodyPatterns: $bodyPatterns, cookies: $cookies, headers: $headers, method: $method, queryParameters: $queryParameters, url: $body_url, urlPath: $urlPath, urlPathPattern: $urlPathPattern, urlPattern: $urlPattern} | compact
+  let body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $body_url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -659,22 +659,22 @@ export def "admin-requests-find post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --basicAuthCredentials: record # Pre-emptive basic auth credentials to match against — shape: {password: string, username: string}
-  --bodyPatterns: list # Request body patterns to match against in the <key>: { "<predicate>": "<value>" } form
+  --basic-auth-credentials: record # Pre-emptive basic auth credentials to match against — shape: {password: string, username: string}
+  --body-patterns: list # Request body patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --cookies: record # Cookie patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --headers: record # Header patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --method: string # The HTTP request method e.g. GET
-  --queryParameters: record # Query parameter patterns to match against in the <key>: { "<predicate>": "<value>" } form
+  --query-parameters: record # Query parameter patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --body-url: string # The path and query to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPath: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPathPattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-path: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-path-pattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-pattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/find")
-  let body = {basicAuthCredentials: $basicAuthCredentials, bodyPatterns: $bodyPatterns, cookies: $cookies, headers: $headers, method: $method, queryParameters: $queryParameters, url: $body_url, urlPath: $urlPath, urlPathPattern: $urlPathPattern, urlPattern: $urlPattern} | compact
+  let body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $body_url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -694,22 +694,22 @@ export def "admin-requests-remove post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --basicAuthCredentials: record # Pre-emptive basic auth credentials to match against — shape: {password: string, username: string}
-  --bodyPatterns: list # Request body patterns to match against in the <key>: { "<predicate>": "<value>" } form
+  --basic-auth-credentials: record # Pre-emptive basic auth credentials to match against — shape: {password: string, username: string}
+  --body-patterns: list # Request body patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --cookies: record # Cookie patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --headers: record # Header patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --method: string # The HTTP request method e.g. GET
-  --queryParameters: record # Query parameter patterns to match against in the <key>: { "<predicate>": "<value>" } form
+  --query-parameters: record # Query parameter patterns to match against in the <key>: { "<predicate>": "<value>" } form
   --body-url: string # The path and query to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPath: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPathPattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
-  --urlPattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-path: string # The path to match exactly against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-path-pattern: string # The path regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
+  --url-pattern: string # The path and query regex to match against. Only one of url, urlPattern, urlPath or urlPathPattern may be specified.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/remove")
-  let body = {basicAuthCredentials: $basicAuthCredentials, bodyPatterns: $bodyPatterns, cookies: $cookies, headers: $headers, method: $method, queryParameters: $queryParameters, url: $body_url, urlPath: $urlPath, urlPathPattern: $urlPathPattern, urlPattern: $urlPattern} | compact
+  let body = {"basicAuthCredentials": $basic_auth_credentials, "bodyPatterns": $body_patterns, "cookies": $cookies, "headers": $headers, "method": $method, "queryParameters": $query_parameters, "url": $body_url, "urlPath": $url_path, "urlPathPattern": $url_path_pattern, "urlPattern": $url_pattern} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,25 +728,25 @@ export def "admin-requests-remove-by-metadata post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --caseInsensitive: oneof<nothing, bool>
-  --equalTo: oneof<nothing, bool>
+  --case-insensitive: oneof<nothing, bool>
+  --equal-to: oneof<nothing, bool>
   --contains: string
   --matches: string
-  --doesNotMatch: string
-  --equalToJson: string
-  --ignoreArrayOrder: oneof<nothing, bool>
-  --ignoreExtraElements: oneof<nothing, bool>
-  --matchesJsonPath: string
-  --equalToXml: string
-  --matchesXpath: string
+  --does-not-match: string
+  --equal-to-json: string
+  --ignore-array-order: oneof<nothing, bool>
+  --ignore-extra-elements: oneof<nothing, bool>
+  --matches-json-path: string
+  --equal-to-xml: string
+  --matches-xpath: string
   --namespaces: record
-  --valuePattern: record
+  --value-pattern: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/requests/remove-by-metadata")
-  let body = {caseInsensitive: $caseInsensitive, equalTo: $equalTo, contains: $contains, matches: $matches, doesNotMatch: $doesNotMatch, equalToJson: $equalToJson, ignoreArrayOrder: $ignoreArrayOrder, ignoreExtraElements: $ignoreExtraElements, matchesJsonPath: $matchesJsonPath, equalToXml: $equalToXml, matchesXpath: $matchesXpath, namespaces: $namespaces, valuePattern: $valuePattern} | compact
+  let body = {"caseInsensitive": $case_insensitive, "equalTo": $equal_to, "contains": $contains, "matches": $matches, "doesNotMatch": $does_not_match, "equalToJson": $equal_to_json, "ignoreArrayOrder": $ignore_array_order, "ignoreExtraElements": $ignore_extra_elements, "matchesJsonPath": $matches_json_path, "equalToXml": $equal_to_xml, "matchesXpath": $matches_xpath, "namespaces": $namespaces, "valuePattern": $value_pattern} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -822,7 +822,7 @@ export def "admin-requests-unmatched-near-misses get" [
 #
 # DELETE /__admin/requests/{requestId}
 export def "admin-requests delete-by-requestId" [
-  requestId: string
+  request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,7 +834,7 @@ export def "admin-requests delete-by-requestId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/__admin/requests/($requestId)")
+  let full_url = (build-url $base ({request_id: $request_id} | format pattern "/__admin/requests/{request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -844,7 +844,7 @@ export def "admin-requests delete-by-requestId" [
 #
 # GET /__admin/requests/{requestId}
 export def "admin-requests get" [
-  requestId: string
+  request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "admin-requests get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/__admin/requests/($requestId)")
+  let full_url = (build-url $base ({request_id: $request_id} | format pattern "/__admin/requests/{request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -937,13 +937,13 @@ export def "admin-settings post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fixedDelay: float
+  --fixed-delay: float
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__admin/settings")
-  let body = {fixedDelay: $fixedDelay} | compact
+  let body = {"fixedDelay": $fixed_delay} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

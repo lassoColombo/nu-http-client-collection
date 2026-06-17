@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-full-pricing-outbound retrievePricingAllCountries" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-full-pricing-outbound retrieve-pricing-all-countries" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /get-full-pricing/outbound/{type}
 # operationId: retrievePricingAllCountries
-export def "get-full-pricing-outbound retrievePricingAllCountries" [
+export def "get-full-pricing-outbound retrieve-pricing-all-countries" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -108,7 +108,7 @@ export def "get-full-pricing-outbound retrievePricingAllCountries" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/get-full-pricing/outbound/($type)" $qp)
+  let full_url = (build-url $base ({type: $type} | format pattern "/get-full-pricing/outbound/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +118,7 @@ export def "get-full-pricing-outbound retrievePricingAllCountries" [
 #
 # GET /get-prefix-pricing/outbound/{type}
 # operationId: retrievePrefixPricing
-export def "get-prefix-pricing-outbound retrievePrefixPricing" [
+export def "get-prefix-pricing-outbound retrieve" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -135,7 +135,7 @@ export def "get-prefix-pricing-outbound retrievePrefixPricing" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar") (serialize-qp "prefix" $prefix "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/get-prefix-pricing/outbound/($type)" $qp)
+  let full_url = (build-url $base ({type: $type} | format pattern "/get-prefix-pricing/outbound/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,7 +145,7 @@ export def "get-prefix-pricing-outbound retrievePrefixPricing" [
 #
 # GET /get-pricing/outbound/{type}
 # operationId: retrievePricingCountry
-export def "get-pricing-outbound retrievePricingCountry" [
+export def "get-pricing-outbound retrieve-pricing-country" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +162,7 @@ export def "get-pricing-outbound retrievePricingCountry" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "api_secret" $api_secret "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/get-pricing/outbound/($type)" $qp)
+  let full_url = (build-url $base ({type: $type} | format pattern "/get-pricing/outbound/{type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

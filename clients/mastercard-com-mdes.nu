@@ -101,13 +101,13 @@ export def "accountholdermessaging post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AccountHolderMessagingRequest: any # shape: {AuditInfo: any, IssuerApplicationMessageDisplay: string, MessageExpiration: string, MessageIdentifier: string, MessageLanguageCode: string, MessageText: string, TokenUniqueReference: string}
+  --account-holder-messaging-request: any # shape: {AuditInfo: any, IssuerApplicationMessageDisplay: string, MessageExpiration: string, MessageIdentifier: string, MessageLanguageCode: string, MessageText: string, TokenUniqueReference: string}
 ]: any -> record<AccountHolderMessagingResponse: record<Token: record<TokenUniqueReference: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accountholdermessaging")
-  let body = {AccountHolderMessagingRequest: $AccountHolderMessagingRequest} | compact
+  let body = {"AccountHolderMessagingRequest": $account_holder_messaging_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,13 +127,13 @@ export def "search post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --SearchRequest: any # shape: {AccountPan?: string, AlternateAccountIdentifier?: string, AuditInfo: any, CommentId?: string, ExcludeDeletedIndicator?: "true"|"false", PaymentAppInstanceId?: string, Token?: string, TokenUniqueReference?: string}
+  --search-request: any # shape: {AccountPan?: string, AlternateAccountIdentifier?: string, AuditInfo: any, CommentId?: string, ExcludeDeletedIndicator?: "true"|"false", PaymentAppInstanceId?: string, Token?: string, TokenUniqueReference?: string}
 ]: any -> record<SearchResponse: record<Accounts: record<Account: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/search")
-  let body = {SearchRequest: $SearchRequest} | compact
+  let body = {"SearchRequest": $search_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,13 +174,13 @@ export def "token-activate post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TokenActivateRequest: any # shape: {AccountPan?: string, AuditInfo: any, CommentText?: string, PaymentAppInstanceId?: string, ReasonCode: string, TokenUniqueReference?: string}
+  --token-activate-request: any # shape: {AccountPan?: string, AuditInfo: any, CommentText?: string, PaymentAppInstanceId?: string, ReasonCode: string, TokenUniqueReference?: string}
 ]: any -> record<TokenActivateResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token/activate")
-  let body = {TokenActivateRequest: $TokenActivateRequest} | compact
+  let body = {"TokenActivateRequest": $token_activate_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,13 +200,13 @@ export def "token-activationmethods post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TokenActivationMethodsRequest: any # shape: {AuditInfo?: any, TokenUniqueReference: string}
+  --token-activation-methods-request: any # shape: {AuditInfo?: any, TokenUniqueReference: string}
 ]: any -> record<TokenActivationMethodsResponse: record<ActivationMethods: record<ActivationMethod: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token/activationmethods")
-  let body = {TokenActivationMethodsRequest: $TokenActivationMethodsRequest} | compact
+  let body = {"TokenActivationMethodsRequest": $token_activation_methods_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -226,13 +226,13 @@ export def "token-comments post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TokenCommentsRequest: any # shape: {AuditInfo?: any, TokenUniqueReference: string}
+  --token-comments-request: any # shape: {AuditInfo?: any, TokenUniqueReference: string}
 ]: any -> record<TokenCommentsResponse: record<Comments: record<Comment: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token/comments")
-  let body = {TokenCommentsRequest: $TokenCommentsRequest} | compact
+  let body = {"TokenCommentsRequest": $token_comments_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -252,13 +252,13 @@ export def "token-delete post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TokenDeleteRequest: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
+  --token-delete-request: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
 ]: any -> record<TokenDeleteResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token/delete")
-  let body = {TokenDeleteRequest: $TokenDeleteRequest} | compact
+  let body = {"TokenDeleteRequest": $token_delete_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -278,13 +278,13 @@ export def "token-resendactivationcode post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TokenResendActivationCodeRequest: any # shape: {ActivationMethodId: string, AuditInfo: any, TokenUniqueReference: string}
+  --token-resend-activation-code-request: any # shape: {ActivationMethodId: string, AuditInfo: any, TokenUniqueReference: string}
 ]: any -> record<TokenResendActivationCodeResponse: record<Token: record<TokenUniqueReference: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token/resendactivationcode")
-  let body = {TokenResendActivationCodeRequest: $TokenResendActivationCodeRequest} | compact
+  let body = {"TokenResendActivationCodeRequest": $token_resend_activation_code_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -304,13 +304,13 @@ export def "token-resetmobilepin post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TokenResetMobilePinRequest: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
+  --token-reset-mobile-pin-request: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
 ]: any -> record<TokenResetMobilePinResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token/resetmobilepin")
-  let body = {TokenResetMobilePinRequest: $TokenResetMobilePinRequest} | compact
+  let body = {"TokenResetMobilePinRequest": $token_reset_mobile_pin_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -330,13 +330,13 @@ export def "token-statushistory post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TokenStatusHistoryRequest: any # shape: {AuditInfo?: any, TokenUniqueReference: string}
+  --token-status-history-request: any # shape: {AuditInfo?: any, TokenUniqueReference: string}
 ]: any -> record<TokenStatusHistoryResponse: record<Statuses: record<Status: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token/statushistory")
-  let body = {TokenStatusHistoryRequest: $TokenStatusHistoryRequest} | compact
+  let body = {"TokenStatusHistoryRequest": $token_status_history_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -356,13 +356,13 @@ export def "token-suspend post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TokenSuspendRequest: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
+  --token-suspend-request: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
 ]: any -> record<TokenSuspendResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token/suspend")
-  let body = {TokenSuspendRequest: $TokenSuspendRequest} | compact
+  let body = {"TokenSuspendRequest": $token_suspend_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -382,13 +382,13 @@ export def "token-unsuspend post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TokenUnsuspendRequest: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
+  --token-unsuspend-request: any # shape: {AuditInfo: any, CommentText?: string, ReasonCode: string, TokenUniqueReference: string}
 ]: any -> record<TokenUnsuspendResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token/unsuspend")
-  let body = {TokenUnsuspendRequest: $TokenUnsuspendRequest} | compact
+  let body = {"TokenUnsuspendRequest": $token_unsuspend_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -408,13 +408,13 @@ export def "token-update post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TokenUpdateRequest: any # shape: {AccountPanSequenceNumber?: string, AuditInfo: any, CommentText?: string, CurrentAccountPan?: string, ExpirationDate?: string, IssuerProductConfigurationId?: string, NewAccountPan?: string, TokenUniqueReference?: string, UpdateWalletProviderIndicator?: string}
+  --token-update-request: any # shape: {AccountPanSequenceNumber?: string, AuditInfo: any, CommentText?: string, CurrentAccountPan?: string, ExpirationDate?: string, IssuerProductConfigurationId?: string, NewAccountPan?: string, TokenUniqueReference?: string, UpdateWalletProviderIndicator?: string}
 ]: any -> record<TokenUpdateResponse: record<Tokens: record<Token: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/token/update")
-  let body = {TokenUpdateRequest: $TokenUpdateRequest} | compact
+  let body = {"TokenUpdateRequest": $token_update_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -434,13 +434,13 @@ export def "transactions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --TransactionsRequest: any # shape: {AuditInfo: any, TokenUniqueReference: string}
+  --transactions-request: any # shape: {AuditInfo: any, TokenUniqueReference: string}
 ]: any -> record<TransactionsResponse: record<Transactions: record<Transaction: list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions")
-  let body = {TransactionsRequest: $TransactionsRequest} | compact
+  let body = {"TransactionsRequest": $transactions_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -460,13 +460,13 @@ export def "updatetokenassurance post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --UpdateTokenAssuranceRequest: any # shape: {AuditInfo: any, CommentText?: string, TokenUniqueReference: string}
+  --update-token-assurance-request: any # shape: {AuditInfo: any, CommentText?: string, TokenUniqueReference: string}
 ]: any -> record<UpdateTokenAssuranceResponse: record<Token: record<CommentId: string, TokenUniqueReference: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/updatetokenassurance")
-  let body = {UpdateTokenAssuranceRequest: $UpdateTokenAssuranceRequest} | compact
+  let body = {"UpdateTokenAssuranceRequest": $update_token_assurance_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

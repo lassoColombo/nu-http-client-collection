@@ -66,24 +66,24 @@ def base-url-completer [] { ["http://application-autoscaling.us-east-1.amazonaws
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AnyScaleFrontendService.DeleteScalingPolicy"] }
-def X-Amz-Target-completer-1 [] { ["AnyScaleFrontendService.DeleteScheduledAction"] }
-def X-Amz-Target-completer-2 [] { ["AnyScaleFrontendService.DeregisterScalableTarget"] }
-def X-Amz-Target-completer-3 [] { ["AnyScaleFrontendService.DescribeScalableTargets"] }
-def X-Amz-Target-completer-4 [] { ["AnyScaleFrontendService.DescribeScalingActivities"] }
-def X-Amz-Target-completer-5 [] { ["AnyScaleFrontendService.DescribeScalingPolicies"] }
-def X-Amz-Target-completer-6 [] { ["AnyScaleFrontendService.DescribeScheduledActions"] }
-def X-Amz-Target-completer-7 [] { ["AnyScaleFrontendService.ListTagsForResource"] }
-def X-Amz-Target-completer-8 [] { ["AnyScaleFrontendService.PutScalingPolicy"] }
-def X-Amz-Target-completer-9 [] { ["AnyScaleFrontendService.PutScheduledAction"] }
-def X-Amz-Target-completer-10 [] { ["AnyScaleFrontendService.RegisterScalableTarget"] }
-def X-Amz-Target-completer-11 [] { ["AnyScaleFrontendService.TagResource"] }
-def X-Amz-Target-completer-12 [] { ["AnyScaleFrontendService.UntagResource"] }
+def x-amz-target-completer [] { ["AnyScaleFrontendService.DeleteScalingPolicy"] }
+def x-amz-target-completer-1 [] { ["AnyScaleFrontendService.DeleteScheduledAction"] }
+def x-amz-target-completer-2 [] { ["AnyScaleFrontendService.DeregisterScalableTarget"] }
+def x-amz-target-completer-3 [] { ["AnyScaleFrontendService.DescribeScalableTargets"] }
+def x-amz-target-completer-4 [] { ["AnyScaleFrontendService.DescribeScalingActivities"] }
+def x-amz-target-completer-5 [] { ["AnyScaleFrontendService.DescribeScalingPolicies"] }
+def x-amz-target-completer-6 [] { ["AnyScaleFrontendService.DescribeScheduledActions"] }
+def x-amz-target-completer-7 [] { ["AnyScaleFrontendService.ListTagsForResource"] }
+def x-amz-target-completer-8 [] { ["AnyScaleFrontendService.PutScalingPolicy"] }
+def x-amz-target-completer-9 [] { ["AnyScaleFrontendService.PutScheduledAction"] }
+def x-amz-target-completer-10 [] { ["AnyScaleFrontendService.RegisterScalableTarget"] }
+def x-amz-target-completer-11 [] { ["AnyScaleFrontendService.TagResource"] }
+def x-amz-target-completer-12 [] { ["AnyScaleFrontendService.UntagResource"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-any-scale-frontend-service-delete-scaling-policy DeleteScalingPolicy" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-any-scale-frontend-service-delete-scaling-policy delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,7 +107,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.DeleteScalingPolicy
 # operationId: DeleteScalingPolicy
-export def "x-amz-target-any-scale-frontend-service-delete-scaling-policy DeleteScalingPolicy" [
+export def "x-amz-target-any-scale-frontend-service-delete-scaling-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -116,26 +116,26 @@ export def "x-amz-target-any-scale-frontend-service-delete-scaling-policy Delete
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  PolicyName: any
-  ServiceNamespace: any
-  ResourceId: any
-  ScalableDimension: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  policy_name: any
+  service_namespace: any
+  resource_id: any
+  scalable_dimension: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.DeleteScalingPolicy")
-  let body = {PolicyName: $PolicyName, ServiceNamespace: $ServiceNamespace, ResourceId: $ResourceId, ScalableDimension: $ScalableDimension} | compact
+  let body = {"PolicyName": $policy_name, "ServiceNamespace": $service_namespace, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +146,7 @@ export def "x-amz-target-any-scale-frontend-service-delete-scaling-policy Delete
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.DeleteScheduledAction
 # operationId: DeleteScheduledAction
-export def "x-amz-target-any-scale-frontend-service-delete-scheduled-action DeleteScheduledAction" [
+export def "x-amz-target-any-scale-frontend-service-delete-scheduled-action delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,26 +155,26 @@ export def "x-amz-target-any-scale-frontend-service-delete-scheduled-action Dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ServiceNamespace: any
-  ScheduledActionName: any
-  ResourceId: any
-  ScalableDimension: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  service_namespace: any
+  scheduled_action_name: any
+  resource_id: any
+  scalable_dimension: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.DeleteScheduledAction")
-  let body = {ServiceNamespace: $ServiceNamespace, ScheduledActionName: $ScheduledActionName, ResourceId: $ResourceId, ScalableDimension: $ScalableDimension} | compact
+  let body = {"ServiceNamespace": $service_namespace, "ScheduledActionName": $scheduled_action_name, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -185,7 +185,7 @@ export def "x-amz-target-any-scale-frontend-service-delete-scheduled-action Dele
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.DeregisterScalableTarget
 # operationId: DeregisterScalableTarget
-export def "x-amz-target-any-scale-frontend-service-deregister-scalable-target DeregisterScalableTarget" [
+export def "x-amz-target-any-scale-frontend-service-deregister-scalable-target post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,25 +194,25 @@ export def "x-amz-target-any-scale-frontend-service-deregister-scalable-target D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ServiceNamespace: any
-  ResourceId: any
-  ScalableDimension: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  service_namespace: any
+  resource_id: any
+  scalable_dimension: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.DeregisterScalableTarget")
-  let body = {ServiceNamespace: $ServiceNamespace, ResourceId: $ResourceId, ScalableDimension: $ScalableDimension} | compact
+  let body = {"ServiceNamespace": $service_namespace, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -223,7 +223,7 @@ export def "x-amz-target-any-scale-frontend-service-deregister-scalable-target D
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.DescribeScalableTargets
 # operationId: DescribeScalableTargets
-export def "x-amz-target-any-scale-frontend-service-describe-scalable-targets DescribeScalableTargets" [
+export def "x-amz-target-any-scale-frontend-service-describe-scalable-targets post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,30 +232,30 @@ export def "x-amz-target-any-scale-frontend-service-describe-scalable-targets De
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ServiceNamespace: any
-  --ResourceIds: any
-  --ScalableDimension: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  service_namespace: any
+  --resource-ids: any
+  --scalable-dimension: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ScalableTargets: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.DescribeScalableTargets" $qp)
-  let body = {ServiceNamespace: $ServiceNamespace, ResourceIds: $ResourceIds, ScalableDimension: $ScalableDimension, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ServiceNamespace": $service_namespace, "ResourceIds": $resource_ids, "ScalableDimension": $scalable_dimension, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,7 +266,7 @@ export def "x-amz-target-any-scale-frontend-service-describe-scalable-targets De
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.DescribeScalingActivities
 # operationId: DescribeScalingActivities
-export def "x-amz-target-any-scale-frontend-service-describe-scaling-activities DescribeScalingActivities" [
+export def "x-amz-target-any-scale-frontend-service-describe-scaling-activities post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,31 +275,31 @@ export def "x-amz-target-any-scale-frontend-service-describe-scaling-activities 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ServiceNamespace: any
-  --ResourceId: any
-  --ScalableDimension: any
-  --MaxResults: any
-  --NextToken: any
-  --IncludeNotScaledActivities: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  service_namespace: any
+  --resource-id: any
+  --scalable-dimension: any
+  --max-results: any
+  --next-token: any
+  --include-not-scaled-activities: any
 ]: any -> record<ScalingActivities: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.DescribeScalingActivities" $qp)
-  let body = {ServiceNamespace: $ServiceNamespace, ResourceId: $ResourceId, ScalableDimension: $ScalableDimension, MaxResults: $MaxResults, NextToken: $NextToken, IncludeNotScaledActivities: $IncludeNotScaledActivities} | compact
+  let body = {"ServiceNamespace": $service_namespace, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension, "MaxResults": $max_results, "NextToken": $next_token, "IncludeNotScaledActivities": $include_not_scaled_activities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -310,7 +310,7 @@ export def "x-amz-target-any-scale-frontend-service-describe-scaling-activities 
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.DescribeScalingPolicies
 # operationId: DescribeScalingPolicies
-export def "x-amz-target-any-scale-frontend-service-describe-scaling-policies DescribeScalingPolicies" [
+export def "x-amz-target-any-scale-frontend-service-describe-scaling-policies post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,31 +319,31 @@ export def "x-amz-target-any-scale-frontend-service-describe-scaling-policies De
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  --PolicyNames: any
-  ServiceNamespace: any
-  --ResourceId: any
-  --ScalableDimension: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  --policy-names: any
+  service_namespace: any
+  --resource-id: any
+  --scalable-dimension: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ScalingPolicies: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.DescribeScalingPolicies" $qp)
-  let body = {PolicyNames: $PolicyNames, ServiceNamespace: $ServiceNamespace, ResourceId: $ResourceId, ScalableDimension: $ScalableDimension, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"PolicyNames": $policy_names, "ServiceNamespace": $service_namespace, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -354,7 +354,7 @@ export def "x-amz-target-any-scale-frontend-service-describe-scaling-policies De
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.DescribeScheduledActions
 # operationId: DescribeScheduledActions
-export def "x-amz-target-any-scale-frontend-service-describe-scheduled-actions DescribeScheduledActions" [
+export def "x-amz-target-any-scale-frontend-service-describe-scheduled-actions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,31 +363,31 @@ export def "x-amz-target-any-scale-frontend-service-describe-scheduled-actions D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --ScheduledActionNames: any
-  ServiceNamespace: any
-  --ResourceId: any
-  --ScalableDimension: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --scheduled-action-names: any
+  service_namespace: any
+  --resource-id: any
+  --scalable-dimension: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ScheduledActions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.DescribeScheduledActions" $qp)
-  let body = {ScheduledActionNames: $ScheduledActionNames, ServiceNamespace: $ServiceNamespace, ResourceId: $ResourceId, ScalableDimension: $ScalableDimension, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ScheduledActionNames": $scheduled_action_names, "ServiceNamespace": $service_namespace, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -398,7 +398,7 @@ export def "x-amz-target-any-scale-frontend-service-describe-scheduled-actions D
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-any-scale-frontend-service-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-any-scale-frontend-service-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,23 +407,23 @@ export def "x-amz-target-any-scale-frontend-service-list-tags-for-resource ListT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ResourceARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.ListTagsForResource")
-  let body = {ResourceARN: $ResourceARN} | compact
+  let body = {"ResourceARN": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -434,7 +434,7 @@ export def "x-amz-target-any-scale-frontend-service-list-tags-for-resource ListT
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.PutScalingPolicy
 # operationId: PutScalingPolicy
-export def "x-amz-target-any-scale-frontend-service-put-scaling-policy PutScalingPolicy" [
+export def "x-amz-target-any-scale-frontend-service-put-scaling-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,29 +443,29 @@ export def "x-amz-target-any-scale-frontend-service-put-scaling-policy PutScalin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  PolicyName: any
-  ServiceNamespace: any
-  ResourceId: any
-  ScalableDimension: any
-  --PolicyType: any
-  --StepScalingPolicyConfiguration: any
-  --TargetTrackingScalingPolicyConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  policy_name: any
+  service_namespace: any
+  resource_id: any
+  scalable_dimension: any
+  --policy-type: any
+  --step-scaling-policy-configuration: any
+  --target-tracking-scaling-policy-configuration: any
 ]: any -> record<PolicyARN: record, Alarms: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.PutScalingPolicy")
-  let body = {PolicyName: $PolicyName, ServiceNamespace: $ServiceNamespace, ResourceId: $ResourceId, ScalableDimension: $ScalableDimension, PolicyType: $PolicyType, StepScalingPolicyConfiguration: $StepScalingPolicyConfiguration, TargetTrackingScalingPolicyConfiguration: $TargetTrackingScalingPolicyConfiguration} | compact
+  let body = {"PolicyName": $policy_name, "ServiceNamespace": $service_namespace, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension, "PolicyType": $policy_type, "StepScalingPolicyConfiguration": $step_scaling_policy_configuration, "TargetTrackingScalingPolicyConfiguration": $target_tracking_scaling_policy_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -476,7 +476,7 @@ export def "x-amz-target-any-scale-frontend-service-put-scaling-policy PutScalin
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.PutScheduledAction
 # operationId: PutScheduledAction
-export def "x-amz-target-any-scale-frontend-service-put-scheduled-action PutScheduledAction" [
+export def "x-amz-target-any-scale-frontend-service-put-scheduled-action update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,31 +485,31 @@ export def "x-amz-target-any-scale-frontend-service-put-scheduled-action PutSche
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  ServiceNamespace: any
-  --Schedule: any
-  --Timezone: any
-  ScheduledActionName: any
-  ResourceId: any
-  ScalableDimension: any
-  --StartTime: any
-  --EndTime: any
-  --ScalableTargetAction: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  service_namespace: any
+  --schedule: any
+  --timezone: any
+  scheduled_action_name: any
+  resource_id: any
+  scalable_dimension: any
+  --start-time: any
+  --end-time: any
+  --scalable-target-action: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.PutScheduledAction")
-  let body = {ServiceNamespace: $ServiceNamespace, Schedule: $Schedule, Timezone: $Timezone, ScheduledActionName: $ScheduledActionName, ResourceId: $ResourceId, ScalableDimension: $ScalableDimension, StartTime: $StartTime, EndTime: $EndTime, ScalableTargetAction: $ScalableTargetAction} | compact
+  let body = {"ServiceNamespace": $service_namespace, "Schedule": $schedule, "Timezone": $timezone, "ScheduledActionName": $scheduled_action_name, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension, "StartTime": $start_time, "EndTime": $end_time, "ScalableTargetAction": $scalable_target_action} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -520,7 +520,7 @@ export def "x-amz-target-any-scale-frontend-service-put-scheduled-action PutSche
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.RegisterScalableTarget
 # operationId: RegisterScalableTarget
-export def "x-amz-target-any-scale-frontend-service-register-scalable-target RegisterScalableTarget" [
+export def "x-amz-target-any-scale-frontend-service-register-scalable-target create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -529,30 +529,30 @@ export def "x-amz-target-any-scale-frontend-service-register-scalable-target Reg
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  ServiceNamespace: any
-  ResourceId: any
-  ScalableDimension: any
-  --MinCapacity: any
-  --MaxCapacity: any
-  --RoleARN: any
-  --SuspendedState: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  service_namespace: any
+  resource_id: any
+  scalable_dimension: any
+  --min-capacity: any
+  --max-capacity: any
+  --role-arn: any
+  --suspended-state: any
+  --tags: any
 ]: any -> record<ScalableTargetARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.RegisterScalableTarget")
-  let body = {ServiceNamespace: $ServiceNamespace, ResourceId: $ResourceId, ScalableDimension: $ScalableDimension, MinCapacity: $MinCapacity, MaxCapacity: $MaxCapacity, RoleARN: $RoleARN, SuspendedState: $SuspendedState, Tags: $Tags} | compact
+  let body = {"ServiceNamespace": $service_namespace, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension, "MinCapacity": $min_capacity, "MaxCapacity": $max_capacity, "RoleARN": $role_arn, "SuspendedState": $suspended_state, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -563,7 +563,7 @@ export def "x-amz-target-any-scale-frontend-service-register-scalable-target Reg
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.TagResource
 # operationId: TagResource
-export def "x-amz-target-any-scale-frontend-service-tag-resource TagResource" [
+export def "x-amz-target-any-scale-frontend-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,24 +572,24 @@ export def "x-amz-target-any-scale-frontend-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  ResourceARN: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.TagResource")
-  let body = {ResourceARN: $ResourceARN, Tags: $Tags} | compact
+  let body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -600,7 +600,7 @@ export def "x-amz-target-any-scale-frontend-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=AnyScaleFrontendService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-any-scale-frontend-service-untag-resource UntagResource" [
+export def "x-amz-target-any-scale-frontend-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,24 +609,24 @@ export def "x-amz-target-any-scale-frontend-service-untag-resource UntagResource
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  ResourceARN: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleFrontendService.UntagResource")
-  let body = {ResourceARN: $ResourceARN, TagKeys: $TagKeys} | compact
+  let body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

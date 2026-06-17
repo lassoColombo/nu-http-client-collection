@@ -66,7 +66,7 @@ def base-url-completer [] { ["https://api.personio.de/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def employeegender-completer [] { ["diverse" "female" "male"] }
+def employee-gender-completer [] { ["diverse" "female" "male"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -139,7 +139,7 @@ export def "company-attendances post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/company/attendances")
-  let body = {attendances: $attendances} | compact
+  let body = {"attendances": $attendances} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,7 +162,7 @@ export def "company-attendances delete" [
 ]: nothing -> record<data: record, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/company/attendances/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/company/attendances/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,8 +190,8 @@ export def "company-attendances patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/company/attendances/($id)")
-  let body = {break: $body_break, comment: $comment, date: $date, end_time: $end_time, start_time: $start_time} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/company/attendances/{id}"))
+  let body = {"break": $body_break, "comment": $comment, "date": $date, "end_time": $end_time, "start_time": $start_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -231,20 +231,20 @@ export def "company-employees post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --employeedepartment: string # Employee department
-  employeeemail: string # Employee email
-  employeefirst_name: string # Employee first name
-  --employeegender: string@employeegender-completer # Employee gender
-  --employeehire-date: string # Employee hire date (format: date)
-  employeelast_name: string # Employee last name
-  --employeeposition: string # Employee position
-  --employeeweekly-hours: float # Employee weekly working hours
+  --employee-department: string # Employee department
+  employee_email: string # Employee email
+  employee_first_name: string # Employee first name
+  --employee-gender: string@employee-gender-completer # Employee gender
+  --employee-hire-date: string # Employee hire date (format: date)
+  employee_last_name: string # Employee last name
+  --employee-position: string # Employee position
+  --employee-weekly-hours: float # Employee weekly working hours
 ]: any -> record<data: record, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/company/employees")
-  let body = {employee[department]: $employeedepartment, employee[email]: $employeeemail, employee[first_name]: $employeefirst_name, employee[gender]: $employeegender, employee[hire_date]: $employeehire_date, employee[last_name]: $employeelast_name, employee[position]: $employeeposition, employee[weekly_hours]: $employeeweekly_hours} | compact
+  let body = {"employee[department]": $employee_department, "employee[email]": $employee_email, "employee[first_name]": $employee_first_name, "employee[gender]": $employee_gender, "employee[hire_date]": $employee_hire_date, "employee[last_name]": $employee_last_name, "employee[position]": $employee_position, "employee[weekly_hours]": $employee_weekly_hours} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -267,7 +267,7 @@ export def "company-employees get" [
 ]: nothing -> record<data: record, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/company/employees/($employee_id)")
+  let full_url = (build-url $base ({employee_id: $employee_id} | format pattern "/company/employees/{employee_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,7 +290,7 @@ export def "company-employees-profile-picture get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/company/employees/($employee_id)/profile-picture/($width)")
+  let full_url = (build-url $base ({employee_id: $employee_id, width: $width} | format pattern "/company/employees/{employee_id}/profile-picture/{width}"))
   let accept_val = "image/png"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -373,7 +373,7 @@ export def "company-time-offs post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/company/time-offs")
-  let body = {comment: $comment, employee_id: $employee_id, end_date: $end_date, half_day_end: $half_day_end, half_day_start: $half_day_start, start_date: $start_date, time_off_type_id: $time_off_type_id} | compact
+  let body = {"comment": $comment, "employee_id": $employee_id, "end_date": $end_date, "half_day_end": $half_day_end, "half_day_start": $half_day_start, "start_date": $start_date, "time_off_type_id": $time_off_type_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -396,7 +396,7 @@ export def "company-time-offs delete" [
 ]: nothing -> record<data: record, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/company/time-offs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/company/time-offs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,7 +418,7 @@ export def "company-time-offs get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/company/time-offs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/company/time-offs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

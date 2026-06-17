@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "query-api post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "query-api create-simple" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: postSimpleQuery
-export def "query-api post" [
+export def "query-api create-simple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,7 +145,7 @@ export def "health get" [
 #
 # POST /v0/data/{path}
 # operationId: getDocumentWithWebHook
-export def "data post-by-path" [
+export def "data get-document-with-web-hook" [
   path: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +162,7 @@ export def "data post-by-path" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v0/data/($path)" $qp)
+  let full_url = (build-url $base ({path: $path} | format pattern "/v0/data/{path}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,7 +174,7 @@ export def "data post-by-path" [
 # POST /v1/compile
 # Docs: https://blog.openpolicyagent.org/partial-evaluation-162750eaf422 — Partial evaluation article
 # operationId: postCompile
-export def "compile post" [
+export def "compile create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "config get" [
 #
 # DELETE /v1/data/{path}
 # operationId: deleteDocument
-export def "data delete" [
+export def "data delete-document" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,7 +241,7 @@ export def "data delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/data/($path)")
+  let full_url = (build-url $base ({path: $path} | format pattern "/v1/data/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,7 +251,7 @@ export def "data delete" [
 #
 # GET /v1/data/{path}
 # operationId: getDocument
-export def "data get" [
+export def "data get-document" [
   path: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,7 +271,7 @@ export def "data get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "input" $input "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "provenance" $provenance "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "instrument" $instrument "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/data/($path)" $qp)
+  let full_url = (build-url $base ({path: $path} | format pattern "/v1/data/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -281,7 +281,7 @@ export def "data get" [
 #
 # PATCH /v1/data/{path}
 # operationId: patchDocument
-export def "data patch" [
+export def "data update-document-by-path" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "data patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/data/($path)")
+  let full_url = (build-url $base ({path: $path} | format pattern "/v1/data/{path}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,7 +307,7 @@ export def "data patch" [
 #
 # POST /v1/data/{path}
 # operationId: getDocumentWithPath
-export def "data post-by-path-1" [
+export def "data get-document-with" [
   path: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "data post-by-path-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar") (serialize-qp "provenance" $provenance "scalar") (serialize-qp "explain" $explain "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "instrument" $instrument "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/data/($path)" $qp)
+  let full_url = (build-url $base ({path: $path} | format pattern "/v1/data/{path}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,7 +339,7 @@ export def "data post-by-path-1" [
 #
 # PUT /v1/data/{path}
 # operationId: putDocument
-export def "data put" [
+export def "data update-document-by-path-1" [
   path: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,15 +349,15 @@ export def "data put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string # The server will respect the If-None-Match header if it is set to * (in other words, it will not overwrite an existing document located at the specified `path`). (e.g. *)
+  --if-none-match: string # The server will respect the If-None-Match header if it is set to * (in other words, it will not overwrite an existing document located at the specified `path`). (e.g. *)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/data/($path)")
+  let full_url = (build-url $base ({path: $path} | format pattern "/v1/data/{path}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -368,7 +368,7 @@ export def "data put" [
 #
 # GET /v1/policies
 # operationId: getPolicies
-export def "policies list" [
+export def "policies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "policies list" [
 #
 # DELETE /v1/policies/{id}
 # operationId: deletePolicyModule
-export def "policies delete" [
+export def "policies delete-policy-module" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +407,7 @@ export def "policies delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/policies/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/policies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -417,7 +417,7 @@ export def "policies delete" [
 #
 # GET /v1/policies/{id}
 # operationId: getPolicyModule
-export def "policies get" [
+export def "policies get-policy-module" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -432,7 +432,7 @@ export def "policies get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/policies/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/policies/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -442,7 +442,7 @@ export def "policies get" [
 #
 # PUT /v1/policies/{id}
 # operationId: putPolicyModule
-export def "policies put" [
+export def "policies update-policy-module" [
   id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +460,7 @@ export def "policies put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pretty" $pretty "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/policies/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/policies/{id}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,7 +498,7 @@ export def "query get" [
 #
 # POST /v1/query
 # operationId: postQuery
-export def "query post" [
+export def "query create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

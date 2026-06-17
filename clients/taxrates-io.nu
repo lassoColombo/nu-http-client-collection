@@ -106,12 +106,12 @@ export def "tax-countrycode taxRatesByCountryCode" [
   --filter: string # You can filter your taxes by one of following types: 'standard', 'reduced', 'second reduced', 'third reduced' and 'super reduced'. (e.g. )
   --zip: string # You must provide a zip code if one of your selected countries is United States and you've had selected a state on your Taxrates.io member's dashboard. (e.g. 71642)
   --product-codes: string # Use one or many product code/s. (e.g. C010)
-  --province : string # Use for Canada (e.g. )
+  --province: string # Use for Canada (e.g. )
   --date: string # e.g. 2020-09-02
 ]: nothing -> record<country_name: string, taxes: table<Country: string, Type: string, data_name: string, data_value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "country_code" $country_code "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "product_codes[]" $product_codes "scalar") (serialize-qp "province " $province  "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "country_code" $country_code "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "zip" $zip "scalar") (serialize-qp "product_codes[]" $product_codes "scalar") (serialize-qp "province " $province "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/tax/countrycode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,11 +162,11 @@ export def "tax-rates allTaxRates" [
   --domain: string # Domain name: api.taxrates.io (e.g. <string>)
   --filter: string # You can filter your taxes by one of following types: 'standard', 'CombinedRate', 'CountyRate', 'CityRate', 'SPDRate' and 'MTARate'. (e.g. )
   --cursor: string # Cursor shows from which record you want to get information. Default value is 0, next value can be retrieved from X-Cursor-Next header. (e.g. )
-  --Product-code: string # e.g. C012
+  --product-code: string # e.g. C012
 ]: nothing -> table<id: string, name: string, rates: list<record>, state: string, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "Product_code" $Product_code "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "Product_code" $product_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/tax/rates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

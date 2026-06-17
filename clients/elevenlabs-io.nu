@@ -135,7 +135,7 @@ export def "history-delete post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/history/delete")
-  let body = {history_item_ids: $history_item_ids} | compact
+  let body = {"history_item_ids": $history_item_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -164,7 +164,7 @@ export def "history-download post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/history/download")
-  let body = {history_item_ids: $history_item_ids} | compact
+  let body = {"history_item_ids": $history_item_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -191,7 +191,7 @@ export def "history delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/history/($history_item_id)")
+  let full_url = (build-url $base ({history_item_id: $history_item_id} | format pattern "/v1/history/{history_item_id}"))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -217,7 +217,7 @@ export def "history-audio get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/history/($history_item_id)/audio")
+  let full_url = (build-url $base ({history_item_id: $history_item_id} | format pattern "/v1/history/{history_item_id}/audio"))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/mpeg"
@@ -246,8 +246,8 @@ export def "text-to-speech post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/text-to-speech/($voice_id)")
-  let body = {text: $text, voice_settings: $voice_settings} | compact
+  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/text-to-speech/{voice_id}"))
+  let body = {"text": $text, "voice_settings": $voice_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -277,8 +277,8 @@ export def "text-to-speech-stream post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/text-to-speech/($voice_id)/stream")
-  let body = {text: $text, voice_settings: $voice_settings} | compact
+  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/text-to-speech/{voice_id}/stream"))
+  let body = {"text": $text, "voice_settings": $voice_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -385,7 +385,7 @@ export def "voices-add post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/voices/add")
-  let body = {description: $description, files: $files, labels: $labels, name: $name} | compact
+  let body = {"description": $description, "files": $files, "labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -434,7 +434,7 @@ export def "voices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/voices/($voice_id)")
+  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/voices/{voice_id}"))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -462,7 +462,7 @@ export def "voices get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_settings" $with_settings "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/voices/($voice_id)" $qp)
+  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/voices/{voice_id}") $qp)
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -493,8 +493,8 @@ export def "voices-edit post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/voices/($voice_id)/edit")
-  let body = {description: $description, files: $files, labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/voices/{voice_id}/edit"))
+  let body = {"description": $description, "files": $files, "labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -522,7 +522,7 @@ export def "voices-samples delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/voices/($voice_id)/samples/($sample_id)")
+  let full_url = (build-url $base ({voice_id: $voice_id, sample_id: $sample_id} | format pattern "/v1/voices/{voice_id}/samples/{sample_id}"))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -549,7 +549,7 @@ export def "voices-samples-audio get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/voices/($voice_id)/samples/($sample_id)/audio")
+  let full_url = (build-url $base ({voice_id: $voice_id, sample_id: $sample_id} | format pattern "/v1/voices/{voice_id}/samples/{sample_id}/audio"))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "audio/*"
@@ -575,7 +575,7 @@ export def "voices-settings get" [
 ]: nothing -> record<similarity_boost: float, stability: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/voices/($voice_id)/settings")
+  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/voices/{voice_id}/settings"))
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -604,8 +604,8 @@ export def "voices-settings-edit post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/voices/($voice_id)/settings/edit")
-  let body = {similarity_boost: $similarity_boost, stability: $stability} | compact
+  let full_url = (build-url $base ({voice_id: $voice_id} | format pattern "/v1/voices/{voice_id}/settings/edit"))
+  let body = {"similarity_boost": $similarity_boost, "stability": $stability} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"xi-api-key": $xi_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

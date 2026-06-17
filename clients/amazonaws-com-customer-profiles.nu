@@ -66,16 +66,16 @@ def base-url-completer [] { ["http://profile.us-east-1.amazonaws.com" "http://pr
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def WorkflowType-completer [] { ["APPFLOW_INTEGRATION"] }
-def PartyType-completer [] { ["BUSINESS" "INDIVIDUAL" "OTHER"] }
-def Gender-completer [] { ["FEMALE" "MALE" "UNSPECIFIED"] }
-def Status-completer [] { ["CANCELLED" "COMPLETE" "FAILED" "IN_PROGRESS" "NOT_STARTED" "RETRY" "SPLIT"] }
-def LogicalOperator-completer [] { ["AND" "OR"] }
+def workflow-type-completer [] { ["APPFLOW_INTEGRATION"] }
+def party-type-completer [] { ["BUSINESS" "INDIVIDUAL" "OTHER"] }
+def gender-completer [] { ["FEMALE" "MALE" "UNSPECIFIED"] }
+def status-completer [] { ["CANCELLED" "COMPLETE" "FAILED" "IN_PROGRESS" "NOT_STARTED" "RETRY" "SPLIT"] }
+def logical-operator-completer [] { ["AND" "OR"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-profiles-keys AddProfileKey" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-profiles-keys create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,8 +99,8 @@ export def commands []: nothing -> table {
 #
 # POST /domains/{DomainName}/profiles/keys
 # operationId: AddProfileKey
-export def "domains-profiles-keys AddProfileKey" [
-  DomainName: string
+export def "domains-profiles-keys create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,24 +109,24 @@ export def "domains-profiles-keys AddProfileKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ProfileId: string # The unique identifier of a customer profile.
-  KeyName: string # A searchable identifier of a customer profile. The predefined keys you can use include: _account, _profileId, _assetId, _caseId, _orderId, _fullName, _phone, _email, _ctrContactId, _marketoLeadId, _salesforceAccountId, _salesforceContactId, _salesforceAssetId, _zendeskUserId, _zendeskExternalId, _zendeskTicketId, _serviceNowSystemId, _serviceNowIncidentId, _segmentUserId, _shopifyCustomerId, _shopifyOrderId.
-  Values: list # A list of key values.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  profile_id: string # The unique identifier of a customer profile.
+  key_name: string # A searchable identifier of a customer profile. The predefined keys you can use include: _account, _profileId, _assetId, _caseId, _orderId, _fullName, _phone, _email, _ctrContactId, _marketoLeadId, _salesforceAccountId, _salesforceContactId, _salesforceAssetId, _zendeskUserId, _zendeskExternalId, _zendeskTicketId, _serviceNowSystemId, _serviceNowIncidentId, _segmentUserId, _shopifyCustomerId, _shopifyOrderId.
+  values: list # A list of key values.
 ]: any -> record<KeyName: record, Values: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/profiles/keys")
-  let body = {ProfileId: $ProfileId, KeyName: $KeyName, Values: $Values} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/profiles/keys"))
+  let body = {"ProfileId": $profile_id, "KeyName": $key_name, "Values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -138,8 +138,8 @@ export def "domains-profiles-keys AddProfileKey" [
 # POST /domains/{DomainName}
 # operationId: CreateDomain
 # --Matching shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
-export def "domains CreateDomain" [
-  DomainName: string
+export def "domains create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,26 +148,26 @@ export def "domains CreateDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  DefaultExpirationDays: int # The default number of days until the data within the domain expires.
-  --DefaultEncryptionKey: string # The default encryption key, which is an AWS managed key, is used when no specific type of encryption key is specified. It is used to encrypt all data before it is placed in permanent or semi-permanent storage.
-  --DeadLetterQueueUrl: string # The URL of the SQS dead letter queue, which is used for reporting errors associated with ingesting data from third party applications. You must set up a policy on the DeadLetterQueue for the SendMessage operation to enable Amazon Connect Customer Profiles to send messages to the DeadLetterQueue.
-  --Matching: record # The flag that enables the matching process of duplicate profiles. — shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
-  --Tags: record # The tags used to organize, track, or control access for this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  default_expiration_days: int # The default number of days until the data within the domain expires.
+  --default-encryption-key: string # The default encryption key, which is an AWS managed key, is used when no specific type of encryption key is specified. It is used to encrypt all data before it is placed in permanent or semi-permanent storage.
+  --dead-letter-queue-url: string # The URL of the SQS dead letter queue, which is used for reporting errors associated with ingesting data from third party applications. You must set up a policy on the DeadLetterQueue for the SendMessage operation to enable Amazon Connect Customer Profiles to send messages to the DeadLetterQueue.
+  --matching: record # The flag that enables the matching process of duplicate profiles. — shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
+  --tags: record # The tags used to organize, track, or control access for this resource.
 ]: any -> record<DomainName: record, DefaultExpirationDays: record, DefaultEncryptionKey: record, DeadLetterQueueUrl: record, Matching: record<Enabled: record, JobSchedule: record<DayOfTheWeek: record, Time: record>, AutoMerging: record<Enabled: record, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: record>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: record, LastUpdatedAt: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)")
-  let body = {DefaultExpirationDays: $DefaultExpirationDays, DefaultEncryptionKey: $DefaultEncryptionKey, DeadLetterQueueUrl: $DeadLetterQueueUrl, Matching: $Matching, Tags: $Tags} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}"))
+  let body = {"DefaultExpirationDays": $default_expiration_days, "DefaultEncryptionKey": $default_encryption_key, "DeadLetterQueueUrl": $dead_letter_queue_url, "Matching": $matching, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,8 +178,8 @@ export def "domains CreateDomain" [
 #
 # DELETE /domains/{DomainName}
 # operationId: DeleteDomain
-export def "domains DeleteDomain" [
-  DomainName: string
+export def "domains delete" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,18 +188,18 @@ export def "domains DeleteDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Message: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -210,8 +210,8 @@ export def "domains DeleteDomain" [
 #
 # GET /domains/{DomainName}
 # operationId: GetDomain
-export def "domains GetDomain" [
-  DomainName: string
+export def "domains get" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,18 +220,18 @@ export def "domains GetDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DomainName: record, DefaultExpirationDays: record, DefaultEncryptionKey: record, DeadLetterQueueUrl: record, Stats: record<ProfileCount: record, MeteringProfileCount: record, ObjectCount: record, TotalSize: record>, Matching: record<Enabled: record, JobSchedule: record<DayOfTheWeek: record, Time: record>, AutoMerging: record<Enabled: record, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: record>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: record, LastUpdatedAt: record, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -243,8 +243,8 @@ export def "domains GetDomain" [
 # PUT /domains/{DomainName}
 # operationId: UpdateDomain
 # --Matching shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
-export def "domains UpdateDomain" [
-  DomainName: string
+export def "domains update" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,26 +253,26 @@ export def "domains UpdateDomain" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --DefaultExpirationDays: int # The default number of days until the data within the domain expires.
-  --DefaultEncryptionKey: string # The default encryption key, which is an AWS managed key, is used when no specific type of encryption key is specified. It is used to encrypt all data before it is placed in permanent or semi-permanent storage. If specified as an empty string, it will clear any existing value.
-  --DeadLetterQueueUrl: string # The URL of the SQS dead letter queue, which is used for reporting errors associated with ingesting data from third party applications. If specified as an empty string, it will clear any existing value. You must set up a policy on the DeadLetterQueue for the SendMessage operation to enable Amazon Connect Customer Profiles to send messages to the DeadLetterQueue.
-  --Matching: record # The flag that enables the matching process of duplicate profiles. — shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
-  --Tags: record # The tags used to organize, track, or control access for this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --default-expiration-days: int # The default number of days until the data within the domain expires.
+  --default-encryption-key: string # The default encryption key, which is an AWS managed key, is used when no specific type of encryption key is specified. It is used to encrypt all data before it is placed in permanent or semi-permanent storage. If specified as an empty string, it will clear any existing value.
+  --dead-letter-queue-url: string # The URL of the SQS dead letter queue, which is used for reporting errors associated with ingesting data from third party applications. If specified as an empty string, it will clear any existing value. You must set up a policy on the DeadLetterQueue for the SendMessage operation to enable Amazon Connect Customer Profiles to send messages to the DeadLetterQueue.
+  --matching: record # The flag that enables the matching process of duplicate profiles. — shape: {Enabled?: any, JobSchedule?: any, AutoMerging?: any, ExportingConfig?: any}
+  --tags: record # The tags used to organize, track, or control access for this resource.
 ]: any -> record<DomainName: record, DefaultExpirationDays: record, DefaultEncryptionKey: record, DeadLetterQueueUrl: record, Matching: record<Enabled: record, JobSchedule: record<DayOfTheWeek: record, Time: record>, AutoMerging: record<Enabled: record, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: record>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: record, LastUpdatedAt: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)")
-  let body = {DefaultExpirationDays: $DefaultExpirationDays, DefaultEncryptionKey: $DefaultEncryptionKey, DeadLetterQueueUrl: $DeadLetterQueueUrl, Matching: $Matching, Tags: $Tags} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}"))
+  let body = {"DefaultExpirationDays": $default_expiration_days, "DefaultEncryptionKey": $default_encryption_key, "DeadLetterQueueUrl": $dead_letter_queue_url, "Matching": $matching, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,8 +284,8 @@ export def "domains UpdateDomain" [
 # POST /domains/{DomainName}/workflows/integrations
 # operationId: CreateIntegrationWorkflow
 # --IntegrationConfig shape: {AppflowIntegration?: any}
-export def "domains-workflows-integrations CreateIntegrationWorkflow" [
-  DomainName: string
+export def "domains-workflows-integrations create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,26 +294,26 @@ export def "domains-workflows-integrations CreateIntegrationWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  WorkflowType: string@WorkflowType-completer # The type of workflow. The only supported value is APPFLOW_INTEGRATION.
-  IntegrationConfig: record # Configuration data for integration workflow. — shape: {AppflowIntegration?: any}
-  ObjectTypeName: string # The name of the profile object type.
-  RoleArn: string # The Amazon Resource Name (ARN) of the IAM role. Customer Profiles assumes this role to create resources on your behalf as part of workflow execution.
-  --Tags: record # The tags used to organize, track, or control access for this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  workflow_type: string@workflow-type-completer # The type of workflow. The only supported value is APPFLOW_INTEGRATION.
+  integration_config: record # Configuration data for integration workflow. — shape: {AppflowIntegration?: any}
+  object_type_name: string # The name of the profile object type.
+  role_arn: string # The Amazon Resource Name (ARN) of the IAM role. Customer Profiles assumes this role to create resources on your behalf as part of workflow execution.
+  --tags: record # The tags used to organize, track, or control access for this resource.
 ]: any -> record<WorkflowId: record, Message: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/workflows/integrations")
-  let body = {WorkflowType: $WorkflowType, IntegrationConfig: $IntegrationConfig, ObjectTypeName: $ObjectTypeName, RoleArn: $RoleArn, Tags: $Tags} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/workflows/integrations"))
+  let body = {"WorkflowType": $workflow_type, "IntegrationConfig": $integration_config, "ObjectTypeName": $object_type_name, "RoleArn": $role_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -328,10 +328,10 @@ export def "domains-workflows-integrations CreateIntegrationWorkflow" [
 # --ShippingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
 # --MailingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
 # --BillingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-@deprecated --flag PartyType
-@deprecated --flag Gender
-export def "domains-profiles CreateProfile" [
-  DomainName: string
+@deprecated --flag party-type
+@deprecated --flag gender
+export def "domains-profiles create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,44 +340,44 @@ export def "domains-profiles CreateProfile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --AccountNumber: string # A unique account number that you have given to the customer.
-  --AdditionalInformation: string # Any additional information relevant to the customer’s profile.
-  --PartyType: string@PartyType-completer # The type of profile used to describe the customer. (DEPRECATED)
-  --BusinessName: string # The name of the customer’s business.
-  --FirstName: string # The customer’s first name.
-  --MiddleName: string # The customer’s middle name.
-  --LastName: string # The customer’s last name.
-  --BirthDate: string # The customer’s birth date. 
-  --Gender: string@Gender-completer # The gender with which the customer identifies.  (DEPRECATED)
-  --PhoneNumber: string # The customer’s phone number, which has not been specified as a mobile, home, or business number. 
-  --MobilePhoneNumber: string # The customer’s mobile phone number.
-  --HomePhoneNumber: string # The customer’s home phone number.
-  --BusinessPhoneNumber: string # The customer’s business phone number.
-  --EmailAddress: string # The customer’s email address, which has not been specified as a personal or business address. 
-  --PersonalEmailAddress: string # The customer’s personal email address.
-  --BusinessEmailAddress: string # The customer’s business email address.
-  --Address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --ShippingAddress: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --MailingAddress: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --BillingAddress: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --Attributes: record # A key value pair of attributes of a customer profile.
-  --PartyTypeString: string # An alternative to <code>PartyType</code> which accepts any string as input.
-  --GenderString: string # An alternative to <code>Gender</code> which accepts any string as input.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --account-number: string # A unique account number that you have given to the customer.
+  --additional-information: string # Any additional information relevant to the customer’s profile.
+  --party-type: string@party-type-completer # The type of profile used to describe the customer. (DEPRECATED)
+  --business-name: string # The name of the customer’s business.
+  --first-name: string # The customer’s first name.
+  --middle-name: string # The customer’s middle name.
+  --last-name: string # The customer’s last name.
+  --birth-date: string # The customer’s birth date. 
+  --gender: string@gender-completer # The gender with which the customer identifies.  (DEPRECATED)
+  --phone-number: string # The customer’s phone number, which has not been specified as a mobile, home, or business number. 
+  --mobile-phone-number: string # The customer’s mobile phone number.
+  --home-phone-number: string # The customer’s home phone number.
+  --business-phone-number: string # The customer’s business phone number.
+  --email-address: string # The customer’s email address, which has not been specified as a personal or business address. 
+  --personal-email-address: string # The customer’s personal email address.
+  --business-email-address: string # The customer’s business email address.
+  --address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+  --shipping-address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+  --mailing-address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+  --billing-address: record # A generic address associated with the customer that is not mailing, shipping, or billing. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+  --attributes: record # A key value pair of attributes of a customer profile.
+  --party-type-string: string # An alternative to <code>PartyType</code> which accepts any string as input.
+  --gender-string: string # An alternative to <code>Gender</code> which accepts any string as input.
 ]: any -> record<ProfileId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/profiles")
-  let body = {AccountNumber: $AccountNumber, AdditionalInformation: $AdditionalInformation, PartyType: $PartyType, BusinessName: $BusinessName, FirstName: $FirstName, MiddleName: $MiddleName, LastName: $LastName, BirthDate: $BirthDate, Gender: $Gender, PhoneNumber: $PhoneNumber, MobilePhoneNumber: $MobilePhoneNumber, HomePhoneNumber: $HomePhoneNumber, BusinessPhoneNumber: $BusinessPhoneNumber, EmailAddress: $EmailAddress, PersonalEmailAddress: $PersonalEmailAddress, BusinessEmailAddress: $BusinessEmailAddress, Address: $Address, ShippingAddress: $ShippingAddress, MailingAddress: $MailingAddress, BillingAddress: $BillingAddress, Attributes: $Attributes, PartyTypeString: $PartyTypeString, GenderString: $GenderString} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/profiles"))
+  let body = {"AccountNumber": $account_number, "AdditionalInformation": $additional_information, "PartyType": $party_type, "BusinessName": $business_name, "FirstName": $first_name, "MiddleName": $middle_name, "LastName": $last_name, "BirthDate": $birth_date, "Gender": $gender, "PhoneNumber": $phone_number, "MobilePhoneNumber": $mobile_phone_number, "HomePhoneNumber": $home_phone_number, "BusinessPhoneNumber": $business_phone_number, "EmailAddress": $email_address, "PersonalEmailAddress": $personal_email_address, "BusinessEmailAddress": $business_email_address, "Address": $address, "ShippingAddress": $shipping_address, "MailingAddress": $mailing_address, "BillingAddress": $billing_address, "Attributes": $attributes, "PartyTypeString": $party_type_string, "GenderString": $gender_string} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -392,10 +392,10 @@ export def "domains-profiles CreateProfile" [
 # --ShippingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
 # --MailingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
 # --BillingAddress shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-@deprecated --flag PartyType
-@deprecated --flag Gender
-export def "domains-profiles UpdateProfile" [
-  DomainName: string
+@deprecated --flag party-type
+@deprecated --flag gender
+export def "domains-profiles update" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,45 +404,45 @@ export def "domains-profiles UpdateProfile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ProfileId: string # The unique identifier of a customer profile.
-  --AdditionalInformation: string # Any additional information relevant to the customer’s profile.
-  --AccountNumber: string # A unique account number that you have given to the customer.
-  --PartyType: string@PartyType-completer # The type of profile used to describe the customer. (DEPRECATED)
-  --BusinessName: string # The name of the customer’s business.
-  --FirstName: string # The customer’s first name.
-  --MiddleName: string # The customer’s middle name.
-  --LastName: string # The customer’s last name.
-  --BirthDate: string # The customer’s birth date. 
-  --Gender: string@Gender-completer # The gender with which the customer identifies.  (DEPRECATED)
-  --PhoneNumber: string # The customer’s phone number, which has not been specified as a mobile, home, or business number. 
-  --MobilePhoneNumber: string # The customer’s mobile phone number.
-  --HomePhoneNumber: string # The customer’s home phone number.
-  --BusinessPhoneNumber: string # The customer’s business phone number.
-  --EmailAddress: string # The customer’s email address, which has not been specified as a personal or business address. 
-  --PersonalEmailAddress: string # The customer’s personal email address.
-  --BusinessEmailAddress: string # The customer’s business email address.
-  --Address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --ShippingAddress: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --MailingAddress: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --BillingAddress: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
-  --Attributes: record # A key value pair of attributes of a customer profile.
-  --PartyTypeString: string # An alternative to <code>PartyType</code> which accepts any string as input.
-  --GenderString: string # An alternative to <code>Gender</code> which accepts any string as input.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  profile_id: string # The unique identifier of a customer profile.
+  --additional-information: string # Any additional information relevant to the customer’s profile.
+  --account-number: string # A unique account number that you have given to the customer.
+  --party-type: string@party-type-completer # The type of profile used to describe the customer. (DEPRECATED)
+  --business-name: string # The name of the customer’s business.
+  --first-name: string # The customer’s first name.
+  --middle-name: string # The customer’s middle name.
+  --last-name: string # The customer’s last name.
+  --birth-date: string # The customer’s birth date. 
+  --gender: string@gender-completer # The gender with which the customer identifies.  (DEPRECATED)
+  --phone-number: string # The customer’s phone number, which has not been specified as a mobile, home, or business number. 
+  --mobile-phone-number: string # The customer’s mobile phone number.
+  --home-phone-number: string # The customer’s home phone number.
+  --business-phone-number: string # The customer’s business phone number.
+  --email-address: string # The customer’s email address, which has not been specified as a personal or business address. 
+  --personal-email-address: string # The customer’s personal email address.
+  --business-email-address: string # The customer’s business email address.
+  --address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+  --shipping-address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+  --mailing-address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+  --billing-address: record # Updates associated with the address properties of a customer profile. — shape: {Address1?: any, Address2?: any, Address3?: any, Address4?: any, City?: any, County?: any, State?: any, Province?: any, Country?: any, PostalCode?: any}
+  --attributes: record # A key value pair of attributes of a customer profile.
+  --party-type-string: string # An alternative to <code>PartyType</code> which accepts any string as input.
+  --gender-string: string # An alternative to <code>Gender</code> which accepts any string as input.
 ]: any -> record<ProfileId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/profiles")
-  let body = {ProfileId: $ProfileId, AdditionalInformation: $AdditionalInformation, AccountNumber: $AccountNumber, PartyType: $PartyType, BusinessName: $BusinessName, FirstName: $FirstName, MiddleName: $MiddleName, LastName: $LastName, BirthDate: $BirthDate, Gender: $Gender, PhoneNumber: $PhoneNumber, MobilePhoneNumber: $MobilePhoneNumber, HomePhoneNumber: $HomePhoneNumber, BusinessPhoneNumber: $BusinessPhoneNumber, EmailAddress: $EmailAddress, PersonalEmailAddress: $PersonalEmailAddress, BusinessEmailAddress: $BusinessEmailAddress, Address: $Address, ShippingAddress: $ShippingAddress, MailingAddress: $MailingAddress, BillingAddress: $BillingAddress, Attributes: $Attributes, PartyTypeString: $PartyTypeString, GenderString: $GenderString} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/profiles"))
+  let body = {"ProfileId": $profile_id, "AdditionalInformation": $additional_information, "AccountNumber": $account_number, "PartyType": $party_type, "BusinessName": $business_name, "FirstName": $first_name, "MiddleName": $middle_name, "LastName": $last_name, "BirthDate": $birth_date, "Gender": $gender, "PhoneNumber": $phone_number, "MobilePhoneNumber": $mobile_phone_number, "HomePhoneNumber": $home_phone_number, "BusinessPhoneNumber": $business_phone_number, "EmailAddress": $email_address, "PersonalEmailAddress": $personal_email_address, "BusinessEmailAddress": $business_email_address, "Address": $address, "ShippingAddress": $shipping_address, "MailingAddress": $mailing_address, "BillingAddress": $billing_address, "Attributes": $attributes, "PartyTypeString": $party_type_string, "GenderString": $gender_string} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -453,8 +453,8 @@ export def "domains-profiles UpdateProfile" [
 #
 # POST /domains/{DomainName}/integrations/delete
 # operationId: DeleteIntegration
-export def "domains-integrations-delete DeleteIntegration" [
-  DomainName: string
+export def "domains-integrations-delete delete" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,22 +463,22 @@ export def "domains-integrations-delete DeleteIntegration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Uri: string # The URI of the S3 bucket or any other type of data source.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  uri: string # The URI of the S3 bucket or any other type of data source.
 ]: any -> record<Message: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/integrations/delete")
-  let body = {Uri: $Uri} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/integrations/delete"))
+  let body = {"Uri": $uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -489,8 +489,8 @@ export def "domains-integrations-delete DeleteIntegration" [
 #
 # POST /domains/{DomainName}/profiles/delete
 # operationId: DeleteProfile
-export def "domains-profiles-delete DeleteProfile" [
-  DomainName: string
+export def "domains-profiles-delete delete" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,22 +499,22 @@ export def "domains-profiles-delete DeleteProfile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ProfileId: string # The unique identifier of a customer profile.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  profile_id: string # The unique identifier of a customer profile.
 ]: any -> record<Message: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/profiles/delete")
-  let body = {ProfileId: $ProfileId} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/profiles/delete"))
+  let body = {"ProfileId": $profile_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -525,8 +525,8 @@ export def "domains-profiles-delete DeleteProfile" [
 #
 # POST /domains/{DomainName}/profiles/keys/delete
 # operationId: DeleteProfileKey
-export def "domains-profiles-keys-delete DeleteProfileKey" [
-  DomainName: string
+export def "domains-profiles-keys-delete delete" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,24 +535,24 @@ export def "domains-profiles-keys-delete DeleteProfileKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ProfileId: string # The unique identifier of a customer profile.
-  KeyName: string # A searchable identifier of a customer profile.
-  Values: list # A list of key values.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  profile_id: string # The unique identifier of a customer profile.
+  key_name: string # A searchable identifier of a customer profile.
+  values: list # A list of key values.
 ]: any -> record<Message: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/profiles/keys/delete")
-  let body = {ProfileId: $ProfileId, KeyName: $KeyName, Values: $Values} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/profiles/keys/delete"))
+  let body = {"ProfileId": $profile_id, "KeyName": $key_name, "Values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -563,8 +563,8 @@ export def "domains-profiles-keys-delete DeleteProfileKey" [
 #
 # POST /domains/{DomainName}/profiles/objects/delete
 # operationId: DeleteProfileObject
-export def "domains-profiles-objects-delete DeleteProfileObject" [
-  DomainName: string
+export def "domains-profiles-objects-delete delete" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,24 +573,24 @@ export def "domains-profiles-objects-delete DeleteProfileObject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ProfileId: string # The unique identifier of a customer profile.
-  ProfileObjectUniqueKey: string # The unique identifier of the profile object generated by the service.
-  ObjectTypeName: string # The name of the profile object type.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  profile_id: string # The unique identifier of a customer profile.
+  profile_object_unique_key: string # The unique identifier of the profile object generated by the service.
+  object_type_name: string # The name of the profile object type.
 ]: any -> record<Message: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/profiles/objects/delete")
-  let body = {ProfileId: $ProfileId, ProfileObjectUniqueKey: $ProfileObjectUniqueKey, ObjectTypeName: $ObjectTypeName} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/profiles/objects/delete"))
+  let body = {"ProfileId": $profile_id, "ProfileObjectUniqueKey": $profile_object_unique_key, "ObjectTypeName": $object_type_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -601,9 +601,9 @@ export def "domains-profiles-objects-delete DeleteProfileObject" [
 #
 # DELETE /domains/{DomainName}/object-types/{ObjectTypeName}
 # operationId: DeleteProfileObjectType
-export def "domains-object-types DeleteProfileObjectType" [
-  DomainName: string
-  ObjectTypeName: string
+export def "domains-object-types delete-profile" [
+  domain_name: string
+  object_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,18 +612,18 @@ export def "domains-object-types DeleteProfileObjectType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Message: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/object-types/($ObjectTypeName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, object_type_name: $object_type_name} | format pattern "/domains/{domain_name}/object-types/{object_type_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -634,9 +634,9 @@ export def "domains-object-types DeleteProfileObjectType" [
 #
 # GET /domains/{DomainName}/object-types/{ObjectTypeName}
 # operationId: GetProfileObjectType
-export def "domains-object-types GetProfileObjectType" [
-  DomainName: string
-  ObjectTypeName: string
+export def "domains-object-types get-profile" [
+  domain_name: string
+  object_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,18 +645,18 @@ export def "domains-object-types GetProfileObjectType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ObjectTypeName: record, Description: record, TemplateId: record, ExpirationDays: record, EncryptionKey: record, AllowProfileCreation: record, SourceLastUpdatedTimestampFormat: record, Fields: record, Keys: record, CreatedAt: record, LastUpdatedAt: record, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/object-types/($ObjectTypeName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, object_type_name: $object_type_name} | format pattern "/domains/{domain_name}/object-types/{object_type_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -667,9 +667,9 @@ export def "domains-object-types GetProfileObjectType" [
 #
 # PUT /domains/{DomainName}/object-types/{ObjectTypeName}
 # operationId: PutProfileObjectType
-export def "domains-object-types PutProfileObjectType" [
-  DomainName: string
-  ObjectTypeName: string
+export def "domains-object-types update-profile" [
+  domain_name: string
+  object_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,30 +678,30 @@ export def "domains-object-types PutProfileObjectType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Description: string # Description of the profile object type.
-  --TemplateId: string # A unique identifier for the object template. For some attributes in the request, the service will use the default value from the object template when TemplateId is present. If these attributes are present in the request, the service may return a <code>BadRequestException</code>. These attributes include: AllowProfileCreation, SourceLastUpdatedTimestampFormat, Fields, and Keys. For example, if AllowProfileCreation is set to true when TemplateId is set, the service may return a <code>BadRequestException</code>.
-  --ExpirationDays: int # The number of days until the data in the object expires.
-  --EncryptionKey: string # The customer-provided key to encrypt the profile object that will be created in this profile object type.
-  --AllowProfileCreation: oneof<nothing, bool> # Indicates whether a profile should be created when data is received if one doesn’t exist for an object of this type. The default is <code>FALSE</code>. If the AllowProfileCreation flag is set to <code>FALSE</code>, then the service tries to fetch a standard profile and associate this object with the profile. If it is set to <code>TRUE</code>, and if no match is found, then the service creates a new standard profile.
-  --SourceLastUpdatedTimestampFormat: string # The format of your <code>sourceLastUpdatedTimestamp</code> that was previously set up. 
-  --Fields: record # A map of the name and ObjectType field.
-  --Keys: record # A list of unique keys that can be used to map data to the profile.
-  --Tags: record # The tags used to organize, track, or control access for this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  description: string # Description of the profile object type.
+  --template-id: string # A unique identifier for the object template. For some attributes in the request, the service will use the default value from the object template when TemplateId is present. If these attributes are present in the request, the service may return a <code>BadRequestException</code>. These attributes include: AllowProfileCreation, SourceLastUpdatedTimestampFormat, Fields, and Keys. For example, if AllowProfileCreation is set to true when TemplateId is set, the service may return a <code>BadRequestException</code>.
+  --expiration-days: int # The number of days until the data in the object expires.
+  --encryption-key: string # The customer-provided key to encrypt the profile object that will be created in this profile object type.
+  --allow-profile-creation: oneof<nothing, bool> # Indicates whether a profile should be created when data is received if one doesn’t exist for an object of this type. The default is <code>FALSE</code>. If the AllowProfileCreation flag is set to <code>FALSE</code>, then the service tries to fetch a standard profile and associate this object with the profile. If it is set to <code>TRUE</code>, and if no match is found, then the service creates a new standard profile.
+  --source-last-updated-timestamp-format: string # The format of your <code>sourceLastUpdatedTimestamp</code> that was previously set up. 
+  --fields: record # A map of the name and ObjectType field.
+  --keys: record # A list of unique keys that can be used to map data to the profile.
+  --tags: record # The tags used to organize, track, or control access for this resource.
 ]: any -> record<ObjectTypeName: record, Description: record, TemplateId: record, ExpirationDays: record, EncryptionKey: record, AllowProfileCreation: record, SourceLastUpdatedTimestampFormat: record, Fields: record, Keys: record, CreatedAt: record, LastUpdatedAt: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/object-types/($ObjectTypeName)")
-  let body = {Description: $Description, TemplateId: $TemplateId, ExpirationDays: $ExpirationDays, EncryptionKey: $EncryptionKey, AllowProfileCreation: $AllowProfileCreation, SourceLastUpdatedTimestampFormat: $SourceLastUpdatedTimestampFormat, Fields: $Fields, Keys: $Keys, Tags: $Tags} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, object_type_name: $object_type_name} | format pattern "/domains/{domain_name}/object-types/{object_type_name}"))
+  let body = {"Description": $description, "TemplateId": $template_id, "ExpirationDays": $expiration_days, "EncryptionKey": $encryption_key, "AllowProfileCreation": $allow_profile_creation, "SourceLastUpdatedTimestampFormat": $source_last_updated_timestamp_format, "Fields": $fields, "Keys": $keys, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -712,9 +712,9 @@ export def "domains-object-types PutProfileObjectType" [
 #
 # DELETE /domains/{DomainName}/workflows/{WorkflowId}
 # operationId: DeleteWorkflow
-export def "domains-workflows DeleteWorkflow" [
-  DomainName: string
-  WorkflowId: string
+export def "domains-workflows delete" [
+  domain_name: string
+  workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -723,18 +723,18 @@ export def "domains-workflows DeleteWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/workflows/($WorkflowId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, workflow_id: $workflow_id} | format pattern "/domains/{domain_name}/workflows/{workflow_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -745,9 +745,9 @@ export def "domains-workflows DeleteWorkflow" [
 #
 # GET /domains/{DomainName}/workflows/{WorkflowId}
 # operationId: GetWorkflow
-export def "domains-workflows GetWorkflow" [
-  DomainName: string
-  WorkflowId: string
+export def "domains-workflows get" [
+  domain_name: string
+  workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,18 +756,18 @@ export def "domains-workflows GetWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<WorkflowId: record, WorkflowType: record, Status: record, ErrorDescription: record, StartDate: record, LastUpdatedAt: record, Attributes: record<AppflowIntegration: record<SourceConnectorType: record, ConnectorProfileName: record, RoleArn: record>>, Metrics: record<AppflowIntegration: record<RecordsProcessed: record, StepsCompleted: record, TotalSteps: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/workflows/($WorkflowId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, workflow_id: $workflow_id} | format pattern "/domains/{domain_name}/workflows/{workflow_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -780,8 +780,8 @@ export def "domains-workflows GetWorkflow" [
 # operationId: GetAutoMergingPreview
 # --Consolidation shape: {MatchingAttributesList?: any}
 # --ConflictResolution shape: {ConflictResolvingModel?: any, SourceName?: any}
-export def "domains-identity-resolution-jobs-auto-merging-preview GetAutoMergingPreview" [
-  DomainName: string
+export def "domains-identity-resolution-jobs-auto-merging-preview get" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,24 +790,24 @@ export def "domains-identity-resolution-jobs-auto-merging-preview GetAutoMerging
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Consolidation: record # The matching criteria to be used during the auto-merging process.  — shape: {MatchingAttributesList?: any}
-  ConflictResolution: record # How the auto-merging process should resolve conflicts between different profiles. — shape: {ConflictResolvingModel?: any, SourceName?: any}
-  --MinAllowedConfidenceScoreForMerging: float # Minimum confidence score required for profiles within a matching group to be merged during the auto-merge process. (format: double)
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  consolidation: record # The matching criteria to be used during the auto-merging process.  — shape: {MatchingAttributesList?: any}
+  conflict_resolution: record # How the auto-merging process should resolve conflicts between different profiles. — shape: {ConflictResolvingModel?: any, SourceName?: any}
+  --min-allowed-confidence-score-for-merging: float # Minimum confidence score required for profiles within a matching group to be merged during the auto-merge process. (format: double)
 ]: any -> record<DomainName: record, NumberOfMatchesInSample: record, NumberOfProfilesInSample: record, NumberOfProfilesWillBeMerged: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/identity-resolution-jobs/auto-merging-preview")
-  let body = {Consolidation: $Consolidation, ConflictResolution: $ConflictResolution, MinAllowedConfidenceScoreForMerging: $MinAllowedConfidenceScoreForMerging} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/identity-resolution-jobs/auto-merging-preview"))
+  let body = {"Consolidation": $consolidation, "ConflictResolution": $conflict_resolution, "MinAllowedConfidenceScoreForMerging": $min_allowed_confidence_score_for_merging} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -818,9 +818,9 @@ export def "domains-identity-resolution-jobs-auto-merging-preview GetAutoMerging
 #
 # GET /domains/{DomainName}/identity-resolution-jobs/{JobId}
 # operationId: GetIdentityResolutionJob
-export def "domains-identity-resolution-jobs GetIdentityResolutionJob" [
-  DomainName: string
-  JobId: string
+export def "domains-identity-resolution-jobs get" [
+  domain_name: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -829,18 +829,18 @@ export def "domains-identity-resolution-jobs GetIdentityResolutionJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DomainName: record, JobId: record, Status: record, Message: record, JobStartTime: record, JobEndTime: record, LastUpdatedAt: record, JobExpirationTime: record, AutoMerging: record<Enabled: record, Consolidation: record<MatchingAttributesList: record>, ConflictResolution: record<ConflictResolvingModel: record, SourceName: record>, MinAllowedConfidenceScoreForMerging: record>, ExportingLocation: record<S3Exporting: record<S3BucketName: record, S3KeyName: record>>, JobStats: record<NumberOfProfilesReviewed: record, NumberOfMatchesFound: record, NumberOfMergesDone: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/identity-resolution-jobs/($JobId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, job_id: $job_id} | format pattern "/domains/{domain_name}/identity-resolution-jobs/{job_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,8 +851,8 @@ export def "domains-identity-resolution-jobs GetIdentityResolutionJob" [
 #
 # POST /domains/{DomainName}/integrations
 # operationId: GetIntegration
-export def "domains-integrations GetIntegration" [
-  DomainName: string
+export def "domains-integrations get" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,22 +861,22 @@ export def "domains-integrations GetIntegration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Uri: string # The URI of the S3 bucket or any other type of data source.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  uri: string # The URI of the S3 bucket or any other type of data source.
 ]: any -> record<DomainName: record, Uri: record, ObjectTypeName: record, CreatedAt: record, LastUpdatedAt: record, Tags: record, ObjectTypeNames: record, WorkflowId: record, IsUnstructured: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/integrations")
-  let body = {Uri: $Uri} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/integrations"))
+  let body = {"Uri": $uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -887,8 +887,8 @@ export def "domains-integrations GetIntegration" [
 #
 # GET /domains/{DomainName}/integrations
 # operationId: ListIntegrations
-export def "domains-integrations ListIntegrations" [
-  DomainName: string
+export def "domains-integrations list" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,19 +900,19 @@ export def "domains-integrations ListIntegrations" [
   --next-token: string # The pagination token from the previous ListIntegrations API call.
   --max-results: int # The maximum number of objects returned per page.
   --include-hidden: oneof<nothing, bool> # Boolean to indicate if hidden integration should be returned. Defaults to <code>False</code>.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Items: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "include-hidden" $include_hidden "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($DomainName)/integrations" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/integrations") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -924,8 +924,8 @@ export def "domains-integrations ListIntegrations" [
 # PUT /domains/{DomainName}/integrations
 # operationId: PutIntegration
 # --FlowDefinition shape: {Description?: any, FlowName?: any, KmsArn?: any, SourceFlowConfig?: any, Tasks?: any, TriggerConfig?: any}
-export def "domains-integrations PutIntegration" [
-  DomainName: string
+export def "domains-integrations update" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,26 +934,26 @@ export def "domains-integrations PutIntegration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Uri: string # The URI of the S3 bucket or any other type of data source.
-  --ObjectTypeName: string # The name of the profile object type.
-  --Tags: record # The tags used to organize, track, or control access for this resource.
-  --FlowDefinition: record # The configurations that control how Customer Profiles retrieves data from the source, Amazon AppFlow. Customer Profiles uses this information to create an AppFlow flow on behalf of customers. — shape: {Description?: any, FlowName?: any, KmsArn?: any, SourceFlowConfig?: any, Tasks?: any, TriggerConfig?: any}
-  --ObjectTypeNames: record # A map in which each key is an event type from an external application such as Segment or Shopify, and each value is an <code>ObjectTypeName</code> (template) used to ingest the event. It supports the following event types: <code>SegmentIdentify</code>, <code>ShopifyCreateCustomers</code>, <code>ShopifyUpdateCustomers</code>, <code>ShopifyCreateDraftOrders</code>, <code>ShopifyUpdateDraftOrders</code>, <code>ShopifyCreateOrders</code>, and <code>ShopifyUpdatedOrders</code>.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --uri: string # The URI of the S3 bucket or any other type of data source.
+  --object-type-name: string # The name of the profile object type.
+  --tags: record # The tags used to organize, track, or control access for this resource.
+  --flow-definition: record # The configurations that control how Customer Profiles retrieves data from the source, Amazon AppFlow. Customer Profiles uses this information to create an AppFlow flow on behalf of customers. — shape: {Description?: any, FlowName?: any, KmsArn?: any, SourceFlowConfig?: any, Tasks?: any, TriggerConfig?: any}
+  --object-type-names: record # A map in which each key is an event type from an external application such as Segment or Shopify, and each value is an <code>ObjectTypeName</code> (template) used to ingest the event. It supports the following event types: <code>SegmentIdentify</code>, <code>ShopifyCreateCustomers</code>, <code>ShopifyUpdateCustomers</code>, <code>ShopifyCreateDraftOrders</code>, <code>ShopifyUpdateDraftOrders</code>, <code>ShopifyCreateOrders</code>, and <code>ShopifyUpdatedOrders</code>.
 ]: any -> record<DomainName: record, Uri: record, ObjectTypeName: record, CreatedAt: record, LastUpdatedAt: record, Tags: record, ObjectTypeNames: record, WorkflowId: record, IsUnstructured: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/integrations")
-  let body = {Uri: $Uri, ObjectTypeName: $ObjectTypeName, Tags: $Tags, FlowDefinition: $FlowDefinition, ObjectTypeNames: $ObjectTypeNames} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/integrations"))
+  let body = {"Uri": $uri, "ObjectTypeName": $object_type_name, "Tags": $tags, "FlowDefinition": $flow_definition, "ObjectTypeNames": $object_type_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -964,8 +964,8 @@ export def "domains-integrations PutIntegration" [
 #
 # GET /domains/{DomainName}/matches
 # operationId: GetMatches
-export def "domains-matches GetMatches" [
-  DomainName: string
+export def "domains-matches get" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -976,19 +976,19 @@ export def "domains-matches GetMatches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
   --max-results: int # The maximum number of results to return per page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<NextToken: record, MatchGenerationDate: record, PotentialMatches: record, Matches: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($DomainName)/matches" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/matches") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -999,8 +999,8 @@ export def "domains-matches GetMatches" [
 #
 # GET /templates/{TemplateId}
 # operationId: GetProfileObjectTypeTemplate
-export def "templates GetProfileObjectTypeTemplate" [
-  TemplateId: string
+export def "templates get-profile-object-type" [
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1009,18 +1009,18 @@ export def "templates GetProfileObjectTypeTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<TemplateId: record, SourceName: record, SourceObject: record, AllowProfileCreation: record, SourceLastUpdatedTimestampFormat: record, Fields: record, Keys: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($TemplateId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1031,9 +1031,9 @@ export def "templates GetProfileObjectTypeTemplate" [
 #
 # GET /domains/{DomainName}/workflows/{WorkflowId}/steps
 # operationId: GetWorkflowSteps
-export def "domains-workflows-steps GetWorkflowSteps" [
-  DomainName: string
-  WorkflowId: string
+export def "domains-workflows-steps get" [
+  domain_name: string
+  workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,19 +1044,19 @@ export def "domains-workflows-steps GetWorkflowSteps" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
   --max-results: int # The maximum number of results to return per page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<WorkflowId: record, WorkflowType: record, Items: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($DomainName)/workflows/($WorkflowId)/steps" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, workflow_id: $workflow_id} | format pattern "/domains/{domain_name}/workflows/{workflow_id}/steps") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1067,7 +1067,7 @@ export def "domains-workflows-steps GetWorkflowSteps" [
 #
 # POST /integrations
 # operationId: ListAccountIntegrations
-export def "integrations ListAccountIntegrations" [
+export def "integrations list-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,23 +1079,23 @@ export def "integrations ListAccountIntegrations" [
   --next-token: string # The pagination token from the previous ListAccountIntegrations API call.
   --max-results: int # The maximum number of objects returned per page.
   --include-hidden: oneof<nothing, bool> # Boolean to indicate if hidden integration should be returned. Defaults to <code>False</code>.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Uri: string # The URI of the S3 bucket or any other type of data source.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  uri: string # The URI of the S3 bucket or any other type of data source.
 ]: any -> record<Items: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "include-hidden" $include_hidden "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/integrations" $qp)
-  let body = {Uri: $Uri} | compact
+  let body = {"Uri": $uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1106,7 +1106,7 @@ export def "integrations ListAccountIntegrations" [
 #
 # GET /domains
 # operationId: ListDomains
-export def "domains ListDomains" [
+export def "domains list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1117,19 +1117,19 @@ export def "domains ListDomains" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The pagination token from the previous ListDomain API call.
   --max-results: int # The maximum number of objects returned per page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Items: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/domains" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1140,8 +1140,8 @@ export def "domains ListDomains" [
 #
 # GET /domains/{DomainName}/identity-resolution-jobs
 # operationId: ListIdentityResolutionJobs
-export def "domains-identity-resolution-jobs ListIdentityResolutionJobs" [
-  DomainName: string
+export def "domains-identity-resolution-jobs list" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,19 +1152,19 @@ export def "domains-identity-resolution-jobs ListIdentityResolutionJobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
   --max-results: int # The maximum number of results to return per page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<IdentityResolutionJobsList: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($DomainName)/identity-resolution-jobs" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/identity-resolution-jobs") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1175,7 +1175,7 @@ export def "domains-identity-resolution-jobs ListIdentityResolutionJobs" [
 #
 # GET /templates
 # operationId: ListProfileObjectTypeTemplates
-export def "templates ListProfileObjectTypeTemplates" [
+export def "templates list-profile-object-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1186,19 +1186,19 @@ export def "templates ListProfileObjectTypeTemplates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The pagination token from the previous ListObjectTypeTemplates API call.
   --max-results: int # The maximum number of objects returned per page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Items: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/templates" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1209,8 +1209,8 @@ export def "templates ListProfileObjectTypeTemplates" [
 #
 # GET /domains/{DomainName}/object-types
 # operationId: ListProfileObjectTypes
-export def "domains-object-types ListProfileObjectTypes" [
-  DomainName: string
+export def "domains-object-types list-profile" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,19 +1221,19 @@ export def "domains-object-types ListProfileObjectTypes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # Identifies the next page of results to return.
   --max-results: int # The maximum number of objects returned per page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Items: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($DomainName)/object-types" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/object-types") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1245,8 +1245,8 @@ export def "domains-object-types ListProfileObjectTypes" [
 # POST /domains/{DomainName}/profiles/objects
 # operationId: ListProfileObjects
 # --ObjectFilter shape: {KeyName?: any, Values?: any}
-export def "domains-profiles-objects ListProfileObjects" [
-  DomainName: string
+export def "domains-profiles-objects list" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,25 +1257,25 @@ export def "domains-profiles-objects ListProfileObjects" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The pagination token from the previous call to ListProfileObjects.
   --max-results: int # The maximum number of objects returned per page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ObjectTypeName: string # The name of the profile object type.
-  ProfileId: string # The unique identifier of a customer profile.
-  --ObjectFilter: record # The filter applied to ListProfileObjects response to include profile objects with the specified index values. This filter is only supported for ObjectTypeName _asset, _case and _order. — shape: {KeyName?: any, Values?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  object_type_name: string # The name of the profile object type.
+  profile_id: string # The unique identifier of a customer profile.
+  --object-filter: record # The filter applied to ListProfileObjects response to include profile objects with the specified index values. This filter is only supported for ObjectTypeName _asset, _case and _order. — shape: {KeyName?: any, Values?: any}
 ]: any -> record<Items: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($DomainName)/profiles/objects" $qp)
-  let body = {ObjectTypeName: $ObjectTypeName, ProfileId: $ProfileId, ObjectFilter: $ObjectFilter} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/profiles/objects") $qp)
+  let body = {"ObjectTypeName": $object_type_name, "ProfileId": $profile_id, "ObjectFilter": $object_filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1286,8 +1286,8 @@ export def "domains-profiles-objects ListProfileObjects" [
 #
 # PUT /domains/{DomainName}/profiles/objects
 # operationId: PutProfileObject
-export def "domains-profiles-objects PutProfileObject" [
-  DomainName: string
+export def "domains-profiles-objects update" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1296,23 +1296,23 @@ export def "domains-profiles-objects PutProfileObject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ObjectTypeName: string # The name of the profile object type.
-  Object: string # A string that is serialized from a JSON object.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  object_type_name: string # The name of the profile object type.
+  object: string # A string that is serialized from a JSON object.
 ]: any -> record<ProfileObjectUniqueKey: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/profiles/objects")
-  let body = {ObjectTypeName: $ObjectTypeName, Object: $Object} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/profiles/objects"))
+  let body = {"ObjectTypeName": $object_type_name, "Object": $object} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1323,8 +1323,8 @@ export def "domains-profiles-objects PutProfileObject" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags ListTagsForResource" [
-  resourceArn: string
+export def "tags list-tags-for-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,18 +1333,18 @@ export def "tags ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resourceArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1355,8 +1355,8 @@ export def "tags ListTagsForResource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags TagResource" [
-  resourceArn: string
+export def "tags tag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1365,22 +1365,22 @@ export def "tags TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   tags: record # The tags used to organize, track, or control access for this resource.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resourceArn)")
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1391,8 +1391,8 @@ export def "tags TagResource" [
 #
 # POST /domains/{DomainName}/workflows
 # operationId: ListWorkflows
-export def "domains-workflows ListWorkflows" [
-  DomainName: string
+export def "domains-workflows list" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1403,26 +1403,26 @@ export def "domains-workflows ListWorkflows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.
   --max-results: int # The maximum number of results to return per page.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --WorkflowType: string@WorkflowType-completer # The type of workflow. The only supported value is APPFLOW_INTEGRATION.
-  --Status: string@Status-completer # Status of workflow execution.
-  --QueryStartDate: string # Retrieve workflows started after timestamp. (format: date-time)
-  --QueryEndDate: string # Retrieve workflows ended after timestamp. (format: date-time)
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --workflow-type: string@workflow-type-completer # The type of workflow. The only supported value is APPFLOW_INTEGRATION.
+  --status: string@status-completer # Status of workflow execution.
+  --query-start-date: string # Retrieve workflows started after timestamp. (format: date-time)
+  --query-end-date: string # Retrieve workflows ended after timestamp. (format: date-time)
 ]: any -> record<Items: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($DomainName)/workflows" $qp)
-  let body = {WorkflowType: $WorkflowType, Status: $Status, QueryStartDate: $QueryStartDate, QueryEndDate: $QueryEndDate} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/workflows") $qp)
+  let body = {"WorkflowType": $workflow_type, "Status": $status, "QueryStartDate": $query_start_date, "QueryEndDate": $query_end_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1434,8 +1434,8 @@ export def "domains-workflows ListWorkflows" [
 # POST /domains/{DomainName}/profiles/objects/merge
 # operationId: MergeProfiles
 # --FieldSourceProfileIds shape: {AccountNumber?: any, AdditionalInformation?: any, PartyType?: any, BusinessName?: any, FirstName?: any, MiddleName?: any, LastName?: any, BirthDate?: any, Gender?: any, PhoneNumber?: any, MobilePhoneNumber?: any, HomePhoneNumber?: any, BusinessPhoneNumber?: any, EmailAddress?: any, PersonalEmailAddress?: any, BusinessEmailAddress?: any, Address?: any, ShippingAddress?: any, MailingAddress?: any, BillingAddress?: any, Attributes?: any}
-export def "domains-profiles-objects-merge MergeProfiles" [
-  DomainName: string
+export def "domains-profiles-objects-merge post" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1444,24 +1444,24 @@ export def "domains-profiles-objects-merge MergeProfiles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  MainProfileId: string # The identifier of the profile to be taken.
-  ProfileIdsToBeMerged: list # The identifier of the profile to be merged into MainProfileId.
-  --FieldSourceProfileIds: record # A duplicate customer profile that is to be merged into a main profile.  — shape: {AccountNumber?: any, AdditionalInformation?: any, PartyType?: any, BusinessName?: any, FirstName?: any, MiddleName?: any, LastName?: any, BirthDate?: any, Gender?: any, PhoneNumber?: any, MobilePhoneNumber?: any, HomePhoneNumber?: any, BusinessPhoneNumber?: any, EmailAddress?: any, PersonalEmailAddress?: any, BusinessEmailAddress?: any, Address?: any, ShippingAddress?: any, MailingAddress?: any, BillingAddress?: any, Attributes?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  main_profile_id: string # The identifier of the profile to be taken.
+  profile_ids_to_be_merged: list # The identifier of the profile to be merged into MainProfileId.
+  --field-source-profile-ids: record # A duplicate customer profile that is to be merged into a main profile.  — shape: {AccountNumber?: any, AdditionalInformation?: any, PartyType?: any, BusinessName?: any, FirstName?: any, MiddleName?: any, LastName?: any, BirthDate?: any, Gender?: any, PhoneNumber?: any, MobilePhoneNumber?: any, HomePhoneNumber?: any, BusinessPhoneNumber?: any, EmailAddress?: any, PersonalEmailAddress?: any, BusinessEmailAddress?: any, Address?: any, ShippingAddress?: any, MailingAddress?: any, BillingAddress?: any, Attributes?: any}
 ]: any -> record<Message: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/domains/($DomainName)/profiles/objects/merge")
-  let body = {MainProfileId: $MainProfileId, ProfileIdsToBeMerged: $ProfileIdsToBeMerged, FieldSourceProfileIds: $FieldSourceProfileIds} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/profiles/objects/merge"))
+  let body = {"MainProfileId": $main_profile_id, "ProfileIdsToBeMerged": $profile_ids_to_be_merged, "FieldSourceProfileIds": $field_source_profile_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1473,8 +1473,8 @@ export def "domains-profiles-objects-merge MergeProfiles" [
 # POST /domains/{DomainName}/profiles/search
 # operationId: SearchProfiles
 # --AdditionalSearchKeys item shape: {KeyName: any, Values: any}
-export def "domains-profiles-search SearchProfiles" [
-  DomainName: string
+export def "domains-profiles-search list" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,26 +1485,26 @@ export def "domains-profiles-search SearchProfiles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The pagination token from the previous SearchProfiles API call.
   --max-results: int # <p>The maximum number of objects returned per page.</p> <p>The default is 20 if this parameter is not included in the request.</p>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  KeyName: string # A searchable identifier of a customer profile. The predefined keys you can use to search include: _account, _profileId, _assetId, _caseId, _orderId, _fullName, _phone, _email, _ctrContactId, _marketoLeadId, _salesforceAccountId, _salesforceContactId, _salesforceAssetId, _zendeskUserId, _zendeskExternalId, _zendeskTicketId, _serviceNowSystemId, _serviceNowIncidentId, _segmentUserId, _shopifyCustomerId, _shopifyOrderId.
-  Values: list # A list of key values.
-  --AdditionalSearchKeys: list # A list of <code>AdditionalSearchKey</code> objects that are each searchable identifiers of a profile. Each <code>AdditionalSearchKey</code> object contains a <code>KeyName</code> and a list of <code>Values</code> associated with that specific key (i.e., a key-value(s) pair). These additional search keys will be used in conjunction with the <code>LogicalOperator</code> and the required <code>KeyName</code> and <code>Values</code> parameters to search for profiles that satisfy the search criteria.  — item shape: {KeyName: any, Values: any}
-  --LogicalOperator: string@LogicalOperator-completer # <p>Relationship between all specified search keys that will be used to search for profiles. This includes the required <code>KeyName</code> and <code>Values</code> parameters as well as any key-value(s) pairs specified in the <code>AdditionalSearchKeys</code> list.</p> <p>This parameter influences which profiles will be returned in the response in the following manner:</p> <ul> <li> <p> <code>AND</code> - The response only includes profiles that match all of the search keys.</p> </li> <li> <p> <code>OR</code> - The response includes profiles that match at least one of the search keys.</p> </li> </ul> <p>The <code>OR</code> relationship is the default behavior if this parameter is not included in the request.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  key_name: string # A searchable identifier of a customer profile. The predefined keys you can use to search include: _account, _profileId, _assetId, _caseId, _orderId, _fullName, _phone, _email, _ctrContactId, _marketoLeadId, _salesforceAccountId, _salesforceContactId, _salesforceAssetId, _zendeskUserId, _zendeskExternalId, _zendeskTicketId, _serviceNowSystemId, _serviceNowIncidentId, _segmentUserId, _shopifyCustomerId, _shopifyOrderId.
+  values: list # A list of key values.
+  --additional-search-keys: list # A list of <code>AdditionalSearchKey</code> objects that are each searchable identifiers of a profile. Each <code>AdditionalSearchKey</code> object contains a <code>KeyName</code> and a list of <code>Values</code> associated with that specific key (i.e., a key-value(s) pair). These additional search keys will be used in conjunction with the <code>LogicalOperator</code> and the required <code>KeyName</code> and <code>Values</code> parameters to search for profiles that satisfy the search criteria.  — item shape: {KeyName: any, Values: any}
+  --logical-operator: string@logical-operator-completer # <p>Relationship between all specified search keys that will be used to search for profiles. This includes the required <code>KeyName</code> and <code>Values</code> parameters as well as any key-value(s) pairs specified in the <code>AdditionalSearchKeys</code> list.</p> <p>This parameter influences which profiles will be returned in the response in the following manner:</p> <ul> <li> <p> <code>AND</code> - The response only includes profiles that match all of the search keys.</p> </li> <li> <p> <code>OR</code> - The response includes profiles that match at least one of the search keys.</p> </li> </ul> <p>The <code>OR</code> relationship is the default behavior if this parameter is not included in the request.</p>
 ]: any -> record<Items: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($DomainName)/profiles/search" $qp)
-  let body = {KeyName: $KeyName, Values: $Values, AdditionalSearchKeys: $AdditionalSearchKeys, LogicalOperator: $LogicalOperator} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/profiles/search") $qp)
+  let body = {"KeyName": $key_name, "Values": $values, "AdditionalSearchKeys": $additional_search_keys, "LogicalOperator": $logical_operator} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1515,8 +1515,8 @@ export def "domains-profiles-search SearchProfiles" [
 #
 # DELETE /tags/{resourceArn}#tagKeys
 # operationId: UntagResource
-export def "tags UntagResource" [
-  resourceArn: string
+export def "tags untag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1525,20 +1525,20 @@ export def "tags UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagKeys: list # The list of tag keys to remove from the resource.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --tag-keys: list # The list of tag keys to remove from the resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tagKeys" $tagKeys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($resourceArn)#tagKeys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

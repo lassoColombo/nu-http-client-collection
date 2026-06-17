@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shopping-availability-flight-availabilities searchFlightAvailabilities" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "shopping-availability-flight-availabilities list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 # operationId: searchFlightAvailabilities
 # --originDestinations item shape: {destinationLocationCode?: string, excludedConnectionPoints?: list, id?: string, includedConnectionPoints?: list, originLocationCode?: string, arrivalDateTime?: record, departureDateTime?: record}
 # --travelers item shape: {associatedAdultId?: string, id: string, travelerType: "ADULT"|"CHILD"|"SENIOR"|"YOUNG"|"HELD_INFANT"|"SEATED_INFANT"|"STUDENT"}
-export def "shopping-availability-flight-availabilities searchFlightAvailabilities" [
+export def "shopping-availability-flight-availabilities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,9 +103,9 @@ export def "shopping-availability-flight-availabilities searchFlightAvailabiliti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-HTTP-Method-Override: string # the HTTP method to apply
-  originDestinations: list # Origins and Destinations must be properly ordered in time (chronological order in accordance with the timezone of each location) to describe the journey consistently. Dates and times must not be past nor more than 365 days in the future, according to provider settings.Number of Origins and Destinations must not exceed the limit defined in provider settings. — item shape: {destinationLocationCode?: string, excludedConnectionPoints?: list, id?: string, includedConnectionPoints?: list, originLocationCode?: string, arrivalDateTime?: record, departureDateTime?: record}
-  --searchCriteria: any
+  --x-http-method-override: string # the HTTP method to apply
+  origin_destinations: list # Origins and Destinations must be properly ordered in time (chronological order in accordance with the timezone of each location) to describe the journey consistently. Dates and times must not be past nor more than 365 days in the future, according to provider settings.Number of Origins and Destinations must not exceed the limit defined in provider settings. — item shape: {destinationLocationCode?: string, excludedConnectionPoints?: list, id?: string, includedConnectionPoints?: list, originLocationCode?: string, arrivalDateTime?: record, departureDateTime?: record}
+  --search-criteria: any
   sources: list # Allows enable one or more sources. If present in the list, these sources will be called by the system.  GDS : Full service carriers (e.g. [GDS])
   travelers: list # List of travelers composing the travel — item shape: {associatedAdultId?: string, id: string, travelerType: "ADULT"|"CHILD"|"SENIOR"|"YOUNG"|"HELD_INFANT"|"SEATED_INFANT"|"STUDENT"}
 ]: any -> any {
@@ -113,9 +113,9 @@ export def "shopping-availability-flight-availabilities searchFlightAvailabiliti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shopping/availability/flight-availabilities")
-  let body = {originDestinations: $originDestinations, searchCriteria: $searchCriteria, sources: $sources, travelers: $travelers} | compact
+  let body = {"originDestinations": $origin_destinations, "searchCriteria": $search_criteria, "sources": $sources, "travelers": $travelers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-HTTP-Method-Override": $X_HTTP_Method_Override} | compact
+  let extra_headers = {"X-HTTP-Method-Override": $x_http_method_override} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

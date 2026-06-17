@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def osTypeSelected-completer [] { ["Linux" "LinuxFunctions" "Windows" "WindowsFunctions"] }
+def os-type-selected-completer [] { ["Linux" "LinuxFunctions" "Windows" "WindowsFunctions"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-web-available-stacks GetAvailableStacks" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-web-available-stacks get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Web/availableStacks
 # operationId: Provider_GetAvailableStacks
-export def "providers-microsoft-web-available-stacks GetAvailableStacks" [
+export def "providers-microsoft-web-available-stacks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,12 +104,12 @@ export def "providers-microsoft-web-available-stacks GetAvailableStacks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --osTypeSelected: string@osTypeSelected-completer
+  --os-type-selected: string@os-type-selected-completer
   --api-version: string # API Version
 ]: nothing -> record<nextLink: string, value: table<dependency: string, display: string, frameworks: list, majorVersions: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "osTypeSelected" $osTypeSelected "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "osTypeSelected" $os_type_selected "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.Web/availableStacks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "providers-microsoft-web-available-stacks GetAvailableStacks" [
 #
 # GET /providers/Microsoft.Web/operations
 # operationId: Provider_ListOperations
-export def "providers-microsoft-web-operations ListOperations" [
+export def "providers-microsoft-web-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,8 +144,8 @@ export def "providers-microsoft-web-operations ListOperations" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/availableStacks
 # operationId: Provider_GetAvailableStacksOnPrem
-export def "subscriptions-providers-microsoft-web-available-stacks GetAvailableStacksOnPrem" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-web-available-stacks get-available-stacks-on-prem" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,13 +154,13 @@ export def "subscriptions-providers-microsoft-web-available-stacks GetAvailableS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --osTypeSelected: string@osTypeSelected-completer
+  --os-type-selected: string@os-type-selected-completer
   --api-version: string # API Version
 ]: nothing -> record<nextLink: string, value: table<dependency: string, display: string, frameworks: list, majorVersions: list, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "osTypeSelected" $osTypeSelected "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Web/availableStacks" $qp)
+  let qp = [(serialize-qp "osTypeSelected" $os_type_selected "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Web/availableStacks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

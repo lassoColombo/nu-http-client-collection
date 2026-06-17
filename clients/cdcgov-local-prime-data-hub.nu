@@ -109,13 +109,13 @@ export def "reports post" [
   --client: string # The client's name that matches the client name in metadata (e.g. simple_report)
   --option: string@option-completer # Optional ways to process the request (e.g. ValidatePayload)
   --default: list # Dynamic default values for an element. ':' or %3A is used to seperate element name and value (e.g. processing_mode_code%3AD)
-  --routeTo: list # A comma speparated list of receiver names. Limit the list of possible receivers to these receivers. (e.g. fl-phd.elr,fl-phd.download)
+  --route-to: list # A comma speparated list of receiver names. Limit the list of possible receivers to these receivers. (e.g. fl-phd.elr,fl-phd.download)
   --body: record
 ]: any -> record<destinationCount: int, destinations: table<itemCount: int, organization: string, organization_id: string, sending_at: string, service: string>, errorCount: int, errors: table<detail: string, id: string, scope: string>, id: string, reportItemCount: int, routing: table<destinations: list, reportIndex: int, trackingId: string>, timestamp: string, topic: string, warningCount: int, warnings: table<detail: string, id: string, scope: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-functions-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "client" $client "scalar") (serialize-qp "option" $option "scalar") (serialize-qp "default" $default "csv") (serialize-qp "routeTo" $routeTo "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "client" $client "scalar") (serialize-qp "option" $option "scalar") (serialize-qp "default" $default "csv") (serialize-qp "routeTo" $route_to "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/reports" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -169,7 +169,7 @@ export def "settings-organizations head" [
 #
 # DELETE /settings/organizations/{organizationName}
 export def "settings-organizations delete" [
-  organizationName: string
+  organization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "settings-organizations delete" [
 ]: nothing -> record<countyName: string, description: string, jurisdiction: string, meta: record<createdAt: string, createdBy: string, version: float>, name: string, stateCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)")
+  let full_url = (build-url $base ({organization_name: $organization_name} | format pattern "/settings/organizations/{organization_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,7 +191,7 @@ export def "settings-organizations delete" [
 #
 # GET /settings/organizations/{organizationName}
 export def "settings-organizations get" [
-  organizationName: string
+  organization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "settings-organizations get" [
 ]: nothing -> record<countyName: string, description: string, jurisdiction: string, meta: record<createdAt: string, createdBy: string, version: float>, name: string, stateCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)")
+  let full_url = (build-url $base ({organization_name: $organization_name} | format pattern "/settings/organizations/{organization_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +213,7 @@ export def "settings-organizations get" [
 #
 # PUT /settings/organizations/{organizationName}
 export def "settings-organizations put" [
-  organizationName: string
+  organization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,18 +222,18 @@ export def "settings-organizations put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countyName: string # the county name (must match FIPS name) (e.g. Pima)
+  --county-name: string # the county name (must match FIPS name) (e.g. Pima)
   description: string # the displayable description of the organization (e.g. Arizona PHD)
   jurisdiction: string@jurisdiction-completer
   --meta: record # The metadata associated with an setting
   name: string # the unique id for the organization (e.g. az-phd)
-  --stateCode: string # the two letter code for the organization (e.g. AZ)
+  --state-code: string # the two letter code for the organization (e.g. AZ)
 ]: any -> record<countyName: string, description: string, jurisdiction: string, meta: record<createdAt: string, createdBy: string, version: float>, name: string, stateCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)")
-  let body = {countyName: $countyName, description: $description, jurisdiction: $jurisdiction, meta: $meta, name: $name, stateCode: $stateCode} | compact
+  let full_url = (build-url $base ({organization_name: $organization_name} | format pattern "/settings/organizations/{organization_name}"))
+  let body = {"countyName": $county_name, "description": $description, "jurisdiction": $jurisdiction, "meta": $meta, "name": $name, "stateCode": $state_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -244,7 +244,7 @@ export def "settings-organizations put" [
 #
 # GET /settings/organizations/{organizationName}/receivers
 export def "settings-organizations-receivers list" [
-  organizationName: string
+  organization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "settings-organizations-receivers list" [
 ]: nothing -> table<description: string, jurisdictionalFilters: list<record>, meta: record<createdAt: string, createdBy: string, version: float>, name: string, organizationName: string, timing: record<dailyAt: float, frequency: string>, topic: string, translations: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)/receivers")
+  let full_url = (build-url $base ({organization_name: $organization_name} | format pattern "/settings/organizations/{organization_name}/receivers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,8 +266,8 @@ export def "settings-organizations-receivers list" [
 #
 # DELETE /settings/organizations/{organizationName}/receivers/{receiverName}
 export def "settings-organizations-receivers delete" [
-  organizationName: string
-  receiverName: string
+  organization_name: string
+  receiver_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "settings-organizations-receivers delete" [
 ]: nothing -> record<description: string, jurisdictionalFilters: table<doesNotMatch: bool, matchFields: string, matchValues: list>, meta: record<createdAt: string, createdBy: string, version: float>, name: string, organizationName: string, timing: record<dailyAt: float, frequency: string>, topic: string, translations: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)/receivers/($receiverName)")
+  let full_url = (build-url $base ({organization_name: $organization_name, receiver_name: $receiver_name} | format pattern "/settings/organizations/{organization_name}/receivers/{receiver_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,8 +289,8 @@ export def "settings-organizations-receivers delete" [
 #
 # GET /settings/organizations/{organizationName}/receivers/{receiverName}
 export def "settings-organizations-receivers get" [
-  organizationName: string
-  receiverName: string
+  organization_name: string
+  receiver_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "settings-organizations-receivers get" [
 ]: nothing -> record<description: string, jurisdictionalFilters: table<doesNotMatch: bool, matchFields: string, matchValues: list>, meta: record<createdAt: string, createdBy: string, version: float>, name: string, organizationName: string, timing: record<dailyAt: float, frequency: string>, topic: string, translations: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)/receivers/($receiverName)")
+  let full_url = (build-url $base ({organization_name: $organization_name, receiver_name: $receiver_name} | format pattern "/settings/organizations/{organization_name}/receivers/{receiver_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -314,8 +314,8 @@ export def "settings-organizations-receivers get" [
 # --jurisdictionalFilters item shape: {doesNotMatch?: bool, matchFields?: "FACILITY_OR_PATIENT_ADDRESS"|"FACILITY_ADDRESS"|"FACILITY_NAME"|"ABNORMAL_VALUE", matchValues?: list}
 # --timing shape: {dailyAt?: float, frequency: "REAL_TIME"|"HOURLY"|"DAILY"}
 export def "settings-organizations-receivers put" [
-  organizationName: string
-  receiverName: string
+  organization_name: string
+  receiver_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "settings-organizations-receivers put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   description: string # Display ready description of the receiver (e.g. Arizona PHD ELR feed)
-  --jurisdictionalFilters: list # What items to include in the report. — item shape: {doesNotMatch?: bool, matchFields?: "FACILITY_OR_PATIENT_ADDRESS"|"FACILITY_ADDRESS"|"FACILITY_NAME"|"ABNORMAL_VALUE", matchValues?: list}
+  --jurisdictional-filters: list # What items to include in the report. — item shape: {doesNotMatch?: bool, matchFields?: "FACILITY_OR_PATIENT_ADDRESS"|"FACILITY_ADDRESS"|"FACILITY_NAME"|"ABNORMAL_VALUE", matchValues?: list}
   --meta: record # The metadata associated with an setting
   name: string # The unique name for the receiver. Should include the organization name as a prefix. (e.g. az-phd.elr)
   timing: record # When the report is sent if not immediately — shape: {dailyAt?: float, frequency: "REAL_TIME"|"HOURLY"|"DAILY"}
@@ -335,8 +335,8 @@ export def "settings-organizations-receivers put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)/receivers/($receiverName)")
-  let body = {description: $description, jurisdictionalFilters: $jurisdictionalFilters, meta: $meta, name: $name, timing: $timing, topic: $topic, translations: $translations} | compact
+  let full_url = (build-url $base ({organization_name: $organization_name, receiver_name: $receiver_name} | format pattern "/settings/organizations/{organization_name}/receivers/{receiver_name}"))
+  let body = {"description": $description, "jurisdictionalFilters": $jurisdictional_filters, "meta": $meta, "name": $name, "timing": $timing, "topic": $topic, "translations": $translations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -347,7 +347,7 @@ export def "settings-organizations-receivers put" [
 #
 # GET /settings/organizations/{organizationName}/senders
 export def "settings-organizations-senders list" [
-  organizationName: string
+  organization_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "settings-organizations-senders list" [
 ]: nothing -> table<description: string, format: string, meta: record<createdAt: string, createdBy: string, version: float>, name: string, organizationName: string, schema: string, topic: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)/senders")
+  let full_url = (build-url $base ({organization_name: $organization_name} | format pattern "/settings/organizations/{organization_name}/senders"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,8 +369,8 @@ export def "settings-organizations-senders list" [
 #
 # DELETE /settings/organizations/{organizationName}/senders/{senderName}
 export def "settings-organizations-senders delete" [
-  organizationName: string
-  senderName: string
+  organization_name: string
+  sender_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "settings-organizations-senders delete" [
 ]: nothing -> record<description: string, format: string, meta: record<createdAt: string, createdBy: string, version: float>, name: string, organizationName: string, schema: string, topic: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)/senders/($senderName)")
+  let full_url = (build-url $base ({organization_name: $organization_name, sender_name: $sender_name} | format pattern "/settings/organizations/{organization_name}/senders/{sender_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,8 +392,8 @@ export def "settings-organizations-senders delete" [
 #
 # GET /settings/organizations/{organizationName}/senders/{senderName}
 export def "settings-organizations-senders get" [
-  organizationName: string
-  senderName: string
+  organization_name: string
+  sender_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "settings-organizations-senders get" [
 ]: nothing -> record<description: string, format: string, meta: record<createdAt: string, createdBy: string, version: float>, name: string, organizationName: string, schema: string, topic: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)/senders/($senderName)")
+  let full_url = (build-url $base ({organization_name: $organization_name, sender_name: $sender_name} | format pattern "/settings/organizations/{organization_name}/senders/{sender_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -415,8 +415,8 @@ export def "settings-organizations-senders get" [
 #
 # PUT /settings/organizations/{organizationName}/senders/{senderName}
 export def "settings-organizations-senders put" [
-  organizationName: string
-  senderName: string
+  organization_name: string
+  sender_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,8 +435,8 @@ export def "settings-organizations-senders put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/settings/organizations/($organizationName)/senders/($senderName)")
-  let body = {description: $description, format: $format, meta: $meta, name: $name, schema: $schema, topic: $topic} | compact
+  let full_url = (build-url $base ({organization_name: $organization_name, sender_name: $sender_name} | format pattern "/settings/organizations/{organization_name}/senders/{sender_name}"))
+  let body = {"description": $description, "format": $format, "meta": $meta, "name": $name, "schema": $schema, "topic": $topic} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

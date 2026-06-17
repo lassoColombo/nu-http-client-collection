@@ -66,55 +66,55 @@ def base-url-completer [] { ["http://cloudtrail.us-east-1.amazonaws.com" "http:/
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.AddTags"] }
-def X-Amz-Target-completer-1 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CancelQuery"] }
-def X-Amz-Target-completer-2 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateChannel"] }
-def X-Amz-Target-completer-3 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateEventDataStore"] }
-def X-Amz-Target-completer-4 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateTrail"] }
-def X-Amz-Target-completer-5 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteChannel"] }
-def X-Amz-Target-completer-6 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteEventDataStore"] }
-def X-Amz-Target-completer-7 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteResourcePolicy"] }
-def X-Amz-Target-completer-8 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteTrail"] }
-def X-Amz-Target-completer-9 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeregisterOrganizationDelegatedAdmin"] }
-def X-Amz-Target-completer-10 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeQuery"] }
-def X-Amz-Target-completer-11 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeTrails"] }
-def X-Amz-Target-completer-12 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetChannel"] }
-def X-Amz-Target-completer-13 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetEventDataStore"] }
-def X-Amz-Target-completer-14 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetEventSelectors"] }
-def X-Amz-Target-completer-15 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetImport"] }
-def X-Amz-Target-completer-16 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetInsightSelectors"] }
-def X-Amz-Target-completer-17 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetQueryResults"] }
-def X-Amz-Target-completer-18 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetResourcePolicy"] }
-def X-Amz-Target-completer-19 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetTrail"] }
-def X-Amz-Target-completer-20 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetTrailStatus"] }
-def X-Amz-Target-completer-21 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListChannels"] }
-def X-Amz-Target-completer-22 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListEventDataStores"] }
-def X-Amz-Target-completer-23 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImportFailures"] }
-def X-Amz-Target-completer-24 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImports"] }
-def X-Amz-Target-completer-25 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListPublicKeys"] }
-def X-Amz-Target-completer-26 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListQueries"] }
-def X-Amz-Target-completer-27 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTags"] }
-def X-Amz-Target-completer-28 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTrails"] }
-def X-Amz-Target-completer-29 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents"] }
-def X-Amz-Target-completer-30 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutEventSelectors"] }
-def X-Amz-Target-completer-31 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutInsightSelectors"] }
-def X-Amz-Target-completer-32 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutResourcePolicy"] }
-def X-Amz-Target-completer-33 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RegisterOrganizationDelegatedAdmin"] }
-def X-Amz-Target-completer-34 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RemoveTags"] }
-def X-Amz-Target-completer-35 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RestoreEventDataStore"] }
-def X-Amz-Target-completer-36 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartImport"] }
-def X-Amz-Target-completer-37 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartLogging"] }
-def X-Amz-Target-completer-38 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartQuery"] }
-def X-Amz-Target-completer-39 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StopImport"] }
-def X-Amz-Target-completer-40 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StopLogging"] }
-def X-Amz-Target-completer-41 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateChannel"] }
-def X-Amz-Target-completer-42 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateEventDataStore"] }
-def X-Amz-Target-completer-43 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateTrail"] }
+def x-amz-target-completer [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.AddTags"] }
+def x-amz-target-completer-1 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CancelQuery"] }
+def x-amz-target-completer-2 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateChannel"] }
+def x-amz-target-completer-3 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateEventDataStore"] }
+def x-amz-target-completer-4 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateTrail"] }
+def x-amz-target-completer-5 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteChannel"] }
+def x-amz-target-completer-6 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteEventDataStore"] }
+def x-amz-target-completer-7 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteResourcePolicy"] }
+def x-amz-target-completer-8 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteTrail"] }
+def x-amz-target-completer-9 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeregisterOrganizationDelegatedAdmin"] }
+def x-amz-target-completer-10 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeQuery"] }
+def x-amz-target-completer-11 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeTrails"] }
+def x-amz-target-completer-12 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetChannel"] }
+def x-amz-target-completer-13 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetEventDataStore"] }
+def x-amz-target-completer-14 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetEventSelectors"] }
+def x-amz-target-completer-15 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetImport"] }
+def x-amz-target-completer-16 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetInsightSelectors"] }
+def x-amz-target-completer-17 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetQueryResults"] }
+def x-amz-target-completer-18 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetResourcePolicy"] }
+def x-amz-target-completer-19 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetTrail"] }
+def x-amz-target-completer-20 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetTrailStatus"] }
+def x-amz-target-completer-21 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListChannels"] }
+def x-amz-target-completer-22 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListEventDataStores"] }
+def x-amz-target-completer-23 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImportFailures"] }
+def x-amz-target-completer-24 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImports"] }
+def x-amz-target-completer-25 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListPublicKeys"] }
+def x-amz-target-completer-26 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListQueries"] }
+def x-amz-target-completer-27 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTags"] }
+def x-amz-target-completer-28 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTrails"] }
+def x-amz-target-completer-29 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents"] }
+def x-amz-target-completer-30 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutEventSelectors"] }
+def x-amz-target-completer-31 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutInsightSelectors"] }
+def x-amz-target-completer-32 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutResourcePolicy"] }
+def x-amz-target-completer-33 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RegisterOrganizationDelegatedAdmin"] }
+def x-amz-target-completer-34 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RemoveTags"] }
+def x-amz-target-completer-35 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RestoreEventDataStore"] }
+def x-amz-target-completer-36 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartImport"] }
+def x-amz-target-completer-37 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartLogging"] }
+def x-amz-target-completer-38 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartQuery"] }
+def x-amz-target-completer-39 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StopImport"] }
+def x-amz-target-completer-40 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StopLogging"] }
+def x-amz-target-completer-41 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateChannel"] }
+def x-amz-target-completer-42 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateEventDataStore"] }
+def x-amz-target-completer-43 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateTrail"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101add-tags AddTags" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101add-tags create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.AddTags
 # operationId: AddTags
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101add-tags AddTags" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101add-tags create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,24 +147,24 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101add-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ResourceId: any
-  TagsList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  resource_id: any
+  tags_list: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.AddTags")
-  let body = {ResourceId: $ResourceId, TagsList: $TagsList} | compact
+  let body = {"ResourceId": $resource_id, "TagsList": $tags_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,7 +175,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101add-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CancelQuery
 # operationId: CancelQuery
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101cancel-query CancelQuery" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101cancel-query cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,24 +184,24 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101canc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  --EventDataStore: any
-  QueryId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  --event-data-store: any
+  query_id: any
 ]: any -> record<QueryId: record, QueryStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CancelQuery")
-  let body = {EventDataStore: $EventDataStore, QueryId: $QueryId} | compact
+  let body = {"EventDataStore": $event_data_store, "QueryId": $query_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,7 +213,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101canc
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateChannel
 # operationId: CreateChannel
 # --Tags item shape: {Key: any, Value?: any}
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101create-channel CreateChannel" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101create-channel create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,26 +222,26 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  Name: any
-  Source: any
-  Destinations: any
-  --Tags: list # A list of tags. — item shape: {Key: any, Value?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  name: any
+  --body-source: any
+  destinations: any
+  --tags: list # A list of tags. — item shape: {Key: any, Value?: any}
 ]: any -> record<ChannelArn: record, Name: record, Source: record, Destinations: record, Tags: table<Key: record, Value: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateChannel")
-  let body = {Name: $Name, Source: $Source, Destinations: $Destinations, Tags: $Tags} | compact
+  let body = {"Name": $name, "Source": $body_source, "Destinations": $destinations, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +253,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101crea
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateEventDataStore
 # operationId: CreateEventDataStore
 # --TagsList item shape: {Key: any, Value?: any}
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101create-event-data-store CreateEventDataStore" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101create-event-data-store create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,30 +262,30 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  Name: any
-  --AdvancedEventSelectors: any
-  --MultiRegionEnabled: any
-  --OrganizationEnabled: any
-  --RetentionPeriod: any
-  --TerminationProtectionEnabled: any
-  --TagsList: list # A list of tags. — item shape: {Key: any, Value?: any}
-  --KmsKeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  name: any
+  --advanced-event-selectors: any
+  --multi-region-enabled: any
+  --organization-enabled: any
+  --retention-period: any
+  --termination-protection-enabled: any
+  --tags-list: list # A list of tags. — item shape: {Key: any, Value?: any}
+  --kms-key-id: any
 ]: any -> record<EventDataStoreArn: record, Name: record, Status: record, AdvancedEventSelectors: record, MultiRegionEnabled: record, OrganizationEnabled: record, RetentionPeriod: record, TerminationProtectionEnabled: record, TagsList: table<Key: record, Value: record>, CreatedTimestamp: record, UpdatedTimestamp: record, KmsKeyId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateEventDataStore")
-  let body = {Name: $Name, AdvancedEventSelectors: $AdvancedEventSelectors, MultiRegionEnabled: $MultiRegionEnabled, OrganizationEnabled: $OrganizationEnabled, RetentionPeriod: $RetentionPeriod, TerminationProtectionEnabled: $TerminationProtectionEnabled, TagsList: $TagsList, KmsKeyId: $KmsKeyId} | compact
+  let body = {"Name": $name, "AdvancedEventSelectors": $advanced_event_selectors, "MultiRegionEnabled": $multi_region_enabled, "OrganizationEnabled": $organization_enabled, "RetentionPeriod": $retention_period, "TerminationProtectionEnabled": $termination_protection_enabled, "TagsList": $tags_list, "KmsKeyId": $kms_key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,7 +297,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101crea
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateTrail
 # operationId: CreateTrail
 # --TagsList item shape: {Key: any, Value?: any}
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101create-trail CreateTrail" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101create-trail create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,34 +306,34 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  Name: any
-  S3BucketName: any
-  --S3KeyPrefix: any
-  --SnsTopicName: any
-  --IncludeGlobalServiceEvents: any
-  --IsMultiRegionTrail: any
-  --EnableLogFileValidation: any
-  --CloudWatchLogsLogGroupArn: any
-  --CloudWatchLogsRoleArn: any
-  --KmsKeyId: any
-  --IsOrganizationTrail: any
-  --TagsList: list # A list of tags. — item shape: {Key: any, Value?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  name: any
+  s3_bucket_name: any
+  --s3-key-prefix: any
+  --sns-topic-name: any
+  --include-global-service-events: any
+  --is-multi-region-trail: any
+  --enable-log-file-validation: any
+  --cloud-watch-logs-log-group-arn: any
+  --cloud-watch-logs-role-arn: any
+  --kms-key-id: any
+  --is-organization-trail: any
+  --tags-list: list # A list of tags. — item shape: {Key: any, Value?: any}
 ]: any -> record<Name: record, S3BucketName: record, S3KeyPrefix: record, SnsTopicName: record, SnsTopicARN: record, IncludeGlobalServiceEvents: record, IsMultiRegionTrail: record, TrailARN: record, LogFileValidationEnabled: record, CloudWatchLogsLogGroupArn: record, CloudWatchLogsRoleArn: record, KmsKeyId: record, IsOrganizationTrail: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.CreateTrail")
-  let body = {Name: $Name, S3BucketName: $S3BucketName, S3KeyPrefix: $S3KeyPrefix, SnsTopicName: $SnsTopicName, IncludeGlobalServiceEvents: $IncludeGlobalServiceEvents, IsMultiRegionTrail: $IsMultiRegionTrail, EnableLogFileValidation: $EnableLogFileValidation, CloudWatchLogsLogGroupArn: $CloudWatchLogsLogGroupArn, CloudWatchLogsRoleArn: $CloudWatchLogsRoleArn, KmsKeyId: $KmsKeyId, IsOrganizationTrail: $IsOrganizationTrail, TagsList: $TagsList} | compact
+  let body = {"Name": $name, "S3BucketName": $s3_bucket_name, "S3KeyPrefix": $s3_key_prefix, "SnsTopicName": $sns_topic_name, "IncludeGlobalServiceEvents": $include_global_service_events, "IsMultiRegionTrail": $is_multi_region_trail, "EnableLogFileValidation": $enable_log_file_validation, "CloudWatchLogsLogGroupArn": $cloud_watch_logs_log_group_arn, "CloudWatchLogsRoleArn": $cloud_watch_logs_role_arn, "KmsKeyId": $kms_key_id, "IsOrganizationTrail": $is_organization_trail, "TagsList": $tags_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,7 +344,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101crea
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteChannel
 # operationId: DeleteChannel
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101delete-channel DeleteChannel" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101delete-channel delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,23 +353,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  Channel: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  channel: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteChannel")
-  let body = {Channel: $Channel} | compact
+  let body = {"Channel": $channel} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -380,7 +380,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101dele
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteEventDataStore
 # operationId: DeleteEventDataStore
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101delete-event-data-store DeleteEventDataStore" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101delete-event-data-store delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,23 +389,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  EventDataStore: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  event_data_store: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteEventDataStore")
-  let body = {EventDataStore: $EventDataStore} | compact
+  let body = {"EventDataStore": $event_data_store} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -416,7 +416,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101dele
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteResourcePolicy
 # operationId: DeleteResourcePolicy
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101delete-resource-policy DeleteResourcePolicy" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101delete-resource-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -425,23 +425,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  resource_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteResourcePolicy")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -452,7 +452,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101dele
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteTrail
 # operationId: DeleteTrail
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101delete-trail DeleteTrail" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101delete-trail delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,23 +461,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeleteTrail")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -488,7 +488,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101dele
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeregisterOrganizationDelegatedAdmin
 # operationId: DeregisterOrganizationDelegatedAdmin
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101deregister-organization-delegated-admin DeregisterOrganizationDelegatedAdmin" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101deregister-organization-delegated-admin post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,23 +497,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101dere
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  DelegatedAdminAccountId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  delegated_admin_account_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DeregisterOrganizationDelegatedAdmin")
-  let body = {DelegatedAdminAccountId: $DelegatedAdminAccountId} | compact
+  let body = {"DelegatedAdminAccountId": $delegated_admin_account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -524,7 +524,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101dere
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeQuery
 # operationId: DescribeQuery
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101describe-query DescribeQuery" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101describe-query post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,24 +533,24 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101desc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  --EventDataStore: any
-  QueryId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  --event-data-store: any
+  query_id: any
 ]: any -> record<QueryId: record, QueryString: record, QueryStatus: record, QueryStatistics: record<EventsMatched: record, EventsScanned: record, BytesScanned: record, ExecutionTimeInMillis: record, CreationTime: record>, ErrorMessage: record, DeliveryS3Uri: record, DeliveryStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeQuery")
-  let body = {EventDataStore: $EventDataStore, QueryId: $QueryId} | compact
+  let body = {"EventDataStore": $event_data_store, "QueryId": $query_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -561,7 +561,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101desc
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeTrails
 # operationId: DescribeTrails
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101describe-trails DescribeTrails" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101describe-trails post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,24 +570,24 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101desc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  --trailNameList: any
-  --includeShadowTrails: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  --trail-name-list: any
+  --include-shadow-trails: any
 ]: any -> record<trailList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeTrails")
-  let body = {trailNameList: $trailNameList, includeShadowTrails: $includeShadowTrails} | compact
+  let body = {"trailNameList": $trail_name_list, "includeShadowTrails": $include_shadow_trails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -598,7 +598,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101desc
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetChannel
 # operationId: GetChannel
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-channel GetChannel" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-channel get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,23 +607,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  Channel: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  channel: any
 ]: any -> record<ChannelArn: record, Name: record, Source: record, SourceConfig: record<ApplyToAllRegions: record, AdvancedEventSelectors: record>, Destinations: record, IngestionStatus: record<LatestIngestionSuccessTime: record, LatestIngestionSuccessEventID: record, LatestIngestionErrorCode: record, LatestIngestionAttemptTime: record, LatestIngestionAttemptEventID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetChannel")
-  let body = {Channel: $Channel} | compact
+  let body = {"Channel": $channel} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -634,7 +634,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetEventDataStore
 # operationId: GetEventDataStore
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-event-data-store GetEventDataStore" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-event-data-store get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,23 +643,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  EventDataStore: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  event_data_store: any
 ]: any -> record<EventDataStoreArn: record, Name: record, Status: record, AdvancedEventSelectors: record, MultiRegionEnabled: record, OrganizationEnabled: record, RetentionPeriod: record, TerminationProtectionEnabled: record, CreatedTimestamp: record, UpdatedTimestamp: record, KmsKeyId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetEventDataStore")
-  let body = {EventDataStore: $EventDataStore} | compact
+  let body = {"EventDataStore": $event_data_store} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -670,7 +670,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetEventSelectors
 # operationId: GetEventSelectors
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-event-selectors GetEventSelectors" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-event-selectors get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,23 +679,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  TrailName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  trail_name: any
 ]: any -> record<TrailARN: record, EventSelectors: record, AdvancedEventSelectors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetEventSelectors")
-  let body = {TrailName: $TrailName} | compact
+  let body = {"TrailName": $trail_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -706,7 +706,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetImport
 # operationId: GetImport
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-import GetImport" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-import get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,23 +715,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  ImportId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  import_id: any
 ]: any -> record<ImportId: record, Destinations: record, ImportSource: record<S3: record<S3LocationUri: record, S3BucketRegion: record, S3BucketAccessRoleArn: record>>, StartEventTime: record, EndEventTime: record, ImportStatus: record, CreatedTimestamp: record, UpdatedTimestamp: record, ImportStatistics: record<PrefixesFound: record, PrefixesCompleted: record, FilesCompleted: record, EventsCompleted: record, FailedEntries: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetImport")
-  let body = {ImportId: $ImportId} | compact
+  let body = {"ImportId": $import_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -742,7 +742,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetInsightSelectors
 # operationId: GetInsightSelectors
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-insight-selectors GetInsightSelectors" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-insight-selectors get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -751,23 +751,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  TrailName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  trail_name: any
 ]: any -> record<TrailARN: record, InsightSelectors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetInsightSelectors")
-  let body = {TrailName: $TrailName} | compact
+  let body = {"TrailName": $trail_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -778,7 +778,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetQueryResults
 # operationId: GetQueryResults
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-query-results GetQueryResults" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-query-results get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,28 +787,28 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  --EventDataStore: any
-  QueryId: any
-  --NextToken: any
-  --MaxQueryResults: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  --event-data-store: any
+  query_id: any
+  --next-token: any
+  --max-query-results: any
 ]: any -> record<QueryStatus: record, QueryStatistics: record<ResultsCount: record, TotalResultsCount: record, BytesScanned: record>, QueryResultRows: record, NextToken: record, ErrorMessage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetQueryResults" $qp)
-  let body = {EventDataStore: $EventDataStore, QueryId: $QueryId, NextToken: $NextToken, MaxQueryResults: $MaxQueryResults} | compact
+  let body = {"EventDataStore": $event_data_store, "QueryId": $query_id, "NextToken": $next_token, "MaxQueryResults": $max_query_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -819,7 +819,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetResourcePolicy
 # operationId: GetResourcePolicy
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-resource-policy GetResourcePolicy" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-resource-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -828,23 +828,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  resource_arn: any
 ]: any -> record<ResourceArn: record, ResourcePolicy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetResourcePolicy")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -855,7 +855,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetTrail
 # operationId: GetTrail
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-trail GetTrail" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-trail get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -864,23 +864,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  name: any
 ]: any -> record<Trail: record<Name: record, S3BucketName: record, S3KeyPrefix: record, SnsTopicName: record, SnsTopicARN: record, IncludeGlobalServiceEvents: record, IsMultiRegionTrail: record, HomeRegion: record, TrailARN: record, LogFileValidationEnabled: record, CloudWatchLogsLogGroupArn: record, CloudWatchLogsRoleArn: record, KmsKeyId: record, HasCustomEventSelectors: record, HasInsightSelectors: record, IsOrganizationTrail: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetTrail")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -891,7 +891,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetTrailStatus
 # operationId: GetTrailStatus
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-trail-status GetTrailStatus" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-trail-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,23 +900,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  name: any
 ]: any -> record<IsLogging: record, LatestDeliveryError: record, LatestNotificationError: record, LatestDeliveryTime: record, LatestNotificationTime: record, StartLoggingTime: record, StopLoggingTime: record, LatestCloudWatchLogsDeliveryError: record, LatestCloudWatchLogsDeliveryTime: record, LatestDigestDeliveryTime: record, LatestDigestDeliveryError: record, LatestDeliveryAttemptTime: record, LatestNotificationAttemptTime: record, LatestNotificationAttemptSucceeded: record, LatestDeliveryAttemptSucceeded: record, TimeLoggingStarted: record, TimeLoggingStopped: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.GetTrailStatus")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -927,7 +927,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101get-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListChannels
 # operationId: ListChannels
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-channels ListChannels" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-channels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -936,27 +936,27 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --max-results: any
+  --next-token: any
 ]: any -> record<Channels: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListChannels" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -967,7 +967,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListEventDataStores
 # operationId: ListEventDataStores
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-event-data-stores ListEventDataStores" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-event-data-stores list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -976,27 +976,27 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  --next-token: any
+  --max-results: any
 ]: any -> record<EventDataStores: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListEventDataStores" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1007,7 +1007,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImportFailures
 # operationId: ListImportFailures
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-import-failures ListImportFailures" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-import-failures list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1016,28 +1016,28 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  ImportId: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  import_id: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Failures: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImportFailures" $qp)
-  let body = {ImportId: $ImportId, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ImportId": $import_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1048,7 +1048,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImports
 # operationId: ListImports
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-imports ListImports" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-imports list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1057,29 +1057,29 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --MaxResults: any
-  --Destination: any
-  --ImportStatus: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --max-results: any
+  --destination: any
+  --import-status: any
+  --next-token: any
 ]: any -> record<Imports: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListImports" $qp)
-  let body = {MaxResults: $MaxResults, Destination: $Destination, ImportStatus: $ImportStatus, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "Destination": $destination, "ImportStatus": $import_status, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1090,7 +1090,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListPublicKeys
 # operationId: ListPublicKeys
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-public-keys ListPublicKeys" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-public-keys list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1099,27 +1099,27 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  --StartTime: any
-  --EndTime: any
-  --NextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  --start-time: any
+  --end-time: any
+  --next-token: any
 ]: any -> record<PublicKeyList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListPublicKeys" $qp)
-  let body = {StartTime: $StartTime, EndTime: $EndTime, NextToken: $NextToken} | compact
+  let body = {"StartTime": $start_time, "EndTime": $end_time, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1130,7 +1130,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListQueries
 # operationId: ListQueries
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-queries ListQueries" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-queries list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1139,31 +1139,31 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  EventDataStore: any
-  --NextToken: any
-  --MaxResults: any
-  --StartTime: any
-  --EndTime: any
-  --QueryStatus: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  event_data_store: any
+  --next-token: any
+  --max-results: any
+  --start-time: any
+  --end-time: any
+  --query-status: any
 ]: any -> record<Queries: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListQueries" $qp)
-  let body = {EventDataStore: $EventDataStore, NextToken: $NextToken, MaxResults: $MaxResults, StartTime: $StartTime, EndTime: $EndTime, QueryStatus: $QueryStatus} | compact
+  let body = {"EventDataStore": $event_data_store, "NextToken": $next_token, "MaxResults": $max_results, "StartTime": $start_time, "EndTime": $end_time, "QueryStatus": $query_status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1174,7 +1174,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTags
 # operationId: ListTags
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-tags ListTags" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,26 +1183,26 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  ResourceIdList: any
-  --NextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  resource_id_list: any
+  --next-token: any
 ]: any -> record<ResourceTagList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTags" $qp)
-  let body = {ResourceIdList: $ResourceIdList, NextToken: $NextToken} | compact
+  let body = {"ResourceIdList": $resource_id_list, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1213,7 +1213,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTrails
 # operationId: ListTrails
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-trails ListTrails" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list-trails list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1222,25 +1222,25 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --NextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --next-token: any
 ]: any -> record<Trails: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.ListTrails" $qp)
-  let body = {NextToken: $NextToken} | compact
+  let body = {"NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1251,7 +1251,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101list
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents
 # operationId: LookupEvents
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101lookup-events LookupEvents" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101lookup-events post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,31 +1260,31 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101look
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --LookupAttributes: any
-  --StartTime: any
-  --EndTime: any
-  --EventCategory: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --lookup-attributes: any
+  --start-time: any
+  --end-time: any
+  --event-category: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Events: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents" $qp)
-  let body = {LookupAttributes: $LookupAttributes, StartTime: $StartTime, EndTime: $EndTime, EventCategory: $EventCategory, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"LookupAttributes": $lookup_attributes, "StartTime": $start_time, "EndTime": $end_time, "EventCategory": $event_category, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1295,7 +1295,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101look
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutEventSelectors
 # operationId: PutEventSelectors
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-event-selectors PutEventSelectors" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-event-selectors update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1304,25 +1304,25 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  TrailName: any
-  --EventSelectors: any
-  --AdvancedEventSelectors: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  trail_name: any
+  --event-selectors: any
+  --advanced-event-selectors: any
 ]: any -> record<TrailARN: record, EventSelectors: record, AdvancedEventSelectors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutEventSelectors")
-  let body = {TrailName: $TrailName, EventSelectors: $EventSelectors, AdvancedEventSelectors: $AdvancedEventSelectors} | compact
+  let body = {"TrailName": $trail_name, "EventSelectors": $event_selectors, "AdvancedEventSelectors": $advanced_event_selectors} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1333,7 +1333,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutInsightSelectors
 # operationId: PutInsightSelectors
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-insight-selectors PutInsightSelectors" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-insight-selectors update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1342,24 +1342,24 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  TrailName: any
-  InsightSelectors: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  trail_name: any
+  insight_selectors: any
 ]: any -> record<TrailARN: record, InsightSelectors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutInsightSelectors")
-  let body = {TrailName: $TrailName, InsightSelectors: $InsightSelectors} | compact
+  let body = {"TrailName": $trail_name, "InsightSelectors": $insight_selectors} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1370,7 +1370,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutResourcePolicy
 # operationId: PutResourcePolicy
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-resource-policy PutResourcePolicy" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-resource-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1379,24 +1379,24 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  ResourceArn: any
-  ResourcePolicy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  resource_arn: any
+  resource_policy: any
 ]: any -> record<ResourceArn: record, ResourcePolicy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.PutResourcePolicy")
-  let body = {ResourceArn: $ResourceArn, ResourcePolicy: $ResourcePolicy} | compact
+  let body = {"ResourceArn": $resource_arn, "ResourcePolicy": $resource_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1407,7 +1407,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101put-
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RegisterOrganizationDelegatedAdmin
 # operationId: RegisterOrganizationDelegatedAdmin
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101register-organization-delegated-admin RegisterOrganizationDelegatedAdmin" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101register-organization-delegated-admin create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1416,23 +1416,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101regi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  MemberAccountId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  member_account_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RegisterOrganizationDelegatedAdmin")
-  let body = {MemberAccountId: $MemberAccountId} | compact
+  let body = {"MemberAccountId": $member_account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1443,7 +1443,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101regi
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RemoveTags
 # operationId: RemoveTags
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101remove-tags RemoveTags" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101remove-tags delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1452,24 +1452,24 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101remo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  ResourceId: any
-  TagsList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  resource_id: any
+  tags_list: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RemoveTags")
-  let body = {ResourceId: $ResourceId, TagsList: $TagsList} | compact
+  let body = {"ResourceId": $resource_id, "TagsList": $tags_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1480,7 +1480,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101remo
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RestoreEventDataStore
 # operationId: RestoreEventDataStore
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101restore-event-data-store RestoreEventDataStore" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101restore-event-data-store post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1489,23 +1489,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101rest
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  EventDataStore: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  event_data_store: any
 ]: any -> record<EventDataStoreArn: record, Name: record, Status: record, AdvancedEventSelectors: record, MultiRegionEnabled: record, OrganizationEnabled: record, RetentionPeriod: record, TerminationProtectionEnabled: record, CreatedTimestamp: record, UpdatedTimestamp: record, KmsKeyId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.RestoreEventDataStore")
-  let body = {EventDataStore: $EventDataStore} | compact
+  let body = {"EventDataStore": $event_data_store} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1516,7 +1516,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101rest
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartImport
 # operationId: StartImport
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101start-import StartImport" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101start-import start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1525,27 +1525,27 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101star
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  --Destinations: any
-  --ImportSource: any
-  --StartEventTime: any
-  --EndEventTime: any
-  --ImportId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  --destinations: any
+  --import-source: any
+  --start-event-time: any
+  --end-event-time: any
+  --import-id: any
 ]: any -> record<ImportId: record, Destinations: record, ImportSource: record<S3: record<S3LocationUri: record, S3BucketRegion: record, S3BucketAccessRoleArn: record>>, StartEventTime: record, EndEventTime: record, ImportStatus: record, CreatedTimestamp: record, UpdatedTimestamp: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartImport")
-  let body = {Destinations: $Destinations, ImportSource: $ImportSource, StartEventTime: $StartEventTime, EndEventTime: $EndEventTime, ImportId: $ImportId} | compact
+  let body = {"Destinations": $destinations, "ImportSource": $import_source, "StartEventTime": $start_event_time, "EndEventTime": $end_event_time, "ImportId": $import_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1556,7 +1556,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101star
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartLogging
 # operationId: StartLogging
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101start-logging StartLogging" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101start-logging start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1565,23 +1565,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101star
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartLogging")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1592,7 +1592,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101star
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartQuery
 # operationId: StartQuery
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101start-query StartQuery" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101start-query start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1601,24 +1601,24 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101star
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  QueryStatement: any
-  --DeliveryS3Uri: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  query_statement: any
+  --delivery-s3-uri: any
 ]: any -> record<QueryId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StartQuery")
-  let body = {QueryStatement: $QueryStatement, DeliveryS3Uri: $DeliveryS3Uri} | compact
+  let body = {"QueryStatement": $query_statement, "DeliveryS3Uri": $delivery_s3_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1629,7 +1629,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101star
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StopImport
 # operationId: StopImport
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101stop-import StopImport" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101stop-import stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1638,23 +1638,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101stop
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  ImportId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  import_id: any
 ]: any -> record<ImportId: record, ImportSource: record<S3: record<S3LocationUri: record, S3BucketRegion: record, S3BucketAccessRoleArn: record>>, Destinations: record, ImportStatus: record, CreatedTimestamp: record, UpdatedTimestamp: record, StartEventTime: record, EndEventTime: record, ImportStatistics: record<PrefixesFound: record, PrefixesCompleted: record, FilesCompleted: record, EventsCompleted: record, FailedEntries: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StopImport")
-  let body = {ImportId: $ImportId} | compact
+  let body = {"ImportId": $import_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1665,7 +1665,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101stop
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StopLogging
 # operationId: StopLogging
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101stop-logging StopLogging" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101stop-logging stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1674,23 +1674,23 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101stop
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.StopLogging")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1701,7 +1701,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101stop
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateChannel
 # operationId: UpdateChannel
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101update-channel UpdateChannel" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101update-channel update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1710,25 +1710,25 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  Channel: any
-  --Destinations: any
-  --Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  channel: any
+  --destinations: any
+  --name: any
 ]: any -> record<ChannelArn: record, Name: record, Source: record, Destinations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateChannel")
-  let body = {Channel: $Channel, Destinations: $Destinations, Name: $Name} | compact
+  let body = {"Channel": $channel, "Destinations": $destinations, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1739,7 +1739,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101upda
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateEventDataStore
 # operationId: UpdateEventDataStore
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101update-event-data-store UpdateEventDataStore" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101update-event-data-store update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1748,30 +1748,30 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  EventDataStore: any
-  --Name: any
-  --AdvancedEventSelectors: any
-  --MultiRegionEnabled: any
-  --OrganizationEnabled: any
-  --RetentionPeriod: any
-  --TerminationProtectionEnabled: any
-  --KmsKeyId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  event_data_store: any
+  --name: any
+  --advanced-event-selectors: any
+  --multi-region-enabled: any
+  --organization-enabled: any
+  --retention-period: any
+  --termination-protection-enabled: any
+  --kms-key-id: any
 ]: any -> record<EventDataStoreArn: record, Name: record, Status: record, AdvancedEventSelectors: record, MultiRegionEnabled: record, OrganizationEnabled: record, RetentionPeriod: record, TerminationProtectionEnabled: record, CreatedTimestamp: record, UpdatedTimestamp: record, KmsKeyId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateEventDataStore")
-  let body = {EventDataStore: $EventDataStore, Name: $Name, AdvancedEventSelectors: $AdvancedEventSelectors, MultiRegionEnabled: $MultiRegionEnabled, OrganizationEnabled: $OrganizationEnabled, RetentionPeriod: $RetentionPeriod, TerminationProtectionEnabled: $TerminationProtectionEnabled, KmsKeyId: $KmsKeyId} | compact
+  let body = {"EventDataStore": $event_data_store, "Name": $name, "AdvancedEventSelectors": $advanced_event_selectors, "MultiRegionEnabled": $multi_region_enabled, "OrganizationEnabled": $organization_enabled, "RetentionPeriod": $retention_period, "TerminationProtectionEnabled": $termination_protection_enabled, "KmsKeyId": $kms_key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1782,7 +1782,7 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101upda
 #
 # POST /#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateTrail
 # operationId: UpdateTrail
-export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101update-trail UpdateTrail" [
+export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101update-trail update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1791,33 +1791,33 @@ export def "x-amz-targetcomamazonawscloudtrailv20131101-cloud-trail-20131101upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  Name: any
-  --S3BucketName: any
-  --S3KeyPrefix: any
-  --SnsTopicName: any
-  --IncludeGlobalServiceEvents: any
-  --IsMultiRegionTrail: any
-  --EnableLogFileValidation: any
-  --CloudWatchLogsLogGroupArn: any
-  --CloudWatchLogsRoleArn: any
-  --KmsKeyId: any
-  --IsOrganizationTrail: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  name: any
+  --s3-bucket-name: any
+  --s3-key-prefix: any
+  --sns-topic-name: any
+  --include-global-service-events: any
+  --is-multi-region-trail: any
+  --enable-log-file-validation: any
+  --cloud-watch-logs-log-group-arn: any
+  --cloud-watch-logs-role-arn: any
+  --kms-key-id: any
+  --is-organization-trail: any
 ]: any -> record<Name: record, S3BucketName: record, S3KeyPrefix: record, SnsTopicName: record, SnsTopicARN: record, IncludeGlobalServiceEvents: record, IsMultiRegionTrail: record, TrailARN: record, LogFileValidationEnabled: record, CloudWatchLogsLogGroupArn: record, CloudWatchLogsRoleArn: record, KmsKeyId: record, IsOrganizationTrail: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.UpdateTrail")
-  let body = {Name: $Name, S3BucketName: $S3BucketName, S3KeyPrefix: $S3KeyPrefix, SnsTopicName: $SnsTopicName, IncludeGlobalServiceEvents: $IncludeGlobalServiceEvents, IsMultiRegionTrail: $IsMultiRegionTrail, EnableLogFileValidation: $EnableLogFileValidation, CloudWatchLogsLogGroupArn: $CloudWatchLogsLogGroupArn, CloudWatchLogsRoleArn: $CloudWatchLogsRoleArn, KmsKeyId: $KmsKeyId, IsOrganizationTrail: $IsOrganizationTrail} | compact
+  let body = {"Name": $name, "S3BucketName": $s3_bucket_name, "S3KeyPrefix": $s3_key_prefix, "SnsTopicName": $sns_topic_name, "IncludeGlobalServiceEvents": $include_global_service_events, "IsMultiRegionTrail": $is_multi_region_trail, "EnableLogFileValidation": $enable_log_file_validation, "CloudWatchLogsLogGroupArn": $cloud_watch_logs_log_group_arn, "CloudWatchLogsRoleArn": $cloud_watch_logs_role_arn, "KmsKeyId": $kms_key_id, "IsOrganizationTrail": $is_organization_trail} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

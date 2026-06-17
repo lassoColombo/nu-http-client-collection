@@ -101,16 +101,16 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contentType: string # data format of the output either json or CSV (e.g. json)
-  --unitGroup: string # e.g. us
+  --content-type: string # data format of the output either json or CSV (e.g. json)
+  --unit-group: string # e.g. us
   --include: string # data to include in the output (required for CSV format - days,hours,alerts,current,events ) (e.g. days)
   --lang: string # Language to use for weather descriptions (e.g. us)
   --key: string # e.g. INSERT_YOUR_KEY
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://weather.visualcrossing.com")
-  let qp = [(serialize-qp "contentType" $contentType "scalar") (serialize-qp "unitGroup" $unitGroup "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/VisualCrossingWebServices/rest/services/timeline/($location)" $qp)
+  let qp = [(serialize-qp "contentType" $content_type "scalar") (serialize-qp "unitGroup" $unit_group "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location: $location} | format pattern "/VisualCrossingWebServices/rest/services/timeline/{location}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -130,16 +130,16 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contentType: string # data format of the output either json or CSV (e.g. json)
-  --unitGroup: string # e.g. us
+  --content-type: string # data format of the output either json or CSV (e.g. json)
+  --unit-group: string # e.g. us
   --include: string # data to include in the output (required for CSV format - days,hours,alerts,current,events ) (e.g. days)
   --lang: string # Language to use for weather descriptions (e.g. us)
   --key: string # e.g. INSERT_YOUR_KEY
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://weather.visualcrossing.com")
-  let qp = [(serialize-qp "contentType" $contentType "scalar") (serialize-qp "unitGroup" $unitGroup "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/VisualCrossingWebServices/rest/services/timeline/($location)/($startdate)" $qp)
+  let qp = [(serialize-qp "contentType" $content_type "scalar") (serialize-qp "unitGroup" $unit_group "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location: $location, startdate: $startdate} | format pattern "/VisualCrossingWebServices/rest/services/timeline/{location}/{startdate}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -160,16 +160,16 @@ export def "visual-crossing-web-services-rest-services-timeline get-by-location-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contentType: string # data format of the output either json or CSV (e.g. json)
-  --unitGroup: string # e.g. us
+  --content-type: string # data format of the output either json or CSV (e.g. json)
+  --unit-group: string # e.g. us
   --include: string # data to include in the output (required for CSV format - days,hours,alerts,current,events ) (e.g. days)
   --lang: string # Language to use for weather descriptions (e.g. us)
   --key: string # e.g. INSERT_YOUR_KEY
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://weather.visualcrossing.com")
-  let qp = [(serialize-qp "contentType" $contentType "scalar") (serialize-qp "unitGroup" $unitGroup "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/VisualCrossingWebServices/rest/services/timeline/($location)/($startdate)/($enddate)" $qp)
+  let qp = [(serialize-qp "contentType" $content_type "scalar") (serialize-qp "unitGroup" $unit_group "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location: $location, startdate: $startdate, enddate: $enddate} | format pattern "/VisualCrossingWebServices/rest/services/timeline/{location}/{startdate}/{enddate}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -187,18 +187,18 @@ export def "visual-crossing-web-services-rest-services-weatherdata-forecast get"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sendAsDatasource: oneof<nothing, bool> # e.g. false
-  --allowAsynch: oneof<nothing, bool> # e.g. false
-  --shortColumnNames: oneof<nothing, bool> # e.g. false
+  --send-as-datasource: oneof<nothing, bool> # e.g. false
+  --allow-asynch: oneof<nothing, bool> # e.g. false
+  --short-column-names: oneof<nothing, bool> # e.g. false
   --locations: string # e.g. Sterling%2C%20VA%2C%20US
-  --aggregateHours: string # e.g. 24
-  --contentType: string # e.g. json
-  --unitGroup: string # e.g. us
+  --aggregate-hours: string # e.g. 24
+  --content-type: string # e.g. json
+  --unit-group: string # e.g. us
   --key: string # e.g. INSERT_YOUR_KEY
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://weather.visualcrossing.com")
-  let qp = [(serialize-qp "sendAsDatasource" $sendAsDatasource "scalar") (serialize-qp "allowAsynch" $allowAsynch "scalar") (serialize-qp "shortColumnNames" $shortColumnNames "scalar") (serialize-qp "locations" $locations "scalar") (serialize-qp "aggregateHours" $aggregateHours "scalar") (serialize-qp "contentType" $contentType "scalar") (serialize-qp "unitGroup" $unitGroup "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sendAsDatasource" $send_as_datasource "scalar") (serialize-qp "allowAsynch" $allow_asynch "scalar") (serialize-qp "shortColumnNames" $short_column_names "scalar") (serialize-qp "locations" $locations "scalar") (serialize-qp "aggregateHours" $aggregate_hours "scalar") (serialize-qp "contentType" $content_type "scalar") (serialize-qp "unitGroup" $unit_group "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/VisualCrossingWebServices/rest/services/weatherdata/forecast" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -217,23 +217,23 @@ export def "visual-crossing-web-services-rest-services-weatherdata-history get" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxDistance: string # e.g. -1
-  --shortColumnNames: oneof<nothing, bool> # e.g. false
-  --endDateTime: string # e.g. 2020-02-04T00%3A00%3A00
-  --aggregateHours: string # e.g. 24
-  --collectStationContributions: oneof<nothing, bool> # e.g. false
-  --startDateTime: string # e.g. 2020-01-28T00%3A00%3A00
-  --maxStations: string # e.g. -1
-  --allowAsynch: oneof<nothing, bool> # e.g. false
+  --max-distance: string # e.g. -1
+  --short-column-names: oneof<nothing, bool> # e.g. false
+  --end-date-time: string # e.g. 2020-02-04T00%3A00%3A00
+  --aggregate-hours: string # e.g. 24
+  --collect-station-contributions: oneof<nothing, bool> # e.g. false
+  --start-date-time: string # e.g. 2020-01-28T00%3A00%3A00
+  --max-stations: string # e.g. -1
+  --allow-asynch: oneof<nothing, bool> # e.g. false
   --locations: string # e.g. Sterling%2C%20VA%2C%20US
-  --includeNormals: oneof<nothing, bool> # e.g. false
-  --contentType: string # e.g. json
-  --unitGroup: string # e.g. us
+  --include-normals: oneof<nothing, bool> # e.g. false
+  --content-type: string # e.g. json
+  --unit-group: string # e.g. us
   --key: string # e.g. INSERT_YOUR_KEY
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://weather.visualcrossing.com")
-  let qp = [(serialize-qp "maxDistance" $maxDistance "scalar") (serialize-qp "shortColumnNames" $shortColumnNames "scalar") (serialize-qp "endDateTime" $endDateTime "scalar") (serialize-qp "aggregateHours" $aggregateHours "scalar") (serialize-qp "collectStationContributions" $collectStationContributions "scalar") (serialize-qp "startDateTime" $startDateTime "scalar") (serialize-qp "maxStations" $maxStations "scalar") (serialize-qp "allowAsynch" $allowAsynch "scalar") (serialize-qp "locations" $locations "scalar") (serialize-qp "includeNormals" $includeNormals "scalar") (serialize-qp "contentType" $contentType "scalar") (serialize-qp "unitGroup" $unitGroup "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxDistance" $max_distance "scalar") (serialize-qp "shortColumnNames" $short_column_names "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "aggregateHours" $aggregate_hours "scalar") (serialize-qp "collectStationContributions" $collect_station_contributions "scalar") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "maxStations" $max_stations "scalar") (serialize-qp "allowAsynch" $allow_asynch "scalar") (serialize-qp "locations" $locations "scalar") (serialize-qp "includeNormals" $include_normals "scalar") (serialize-qp "contentType" $content_type "scalar") (serialize-qp "unitGroup" $unit_group "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/VisualCrossingWebServices/rest/services/weatherdata/history" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

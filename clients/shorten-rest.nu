@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aliases DeleteAlias" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aliases delete-alias" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /aliases
 # operationId: DeleteAlias
-export def "aliases DeleteAlias" [
+export def "aliases delete-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,12 +102,12 @@ export def "aliases DeleteAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domainName: string # domain which alias belongs to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
-  --aliasName: string # alias (without `/` at the beginning) (e.g. aBcDe012)
+  --domain-name: string # domain which alias belongs to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
+  --alias-name: string # alias (without `/` at the beginning) (e.g. aBcDe012)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "domainName" $domainName "scalar") (serialize-qp "aliasName" $aliasName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domainName" $domain_name "scalar") (serialize-qp "aliasName" $alias_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aliases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -118,7 +118,7 @@ export def "aliases DeleteAlias" [
 #
 # GET /aliases
 # operationId: GetAlias
-export def "aliases GetAlias" [
+export def "aliases get-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,12 +127,12 @@ export def "aliases GetAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domainName: string # domain which alias belongs to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
-  --aliasName: string # alias value (without `/` at the beginning) (e.g. aBcDe012)
+  --domain-name: string # domain which alias belongs to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
+  --alias-name: string # alias value (without `/` at the beginning) (e.g. aBcDe012)
 ]: nothing -> record<createdAt: int, destinations: table<country: string, os: string, url: string>, domainName: string, metatags: table<content: string, name: string>, name: string, snippets: table<id: string, parameters: record>, updatedAt: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "domainName" $domainName "scalar") (serialize-qp "aliasName" $aliasName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domainName" $domain_name "scalar") (serialize-qp "aliasName" $alias_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aliases" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +146,7 @@ export def "aliases GetAlias" [
 # --destinations item shape: {country?: string, os?: string, url: string}
 # --metatags item shape: {content: string, name: string}
 # --snippets item shape: {id: string, parameters?: record}
-export def "aliases CreateAlias" [
+export def "aliases create-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,8 +155,8 @@ export def "aliases CreateAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domainName: string # domain which alias will belong to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
-  --aliasName: string # alias (without `/` at the beginning) (default: @rnd, e.g. aBcDe012)
+  --domain-name: string # domain which alias will belong to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
+  --alias-name: string # alias (without `/` at the beginning) (default: @rnd, e.g. aBcDe012)
   --destinations: list # item shape: {country?: string, os?: string, url: string}
   --metatags: list # item shape: {content: string, name: string}
   --snippets: list # item shape: {id: string, parameters?: record}
@@ -164,9 +164,9 @@ export def "aliases CreateAlias" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "domainName" $domainName "scalar") (serialize-qp "aliasName" $aliasName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domainName" $domain_name "scalar") (serialize-qp "aliasName" $alias_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aliases" $qp)
-  let body = {destinations: $destinations, metatags: $metatags, snippets: $snippets} | compact
+  let body = {"destinations": $destinations, "metatags": $metatags, "snippets": $snippets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,7 +180,7 @@ export def "aliases CreateAlias" [
 # --destinations item shape: {country?: string, os?: string, url: string}
 # --metatags item shape: {content: string, name: string}
 # --snippets item shape: {id: string, parameters?: record}
-export def "aliases UpdateAlias" [
+export def "aliases update-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,8 +189,8 @@ export def "aliases UpdateAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domainName: string # domain which alias belongs to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
-  --aliasName: string # alias (without `/` at the beginning) (e.g. aBcDe012)
+  --domain-name: string # domain which alias belongs to (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
+  --alias-name: string # alias (without `/` at the beginning) (e.g. aBcDe012)
   --destinations: list # item shape: {country?: string, os?: string, url: string}
   --metatags: list # item shape: {content: string, name: string}
   --snippets: list # item shape: {id: string, parameters?: record}
@@ -198,9 +198,9 @@ export def "aliases UpdateAlias" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "domainName" $domainName "scalar") (serialize-qp "aliasName" $aliasName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domainName" $domain_name "scalar") (serialize-qp "aliasName" $alias_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aliases" $qp)
-  let body = {destinations: $destinations, metatags: $metatags, snippets: $snippets} | compact
+  let body = {"destinations": $destinations, "metatags": $metatags, "snippets": $snippets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,7 +211,7 @@ export def "aliases UpdateAlias" [
 #
 # GET /aliases/all
 # operationId: GetAliases
-export def "aliases-all GetAliases" [
+export def "aliases-all get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,13 +220,13 @@ export def "aliases-all GetAliases" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domainName: string # The domain name to get the aliases for (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
-  --continueFrom: string # An ID returned by a previous query to continue aliases retrieval (see lastId in response) (e.g. 1588788835614657618)
+  --domain-name: string # The domain name to get the aliases for (string without `http/https` or `/`) (default: short.fyi, e.g. your.domain.com)
+  --continue-from: string # An ID returned by a previous query to continue aliases retrieval (see lastId in response) (e.g. 1588788835614657618)
   --limit: int # Number of results to return per request (default: 1000, e.g. 100)
 ]: nothing -> record<aliases: list<string>, lastId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "domainName" $domainName "scalar") (serialize-qp "continueFrom" $continueFrom "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domainName" $domain_name "scalar") (serialize-qp "continueFrom" $continue_from "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aliases/all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,7 +237,7 @@ export def "aliases-all GetAliases" [
 #
 # GET /clicks
 # operationId: GetClicks
-export def "clicks GetClicks" [
+export def "clicks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,12 +246,12 @@ export def "clicks GetClicks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --continueFrom: string # An ID returned by a previous query to continue clicks retrieval (see lastId in response) (e.g. 1588788835614657618)
+  --continue-from: string # An ID returned by a previous query to continue clicks retrieval (see lastId in response) (e.g. 1588788835614657618)
   --limit: int # Number of results to return per request (default: 1000, e.g. 100)
 ]: nothing -> record<clicks: table<alias: string, aliasId: string, browser: string, country: string, createdAt: int, destination: string, domain: string, os: string, referrer: string, userAgent: string>, lastId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "continueFrom" $continueFrom "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "continueFrom" $continue_from "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/clicks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -262,7 +262,7 @@ export def "clicks GetClicks" [
 #
 # POST /clicks/pg
 # operationId: GetStatistics
-export def "clicks-pg GetStatistics" [
+export def "clicks-pg get-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,17 +271,17 @@ export def "clicks-pg GetStatistics" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --aliasId: string # Alias Id (e.g. aBcDe012)
-  --dateFrom: string # date From (e.g. 2001-05-02)
-  --dateTo: string # date To (e.g. 2001-05-02)
+  --alias-id: string # Alias Id (e.g. aBcDe012)
+  --date-from: string # date From (e.g. 2001-05-02)
+  --date-to: string # date To (e.g. 2001-05-02)
   --domain: string # Domain name (e.g. short.fyi)
-  --lastId: int # last Id (e.g. 100)
+  --last-id: int # last Id (e.g. 100)
 ]: any -> record<accountId: string, alias: string, aliasId: string, browser: string, country: string, createdAt: int, destination: string, domain: string, id: int, os: string, referrer: string, userAgent: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/clicks/pg")
-  let body = {aliasId: $aliasId, dateFrom: $dateFrom, dateTo: $dateTo, domain: $domain, lastId: $lastId} | compact
+  let body = {"aliasId": $alias_id, "dateFrom": $date_from, "dateTo": $date_to, "domain": $domain, "lastId": $last_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

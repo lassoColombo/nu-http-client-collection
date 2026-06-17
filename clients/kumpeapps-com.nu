@@ -66,13 +66,13 @@ def base-url-completer [] { ["https://restapi.kumpeapps.com/v5" "https://restapi
 def auth-scheme-completer [] { ["x-auth"] }
 
 # Completers for enum parameters
-def transactionType-completer [] { ["Add" "Subtract"] }
+def transaction-type-completer [] { ["Add" "Subtract"] }
 def tool-completer [] { ["register" "send" "subscribe" "unsubscribe"] }
 def section-completer [] { ["Allowance" "Allowance-New" "Chores" "Chores-New" "Chores-Reminders" "WishList"] }
 def priority-completer [] { ["active" "critical" "passive" "time-sensitive"] }
 def day-completer [] { ["Friday" "Monday" "Saturday" "Sunday" "Thursday" "Tuesday" "Wednesday" "Weekly"] }
 def day-completer-1 [] { ["Friday" "Monday" "Saturday" "Sunday" "Thursday" "Today" "Tuesday" "Wednesday" "Weekly"] }
-def whereDay-completer [] { ["Friday" "Monday" "Saturday" "Sunday" "Thursday" "Today" "Tuesday" "Wednesday" "Weekly"] }
+def where-day-completer [] { ["Friday" "Monday" "Saturday" "Sunday" "Thursday" "Today" "Tuesday" "Wednesday" "Weekly"] }
 def link-completer [] { ["https://khome.kumpeapps.com/portal/chores-today.php" "https://khome.kumpeapps.com/portal/wish-list.php"] }
 def scope-completer [] { ["Chores" "ChoresAdmin" "WishList" "WishListAdmin"] }
 def scope2-completer [] { ["Chores" "ChoresAdmin" "WishList" "WishListAdmin"] }
@@ -146,11 +146,11 @@ export def "appkey post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # Username assigned to your app
   --password: string # Password assigned to your app (format: password)
-  --supportsYubikey: oneof<nothing, bool> # App supports YubiKey OTP
+  --supports-yubikey: oneof<nothing, bool> # App supports YubiKey OTP
 ]: nothing -> record<app_key: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supportsYubikey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supports_yubikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -223,11 +223,11 @@ export def "authentication-appkey post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # Username assigned to your app
   --password: string # Password assigned to your app (format: password)
-  --supportsYubikey: oneof<nothing, bool> # App supports YubiKey OTP
+  --supports-yubikey: oneof<nothing, bool> # App supports YubiKey OTP
 ]: nothing -> record<app_key: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supportsYubikey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supports_yubikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/appkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,12 +274,12 @@ export def "authentication-authkey get" [
   --username: string # Authenticated username
   --password: string # Authenticated password (format: password)
   --otp: string # YubiKey OTP (if configured for user) (format: password)
-  --deviceName: string # User's device name
-  --identifierForVendor: string # identifierForVendor for User's Device (if app is iOS)
+  --device-name: string # User's device name
+  --identifier-for-vendor: string # identifierForVendor for User's Device (if app is iOS)
 ]: nothing -> record<auth_key: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar") (serialize-qp "deviceName" $deviceName "scalar") (serialize-qp "identifierForVendor" $identifierForVendor "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "otp" $otp "scalar") (serialize-qp "deviceName" $device_name "scalar") (serialize-qp "identifierForVendor" $identifier_for_vendor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/authkey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,12 +507,12 @@ export def "kkid-allowance get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kidUserId: int # userID of the kid
-  --transactionDays: int # number of days you wish to search allowance transactions (default is 90 days)
+  --kid-user-id: int # userID of the kid
+  --transaction-days: int # number of days you wish to search allowance transactions (default is 90 days)
 ]: nothing -> record<allowanceTransaction: table<amount: int, date: string, transactionDescription: string, transactionId: int, transactionType: string, userId: int>, balance: int, id: int, lastUpdated: string, success: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "kidUserId" $kidUserId "scalar") (serialize-qp "transactionDays" $transactionDays "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "transactionDays" $transaction_days "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/allowance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -532,14 +532,14 @@ export def "kkid-allowance post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kidUserId: int # userID of the kid
+  --kid-user-id: int # userID of the kid
   --amount: float # amount you wish to Add/Subtract (subtract value should be a negative value)
   --description: string # Description (reason) of allowance transaction
-  --transactionType: string@transactionType-completer # Transaction Type (Add/Subtract)
+  --transaction-type: string@transaction-type-completer # Transaction Type (Add/Subtract)
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "kidUserId" $kidUserId "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "transactionType" $transactionType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "transactionType" $transaction_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/allowance" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -559,7 +559,7 @@ export def "kkid-apns post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kidUserId: int # userID of the kid
+  --kid-user-id: int # userID of the kid
   --tool: string@tool-completer # tool you wish to talk to
   --qp-token: string # device APNS token (required for register)
   --devicename: string # Name of device to associate to token (required for register)
@@ -572,7 +572,7 @@ export def "kkid-apns post" [
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "kidUserId" $kidUserId "scalar") (serialize-qp "tool" $tool "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devicename" $devicename "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "badge" $badge "scalar") (serialize-qp "sound" $sound "scalar") (serialize-qp "section" $section "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "tool" $tool "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "devicename" $devicename "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "badge" $badge "scalar") (serialize-qp "sound" $sound "scalar") (serialize-qp "section" $section "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/apns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -592,11 +592,11 @@ export def "kkid-chorelist delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idChoreList: int # id of the chore you wish to delete
+  --id-chore-list: int # id of the chore you wish to delete
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "idChoreList" $idChoreList "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "idChoreList" $id_chore_list "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -616,17 +616,17 @@ export def "kkid-chorelist get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kidUsername: string # Username of kid you wish to search
+  --kid-username: string # Username of kid you wish to search
   --day: string@day-completer # Day of week for chores (Weekly for weekly chores)
   --status: string # Status of Chore to search
-  --blockDash: oneof<nothing, bool> # Filter results by blockDash parameter
+  --block-dash: oneof<nothing, bool> # Filter results by blockDash parameter
   --optional: oneof<nothing, bool> # Filter results by optional parameter
-  --canSteal: oneof<nothing, bool> # Filter results by canSteal parameter
-  --includeCalendar: oneof<nothing, bool> # include calendar notations (default is false)
+  --can-steal: oneof<nothing, bool> # Filter results by canSteal parameter
+  --include-calendar: oneof<nothing, bool> # include calendar notations (default is false)
 ]: nothing -> record<chore: table<aiIcon: string, altitude: int, blockDash: bool, choreDescription: string, choreName: string, choreNumber: int, day: string, extraAllowance: int, idChoreList: int, isCalendar: bool, kid: string, latitude: int, longitude: int, nfcTag: string, notes: string, oneTime: bool, optional: bool, reassignable: bool, reassigned: bool, requireObjectDetection: string, startDate: string, status: string, stolen: bool, stolenBy: string, updated: string, updatedBy: string>, success: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "kidUsername" $kidUsername "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "blockDash" $blockDash "scalar") (serialize-qp "optional" $optional "scalar") (serialize-qp "canSteal" $canSteal "scalar") (serialize-qp "includeCalendar" $includeCalendar "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "kidUsername" $kid_username "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "blockDash" $block_dash "scalar") (serialize-qp "optional" $optional "scalar") (serialize-qp "canSteal" $can_steal "scalar") (serialize-qp "includeCalendar" $include_calendar "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -646,30 +646,30 @@ export def "kkid-chorelist post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kidUsername: string # username of kid to assign the chore to.
+  --kid-username: string # username of kid to assign the chore to.
   --day: string@day-completer-1 # day of week (Monday, Tuesday....) for the chore. For weekly chores put Weekly or leave blank
-  --nfcTag: string # text field of nfc tag required to check off chore
+  --nfc-tag: string # text field of nfc tag required to check off chore
   --status: string # status of chore (default is todo)
-  --choreName: string # name of chore
-  --choreDescription: string # optional chore description
-  --choreNumber: int # number priority of chore (default is 5)
-  --blockDash: oneof<nothing, bool> # block dash option on this chore
-  --oneTime: oneof<nothing, bool> # mark as one time chore (does not repeat each week)
-  --extraAllowance: int # ammount of allowance added at end of week for completing this chore
+  --chore-name: string # name of chore
+  --chore-description: string # optional chore description
+  --chore-number: int # number priority of chore (default is 5)
+  --block-dash: oneof<nothing, bool> # block dash option on this chore
+  --one-time: oneof<nothing, bool> # mark as one time chore (does not repeat each week)
+  --extra-allowance: int # ammount of allowance added at end of week for completing this chore
   --optional: oneof<nothing, bool> # mark as optional chore
   --reassignable: oneof<nothing, bool> # mark as reassignable (default is true)
-  --canSteal: oneof<nothing, bool> # mark as sibling can steal chore
-  --startDate: string # date (yyyy-mm-dd) that you wish the chore to start showing up. (default is today)
+  --can-steal: oneof<nothing, bool> # mark as sibling can steal chore
+  --start-date: string # date (yyyy-mm-dd) that you wish the chore to start showing up. (default is today)
   --notes: string # notes added to chore (visable only on reports, kids do not see this note, this is mostly just for the developer)
-  --requireObjectDetection: oneof<nothing, bool> # require use of camera to detect object detection tag order to check off chore
-  --objectDetectionTag: string # tag for object detection to search for (required if requireObjectDetection is true)
-  --updatedByAutomation: oneof<nothing, bool> # true if chore updated via API from an Automation System
-  --aiIcon: string # Notes if AI Icons should be used (n for no, y for yes, e for yes- error)
-  --isCalendar: oneof<nothing, bool> # True if this is a calendar note instead of a chore.
+  --require-object-detection: oneof<nothing, bool> # require use of camera to detect object detection tag order to check off chore
+  --object-detection-tag: string # tag for object detection to search for (required if requireObjectDetection is true)
+  --updated-by-automation: oneof<nothing, bool> # true if chore updated via API from an Automation System
+  --ai-icon: string # Notes if AI Icons should be used (n for no, y for yes, e for yes- error)
+  --is-calendar: oneof<nothing, bool> # True if this is a calendar note instead of a chore.
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "kidUsername" $kidUsername "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "nfcTag" $nfcTag "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "choreName" $choreName "scalar") (serialize-qp "choreDescription" $choreDescription "scalar") (serialize-qp "choreNumber" $choreNumber "scalar") (serialize-qp "blockDash" $blockDash "scalar") (serialize-qp "oneTime" $oneTime "scalar") (serialize-qp "extraAllowance" $extraAllowance "scalar") (serialize-qp "optional" $optional "scalar") (serialize-qp "reassignable" $reassignable "scalar") (serialize-qp "canSteal" $canSteal "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "requireObjectDetection" $requireObjectDetection "scalar") (serialize-qp "objectDetectionTag" $objectDetectionTag "scalar") (serialize-qp "updatedByAutomation" $updatedByAutomation "scalar") (serialize-qp "aiIcon" $aiIcon "scalar") (serialize-qp "isCalendar" $isCalendar "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "kidUsername" $kid_username "scalar") (serialize-qp "day" $day "scalar") (serialize-qp "nfcTag" $nfc_tag "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "choreName" $chore_name "scalar") (serialize-qp "choreDescription" $chore_description "scalar") (serialize-qp "choreNumber" $chore_number "scalar") (serialize-qp "blockDash" $block_dash "scalar") (serialize-qp "oneTime" $one_time "scalar") (serialize-qp "extraAllowance" $extra_allowance "scalar") (serialize-qp "optional" $optional "scalar") (serialize-qp "reassignable" $reassignable "scalar") (serialize-qp "canSteal" $can_steal "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "requireObjectDetection" $require_object_detection "scalar") (serialize-qp "objectDetectionTag" $object_detection_tag "scalar") (serialize-qp "updatedByAutomation" $updated_by_automation "scalar") (serialize-qp "aiIcon" $ai_icon "scalar") (serialize-qp "isCalendar" $is_calendar "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -689,23 +689,23 @@ export def "kkid-chorelist put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --idChoreList: int # id number of chore you wish to update
+  --id-chore-list: int # id number of chore you wish to update
   --status: string # new status of chore
   --stolen: oneof<nothing, bool> # mark chore as stolen by sibling
-  --stolenBy: string # username of sibling that stole the chore (required if stolen is true)
-  --nfcTag: string # text field of NFC tag that is required to be scanned to check off this chore (normally null)
+  --stolen-by: string # username of sibling that stole the chore (required if stolen is true)
+  --nfc-tag: string # text field of NFC tag that is required to be scanned to check off this chore (normally null)
   --notes: string # notes field for chore
   --latitude: int # GPS latitude of where the chore was marked
   --longitude: int # GPS longitude of where the chore was marked
   --altitude: int # GPS altitude of where the chore was marked
-  --updatedByAutomation: oneof<nothing, bool> # true if updated via API by automation system
-  --whereDay: string@whereDay-completer # Where day equals...
-  --whereStatus: string # Where status equals...
-  --whereName: string # Where chore name equals...
+  --updated-by-automation: oneof<nothing, bool> # true if updated via API by automation system
+  --where-day: string@where-day-completer # Where day equals...
+  --where-status: string # Where status equals...
+  --where-name: string # Where chore name equals...
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "idChoreList" $idChoreList "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "stolen" $stolen "scalar") (serialize-qp "stolenBy" $stolenBy "scalar") (serialize-qp "nfcTag" $nfcTag "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "altitude" $altitude "scalar") (serialize-qp "updatedByAutomation" $updatedByAutomation "scalar") (serialize-qp "whereDay" $whereDay "scalar") (serialize-qp "whereStatus" $whereStatus "scalar") (serialize-qp "whereName" $whereName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "idChoreList" $id_chore_list "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "stolen" $stolen "scalar") (serialize-qp "stolenBy" $stolen_by "scalar") (serialize-qp "nfcTag" $nfc_tag "scalar") (serialize-qp "notes" $notes "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "altitude" $altitude "scalar") (serialize-qp "updatedByAutomation" $updated_by_automation "scalar") (serialize-qp "whereDay" $where_day "scalar") (serialize-qp "whereStatus" $where_status "scalar") (serialize-qp "whereName" $where_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/chorelist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,12 +728,12 @@ export def "kkid-masteruser post" [
   --username: string # username of user to create
   --password: string # password of user to create (format: password)
   --email: string # email address of user to create
-  --firstName: string # First Name of user to create
-  --lastName: string # Last Name of user to create
+  --first-name: string # First Name of user to create
+  --last-name: string # Last Name of user to create
 ]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/masteruser" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -753,7 +753,7 @@ export def "kkid-share get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --linkUserId: string # User ID that the link should be authenticated to
+  --link-user-id: string # User ID that the link should be authenticated to
   --link: string@link-completer # Link to share
   --scope: string@scope-completer # Authentication scope for link
   --scope2: string@scope2-completer # Authentication scope for link
@@ -762,7 +762,7 @@ export def "kkid-share get" [
 ]: nothing -> record<auth_link: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "linkUserId" $linkUserId "scalar") (serialize-qp "link" $link "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "scope2" $scope2 "scalar") (serialize-qp "scope3" $scope3 "scalar") (serialize-qp "scope4" $scope4 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "linkUserId" $link_user_id "scalar") (serialize-qp "link" $link "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "scope2" $scope2 "scalar") (serialize-qp "scope3" $scope3 "scalar") (serialize-qp "scope4" $scope4 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/share" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -782,11 +782,11 @@ export def "kkid-user get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --enableBool: oneof<nothing, bool> # Use bool values instead of Int 0/1
+  --enable-bool: oneof<nothing, bool> # Use bool values instead of Int 0/1
 ]: nothing -> record<success: bool, user: table<email: string, emoji: string, enableAllowance: bool, enableBehaviorChart: bool, enableChores: bool, enableNoAds: bool, enableObjectDetection: bool, enableTmdb: bool, firstName: string, homeId: int, isActive: bool, isAdmin: bool, isBanned: bool, isChild: bool, isDisabled: bool, isLocked: bool, isMaster: bool, lastName: string, masterId: int, pushAllowance: bool, pushAllowanceNew: bool, pushChores: bool, pushChoresNew: bool, pushChoresReminders: bool, tmdbKey: string, userId: int, username: string, weeklyAllowance: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "enableBool" $enableBool "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "enableBool" $enable_bool "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -806,11 +806,11 @@ export def "kkid-userlist delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userID: int # userID of the user you wish to delete
+  --user-id: int # userID of the user you wish to delete
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userID" $userID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userID" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,18 +830,18 @@ export def "kkid-userlist get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --isChild: oneof<nothing, bool> # Filter Search by isChild flag
-  --isActive: oneof<nothing, bool> # Filter Search by isActive flag
-  --isAdmin: oneof<nothing, bool> # Filter Search by isAdmin flag
-  --enableAllowance: oneof<nothing, bool> # Filter Search by enableAllowance flag
-  --enableChores: oneof<nothing, bool> # Filter Search by enableChores flag
-  --userID: int # userID of user to search
+  --is-child: oneof<nothing, bool> # Filter Search by isChild flag
+  --is-active: oneof<nothing, bool> # Filter Search by isActive flag
+  --is-admin: oneof<nothing, bool> # Filter Search by isAdmin flag
+  --enable-allowance: oneof<nothing, bool> # Filter Search by enableAllowance flag
+  --enable-chores: oneof<nothing, bool> # Filter Search by enableChores flag
+  --user-id: int # userID of user to search
   --username: string # Username of user to search
   --email: string # Email address of user to search
 ]: nothing -> record<success: bool, user: table<email: string, emoji: string, enableAllowance: bool, enableBehaviorChart: bool, enableChores: bool, enableNoAds: bool, enableObjectDetection: bool, enableTmdb: bool, firstName: string, homeId: int, isActive: bool, isAdmin: bool, isBanned: bool, isChild: bool, isDisabled: bool, isLocked: bool, isMaster: bool, lastName: string, masterId: int, pushAllowance: bool, pushAllowanceNew: bool, pushChores: bool, pushChoresNew: bool, pushChoresReminders: bool, tmdbKey: string, userId: int, username: string, weeklyAllowance: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "isChild" $isChild "scalar") (serialize-qp "isActive" $isActive "scalar") (serialize-qp "isAdmin" $isAdmin "scalar") (serialize-qp "enableAllowance" $enableAllowance "scalar") (serialize-qp "enableChores" $enableChores "scalar") (serialize-qp "userID" $userID "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "isChild" $is_child "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "isAdmin" $is_admin "scalar") (serialize-qp "enableAllowance" $enable_allowance "scalar") (serialize-qp "enableChores" $enable_chores "scalar") (serialize-qp "userID" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -864,12 +864,12 @@ export def "kkid-userlist post" [
   --username: string # username of user to create
   --password: string # password of user to create (format: password)
   --email: string # email address of user to create
-  --firstName: string # First Name of user to create
-  --lastName: string # Last Name of user to create
+  --first-name: string # First Name of user to create
+  --last-name: string # Last Name of user to create
 ]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -889,23 +889,23 @@ export def "kkid-userlist put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userID: int # userID of the user you wish to update
+  --user-id: int # userID of the user you wish to update
   --username: string # username of user to create
   --email: string # email address of user to create
-  --firstName: string # First Name of user to create
-  --lastName: string # Last Name of user to create
+  --first-name: string # First Name of user to create
+  --last-name: string # Last Name of user to create
   --emoji: string # emoji character for user
-  --tmdbKey: string # User's TMdB Session Key
-  --enableWishList: oneof<nothing, bool> # set status of Wish List module enabled
-  --enableChores: oneof<nothing, bool> # set status of chores module enabled
-  --enableAllowance: oneof<nothing, bool> # set status of allowance module enabled
-  --enableAdmin: oneof<nothing, bool> # set status of isAdmin
-  --enableTmdb: oneof<nothing, bool> # set status of enableTmdb (movie and tv search)
-  --enableObjectDetection: oneof<nothing, bool> # set status of enableObjectDetection
+  --tmdb-key: string # User's TMdB Session Key
+  --enable-wish-list: oneof<nothing, bool> # set status of Wish List module enabled
+  --enable-chores: oneof<nothing, bool> # set status of chores module enabled
+  --enable-allowance: oneof<nothing, bool> # set status of allowance module enabled
+  --enable-admin: oneof<nothing, bool> # set status of isAdmin
+  --enable-tmdb: oneof<nothing, bool> # set status of enableTmdb (movie and tv search)
+  --enable-object-detection: oneof<nothing, bool> # set status of enableObjectDetection
 ]: nothing -> record<added: string, aff_added: string, aff_id: string, aff_payout_type: string, avatar: string, city: string, comment: string, country: string, disable_lock_until: string, email: string, i_agree: string, is_affiliate: string, is_locked: string, lang: string, last_login: string, login: string, name_f: string, name_l: string, pass: string, pass_dattm: string, phone: string, pin: string, plain_password: string, remember_key: string, remote_addr: string, require_consent: string, reseller_id: string, saved_form_id: string, state: string, status: string, street: string, street2: string, subusers_parent_id: string, tax_id: string, unsubscribed: string, user_agent: string, user_id: int, zip: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userID" $userID "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar") (serialize-qp "emoji" $emoji "scalar") (serialize-qp "tmdbKey" $tmdbKey "scalar") (serialize-qp "enableWishList" $enableWishList "scalar") (serialize-qp "enableChores" $enableChores "scalar") (serialize-qp "enableAllowance" $enableAllowance "scalar") (serialize-qp "enableAdmin" $enableAdmin "scalar") (serialize-qp "enableTmdb" $enableTmdb "scalar") (serialize-qp "enableObjectDetection" $enableObjectDetection "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userID" $user_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "emoji" $emoji "scalar") (serialize-qp "tmdbKey" $tmdb_key "scalar") (serialize-qp "enableWishList" $enable_wish_list "scalar") (serialize-qp "enableChores" $enable_chores "scalar") (serialize-qp "enableAllowance" $enable_allowance "scalar") (serialize-qp "enableAdmin" $enable_admin "scalar") (serialize-qp "enableTmdb" $enable_tmdb "scalar") (serialize-qp "enableObjectDetection" $enable_object_detection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/userlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -925,11 +925,11 @@ export def "kkid-wishlist delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --wishId: int # ID of wishlist item to delete
+  --wish-id: int # ID of wishlist item to delete
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "wishId" $wishId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "wishId" $wish_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -949,11 +949,11 @@ export def "kkid-wishlist get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kidUserId: int # userID of the kid
+  --kid-user-id: int # userID of the kid
 ]: nothing -> record<success: bool, wish: table<description: string, id: int, link: string, master_id: int, priority: int, title: string, user_id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "kidUserId" $kidUserId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -973,7 +973,7 @@ export def "kkid-wishlist post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --kidUserId: int # userID of the kid
+  --kid-user-id: int # userID of the kid
   --title: string # Item title
   --description: string # Item Description
   --priority: int # Item Priority
@@ -981,7 +981,7 @@ export def "kkid-wishlist post" [
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "kidUserId" $kidUserId "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "link" $link "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "kidUserId" $kid_user_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "link" $link "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1001,7 +1001,7 @@ export def "kkid-wishlist put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --wishId: int # Wish list item ID to update
+  --wish-id: int # Wish list item ID to update
   --title: string # Item title
   --description: string # Item Description
   --priority: int # Item Priority
@@ -1009,7 +1009,7 @@ export def "kkid-wishlist put" [
 ]: nothing -> record<message: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "wishId" $wishId "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "link" $link "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "wishId" $wish_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "link" $link "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/kkid/wishlist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -73,7 +73,7 @@ def accept-completer [] { ["application/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-openid-configuration Get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-openid-configuration get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 #
 # GET /.well-known/openid-configuration
 # operationId: MetadataConfiguration_Get
-export def "well-known-openid-configuration Get" [
+export def "well-known-openid-configuration get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,7 +119,7 @@ export def "well-known-openid-configuration Get" [
 #
 # GET /certs
 # operationId: Certs_Get
-export def "certs Get" [
+export def "certs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,7 +141,7 @@ export def "certs Get" [
 #
 # GET /operations/policy/current
 # operationId: Policy_Get
-export def "operations-policy-current Get" [
+export def "operations-policy-current get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "operations-policy-current Get" [
 #
 # POST /operations/policy/current
 # operationId: Policy_Reset
-export def "operations-policy-current Reset" [
+export def "operations-policy-current reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "operations-policy-current Reset" [
 #
 # PUT /operations/policy/current
 # operationId: Policy_Set
-export def "operations-policy-current Set" [
+export def "operations-policy-current put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "operations-policy-current Set" [
 #
 # POST /operations/policy/updatepolicy
 # operationId: Policy_PrepareToSet
-export def "operations-policy-updatepolicy PrepareToSet" [
+export def "operations-policy-updatepolicy post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

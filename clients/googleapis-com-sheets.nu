@@ -68,13 +68,13 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def dateTimeRenderOption-completer [] { ["FORMATTED_STRING" "SERIAL_NUMBER"] }
-def majorDimension-completer [] { ["COLUMNS" "DIMENSION_UNSPECIFIED" "ROWS"] }
-def valueRenderOption-completer [] { ["FORMATTED_VALUE" "FORMULA" "UNFORMATTED_VALUE"] }
-def responseDateTimeRenderOption-completer [] { ["FORMATTED_STRING" "SERIAL_NUMBER"] }
-def responseValueRenderOption-completer [] { ["FORMATTED_VALUE" "FORMULA" "UNFORMATTED_VALUE"] }
-def valueInputOption-completer [] { ["INPUT_VALUE_OPTION_UNSPECIFIED" "RAW" "USER_ENTERED"] }
-def insertDataOption-completer [] { ["INSERT_ROWS" "OVERWRITE"] }
+def date-time-render-option-completer [] { ["FORMATTED_STRING" "SERIAL_NUMBER"] }
+def major-dimension-completer [] { ["COLUMNS" "DIMENSION_UNSPECIFIED" "ROWS"] }
+def value-render-option-completer [] { ["FORMATTED_VALUE" "FORMULA" "UNFORMATTED_VALUE"] }
+def response-date-time-render-option-completer [] { ["FORMATTED_STRING" "SERIAL_NUMBER"] }
+def response-value-render-option-completer [] { ["FORMATTED_VALUE" "FORMULA" "UNFORMATTED_VALUE"] }
+def value-input-option-completer [] { ["INPUT_VALUE_OPTION_UNSPECIFIED" "RAW" "USER_ENTERED"] }
+def insert-data-option-completer [] { ["INSERT_ROWS" "OVERWRITE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -125,24 +125,24 @@ export def "spreadsheets sheetsspreadsheetscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dataSources: list # A list of external data sources connected with the spreadsheet. — item shape: {calculatedColumns?: list, dataSourceId?: string, sheetId?: int, spec?: record}
-  --developerMetadata: list # The developer metadata associated with a spreadsheet. — item shape: {location?: record, metadataId?: int, metadataKey?: string, metadataValue?: string, visibility?: "DEVELOPER_METADATA_VISIBILITY_UNSPECIFIED"|"DOCUMENT"|"PROJECT"}
-  --namedRanges: list # The named ranges defined in a spreadsheet. — item shape: {name?: string, namedRangeId?: string, range?: record}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --data-sources: list # A list of external data sources connected with the spreadsheet. — item shape: {calculatedColumns?: list, dataSourceId?: string, sheetId?: int, spec?: record}
+  --developer-metadata: list # The developer metadata associated with a spreadsheet. — item shape: {location?: record, metadataId?: int, metadataKey?: string, metadataValue?: string, visibility?: "DEVELOPER_METADATA_VISIBILITY_UNSPECIFIED"|"DOCUMENT"|"PROJECT"}
+  --named-ranges: list # The named ranges defined in a spreadsheet. — item shape: {name?: string, namedRangeId?: string, range?: record}
   --properties: record # Properties of a spreadsheet. — shape: {autoRecalc?: "RECALCULATION_INTERVAL_UNSPECIFIED"|"ON_CHANGE"|"MINUTE"|"HOUR", defaultFormat?: record, iterativeCalculationSettings?: record, locale?: string, spreadsheetTheme?: record, timeZone?: string, title?: string}
   --sheets: list # The sheets that are part of a spreadsheet. — item shape: {bandedRanges?: list, basicFilter?: record, charts?: list, columnGroups?: list, conditionalFormats?: list, data?: list, developerMetadata?: list, filterViews?: list, merges?: list, properties?: record, protectedRanges?: list, rowGroups?: list, slicers?: list}
-  --spreadsheetId: string # The ID of the spreadsheet. This field is read-only.
-  --spreadsheetUrl: string # The url of the spreadsheet. This field is read-only.
+  --spreadsheet-id: string # The ID of the spreadsheet. This field is read-only.
+  --spreadsheet-url: string # The url of the spreadsheet. This field is read-only.
 ]: any -> record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/spreadsheets" $qp)
-  let body = {dataSources: $dataSources, developerMetadata: $developerMetadata, namedRanges: $namedRanges, properties: $properties, sheets: $sheets, spreadsheetId: $spreadsheetId, spreadsheetUrl: $spreadsheetUrl} | compact
+  let body = {"dataSources": $data_sources, "developerMetadata": $developer_metadata, "namedRanges": $named_ranges, "properties": $properties, "sheets": $sheets, "spreadsheetId": $spreadsheet_id, "spreadsheetUrl": $spreadsheet_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -154,7 +154,7 @@ export def "spreadsheets sheetsspreadsheetscreate" [
 # GET /v4/spreadsheets/{spreadsheetId}
 # operationId: sheets.spreadsheets.get
 export def "spreadsheets sheetsspreadsheetsget" [
-  spreadsheetId: string
+  spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,17 +170,17 @@ export def "spreadsheets sheetsspreadsheetsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --includeGridData: oneof<nothing, bool> # True if grid data should be returned. This parameter is ignored if a field mask was set in the request.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --include-grid-data: oneof<nothing, bool> # True if grid data should be returned. This parameter is ignored if a field mask was set in the request.
   --ranges: list # The ranges to retrieve from the spreadsheet.
 ]: nothing -> record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "includeGridData" $includeGridData "scalar") (serialize-qp "ranges" $ranges "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeGridData" $include_grid_data "scalar") (serialize-qp "ranges" $ranges "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,8 +191,8 @@ export def "spreadsheets sheetsspreadsheetsget" [
 # GET /v4/spreadsheets/{spreadsheetId}/developerMetadata/{metadataId}
 # operationId: sheets.spreadsheets.developerMetadata.get
 export def "spreadsheets-developer-metadata sheetsspreadsheetsdeveloperMetadataget" [
-  spreadsheetId: string
-  metadataId: int
+  spreadsheet_id: string
+  metadata_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,15 +208,15 @@ export def "spreadsheets-developer-metadata sheetsspreadsheetsdeveloperMetadatag
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<location: record<dimensionRange: record<dimension: string, endIndex: int, sheetId: int, startIndex: int>, locationType: string, sheetId: int, spreadsheet: bool>, metadataId: int, metadataKey: string, metadataValue: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/developerMetadata/($metadataId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, metadata_id: $metadata_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/developerMetadata/{metadata_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,7 +228,7 @@ export def "spreadsheets-developer-metadata sheetsspreadsheetsdeveloperMetadatag
 # operationId: sheets.spreadsheets.developerMetadata.search
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 export def "spreadsheets-developer-metadata-search sheetsspreadsheetsdeveloperMetadatasearch" [
-  spreadsheetId: string
+  spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,18 +244,18 @@ export def "spreadsheets-developer-metadata-search sheetsspreadsheetsdeveloperMe
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dataFilters: list # The data filters describing the criteria used to determine which DeveloperMetadata entries to return. DeveloperMetadata matching any of the specified filters are included in the response. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --data-filters: list # The data filters describing the criteria used to determine which DeveloperMetadata entries to return. DeveloperMetadata matching any of the specified filters are included in the response. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 ]: any -> record<matchedDeveloperMetadata: table<dataFilters: list, developerMetadata: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/developerMetadata:search" $qp)
-  let body = {dataFilters: $dataFilters} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/developerMetadata:search") $qp)
+  let body = {"dataFilters": $data_filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -267,8 +267,8 @@ export def "spreadsheets-developer-metadata-search sheetsspreadsheetsdeveloperMe
 # POST /v4/spreadsheets/{spreadsheetId}/sheets/{sheetId}:copyTo
 # operationId: sheets.spreadsheets.sheets.copyTo
 export def "spreadsheets-sheets sheetsspreadsheetssheetscopyTo" [
-  spreadsheetId: string
-  sheetId: int
+  spreadsheet_id: string
+  sheet_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,18 +284,18 @@ export def "spreadsheets-sheets sheetsspreadsheetssheetscopyTo" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --destinationSpreadsheetId: string # The ID of the spreadsheet to copy the sheet to.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --destination-spreadsheet-id: string # The ID of the spreadsheet to copy the sheet to.
 ]: any -> record<dataSourceSheetProperties: record<columns: list<record>, dataExecutionStatus: record<errorCode: string, errorMessage: string, lastRefreshTime: string, state: string>, dataSourceId: string>, gridProperties: record<columnCount: int, columnGroupControlAfter: bool, frozenColumnCount: int, frozenRowCount: int, hideGridlines: bool, rowCount: int, rowGroupControlAfter: bool>, hidden: bool, index: int, rightToLeft: bool, sheetId: int, sheetType: string, tabColor: record<alpha: float, blue: float, green: float, red: float>, tabColorStyle: record<rgbColor: record<alpha: float, blue: float, green: float, red: float>, themeColor: string>, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/sheets/($sheetId):copyTo" $qp)
-  let body = {destinationSpreadsheetId: $destinationSpreadsheetId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, sheet_id: $sheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/sheets/{sheet_id}:copyTo") $qp)
+  let body = {"destinationSpreadsheetId": $destination_spreadsheet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,7 +307,7 @@ export def "spreadsheets-sheets sheetsspreadsheetssheetscopyTo" [
 # GET /v4/spreadsheets/{spreadsheetId}/values/{range}
 # operationId: sheets.spreadsheets.values.get
 export def "spreadsheets-values sheetsspreadsheetsvaluesget" [
-  spreadsheetId: string
+  spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -324,18 +324,18 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dateTimeRenderOption: string@dateTimeRenderOption-completer # How dates, times, and durations should be represented in the output. This is ignored if value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
-  --majorDimension: string@majorDimension-completer # The major dimension that results should use. For example, if the spreadsheet data in Sheet1 is: `A1=1,B1=2,A2=3,B2=4`, then requesting `range=Sheet1!A1:B2?majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas requesting `range=Sheet1!A1:B2?majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
-  --valueRenderOption: string@valueRenderOption-completer # How values should be represented in the output. The default render option is FORMATTED_VALUE.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --date-time-render-option: string@date-time-render-option-completer # How dates, times, and durations should be represented in the output. This is ignored if value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
+  --major-dimension: string@major-dimension-completer # The major dimension that results should use. For example, if the spreadsheet data in Sheet1 is: `A1=1,B1=2,A2=3,B2=4`, then requesting `range=Sheet1!A1:B2?majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas requesting `range=Sheet1!A1:B2?majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
+  --value-render-option: string@value-render-option-completer # How values should be represented in the output. The default render option is FORMATTED_VALUE.
 ]: nothing -> record<majorDimension: string, range: string, values: list<list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "dateTimeRenderOption" $dateTimeRenderOption "scalar") (serialize-qp "majorDimension" $majorDimension "scalar") (serialize-qp "valueRenderOption" $valueRenderOption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/values/($range)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dateTimeRenderOption" $date_time_render_option "scalar") (serialize-qp "majorDimension" $major_dimension "scalar") (serialize-qp "valueRenderOption" $value_render_option "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, range: $range} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -346,7 +346,7 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesget" [
 # PUT /v4/spreadsheets/{spreadsheetId}/values/{range}
 # operationId: sheets.spreadsheets.values.update
 export def "spreadsheets-values sheetsspreadsheetsvaluesupdate" [
-  spreadsheetId: string
+  spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,24 +363,24 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --includeValuesInResponse: oneof<nothing, bool> # Determines if the update response should include the values of the cells that were updated. By default, responses do not include the updated values. If the range to write was larger than the range actually written, the response includes all values in the requested range (excluding trailing empty rows and columns).
-  --responseDateTimeRenderOption: string@responseDateTimeRenderOption-completer # Determines how dates, times, and durations in the response should be rendered. This is ignored if response_value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
-  --responseValueRenderOption: string@responseValueRenderOption-completer # Determines how values in the response should be rendered. The default render option is FORMATTED_VALUE.
-  --valueInputOption: string@valueInputOption-completer # How the input data should be interpreted.
-  --majorDimension: string@majorDimension-completer # The major dimension of the values. For output, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then requesting `range=A1:B2,majorDimension=ROWS` will return `[[1,2],[3,4]]`, whereas requesting `range=A1:B2,majorDimension=COLUMNS` will return `[[1,3],[2,4]]`. For input, with `range=A1:B2,majorDimension=ROWS` then `[[1,2],[3,4]]` will set `A1=1,B1=2,A2=3,B2=4`. With `range=A1:B2,majorDimension=COLUMNS` then `[[1,2],[3,4]]` will set `A1=1,B1=3,A2=2,B2=4`. When writing, if this field is not set, it defaults to ROWS.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --include-values-in-response: oneof<nothing, bool> # Determines if the update response should include the values of the cells that were updated. By default, responses do not include the updated values. If the range to write was larger than the range actually written, the response includes all values in the requested range (excluding trailing empty rows and columns).
+  --response-date-time-render-option: string@response-date-time-render-option-completer # Determines how dates, times, and durations in the response should be rendered. This is ignored if response_value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
+  --response-value-render-option: string@response-value-render-option-completer # Determines how values in the response should be rendered. The default render option is FORMATTED_VALUE.
+  --value-input-option: string@value-input-option-completer # How the input data should be interpreted.
+  --major-dimension: string@major-dimension-completer # The major dimension of the values. For output, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then requesting `range=A1:B2,majorDimension=ROWS` will return `[[1,2],[3,4]]`, whereas requesting `range=A1:B2,majorDimension=COLUMNS` will return `[[1,3],[2,4]]`. For input, with `range=A1:B2,majorDimension=ROWS` then `[[1,2],[3,4]]` will set `A1=1,B1=2,A2=3,B2=4`. With `range=A1:B2,majorDimension=COLUMNS` then `[[1,2],[3,4]]` will set `A1=1,B1=3,A2=2,B2=4`. When writing, if this field is not set, it defaults to ROWS.
   --body-range: string # The range the values cover, in [A1 notation](/sheets/api/guides/concepts#cell). For output, this range indicates the entire requested range, even though the values will exclude trailing rows and columns. When appending values, this field represents the range to search for a table, after which values will be appended.
   --values: list # The data that was read or to be written. This is an array of arrays, the outer array representing all the data and each inner array representing a major dimension. Each item in the inner array corresponds with one cell. For output, empty trailing rows and columns will not be included. For input, supported value types are: bool, string, and double. Null values will be skipped. To set a cell to an empty value, set the string value to an empty string.
 ]: any -> record<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record<majorDimension: string, range: string, values: list<list>>, updatedRange: string, updatedRows: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "includeValuesInResponse" $includeValuesInResponse "scalar") (serialize-qp "responseDateTimeRenderOption" $responseDateTimeRenderOption "scalar") (serialize-qp "responseValueRenderOption" $responseValueRenderOption "scalar") (serialize-qp "valueInputOption" $valueInputOption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/values/($range)" $qp)
-  let body = {majorDimension: $majorDimension, range: $body_range, values: $values} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeValuesInResponse" $include_values_in_response "scalar") (serialize-qp "responseDateTimeRenderOption" $response_date_time_render_option "scalar") (serialize-qp "responseValueRenderOption" $response_value_render_option "scalar") (serialize-qp "valueInputOption" $value_input_option "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, range: $range} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}") $qp)
+  let body = {"majorDimension": $major_dimension, "range": $body_range, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -392,7 +392,7 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesupdate" [
 # POST /v4/spreadsheets/{spreadsheetId}/values/{range}:append
 # operationId: sheets.spreadsheets.values.append
 export def "spreadsheets-values sheetsspreadsheetsvaluesappend" [
-  spreadsheetId: string
+  spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,25 +409,25 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesappend" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --includeValuesInResponse: oneof<nothing, bool> # Determines if the update response should include the values of the cells that were appended. By default, responses do not include the updated values.
-  --insertDataOption: string@insertDataOption-completer # How the input data should be inserted.
-  --responseDateTimeRenderOption: string@responseDateTimeRenderOption-completer # Determines how dates, times, and durations in the response should be rendered. This is ignored if response_value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
-  --responseValueRenderOption: string@responseValueRenderOption-completer # Determines how values in the response should be rendered. The default render option is FORMATTED_VALUE.
-  --valueInputOption: string@valueInputOption-completer # How the input data should be interpreted.
-  --majorDimension: string@majorDimension-completer # The major dimension of the values. For output, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then requesting `range=A1:B2,majorDimension=ROWS` will return `[[1,2],[3,4]]`, whereas requesting `range=A1:B2,majorDimension=COLUMNS` will return `[[1,3],[2,4]]`. For input, with `range=A1:B2,majorDimension=ROWS` then `[[1,2],[3,4]]` will set `A1=1,B1=2,A2=3,B2=4`. With `range=A1:B2,majorDimension=COLUMNS` then `[[1,2],[3,4]]` will set `A1=1,B1=3,A2=2,B2=4`. When writing, if this field is not set, it defaults to ROWS.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --include-values-in-response: oneof<nothing, bool> # Determines if the update response should include the values of the cells that were appended. By default, responses do not include the updated values.
+  --insert-data-option: string@insert-data-option-completer # How the input data should be inserted.
+  --response-date-time-render-option: string@response-date-time-render-option-completer # Determines how dates, times, and durations in the response should be rendered. This is ignored if response_value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
+  --response-value-render-option: string@response-value-render-option-completer # Determines how values in the response should be rendered. The default render option is FORMATTED_VALUE.
+  --value-input-option: string@value-input-option-completer # How the input data should be interpreted.
+  --major-dimension: string@major-dimension-completer # The major dimension of the values. For output, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then requesting `range=A1:B2,majorDimension=ROWS` will return `[[1,2],[3,4]]`, whereas requesting `range=A1:B2,majorDimension=COLUMNS` will return `[[1,3],[2,4]]`. For input, with `range=A1:B2,majorDimension=ROWS` then `[[1,2],[3,4]]` will set `A1=1,B1=2,A2=3,B2=4`. With `range=A1:B2,majorDimension=COLUMNS` then `[[1,2],[3,4]]` will set `A1=1,B1=3,A2=2,B2=4`. When writing, if this field is not set, it defaults to ROWS.
   --body-range: string # The range the values cover, in [A1 notation](/sheets/api/guides/concepts#cell). For output, this range indicates the entire requested range, even though the values will exclude trailing rows and columns. When appending values, this field represents the range to search for a table, after which values will be appended.
   --values: list # The data that was read or to be written. This is an array of arrays, the outer array representing all the data and each inner array representing a major dimension. Each item in the inner array corresponds with one cell. For output, empty trailing rows and columns will not be included. For input, supported value types are: bool, string, and double. Null values will be skipped. To set a cell to an empty value, set the string value to an empty string.
 ]: any -> record<spreadsheetId: string, tableRange: string, updates: record<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record<majorDimension: string, range: string, values: list>, updatedRange: string, updatedRows: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "includeValuesInResponse" $includeValuesInResponse "scalar") (serialize-qp "insertDataOption" $insertDataOption "scalar") (serialize-qp "responseDateTimeRenderOption" $responseDateTimeRenderOption "scalar") (serialize-qp "responseValueRenderOption" $responseValueRenderOption "scalar") (serialize-qp "valueInputOption" $valueInputOption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/values/($range):append" $qp)
-  let body = {majorDimension: $majorDimension, range: $body_range, values: $values} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "includeValuesInResponse" $include_values_in_response "scalar") (serialize-qp "insertDataOption" $insert_data_option "scalar") (serialize-qp "responseDateTimeRenderOption" $response_date_time_render_option "scalar") (serialize-qp "responseValueRenderOption" $response_value_render_option "scalar") (serialize-qp "valueInputOption" $value_input_option "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, range: $range} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}:append") $qp)
+  let body = {"majorDimension": $major_dimension, "range": $body_range, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,7 +439,7 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesappend" [
 # POST /v4/spreadsheets/{spreadsheetId}/values/{range}:clear
 # operationId: sheets.spreadsheets.values.clear
 export def "spreadsheets-values sheetsspreadsheetsvaluesclear" [
-  spreadsheetId: string
+  spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,17 +456,17 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesclear" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record<clearedRange: string, spreadsheetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/values/($range):clear" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id, range: $range} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values/{range}:clear") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -478,7 +478,7 @@ export def "spreadsheets-values sheetsspreadsheetsvaluesclear" [
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchClear
 # operationId: sheets.spreadsheets.values.batchClear
 export def "spreadsheets-values-batch-clear sheetsspreadsheetsvaluesbatchClear" [
-  spreadsheetId: string
+  spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,18 +494,18 @@ export def "spreadsheets-values-batch-clear sheetsspreadsheetsvaluesbatchClear" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ranges: list # The ranges to clear, in [A1 notation or R1C1 notation](/sheets/api/guides/concepts#cell).
 ]: any -> record<clearedRanges: list<string>, spreadsheetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/values:batchClear" $qp)
-  let body = {ranges: $ranges} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchClear") $qp)
+  let body = {"ranges": $ranges} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -518,7 +518,7 @@ export def "spreadsheets-values-batch-clear sheetsspreadsheetsvaluesbatchClear" 
 # operationId: sheets.spreadsheets.values.batchClearByDataFilter
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 export def "spreadsheets-values-batch-clear-by-data-filter sheetsspreadsheetsvaluesbatchClearByDataFilter" [
-  spreadsheetId: string
+  spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,18 +534,18 @@ export def "spreadsheets-values-batch-clear-by-data-filter sheetsspreadsheetsval
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dataFilters: list # The DataFilters used to determine which ranges to clear. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --data-filters: list # The DataFilters used to determine which ranges to clear. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 ]: any -> record<clearedRanges: list<string>, spreadsheetId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/values:batchClearByDataFilter" $qp)
-  let body = {dataFilters: $dataFilters} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchClearByDataFilter") $qp)
+  let body = {"dataFilters": $data_filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -557,7 +557,7 @@ export def "spreadsheets-values-batch-clear-by-data-filter sheetsspreadsheetsval
 # GET /v4/spreadsheets/{spreadsheetId}/values:batchGet
 # operationId: sheets.spreadsheets.values.batchGet
 export def "spreadsheets-values-batch-get sheetsspreadsheetsvaluesbatchGet" [
-  spreadsheetId: string
+  spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,19 +573,19 @@ export def "spreadsheets-values-batch-get sheetsspreadsheetsvaluesbatchGet" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dateTimeRenderOption: string@dateTimeRenderOption-completer # How dates, times, and durations should be represented in the output. This is ignored if value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
-  --majorDimension: string@majorDimension-completer # The major dimension that results should use. For example, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then requesting `ranges=["A1:B2"],majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas requesting `ranges=["A1:B2"],majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --date-time-render-option: string@date-time-render-option-completer # How dates, times, and durations should be represented in the output. This is ignored if value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
+  --major-dimension: string@major-dimension-completer # The major dimension that results should use. For example, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then requesting `ranges=["A1:B2"],majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas requesting `ranges=["A1:B2"],majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
   --ranges: list # The [A1 notation or R1C1 notation](/sheets/api/guides/concepts#cell) of the range to retrieve values from.
-  --valueRenderOption: string@valueRenderOption-completer # How values should be represented in the output. The default render option is ValueRenderOption.FORMATTED_VALUE.
+  --value-render-option: string@value-render-option-completer # How values should be represented in the output. The default render option is ValueRenderOption.FORMATTED_VALUE.
 ]: nothing -> record<spreadsheetId: string, valueRanges: table<majorDimension: string, range: string, values: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "dateTimeRenderOption" $dateTimeRenderOption "scalar") (serialize-qp "majorDimension" $majorDimension "scalar") (serialize-qp "ranges" $ranges "multi") (serialize-qp "valueRenderOption" $valueRenderOption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/values:batchGet" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dateTimeRenderOption" $date_time_render_option "scalar") (serialize-qp "majorDimension" $major_dimension "scalar") (serialize-qp "ranges" $ranges "multi") (serialize-qp "valueRenderOption" $value_render_option "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchGet") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -597,7 +597,7 @@ export def "spreadsheets-values-batch-get sheetsspreadsheetsvaluesbatchGet" [
 # operationId: sheets.spreadsheets.values.batchGetByDataFilter
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 export def "spreadsheets-values-batch-get-by-data-filter sheetsspreadsheetsvaluesbatchGetByDataFilter" [
-  spreadsheetId: string
+  spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,21 +613,21 @@ export def "spreadsheets-values-batch-get-by-data-filter sheetsspreadsheetsvalue
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dataFilters: list # The data filters used to match the ranges of values to retrieve. Ranges that match any of the specified data filters are included in the response. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-  --dateTimeRenderOption: string@dateTimeRenderOption-completer # How dates, times, and durations should be represented in the output. This is ignored if value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
-  --majorDimension: string@majorDimension-completer # The major dimension that results should use. For example, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then a request that selects that range and sets `majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas a request that sets `majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
-  --valueRenderOption: string@valueRenderOption-completer # How values should be represented in the output. The default render option is FORMATTED_VALUE.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --data-filters: list # The data filters used to match the ranges of values to retrieve. Ranges that match any of the specified data filters are included in the response. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
+  --date-time-render-option: string@date-time-render-option-completer # How dates, times, and durations should be represented in the output. This is ignored if value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
+  --major-dimension: string@major-dimension-completer # The major dimension that results should use. For example, if the spreadsheet data is: `A1=1,B1=2,A2=3,B2=4`, then a request that selects that range and sets `majorDimension=ROWS` returns `[[1,2],[3,4]]`, whereas a request that sets `majorDimension=COLUMNS` returns `[[1,3],[2,4]]`.
+  --value-render-option: string@value-render-option-completer # How values should be represented in the output. The default render option is FORMATTED_VALUE.
 ]: any -> record<spreadsheetId: string, valueRanges: table<dataFilters: list, valueRange: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/values:batchGetByDataFilter" $qp)
-  let body = {dataFilters: $dataFilters, dateTimeRenderOption: $dateTimeRenderOption, majorDimension: $majorDimension, valueRenderOption: $valueRenderOption} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchGetByDataFilter") $qp)
+  let body = {"dataFilters": $data_filters, "dateTimeRenderOption": $date_time_render_option, "majorDimension": $major_dimension, "valueRenderOption": $value_render_option} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -640,7 +640,7 @@ export def "spreadsheets-values-batch-get-by-data-filter sheetsspreadsheetsvalue
 # operationId: sheets.spreadsheets.values.batchUpdate
 # --data item shape: {majorDimension?: "DIMENSION_UNSPECIFIED"|"ROWS"|"COLUMNS", range?: string, values?: list}
 export def "spreadsheets-values-batch-update sheetsspreadsheetsvaluesbatchUpdate" [
-  spreadsheetId: string
+  spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,22 +656,22 @@ export def "spreadsheets-values-batch-update sheetsspreadsheetsvaluesbatchUpdate
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --data: list # The new values to apply to the spreadsheet. — item shape: {majorDimension?: "DIMENSION_UNSPECIFIED"|"ROWS"|"COLUMNS", range?: string, values?: list}
-  --includeValuesInResponse: oneof<nothing, bool> # Determines if the update response should include the values of the cells that were updated. By default, responses do not include the updated values. The `updatedData` field within each of the BatchUpdateValuesResponse.responses contains the updated values. If the range to write was larger than the range actually written, the response includes all values in the requested range (excluding trailing empty rows and columns).
-  --responseDateTimeRenderOption: string@responseDateTimeRenderOption-completer # Determines how dates, times, and durations in the response should be rendered. This is ignored if response_value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
-  --responseValueRenderOption: string@responseValueRenderOption-completer # Determines how values in the response should be rendered. The default render option is FORMATTED_VALUE.
-  --valueInputOption: string@valueInputOption-completer # How the input data should be interpreted.
+  --include-values-in-response: oneof<nothing, bool> # Determines if the update response should include the values of the cells that were updated. By default, responses do not include the updated values. The `updatedData` field within each of the BatchUpdateValuesResponse.responses contains the updated values. If the range to write was larger than the range actually written, the response includes all values in the requested range (excluding trailing empty rows and columns).
+  --response-date-time-render-option: string@response-date-time-render-option-completer # Determines how dates, times, and durations in the response should be rendered. This is ignored if response_value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
+  --response-value-render-option: string@response-value-render-option-completer # Determines how values in the response should be rendered. The default render option is FORMATTED_VALUE.
+  --value-input-option: string@value-input-option-completer # How the input data should be interpreted.
 ]: any -> record<responses: table<spreadsheetId: string, updatedCells: int, updatedColumns: int, updatedData: record, updatedRange: string, updatedRows: int>, spreadsheetId: string, totalUpdatedCells: int, totalUpdatedColumns: int, totalUpdatedRows: int, totalUpdatedSheets: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/values:batchUpdate" $qp)
-  let body = {data: $data, includeValuesInResponse: $includeValuesInResponse, responseDateTimeRenderOption: $responseDateTimeRenderOption, responseValueRenderOption: $responseValueRenderOption, valueInputOption: $valueInputOption} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchUpdate") $qp)
+  let body = {"data": $data, "includeValuesInResponse": $include_values_in_response, "responseDateTimeRenderOption": $response_date_time_render_option, "responseValueRenderOption": $response_value_render_option, "valueInputOption": $value_input_option} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -684,7 +684,7 @@ export def "spreadsheets-values-batch-update sheetsspreadsheetsvaluesbatchUpdate
 # operationId: sheets.spreadsheets.values.batchUpdateByDataFilter
 # --data item shape: {dataFilter?: record, majorDimension?: "DIMENSION_UNSPECIFIED"|"ROWS"|"COLUMNS", values?: list}
 export def "spreadsheets-values-batch-update-by-data-filter sheetsspreadsheetsvaluesbatchUpdateByDataFilter" [
-  spreadsheetId: string
+  spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,22 +700,22 @@ export def "spreadsheets-values-batch-update-by-data-filter sheetsspreadsheetsva
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --data: list # The new values to apply to the spreadsheet. If more than one range is matched by the specified DataFilter the specified values are applied to all of those ranges. — item shape: {dataFilter?: record, majorDimension?: "DIMENSION_UNSPECIFIED"|"ROWS"|"COLUMNS", values?: list}
-  --includeValuesInResponse: oneof<nothing, bool> # Determines if the update response should include the values of the cells that were updated. By default, responses do not include the updated values. The `updatedData` field within each of the BatchUpdateValuesResponse.responses contains the updated values. If the range to write was larger than the range actually written, the response includes all values in the requested range (excluding trailing empty rows and columns).
-  --responseDateTimeRenderOption: string@responseDateTimeRenderOption-completer # Determines how dates, times, and durations in the response should be rendered. This is ignored if response_value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
-  --responseValueRenderOption: string@responseValueRenderOption-completer # Determines how values in the response should be rendered. The default render option is FORMATTED_VALUE.
-  --valueInputOption: string@valueInputOption-completer # How the input data should be interpreted.
+  --include-values-in-response: oneof<nothing, bool> # Determines if the update response should include the values of the cells that were updated. By default, responses do not include the updated values. The `updatedData` field within each of the BatchUpdateValuesResponse.responses contains the updated values. If the range to write was larger than the range actually written, the response includes all values in the requested range (excluding trailing empty rows and columns).
+  --response-date-time-render-option: string@response-date-time-render-option-completer # Determines how dates, times, and durations in the response should be rendered. This is ignored if response_value_render_option is FORMATTED_VALUE. The default dateTime render option is SERIAL_NUMBER.
+  --response-value-render-option: string@response-value-render-option-completer # Determines how values in the response should be rendered. The default render option is FORMATTED_VALUE.
+  --value-input-option: string@value-input-option-completer # How the input data should be interpreted.
 ]: any -> record<responses: table<dataFilter: record, updatedCells: int, updatedColumns: int, updatedData: record, updatedRange: string, updatedRows: int>, spreadsheetId: string, totalUpdatedCells: int, totalUpdatedColumns: int, totalUpdatedRows: int, totalUpdatedSheets: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId)/values:batchUpdateByDataFilter" $qp)
-  let body = {data: $data, includeValuesInResponse: $includeValuesInResponse, responseDateTimeRenderOption: $responseDateTimeRenderOption, responseValueRenderOption: $responseValueRenderOption, valueInputOption: $valueInputOption} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}/values:batchUpdateByDataFilter") $qp)
+  let body = {"data": $data, "includeValuesInResponse": $include_values_in_response, "responseDateTimeRenderOption": $response_date_time_render_option, "responseValueRenderOption": $response_value_render_option, "valueInputOption": $value_input_option} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,7 +728,7 @@ export def "spreadsheets-values-batch-update-by-data-filter sheetsspreadsheetsva
 # operationId: sheets.spreadsheets.batchUpdate
 # --requests item shape: {addBanding?: record, addChart?: record, addConditionalFormatRule?: record, addDataSource?: record, addDimensionGroup?: record, addFilterView?: record, addNamedRange?: record, addProtectedRange?: record, addSheet?: record, addSlicer?: record, appendCells?: record, appendDimension?: record, autoFill?: record, autoResizeDimensions?: record, clearBasicFilter?: record, copyPaste?: record, createDeveloperMetadata?: record, cutPaste?: record, deleteBanding?: record, deleteConditionalFormatRule?: record, deleteDataSource?: record, deleteDeveloperMetadata?: record, deleteDimension?: record, deleteDimensionGroup?: record, deleteDuplicates?: record, deleteEmbeddedObject?: record, deleteFilterView?: record, deleteNamedRange?: record, deleteProtectedRange?: record, deleteRange?: record, deleteSheet?: record, duplicateFilterView?: record, duplicateSheet?: record, findReplace?: record, insertDimension?: record, insertRange?: record, mergeCells?: record, moveDimension?: record, pasteData?: record, randomizeRange?: record, refreshDataSource?: record, repeatCell?: record, setBasicFilter?: record, setDataValidation?: record, sortRange?: record, textToColumns?: record, trimWhitespace?: record, unmergeCells?: record, updateBanding?: record, updateBorders?: record, updateCells?: record, updateChartSpec?: record, updateConditionalFormatRule?: record, updateDataSource?: record, updateDeveloperMetadata?: record, updateDimensionGroup?: record, updateDimensionProperties?: record, updateEmbeddedObjectBorder?: record, updateEmbeddedObjectPosition?: record, updateFilterView?: record, updateNamedRange?: record, updateProtectedRange?: record, updateSheetProperties?: record, updateSlicerSpec?: record, updateSpreadsheetProperties?: record}
 export def "spreadsheets sheetsspreadsheetsbatchUpdate" [
-  spreadsheetId: string
+  spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,21 +744,21 @@ export def "spreadsheets sheetsspreadsheetsbatchUpdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --includeSpreadsheetInResponse: oneof<nothing, bool> # Determines if the update response should include the spreadsheet resource.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --include-spreadsheet-in-response: oneof<nothing, bool> # Determines if the update response should include the spreadsheet resource.
   --requests: list # A list of updates to apply to the spreadsheet. Requests will be applied in the order they are specified. If any request is not valid, no requests will be applied. — item shape: {addBanding?: record, addChart?: record, addConditionalFormatRule?: record, addDataSource?: record, addDimensionGroup?: record, addFilterView?: record, addNamedRange?: record, addProtectedRange?: record, addSheet?: record, addSlicer?: record, appendCells?: record, appendDimension?: record, autoFill?: record, autoResizeDimensions?: record, clearBasicFilter?: record, copyPaste?: record, createDeveloperMetadata?: record, cutPaste?: record, deleteBanding?: record, deleteConditionalFormatRule?: record, deleteDataSource?: record, deleteDeveloperMetadata?: record, deleteDimension?: record, deleteDimensionGroup?: record, deleteDuplicates?: record, deleteEmbeddedObject?: record, deleteFilterView?: record, deleteNamedRange?: record, deleteProtectedRange?: record, deleteRange?: record, deleteSheet?: record, duplicateFilterView?: record, duplicateSheet?: record, findReplace?: record, insertDimension?: record, insertRange?: record, mergeCells?: record, moveDimension?: record, pasteData?: record, randomizeRange?: record, refreshDataSource?: record, repeatCell?: record, setBasicFilter?: record, setDataValidation?: record, sortRange?: record, textToColumns?: record, trimWhitespace?: record, unmergeCells?: record, updateBanding?: record, updateBorders?: record, updateCells?: record, updateChartSpec?: record, updateConditionalFormatRule?: record, updateDataSource?: record, updateDeveloperMetadata?: record, updateDimensionGroup?: record, updateDimensionProperties?: record, updateEmbeddedObjectBorder?: record, updateEmbeddedObjectPosition?: record, updateFilterView?: record, updateNamedRange?: record, updateProtectedRange?: record, updateSheetProperties?: record, updateSlicerSpec?: record, updateSpreadsheetProperties?: record}
-  --responseIncludeGridData: oneof<nothing, bool> # True if grid data should be returned. Meaningful only if include_spreadsheet_in_response is 'true'. This parameter is ignored if a field mask was set in the request.
-  --responseRanges: list # Limits the ranges included in the response spreadsheet. Meaningful only if include_spreadsheet_in_response is 'true'.
+  --response-include-grid-data: oneof<nothing, bool> # True if grid data should be returned. Meaningful only if include_spreadsheet_in_response is 'true'. This parameter is ignored if a field mask was set in the request.
+  --response-ranges: list # Limits the ranges included in the response spreadsheet. Meaningful only if include_spreadsheet_in_response is 'true'.
 ]: any -> record<replies: table<addBanding: record, addChart: record, addDataSource: record, addDimensionGroup: record, addFilterView: record, addNamedRange: record, addProtectedRange: record, addSheet: record, addSlicer: record, createDeveloperMetadata: record, deleteConditionalFormatRule: record, deleteDeveloperMetadata: record, deleteDimensionGroup: record, deleteDuplicates: record, duplicateFilterView: record, duplicateSheet: record, findReplace: record, refreshDataSource: record, trimWhitespace: record, updateConditionalFormatRule: record, updateDataSource: record, updateDeveloperMetadata: record, updateEmbeddedObjectPosition: record>, spreadsheetId: string, updatedSpreadsheet: record<dataSourceSchedules: list<record>, dataSources: list<record>, developerMetadata: list<record>, namedRanges: list<record>, properties: record<autoRecalc: string, defaultFormat: record, iterativeCalculationSettings: record, locale: string, spreadsheetTheme: record, timeZone: string, title: string>, sheets: list<record>, spreadsheetId: string, spreadsheetUrl: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId):batchUpdate" $qp)
-  let body = {includeSpreadsheetInResponse: $includeSpreadsheetInResponse, requests: $requests, responseIncludeGridData: $responseIncludeGridData, responseRanges: $responseRanges} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}:batchUpdate") $qp)
+  let body = {"includeSpreadsheetInResponse": $include_spreadsheet_in_response, "requests": $requests, "responseIncludeGridData": $response_include_grid_data, "responseRanges": $response_ranges} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -771,7 +771,7 @@ export def "spreadsheets sheetsspreadsheetsbatchUpdate" [
 # operationId: sheets.spreadsheets.getByDataFilter
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
 export def "spreadsheets sheetsspreadsheetsgetByDataFilter" [
-  spreadsheetId: string
+  spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,19 +787,19 @@ export def "spreadsheets sheetsspreadsheetsgetByDataFilter" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dataFilters: list # The DataFilters used to select which ranges to retrieve from the spreadsheet. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-  --includeGridData: oneof<nothing, bool> # True if grid data should be returned. This parameter is ignored if a field mask was set in the request.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --data-filters: list # The DataFilters used to select which ranges to retrieve from the spreadsheet. — item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
+  --include-grid-data: oneof<nothing, bool> # True if grid data should be returned. This parameter is ignored if a field mask was set in the request.
 ]: any -> record<dataSourceSchedules: table<dailySchedule: record, enabled: bool, monthlySchedule: record, nextRun: record, refreshScope: string, weeklySchedule: record>, dataSources: table<calculatedColumns: list, dataSourceId: string, sheetId: int, spec: record>, developerMetadata: table<location: record, metadataId: int, metadataKey: string, metadataValue: string, visibility: string>, namedRanges: table<name: string, namedRangeId: string, range: record>, properties: record<autoRecalc: string, defaultFormat: record<backgroundColor: record, backgroundColorStyle: record, borders: record, horizontalAlignment: string, hyperlinkDisplayType: string, numberFormat: record, padding: record, textDirection: string, textFormat: record, textRotation: record, verticalAlignment: string, wrapStrategy: string>, iterativeCalculationSettings: record<convergenceThreshold: float, maxIterations: int>, locale: string, spreadsheetTheme: record<primaryFontFamily: string, themeColors: list>, timeZone: string, title: string>, sheets: table<bandedRanges: list, basicFilter: record, charts: list, columnGroups: list, conditionalFormats: list, data: list, developerMetadata: list, filterViews: list, merges: list, properties: record, protectedRanges: list, rowGroups: list, slicers: list>, spreadsheetId: string, spreadsheetUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/spreadsheets/($spreadsheetId):getByDataFilter" $qp)
-  let body = {dataFilters: $dataFilters, includeGridData: $includeGridData} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({spreadsheet_id: $spreadsheet_id} | format pattern "/v4/spreadsheets/{spreadsheet_id}:getByDataFilter") $qp)
+  let body = {"dataFilters": $data_filters, "includeGridData": $include_grid_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

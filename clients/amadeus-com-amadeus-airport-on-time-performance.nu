@@ -101,12 +101,12 @@ export def "airport-predictions-on-time get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --airportCode: string # airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx), e.g. BOS for Boston (e.g. JFK)
+  --airport-code: string # airport [IATA code](http://www.iata.org/publications/Pages/code-search.aspx), e.g. BOS for Boston (e.g. JFK)
   --date: string # the date on which the traveler will depart from the give airport. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2019-12-25 (format: date, e.g. 2023-11-12)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "airportCode" $airportCode "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "airportCode" $airport_code "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/airport/predictions/on-time" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

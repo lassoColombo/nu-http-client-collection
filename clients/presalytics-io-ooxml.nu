@@ -107,7 +107,7 @@ export def "charts-axes id" [
 ]: nothing -> record<axisDataTypeId: int, chartsId: string, id: string, ooxmlId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/Axes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/Axes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -152,7 +152,7 @@ export def "charts-axis-data-types-type-id id" [
 ]: nothing -> record<description: string, id: string, name: string, ooxmlName: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/AxisDataTypes/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Charts/AxisDataTypes/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,7 +175,7 @@ export def "charts-axis-data-types id" [
 ]: nothing -> record<description: string, id: string, name: string, ooxmlName: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/AxisDataTypes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/AxisDataTypes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,7 +198,7 @@ export def "charts-chart-data id" [
 ]: nothing -> record<chartId: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/ChartData/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/ChartData/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,7 +221,7 @@ export def "charts-chart-update id-by-id" [
 ]: nothing -> record<categoryNames: list<string>, chartId: string, dataPoints: list<list<float>>, seriesNames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/ChartUpdate/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/ChartUpdate/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -241,16 +241,16 @@ export def "charts-chart-update id-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --categoryNames: list # nullable
-  --chartId: string # format: uuid
-  --dataPoints: list # nullable
-  --seriesNames: list # nullable
+  --category-names: list # nullable
+  --chart-id: string # format: uuid
+  --data-points: list # nullable
+  --series-names: list # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/ChartUpdate/($id)")
-  let body = {categoryNames: $categoryNames, chartId: $chartId, dataPoints: $dataPoints, seriesNames: $seriesNames} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/ChartUpdate/{id}"))
+  let body = {"categoryNames": $category_names, "chartId": $chart_id, "dataPoints": $data_points, "seriesNames": $series_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,7 +274,7 @@ export def "charts-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/ChildObjects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,7 +297,7 @@ export def "charts-column-collections id" [
 ]: nothing -> record<chartDataId: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/ColumnCollections/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/ColumnCollections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,7 +320,7 @@ export def "charts-columns id" [
 ]: nothing -> record<axisId: string, columnCollectionId: string, id: string, index: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/Columns/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/Columns/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -343,7 +343,7 @@ export def "charts-data-points id" [
 ]: nothing -> record<chartDataId: string, columnId: string, id: string, rowId: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/DataPoints/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/DataPoints/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -366,7 +366,7 @@ export def "charts-details id" [
 ]: nothing -> record<axes: table<axisDataTypeId: int, chart: any, chartsId: string, dateCreated: string, dateModified: string, id: string, ooxmlId: int, titleTextContainer: record, userCreated: string, userModified: string>, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record<chart: any, chartId: string, columnCollection: record<chartData: any, chartDataId: string, columns: list, dateCreated: string, dateModified: string, id: string, userCreated: string, userModified: string>, dataPoints: list<record>, dateCreated: string, dateModified: string, id: string, rowCollection: record<axis: record, axisId: string, chartData: any, chartDataId: string, dateCreated: string, dateModified: string, id: string, nameFormatType: int, rows: list, userCreated: string, userModified: string>, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: record<chart: any, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record, imageFillsId: string, name: string, packageUri: string, parentGraphic: any, userCreated: string, userModified: string>, smartArt: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: any, svgBlobUrl: string, userCreated: string, userModified: string>, table: record<baseElementBlobUrl: string, cells: list, changedBaseElementBlobUrl: string, columns: list, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, rows: list, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record<axis: record<axisDataTypeId: int, chart: any, chartsId: string, dateCreated: string, dateModified: string, id: string, ooxmlId: int, titleTextContainer: any, userCreated: string, userModified: string>, axisId: string, chart: any, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list<record>, parentShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: any, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeId: string, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: record, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: any, userCreated: string, userModified: string>, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/Details/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/Details/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,7 +376,7 @@ export def "charts-details id" [
 #
 # GET /Charts/OpenOfficeXml/{id}
 # operationId: charts_charts_openofficexml_get_id_updated
-export def "charts-open-office-xml updated" [
+export def "charts-open-office-xml update-d" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,7 +391,7 @@ export def "charts-open-office-xml updated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updated" $updated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Charts/OpenOfficeXml/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/OpenOfficeXml/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,14 +412,14 @@ export def "charts-open-office-xml id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # nullable, format: uuid
-  --openOfficeXml: string # nullable
+  --open-office-xml: string # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/OpenOfficeXml/($id)")
-  let body = {id: $body_id, openOfficeXml: $openOfficeXml, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/OpenOfficeXml/{id}"))
+  let body = {"id": $body_id, "openOfficeXml": $open_office_xml, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -465,7 +465,7 @@ export def "charts-plot-type-type-id id" [
 ]: nothing -> record<id: string, plotQualifedAssy: string, plotTypeName: string, rowColTypeId: int, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/PlotType/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Charts/PlotType/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -488,7 +488,7 @@ export def "charts-plot-type id" [
 ]: nothing -> record<id: string, plotQualifedAssy: string, plotTypeName: string, rowColTypeId: int, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/PlotType/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/PlotType/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,7 +533,7 @@ export def "charts-row-col-type-id id" [
 ]: nothing -> record<colName: string, colQualifiedAssy: string, id: string, rowName: string, rowQualifedAssy: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/RowCol/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Charts/RowCol/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -556,7 +556,7 @@ export def "charts-row-col id" [
 ]: nothing -> record<colName: string, colQualifiedAssy: string, id: string, rowName: string, rowQualifedAssy: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/RowCol/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/RowCol/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -579,7 +579,7 @@ export def "charts-row-collections id" [
 ]: nothing -> record<axisId: string, chartDataId: string, id: string, nameFormatType: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/RowCollections/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/RowCollections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -624,7 +624,7 @@ export def "charts-row-name-format-types-type-id id" [
 ]: nothing -> record<formatCode: string, id: string, powerToolsId: int, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/RowNameFormatTypes/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Charts/RowNameFormatTypes/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -647,7 +647,7 @@ export def "charts-row-name-format-types id" [
 ]: nothing -> record<formatCode: string, id: string, powerToolsId: int, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/RowNameFormatTypes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/RowNameFormatTypes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -670,7 +670,7 @@ export def "charts-rows id" [
 ]: nothing -> record<id: string, index: int, name: string, rowNameCollectionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/Rows/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/Rows/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -695,7 +695,7 @@ export def "charts-svg cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "use_cache" $use_cache "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Charts/Svg/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/Svg/{id}") $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -718,7 +718,7 @@ export def "charts id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, id: string, name: string, packageUri: string, parentGraphicId: string, svgBlobUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Charts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Charts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -741,7 +741,7 @@ export def "connection-shapes-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ConnectionShapes/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ConnectionShapes/ChildObjects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -764,7 +764,7 @@ export def "connection-shapes-details id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list<record>, effectMap: record<dateCreated: string, dateModified: string, effect: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, effectMapId: string, id: string, name: string, parentConnector: any, parentShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: any, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeId: string, userCreated: string, userModified: string>, endConnectionIdx: int, endConnectionShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list, effectMap: record, effectMapId: string, id: string, name: string, parentConnector: any, parentShape: any, shapeId: string, userCreated: string, userModified: string>, fillMap: record<connector: any, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record, effectAttributeId: string, fillTypeId: int, gradientFill: record, id: string, imageFill: record, shape: any, shapeId: string, solidFill: record, tableCell: record, tableCellId: string, themeBackgroundFill: record, themeBackgroundFillId: string, themeFill: record, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list, connector: any, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: any, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record, bLtoTRBorderId: string, bottomBorder: record, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record, leftBorderId: string, lineColorSolidFill: record, lineMap: record, lineMapId: string, parentConnector: any, parentShape: any, rightBorder: record, rightBorderId: string, shapeId: string, tLtoBRBorder: record, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record<axis: record, axisId: string, chart: record, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list, parentShape: any, shapeId: string, tableCell: record, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, endConnectionShapeId: string, fillMap: record<connector: any, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record<attributesJson: string, dateCreated: string, dateModified: string, effect: record, effectId: string, effectTypeId: int, fillMap: any, id: string, userCreated: string, userModified: string>, effectAttributeId: string, fillTypeId: int, gradientFill: record<angle: int, dateCreated: string, dateModified: string, fillMap: any, fillMapId: string, gradientStops: list, id: string, isPath: bool, pathType: string, rotateWithShape: bool, userCreated: string, userModified: string>, id: string, imageFill: record<compressionState: string, dateCreated: string, dateModified: string, dpi: int, effectsJson: string, fillMap: any, fillMapId: string, id: string, picture: record, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string, userCreated: string, userModified: string>, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: any, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeId: string, solidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: any, parentGradientStop: record, parentGradientStopId: string, parentLine: record, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: any, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: record, userCreated: string, userModified: string>, tableCellId: string, themeBackgroundFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeBackgroundFillId: string, themeFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list<any>, connector: any, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bLtoTRBorderId: string, bottomBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, leftBorderId: string, lineColorSolidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: record, parentGradientStop: record, parentGradientStopId: string, parentLine: any, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, lineMap: record<dateCreated: string, dateModified: string, id: string, intensityId: int, line: any, theme: record, themeId: string, userCreated: string, userModified: string>, lineMapId: string, parentConnector: any, parentShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: any, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, rightBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, rightBorderId: string, shapeId: string, tLtoBRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list, effectMap: record, effectMapId: string, id: string, name: string, parentConnector: any, parentShape: any, shapeId: string, userCreated: string, userModified: string>, fillMap: record<connector: any, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record, effectAttributeId: string, fillTypeId: int, gradientFill: record, id: string, imageFill: record, shape: any, shapeId: string, solidFill: record, tableCell: record, tableCellId: string, themeBackgroundFill: record, themeBackgroundFillId: string, themeFill: record, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list, connector: any, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: any, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record, bLtoTRBorderId: string, bottomBorder: record, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record, leftBorderId: string, lineColorSolidFill: record, lineMap: record, lineMapId: string, parentConnector: any, parentShape: any, rightBorder: record, rightBorderId: string, shapeId: string, tLtoBRBorder: record, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record<axis: record, axisId: string, chart: record, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list, parentShape: any, shapeId: string, tableCell: record, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ConnectionShapes/Details/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ConnectionShapes/Details/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -774,7 +774,7 @@ export def "connection-shapes-details id" [
 #
 # GET /ConnectionShapes/OpenOfficeXml/{id}
 # operationId: slides_connectionshapes_openofficexml_get_id_updated
-export def "connection-shapes-open-office-xml updated" [
+export def "connection-shapes-open-office-xml update-d" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,7 +789,7 @@ export def "connection-shapes-open-office-xml updated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updated" $updated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ConnectionShapes/OpenOfficeXml/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/ConnectionShapes/OpenOfficeXml/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -810,14 +810,14 @@ export def "connection-shapes-open-office-xml id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # nullable, format: uuid
-  --openOfficeXml: string # nullable
+  --open-office-xml: string # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ConnectionShapes/OpenOfficeXml/($id)")
-  let body = {id: $body_id, openOfficeXml: $openOfficeXml, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ConnectionShapes/OpenOfficeXml/{id}"))
+  let body = {"id": $body_id, "openOfficeXml": $open_office_xml, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -843,7 +843,7 @@ export def "connection-shapes-svg cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "use_cache" $use_cache "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ConnectionShapes/Svg/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/ConnectionShapes/Svg/{id}") $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -866,7 +866,7 @@ export def "connection-shapes id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, endConnectionIdx: int, endConnectionShapeId: string, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShapeId: string, svgBlobUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ConnectionShapes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ConnectionShapes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -887,13 +887,13 @@ export def "documents post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   file: string # The file to upload.  Must be of type .pptx, ppt (format: binary)
-  storyId: string # The story_id of the document being uploaded. (format: uuid)
+  story_id: string # The story_id of the document being uploaded. (format: uuid)
 ]: any -> table<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, storyId: string, tableStylesXmlBlobUrl: string, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Documents")
-  let body = {file: $file, storyId: $storyId} | compact
+  let body = {"file": $file, "storyId": $story_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -918,7 +918,7 @@ export def "documents-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Documents/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Documents/ChildObjects/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -940,13 +940,13 @@ export def "documents-clone id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-id: string # format: uuid
-  --storyId: string # format: uuid
+  --story-id: string # format: uuid
 ]: any -> record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, storyId: string, tableStylesXmlBlobUrl: string, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Documents/Clone/($id)")
-  let body = {id: $body_id, storyId: $storyId} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/Documents/Clone/{id}"))
+  let body = {"id": $body_id, "storyId": $story_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -992,7 +992,7 @@ export def "documents-document-type-type-id id" [
 ]: nothing -> record<description: string, fileExtension: string, id: string, mimeType: string, name: string, ooxmlPackageType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Documents/DocumentType/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Documents/DocumentType/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1015,7 +1015,7 @@ export def "documents-document-type id" [
 ]: nothing -> record<description: string, fileExtension: string, id: string, mimeType: string, name: string, ooxmlPackageType: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Documents/DocumentType/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Documents/DocumentType/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1040,7 +1040,7 @@ export def "documents-download orginal" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "orginal" $orginal "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Documents/Download/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Documents/Download/{id}") $qp)
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1063,7 +1063,7 @@ export def "documents id-by-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Documents/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1087,7 +1087,7 @@ export def "documents id-by-id-1" [
 ]: nothing -> record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, storyId: string, tableStylesXmlBlobUrl: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Documents/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Documents/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1110,7 +1110,7 @@ export def "groups-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Groups/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Groups/ChildObjects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1133,7 +1133,7 @@ export def "groups-details id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record<childGroupElements: list<any>, connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: record, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: record, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: any, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Groups/Details/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Groups/Details/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1143,7 +1143,7 @@ export def "groups-details id" [
 #
 # GET /Groups/OpenOfficeXml/{id}
 # operationId: slides_groups_openofficexml_get_id_updated
-export def "groups-open-office-xml updated" [
+export def "groups-open-office-xml update-d" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1158,7 +1158,7 @@ export def "groups-open-office-xml updated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updated" $updated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Groups/OpenOfficeXml/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Groups/OpenOfficeXml/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1179,14 +1179,14 @@ export def "groups-open-office-xml id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # nullable, format: uuid
-  --openOfficeXml: string # nullable
+  --open-office-xml: string # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Groups/OpenOfficeXml/($id)")
-  let body = {id: $body_id, openOfficeXml: $openOfficeXml, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/Groups/OpenOfficeXml/{id}"))
+  let body = {"id": $body_id, "openOfficeXml": $open_office_xml, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1212,7 +1212,7 @@ export def "groups-svg cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "use_cache" $use_cache "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Groups/Svg/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Groups/Svg/{id}") $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1235,7 +1235,7 @@ export def "groups id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1258,7 +1258,7 @@ export def "images-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Images/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Images/ChildObjects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1281,7 +1281,7 @@ export def "images-details id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record<compressionState: string, dateCreated: string, dateModified: string, dpi: int, effectsJson: string, fillMap: record<connector: record, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record, effectAttributeId: string, fillTypeId: int, gradientFill: record, id: string, imageFill: any, shape: record, shapeId: string, solidFill: record, tableCell: record, tableCellId: string, themeBackgroundFill: record, themeBackgroundFillId: string, themeFill: record, themeFillId: string, userCreated: string, userModified: string>, fillMapId: string, id: string, picture: any, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string, userCreated: string, userModified: string>, imageFillsId: string, name: string, packageUri: string, parentGraphic: record<chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: any, smartArt: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: any, svgBlobUrl: string, userCreated: string, userModified: string>, table: record<baseElementBlobUrl: string, cells: list, changedBaseElementBlobUrl: string, columns: list, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, rows: list, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, userCreated: string, userModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Images/Details/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Images/Details/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1292,7 +1292,7 @@ export def "images-details id" [
 # PUT /Images/GetImage/{Id}
 # operationId: shared_images_getimage_put_id
 export def "images-get-image id" [
-  Id: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1304,7 +1304,7 @@ export def "images-get-image id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Images/GetImage/($Id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Images/GetImage/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1314,7 +1314,7 @@ export def "images-get-image id" [
 #
 # GET /Images/OpenOfficeXml/{id}
 # operationId: shared_images_openofficexml_get_id_updated
-export def "images-open-office-xml updated" [
+export def "images-open-office-xml update-d" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1329,7 +1329,7 @@ export def "images-open-office-xml updated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updated" $updated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Images/OpenOfficeXml/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Images/OpenOfficeXml/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1350,14 +1350,14 @@ export def "images-open-office-xml id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # nullable, format: uuid
-  --openOfficeXml: string # nullable
+  --open-office-xml: string # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Images/OpenOfficeXml/($id)")
-  let body = {id: $body_id, openOfficeXml: $openOfficeXml, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/Images/OpenOfficeXml/{id}"))
+  let body = {"id": $body_id, "openOfficeXml": $open_office_xml, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1383,7 +1383,7 @@ export def "images-svg cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "use_cache" $use_cache "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Images/Svg/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Images/Svg/{id}") $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1406,7 +1406,7 @@ export def "images id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFillsId: string, name: string, packageUri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Images/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Images/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1429,7 +1429,7 @@ export def "shape-trees-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ShapeTrees/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ShapeTrees/ChildObjects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1452,7 +1452,7 @@ export def "shape-trees-details id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record<childGroupElements: list<any>, connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: record, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: record, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeTree: any, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementId: string, groupElements: table<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: any, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, document: record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, slides: list, storyId: string, tableStylesXmlBlobUrl: string, title: string, userCreated: string, userModified: string>, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, shapeTree: any, slideDocumentUrl: string, slideMaster: record<colorMap: record, dateCreated: string, dateModified: string, id: string, parentSlide: any, slideId: string, userCreated: string, userModified: string>, svgBlobUrl: string, theme: record<backgroundFills: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, colors: record, customColors: list, dateCreated: string, dateModified: string, effectMaps: list, fills: list, fonts: record, id: string, lineMaps: list, name: string, packageUri: string, slide: any, slideId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string>, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ShapeTrees/Details/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ShapeTrees/Details/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1462,7 +1462,7 @@ export def "shape-trees-details id" [
 #
 # GET /ShapeTrees/OpenOfficeXml/{id}
 # operationId: slides_shapetrees_openofficexml_get_id_updated
-export def "shape-trees-open-office-xml updated" [
+export def "shape-trees-open-office-xml update-d" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1477,7 +1477,7 @@ export def "shape-trees-open-office-xml updated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updated" $updated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ShapeTrees/OpenOfficeXml/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/ShapeTrees/OpenOfficeXml/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1498,14 +1498,14 @@ export def "shape-trees-open-office-xml id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # nullable, format: uuid
-  --openOfficeXml: string # nullable
+  --open-office-xml: string # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ShapeTrees/OpenOfficeXml/($id)")
-  let body = {id: $body_id, openOfficeXml: $openOfficeXml, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ShapeTrees/OpenOfficeXml/{id}"))
+  let body = {"id": $body_id, "openOfficeXml": $open_office_xml, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1531,7 +1531,7 @@ export def "shape-trees-svg cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "use_cache" $use_cache "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ShapeTrees/Svg/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/ShapeTrees/Svg/{id}") $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1554,7 +1554,7 @@ export def "shape-trees id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slideId: string, svgBlobUrl: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ShapeTrees/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ShapeTrees/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1577,7 +1577,7 @@ export def "shapes-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shapes/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shapes/ChildObjects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1600,7 +1600,7 @@ export def "shapes-details id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list<record>, effectMap: record<dateCreated: string, dateModified: string, effect: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, effectMapId: string, id: string, name: string, parentConnector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: any, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, parentShape: any, shapeId: string, userCreated: string, userModified: string>, fillMap: record<connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: any, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record<attributesJson: string, dateCreated: string, dateModified: string, effect: record, effectId: string, effectTypeId: int, fillMap: any, id: string, userCreated: string, userModified: string>, effectAttributeId: string, fillTypeId: int, gradientFill: record<angle: int, dateCreated: string, dateModified: string, fillMap: any, fillMapId: string, gradientStops: list, id: string, isPath: bool, pathType: string, rotateWithShape: bool, userCreated: string, userModified: string>, id: string, imageFill: record<compressionState: string, dateCreated: string, dateModified: string, dpi: int, effectsJson: string, fillMap: any, fillMapId: string, id: string, picture: record, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string, userCreated: string, userModified: string>, shape: any, shapeId: string, solidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: any, parentGradientStop: record, parentGradientStopId: string, parentLine: record, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: any, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: record, userCreated: string, userModified: string>, tableCellId: string, themeBackgroundFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeBackgroundFillId: string, themeFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list<any>, connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: any, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bLtoTRBorderId: string, bottomBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, leftBorderId: string, lineColorSolidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: record, parentGradientStop: record, parentGradientStopId: string, parentLine: any, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, lineMap: record<dateCreated: string, dateModified: string, id: string, intensityId: int, line: any, theme: record, themeId: string, userCreated: string, userModified: string>, lineMapId: string, parentConnector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: any, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, parentShape: any, rightBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, rightBorderId: string, shapeId: string, tLtoBRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record<axis: record<axisDataTypeId: int, chart: record, chartsId: string, dateCreated: string, dateModified: string, id: string, ooxmlId: int, titleTextContainer: any, userCreated: string, userModified: string>, axisId: string, chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: record, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: any, userCreated: string, userModified: string>, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list<record>, parentShape: any, shapeId: string, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: record, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: any, userCreated: string, userModified: string>, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shapes/Details/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shapes/Details/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1610,7 +1610,7 @@ export def "shapes-details id" [
 #
 # GET /Shapes/OpenOfficeXml/{id}
 # operationId: slides_shapes_openofficexml_get_id_updated
-export def "shapes-open-office-xml updated" [
+export def "shapes-open-office-xml update-d" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1625,7 +1625,7 @@ export def "shapes-open-office-xml updated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updated" $updated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Shapes/OpenOfficeXml/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shapes/OpenOfficeXml/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1646,14 +1646,14 @@ export def "shapes-open-office-xml id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # nullable, format: uuid
-  --openOfficeXml: string # nullable
+  --open-office-xml: string # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shapes/OpenOfficeXml/($id)")
-  let body = {id: $body_id, openOfficeXml: $openOfficeXml, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shapes/OpenOfficeXml/{id}"))
+  let body = {"id": $body_id, "openOfficeXml": $open_office_xml, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1679,7 +1679,7 @@ export def "shapes-svg cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "use_cache" $use_cache "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Shapes/Svg/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shapes/Svg/{id}") $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1702,7 +1702,7 @@ export def "shapes id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, width: int, xOffset: int, yOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shapes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shapes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1725,7 +1725,7 @@ export def "shared-color-transformation-attributes id" [
 ]: nothing -> record<colorTransformationsId: string, id: string, name: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/ColorTransformationAttributes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/ColorTransformationAttributes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1748,7 +1748,7 @@ export def "shared-color-transformations id" [
 ]: nothing -> record<id: string, name: string, solidFillsId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/ColorTransformations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/ColorTransformations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1793,7 +1793,7 @@ export def "shared-color-types-type-id id" [
 ]: nothing -> record<colorSchemeIndexValueEnum: int, description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/ColorTypes/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Shared/ColorTypes/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1816,7 +1816,7 @@ export def "shared-color-types id" [
 ]: nothing -> record<colorSchemeIndexValueEnum: int, description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/ColorTypes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/ColorTypes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1861,7 +1861,7 @@ export def "shared-dash-types-type-id id" [
 ]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/DashTypes/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Shared/DashTypes/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1884,7 +1884,7 @@ export def "shared-dash-types id" [
 ]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/DashTypes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/DashTypes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1907,7 +1907,7 @@ export def "shared-effect-attributes id" [
 ]: nothing -> record<attributesJson: string, effectId: string, effectTypeId: int, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/EffectAttributes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/EffectAttributes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1952,7 +1952,7 @@ export def "shared-effect-types-type-id id" [
 ]: nothing -> record<description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/EffectTypes/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Shared/EffectTypes/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1975,7 +1975,7 @@ export def "shared-effect-types id" [
 ]: nothing -> record<description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/EffectTypes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/EffectTypes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1998,7 +1998,7 @@ export def "shared-effects id" [
 ]: nothing -> record<connectorId: string, effectMapId: string, id: string, name: string, shapeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/Effects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/Effects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2021,7 +2021,7 @@ export def "shared-fill-map id" [
 ]: nothing -> record<connectorId: string, effectAttributeId: string, fillTypeId: int, id: string, shapeId: string, tableCellId: string, themeBackgroundFillId: string, themeFillId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/FillMap/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/FillMap/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2066,7 +2066,7 @@ export def "shared-fill-types-type-id id" [
 ]: nothing -> record<description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/FillTypes/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Shared/FillTypes/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2089,7 +2089,7 @@ export def "shared-fill-types id" [
 ]: nothing -> record<description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/FillTypes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/FillTypes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2112,7 +2112,7 @@ export def "shared-gradient-fills id" [
 ]: nothing -> record<angle: int, fillMapId: string, id: string, isPath: bool, pathType: string, rotateWithShape: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/GradientFills/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/GradientFills/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2135,7 +2135,7 @@ export def "shared-gradient-stops id" [
 ]: nothing -> record<gradientFillsId: string, id: string, position: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/GradientStops/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/GradientStops/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2158,7 +2158,7 @@ export def "shared-image-fills id" [
 ]: nothing -> record<compressionState: string, dpi: int, effectsJson: string, fillMapId: string, id: string, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/ImageFills/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/ImageFills/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2203,7 +2203,7 @@ export def "shared-line-end-sizes-type-id id" [
 ]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/LineEndSizes/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Shared/LineEndSizes/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2226,7 +2226,7 @@ export def "shared-line-end-sizes id" [
 ]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/LineEndSizes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/LineEndSizes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2271,7 +2271,7 @@ export def "shared-line-end-types-type-id id" [
 ]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/LineEndTypes/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Shared/LineEndTypes/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2294,7 +2294,7 @@ export def "shared-line-end-types id" [
 ]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/LineEndTypes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/LineEndTypes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2317,7 +2317,7 @@ export def "shared-lines id" [
 ]: nothing -> record<bLtoTRBorderId: string, bottomBorderId: string, connectorId: string, dashTypeId: int, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorderId: string, lineMapId: string, rightBorderId: string, shapeId: string, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorderId: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/Lines/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/Lines/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2340,7 +2340,7 @@ export def "shared-paragraph id" [
 ]: nothing -> record<id: string, number: int, textContainerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/Paragraph/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/Paragraph/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2363,7 +2363,7 @@ export def "shared-solid-fills id" [
 ]: nothing -> record<colorTypeId: int, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentGradientStopId: string, parentLineId: string, parentTextId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/SolidFills/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/SolidFills/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2386,7 +2386,7 @@ export def "shared-text id" [
 ]: nothing -> record<colorSolidFillsId: string, font: string, fontSize: int, id: string, isBold: bool, isItalic: bool, isThemeFont: bool, isUnderline: bool, paragraphId: string, rawText: string, sequence: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/Text/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/Text/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2409,7 +2409,7 @@ export def "shared-text-container id" [
 ]: nothing -> record<axisId: string, chartId: string, id: string, outerXml: string, shapeId: string, tableCellId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Shared/TextContainer/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Shared/TextContainer/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2432,7 +2432,7 @@ export def "slides-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/ChildObjects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2455,7 +2455,7 @@ export def "slides-color-maps id" [
 ]: nothing -> record<accent1: int, accent2: int, accent3: int, accent4: int, accent5: int, accent6: int, background1: int, background2: int, followedHyperlink: int, hyperlink: int, id: string, slideMasterId: string, text1: int, text2: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/ColorMaps/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/ColorMaps/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2478,7 +2478,7 @@ export def "slides-details id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, document: record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, slides: list<any>, storyId: string, tableStylesXmlBlobUrl: string, title: string, userCreated: string, userModified: string>, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: any, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementId: string, groupElements: list<record>, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: any, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, slideDocumentUrl: string, slideMaster: record<colorMap: record<accent1: int, accent2: int, accent3: int, accent4: int, accent5: int, accent6: int, background1: int, background2: int, dateCreated: string, dateModified: string, followedHyperlink: int, hyperlink: int, id: string, slideMaster: any, slideMasterId: string, text1: int, text2: int, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, id: string, parentSlide: any, slideId: string, userCreated: string, userModified: string>, svgBlobUrl: string, theme: record<backgroundFills: list<record>, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, colors: record<accent1: string, accent2: string, accent3: string, accent4: string, accent5: string, accent6: string, dark1: string, dark2: string, dateCreated: string, dateModified: string, followedHyperlink: string, hyperlink: string, id: string, light1: string, light2: string, name: string, theme: any, themeId: string, userCreated: string, userModified: string>, customColors: list<record>, dateCreated: string, dateModified: string, effectMaps: list<record>, fills: list<record>, fonts: record<bodyFont: string, dateCreated: string, dateModified: string, headingFont: string, id: string, theme: any, themeId: string, userCreated: string, userModified: string>, id: string, lineMaps: list<record>, name: string, packageUri: string, slide: any, slideId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/Details/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/Details/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2523,7 +2523,7 @@ export def "slides-graphic-types-type-id id" [
 ]: nothing -> record<description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/GraphicTypes/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Slides/GraphicTypes/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2546,7 +2546,7 @@ export def "slides-graphic-types id" [
 ]: nothing -> record<description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/GraphicTypes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/GraphicTypes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2569,7 +2569,7 @@ export def "slides-graphics id" [
 ]: nothing -> record<graphicTypeId: int, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, width: int, xOffset: int, yOffset: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/Graphics/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/Graphics/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2614,7 +2614,7 @@ export def "slides-group-element-types-type-id id" [
 ]: nothing -> record<description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/GroupElementTypes/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Slides/GroupElementTypes/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2637,7 +2637,7 @@ export def "slides-group-element-types id" [
 ]: nothing -> record<description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/GroupElementTypes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/GroupElementTypes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2660,7 +2660,7 @@ export def "slides-group-elements id" [
 ]: nothing -> record<groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElementId: string, shapeTreeId: string, ultimateParentShapeTreeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/GroupElements/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/GroupElements/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2670,7 +2670,7 @@ export def "slides-group-elements id" [
 #
 # GET /Slides/OpenOfficeXml/{id}
 # operationId: slides_slides_openofficexml_get_id_updated
-export def "slides-open-office-xml updated" [
+export def "slides-open-office-xml update-d" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2685,7 +2685,7 @@ export def "slides-open-office-xml updated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updated" $updated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Slides/OpenOfficeXml/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/OpenOfficeXml/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2706,14 +2706,14 @@ export def "slides-open-office-xml id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # nullable, format: uuid
-  --openOfficeXml: string # nullable
+  --open-office-xml: string # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/OpenOfficeXml/($id)")
-  let body = {id: $body_id, openOfficeXml: $openOfficeXml, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/OpenOfficeXml/{id}"))
+  let body = {"id": $body_id, "openOfficeXml": $open_office_xml, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2737,7 +2737,7 @@ export def "slides-slide-masters id" [
 ]: nothing -> record<id: string, slideId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/SlideMasters/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/SlideMasters/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2762,7 +2762,7 @@ export def "slides-svg cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "use_cache" $use_cache "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Slides/Svg/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/Svg/{id}") $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2785,7 +2785,7 @@ export def "slides id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, slideDocumentUrl: string, svgBlobUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Slides/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Slides/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2808,7 +2808,7 @@ export def "smart-arts-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/SmartArts/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/SmartArts/ChildObjects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2831,7 +2831,7 @@ export def "smart-arts-details id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: record<chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record, imageFillsId: string, name: string, packageUri: string, parentGraphic: any, userCreated: string, userModified: string>, smartArt: any, table: record<baseElementBlobUrl: string, cells: list, changedBaseElementBlobUrl: string, columns: list, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, rows: list, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, svgBlobUrl: string, userCreated: string, userModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/SmartArts/Details/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/SmartArts/Details/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2841,7 +2841,7 @@ export def "smart-arts-details id" [
 #
 # GET /SmartArts/OpenOfficeXml/{id}
 # operationId: slides_smartarts_openofficexml_get_id_updated
-export def "smart-arts-open-office-xml updated" [
+export def "smart-arts-open-office-xml update-d" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2856,7 +2856,7 @@ export def "smart-arts-open-office-xml updated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updated" $updated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/SmartArts/OpenOfficeXml/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/SmartArts/OpenOfficeXml/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2877,14 +2877,14 @@ export def "smart-arts-open-office-xml id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # nullable, format: uuid
-  --openOfficeXml: string # nullable
+  --open-office-xml: string # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/SmartArts/OpenOfficeXml/($id)")
-  let body = {id: $body_id, openOfficeXml: $openOfficeXml, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/SmartArts/OpenOfficeXml/{id}"))
+  let body = {"id": $body_id, "openOfficeXml": $open_office_xml, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2910,7 +2910,7 @@ export def "smart-arts-svg cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "use_cache" $use_cache "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/SmartArts/Svg/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/SmartArts/Svg/{id}") $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2933,7 +2933,7 @@ export def "smart-arts id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, graphicsId: string, id: string, name: string, packageUri: string, svgBlobUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/SmartArts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/SmartArts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2956,7 +2956,7 @@ export def "tables-borders id" [
 ]: nothing -> record<cellId: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tables/Borders/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/Borders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2979,7 +2979,7 @@ export def "tables-cells id" [
 ]: nothing -> record<columnId: string, columnSpan: int, id: string, isMergedHorozontal: bool, isMergedVertical: bool, rowId: string, rowSpan: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tables/Cells/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/Cells/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3002,7 +3002,7 @@ export def "tables-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tables/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/ChildObjects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3025,7 +3025,7 @@ export def "tables-columns id" [
 ]: nothing -> record<id: string, index: int, tableId: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tables/Columns/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/Columns/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3048,7 +3048,7 @@ export def "tables-details id" [
 ]: nothing -> record<baseElementBlobUrl: string, cells: table<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: record, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: record, userCreated: string, userModified: string>, changedBaseElementBlobUrl: string, columns: table<cells: list, dateCreated: string, dateModified: string, id: string, index: int, table: any, tableId: string, userCreated: string, userModified: string, width: int>, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: record<chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record, imageFillsId: string, name: string, packageUri: string, parentGraphic: any, userCreated: string, userModified: string>, smartArt: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: any, svgBlobUrl: string, userCreated: string, userModified: string>, table: any, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, parentGraphicId: string, rows: table<cells: list, dateCreated: string, dateModified: string, height: int, id: string, index: int, table: any, tableId: string, userCreated: string, userModified: string>, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tables/Details/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/Details/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3058,7 +3058,7 @@ export def "tables-details id" [
 #
 # GET /Tables/OpenOfficeXml/{id}
 # operationId: tables_tables_openofficexml_get_id_updated
-export def "tables-open-office-xml updated" [
+export def "tables-open-office-xml update-d" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3073,7 +3073,7 @@ export def "tables-open-office-xml updated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updated" $updated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Tables/OpenOfficeXml/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/OpenOfficeXml/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3094,14 +3094,14 @@ export def "tables-open-office-xml id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # nullable, format: uuid
-  --openOfficeXml: string # nullable
+  --open-office-xml: string # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tables/OpenOfficeXml/($id)")
-  let body = {id: $body_id, openOfficeXml: $openOfficeXml, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/OpenOfficeXml/{id}"))
+  let body = {"id": $body_id, "openOfficeXml": $open_office_xml, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3125,7 +3125,7 @@ export def "tables-rows id" [
 ]: nothing -> record<height: int, id: string, index: int, tableId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tables/Rows/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/Rows/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3150,7 +3150,7 @@ export def "tables-svg cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "use_cache" $use_cache "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Tables/Svg/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/Svg/{id}") $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3173,7 +3173,7 @@ export def "tables-table-update id-by-id" [
 ]: nothing -> record<tableData: list<list<string>>, tableId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tables/TableUpdate/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/TableUpdate/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3193,14 +3193,14 @@ export def "tables-table-update id-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tableData: list # nullable
-  --tableId: string # format: uuid
+  --table-data: list # nullable
+  --table-id: string # format: uuid
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tables/TableUpdate/($id)")
-  let body = {tableData: $tableData, tableId: $tableId} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/TableUpdate/{id}"))
+  let body = {"tableData": $table_data, "tableId": $table_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3224,7 +3224,7 @@ export def "tables id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphicId: string, stylePartOuterXml: string, svgBlobUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Tables/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Tables/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3247,7 +3247,7 @@ export def "themes-background-fills id" [
 ]: nothing -> record<id: string, intensityId: int, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/BackgroundFills/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/BackgroundFills/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3270,7 +3270,7 @@ export def "themes-child-objects id" [
 ]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/ChildObjects/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/ChildObjects/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3293,7 +3293,7 @@ export def "themes-colors id" [
 ]: nothing -> record<accent1: string, accent2: string, accent3: string, accent4: string, accent5: string, accent6: string, dark1: string, dark2: string, followedHyperlink: string, hyperlink: string, id: string, light1: string, light2: string, name: string, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/Colors/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/Colors/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3316,7 +3316,7 @@ export def "themes-custom-colors id" [
 ]: nothing -> record<hexValue: string, id: string, name: string, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/CustomColors/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/CustomColors/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3339,7 +3339,7 @@ export def "themes-details id" [
 ]: nothing -> record<backgroundFills: table<dateCreated: string, dateModified: string, fillMap: record, id: string, intensityId: int, theme: any, themeId: string, userCreated: string, userModified: string>, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, colors: record<accent1: string, accent2: string, accent3: string, accent4: string, accent5: string, accent6: string, dark1: string, dark2: string, dateCreated: string, dateModified: string, followedHyperlink: string, hyperlink: string, id: string, light1: string, light2: string, name: string, theme: any, themeId: string, userCreated: string, userModified: string>, customColors: table<dateCreated: string, dateModified: string, hexValue: string, id: string, name: string, theme: any, themeId: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, effectMaps: table<dateCreated: string, dateModified: string, effect: record, id: string, intensityId: int, theme: any, themeId: string, userCreated: string, userModified: string>, fills: table<dateCreated: string, dateModified: string, fillMap: record, id: string, intensityId: int, theme: any, themeId: string, userCreated: string, userModified: string>, fonts: record<bodyFont: string, dateCreated: string, dateModified: string, headingFont: string, id: string, theme: any, themeId: string, userCreated: string, userModified: string>, id: string, lineMaps: table<dateCreated: string, dateModified: string, id: string, intensityId: int, line: record, theme: any, themeId: string, userCreated: string, userModified: string>, name: string, packageUri: string, slide: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, document: record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, slides: list, storyId: string, tableStylesXmlBlobUrl: string, title: string, userCreated: string, userModified: string>, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: any, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, slideDocumentUrl: string, slideMaster: record<colorMap: record, dateCreated: string, dateModified: string, id: string, parentSlide: any, slideId: string, userCreated: string, userModified: string>, svgBlobUrl: string, theme: any, userCreated: string, userModified: string>, slideId: string, userCreated: string, userModified: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/Details/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/Details/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3362,7 +3362,7 @@ export def "themes-effect-map id" [
 ]: nothing -> record<id: string, intensityId: int, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/EffectMap/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/EffectMap/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3385,7 +3385,7 @@ export def "themes-fills id" [
 ]: nothing -> record<id: string, intensityId: int, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/Fills/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/Fills/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3408,7 +3408,7 @@ export def "themes-fonts id" [
 ]: nothing -> record<bodyFont: string, headingFont: string, id: string, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/Fonts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/Fonts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3453,7 +3453,7 @@ export def "themes-intensity-type-id id" [
 ]: nothing -> record<description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/Intensity/TypeId/($type_id)")
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/Themes/Intensity/TypeId/{type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3476,7 +3476,7 @@ export def "themes-intensity id" [
 ]: nothing -> record<description: string, id: string, name: string, typeId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/Intensity/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/Intensity/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3499,7 +3499,7 @@ export def "themes-line-map id" [
 ]: nothing -> record<id: string, intensityId: int, themeId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/LineMap/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/LineMap/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3509,7 +3509,7 @@ export def "themes-line-map id" [
 #
 # GET /Themes/OpenOfficeXml/{id}
 # operationId: theme_themes_openofficexml_get_id_updated
-export def "themes-open-office-xml updated" [
+export def "themes-open-office-xml update-d" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3524,7 +3524,7 @@ export def "themes-open-office-xml updated" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "updated" $updated "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Themes/OpenOfficeXml/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/OpenOfficeXml/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3545,14 +3545,14 @@ export def "themes-open-office-xml id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-id: string # nullable, format: uuid
-  --openOfficeXml: string # nullable
+  --open-office-xml: string # nullable
   --type: string # nullable
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/OpenOfficeXml/($id)")
-  let body = {id: $body_id, openOfficeXml: $openOfficeXml, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/OpenOfficeXml/{id}"))
+  let body = {"id": $body_id, "openOfficeXml": $open_office_xml, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3578,7 +3578,7 @@ export def "themes-svg cache" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "use_cache" $use_cache "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Themes/Svg/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/Svg/{id}") $qp)
   let accept_val = "image/svg+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3601,7 +3601,7 @@ export def "themes id" [
 ]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, id: string, name: string, packageUri: string, slideId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/Themes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/Themes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

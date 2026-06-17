@@ -66,7 +66,7 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def synchronizationMode-completer [] { ["FullSync" "Incremental"] }
+def synchronization-mode-completer [] { ["FullSync" "Incremental"] }
 def kind-completer [] { ["AdlsGen2File" "AdlsGen2FileSystem" "AdlsGen2Folder" "Blob" "BlobFolder" "Container" "KustoCluster" "KustoDatabase" "SqlDBTable" "SqlDWTable"] }
 def kind-completer-1 [] { ["ScheduleBased"] }
 def kind-completer-2 [] { ["AdlsGen1File" "AdlsGen1Folder" "AdlsGen2File" "AdlsGen2FileSystem" "AdlsGen2Folder" "Blob" "BlobFolder" "Container" "KustoCluster" "KustoDatabase" "SqlDBTable" "SqlDWTable"] }
@@ -74,7 +74,7 @@ def kind-completer-2 [] { ["AdlsGen1File" "AdlsGen1Folder" "AdlsGen2File" "AdlsG
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-share-list-invitations ListInvitations" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-share-list-invitations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +98,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataShare/ListInvitations
 # operationId: ConsumerInvitations_ListInvitations
-export def "providers-microsoft-data-share-list-invitations ListInvitations" [
+export def "providers-microsoft-data-share-list-invitations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,11 +108,11 @@ export def "providers-microsoft-data-share-list-invitations ListInvitations" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # The continuation token
+  --skip-token: string # The continuation token
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/providers/Microsoft.DataShare/ListInvitations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -124,7 +124,7 @@ export def "providers-microsoft-data-share-list-invitations ListInvitations" [
 # POST /providers/Microsoft.DataShare/locations/{location}/RejectInvitation
 # operationId: ConsumerInvitations_RejectInvitation
 # --properties shape: {invitationId: string}
-export def "providers-microsoft-data-share-locations-reject-invitation RejectInvitation" [
+export def "providers-microsoft-data-share-locations-reject-invitation reject" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -141,8 +141,8 @@ export def "providers-microsoft-data-share-locations-reject-invitation RejectInv
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.DataShare/locations/($location)/RejectInvitation" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({location: $location} | format pattern "/providers/Microsoft.DataShare/locations/{location}/RejectInvitation") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -153,9 +153,9 @@ export def "providers-microsoft-data-share-locations-reject-invitation RejectInv
 #
 # GET /providers/Microsoft.DataShare/locations/{location}/consumerInvitations/{invitationId}
 # operationId: ConsumerInvitations_Get
-export def "providers-microsoft-data-share-locations-consumer-invitations Get" [
+export def "providers-microsoft-data-share-locations-consumer-invitations get" [
   location: string
-  invitationId: string
+  invitation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "providers-microsoft-data-share-locations-consumer-invitations Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.DataShare/locations/($location)/consumerInvitations/($invitationId)" $qp)
+  let full_url = (build-url $base ({location: $location, invitation_id: $invitation_id} | format pattern "/providers/Microsoft.DataShare/locations/{location}/consumerInvitations/{invitation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +179,7 @@ export def "providers-microsoft-data-share-locations-consumer-invitations Get" [
 #
 # GET /providers/Microsoft.DataShare/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-share-operations List" [
+export def "providers-microsoft-data-share-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,8 +203,8 @@ export def "providers-microsoft-data-share-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataShare/accounts
 # operationId: Accounts_ListBySubscription
-export def "subscriptions-providers-microsoft-data-share-accounts ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-data-share-accounts list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,12 +214,12 @@ export def "subscriptions-providers-microsoft-data-share-accounts ListBySubscrip
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation token
+  --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataShare/accounts" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataShare/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,9 +229,9 @@ export def "subscriptions-providers-microsoft-data-share-accounts ListBySubscrip
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,12 +241,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation token
+  --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<identity: record, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,10 +256,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,10 +283,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,10 +310,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}
 # operationId: Accounts_Update
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts update" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,8 +329,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -342,10 +342,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}
 # operationId: Accounts_Create
 # --identity shape: {type?: "SystemAssigned"}
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,8 +364,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)" $qp)
-  let body = {identity: $identity, properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}") $qp)
+  let body = {"identity": $identity, "properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -376,10 +376,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions
 # operationId: ShareSubscriptions_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions ListByAccount" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,12 +389,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation Token
+  --skip-token: string # Continuation Token
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -404,11 +404,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}
 # operationId: ShareSubscriptions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -432,11 +432,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}
 # operationId: ShareSubscriptions_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -461,11 +461,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}
 # operationId: ShareSubscriptions_Create
 # --properties shape: {invitationId: string, sourceShareLocation: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,8 +481,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -493,11 +493,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/ConsumerSourceDataSets
 # operationId: ConsumerSourceDataSets_ListByShareSubscription
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-consumer-source-data-sets ListByShareSubscription" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-consumer-source-data-sets list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,12 +507,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation token
+  --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/ConsumerSourceDataSets" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/ConsumerSourceDataSets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -522,11 +522,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/Synchronize
 # operationId: ShareSubscriptions_Synchronize
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-synchronize Synchronize" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-synchronize sync-hronize" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,14 +536,14 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --synchronizationMode: string@synchronizationMode-completer # Mode of synchronization used in triggers and snapshot sync. Incremental by default
+  --synchronization-mode: string@synchronization-mode-completer # Mode of synchronization used in triggers and snapshot sync. Incremental by default
 ]: any -> record<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/Synchronize" $qp)
-  let body = {synchronizationMode: $synchronizationMode} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/Synchronize") $qp)
+  let body = {"synchronizationMode": $synchronization_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -554,11 +554,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/cancelSynchronization
 # operationId: ShareSubscriptions_CancelSynchronization
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-cancel-synchronization CancelSynchronization" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-cancel-synchronization cancel" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,14 +568,14 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  synchronizationId: string # Synchronization id
+  synchronization_id: string # Synchronization id
 ]: any -> record<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/cancelSynchronization" $qp)
-  let body = {synchronizationId: $synchronizationId} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/cancelSynchronization") $qp)
+  let body = {"synchronizationId": $synchronization_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -586,11 +586,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/dataSetMappings
 # operationId: DataSetMappings_ListByShareSubscription
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings ListByShareSubscription" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,12 +600,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation token
+  --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/dataSetMappings" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/dataSetMappings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -615,12 +615,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/dataSetMappings/{dataSetMappingName}
 # operationId: DataSetMappings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
-  dataSetMappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
+  data_set_mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,7 +634,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/dataSetMappings/($dataSetMappingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name, data_set_mapping_name: $data_set_mapping_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/dataSetMappings/{data_set_mapping_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,12 +644,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/dataSetMappings/{dataSetMappingName}
 # operationId: DataSetMappings_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
-  dataSetMappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
+  data_set_mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/dataSetMappings/($dataSetMappingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name, data_set_mapping_name: $data_set_mapping_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/dataSetMappings/{data_set_mapping_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,12 +674,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/dataSetMappings/{dataSetMappingName}
 # Discriminator (request): kind
 # operationId: DataSetMappings_Create
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
-  dataSetMappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-data-set-mappings create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
+  data_set_mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,8 +695,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/dataSetMappings/($dataSetMappingName)" $qp)
-  let body = {kind: $kind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name, data_set_mapping_name: $data_set_mapping_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/dataSetMappings/{data_set_mapping_name}") $qp)
+  let body = {"kind": $kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -707,11 +707,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/listSourceShareSynchronizationSettings
 # operationId: ShareSubscriptions_ListSourceShareSynchronizationSettings
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-list-source-share-synchronization-settings ListSourceShareSynchronizationSettings" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-list-source-share-synchronization-settings list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,12 +721,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation token
+  --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/listSourceShareSynchronizationSettings" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/listSourceShareSynchronizationSettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -736,11 +736,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/listSynchronizationDetails
 # operationId: ShareSubscriptions_ListSynchronizationDetails
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-list-synchronization-details ListSynchronizationDetails" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-list-synchronization-details list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,15 +750,15 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation token
-  synchronizationId: string # Synchronization id
+  --skip-token: string # Continuation token
+  synchronization_id: string # Synchronization id
 ]: any -> record<nextLink: string, value: table<dataSetId: string, dataSetType: string, durationMs: int, endTime: string, filesRead: int, filesWritten: int, message: string, name: string, rowsCopied: int, rowsRead: int, sizeRead: int, sizeWritten: int, startTime: string, status: string, vCore: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/listSynchronizationDetails" $qp)
-  let body = {synchronizationId: $synchronizationId} | compact
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/listSynchronizationDetails") $qp)
+  let body = {"synchronizationId": $synchronization_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -769,11 +769,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/listSynchronizations
 # operationId: ShareSubscriptions_ListSynchronizations
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-list-synchronizations ListSynchronizations" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-list-synchronizations list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,12 +783,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation token
+  --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/listSynchronizations" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/listSynchronizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -798,11 +798,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/triggers
 # operationId: Triggers_ListByShareSubscription
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers ListByShareSubscription" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,12 +812,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation token
+  --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/triggers" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/triggers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -827,12 +827,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/triggers/{triggerName}
 # operationId: Triggers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
-  triggerName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
+  trigger_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,7 +846,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/triggers/($triggerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/triggers/{trigger_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -856,12 +856,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/triggers/{triggerName}
 # operationId: Triggers_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
-  triggerName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
+  trigger_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,7 +875,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/triggers/($triggerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/triggers/{trigger_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -886,12 +886,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/triggers/{triggerName}
 # Discriminator (request): kind
 # operationId: Triggers_Create
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareSubscriptionName: string
-  triggerName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-share-subscriptions-triggers create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_subscription_name: string
+  trigger_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,8 +907,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shareSubscriptions/($shareSubscriptionName)/triggers/($triggerName)" $qp)
-  let body = {kind: $kind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_subscription_name: $share_subscription_name, trigger_name: $trigger_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shareSubscriptions/{share_subscription_name}/triggers/{trigger_name}") $qp)
+  let body = {"kind": $kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -919,10 +919,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares
 # operationId: Shares_ListByAccount
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares ListByAccount" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,12 +932,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation Token
+  --skip-token: string # Continuation Token
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -947,11 +947,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}
 # operationId: Shares_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,7 +965,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -975,11 +975,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}
 # operationId: Shares_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1004,11 +1004,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}
 # operationId: Shares_Create
 # --properties shape: {description?: string, shareKind?: "CopyBased"|"InPlace", terms?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,8 +1024,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1036,11 +1036,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/dataSets
 # operationId: DataSets_ListByShare
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets ListByShare" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,12 +1050,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # continuation token
+  --skip-token: string # continuation token
 ]: nothing -> record<nextLink: string, value: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/dataSets" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/dataSets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1065,12 +1065,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/dataSets/{dataSetName}
 # operationId: DataSets_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  dataSetName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  data_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1084,7 +1084,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/dataSets/($dataSetName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, data_set_name: $data_set_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/dataSets/{data_set_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1094,12 +1094,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/dataSets/{dataSetName}
 # operationId: DataSets_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  dataSetName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  data_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1113,7 +1113,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/dataSets/($dataSetName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, data_set_name: $data_set_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/dataSets/{data_set_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1124,12 +1124,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/dataSets/{dataSetName}
 # Discriminator (request): kind
 # operationId: DataSets_Create
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  dataSetName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-data-sets create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  data_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1145,8 +1145,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/dataSets/($dataSetName)" $qp)
-  let body = {kind: $kind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, data_set_name: $data_set_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/dataSets/{data_set_name}") $qp)
+  let body = {"kind": $kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1157,11 +1157,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/invitations
 # operationId: Invitations_ListByShare
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations ListByShare" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,12 +1171,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # The continuation token
+  --skip-token: string # The continuation token
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/invitations" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/invitations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1186,12 +1186,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/invitations/{invitationName}
 # operationId: Invitations_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  invitationName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  invitation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/invitations/($invitationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, invitation_name: $invitation_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/invitations/{invitation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1215,12 +1215,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/invitations/{invitationName}
 # operationId: Invitations_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  invitationName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  invitation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1234,7 +1234,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/invitations/($invitationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, invitation_name: $invitation_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/invitations/{invitation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1245,12 +1245,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/invitations/{invitationName}
 # operationId: Invitations_Create
 # --properties shape: {targetActiveDirectoryId?: string, targetEmail?: string, targetObjectId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  invitationName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-invitations create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  invitation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,8 +1266,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/invitations/($invitationName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, invitation_name: $invitation_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/invitations/{invitation_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1278,11 +1278,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/listSynchronizationDetails
 # operationId: Shares_ListSynchronizationDetails
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-list-synchronization-details ListSynchronizationDetails" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-list-synchronization-details list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,23 +1292,23 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation token
-  --consumerEmail: string # Email of the user who created the synchronization
-  --consumerName: string # Name of the user who created the synchronization
-  --consumerTenantName: string # Tenant name of the consumer who created the synchronization
-  --durationMs: int # synchronization duration (format: int32)
-  --endTime: string # End time of synchronization (format: date-time)
+  --skip-token: string # Continuation token
+  --consumer-email: string # Email of the user who created the synchronization
+  --consumer-name: string # Name of the user who created the synchronization
+  --consumer-tenant-name: string # Tenant name of the consumer who created the synchronization
+  --duration-ms: int # synchronization duration (format: int32)
+  --end-time: string # End time of synchronization (format: date-time)
   --message: string # message of synchronization
-  --startTime: string # start time of synchronization (format: date-time)
+  --start-time: string # start time of synchronization (format: date-time)
   --status: string # Raw Status
-  --synchronizationId: string # Synchronization id
+  --synchronization-id: string # Synchronization id
 ]: any -> record<nextLink: string, value: table<dataSetId: string, dataSetType: string, durationMs: int, endTime: string, filesRead: int, filesWritten: int, message: string, name: string, rowsCopied: int, rowsRead: int, sizeRead: int, sizeWritten: int, startTime: string, status: string, vCore: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/listSynchronizationDetails" $qp)
-  let body = {consumerEmail: $consumerEmail, consumerName: $consumerName, consumerTenantName: $consumerTenantName, durationMs: $durationMs, endTime: $endTime, message: $message, startTime: $startTime, status: $status, synchronizationId: $synchronizationId} | compact
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/listSynchronizationDetails") $qp)
+  let body = {"consumerEmail": $consumer_email, "consumerName": $consumer_name, "consumerTenantName": $consumer_tenant_name, "durationMs": $duration_ms, "endTime": $end_time, "message": $message, "startTime": $start_time, "status": $status, "synchronizationId": $synchronization_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1319,11 +1319,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/listSynchronizations
 # operationId: Shares_ListSynchronizations
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-list-synchronizations ListSynchronizations" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-list-synchronizations list" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,12 +1333,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation token
+  --skip-token: string # Continuation token
 ]: nothing -> record<nextLink: string, value: table<consumerEmail: string, consumerName: string, consumerTenantName: string, durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/listSynchronizations" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/listSynchronizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1348,11 +1348,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/providerShareSubscriptions
 # operationId: ProviderShareSubscriptions_ListByShare
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions ListByShare" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1362,12 +1362,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # Continuation Token
+  --skip-token: string # Continuation Token
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/providerShareSubscriptions" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/providerShareSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1377,12 +1377,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/providerShareSubscriptions/{providerShareSubscriptionId}
 # operationId: ProviderShareSubscriptions_GetByShare
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions GetByShare" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  providerShareSubscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions get-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  provider_share_subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,7 +1396,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/providerShareSubscriptions/($providerShareSubscriptionId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, provider_share_subscription_id: $provider_share_subscription_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/providerShareSubscriptions/{provider_share_subscription_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1406,12 +1406,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/providerShareSubscriptions/{providerShareSubscriptionId}/reinstate
 # operationId: ProviderShareSubscriptions_Reinstate
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions-reinstate Reinstate" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  providerShareSubscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions-reinstate post" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  provider_share_subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1425,7 +1425,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/providerShareSubscriptions/($providerShareSubscriptionId)/reinstate" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, provider_share_subscription_id: $provider_share_subscription_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/providerShareSubscriptions/{provider_share_subscription_id}/reinstate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1435,12 +1435,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/providerShareSubscriptions/{providerShareSubscriptionId}/revoke
 # operationId: ProviderShareSubscriptions_Revoke
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions-revoke Revoke" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  providerShareSubscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-provider-share-subscriptions-revoke delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  provider_share_subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1454,7 +1454,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/providerShareSubscriptions/($providerShareSubscriptionId)/revoke" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, provider_share_subscription_id: $provider_share_subscription_id} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/providerShareSubscriptions/{provider_share_subscription_id}/revoke") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1464,11 +1464,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/synchronizationSettings
 # operationId: SynchronizationSettings_ListByShare
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings ListByShare" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings list-by" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,12 +1478,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use.
-  --skipToken: string # continuation token
+  --skip-token: string # continuation token
 ]: nothing -> record<nextLink: string, value: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/synchronizationSettings" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/synchronizationSettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1493,12 +1493,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/synchronizationSettings/{synchronizationSettingName}
 # operationId: SynchronizationSettings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  synchronizationSettingName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings delete" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  synchronization_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,7 +1512,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/synchronizationSettings/($synchronizationSettingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, synchronization_setting_name: $synchronization_setting_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/synchronizationSettings/{synchronization_setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1522,12 +1522,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/synchronizationSettings/{synchronizationSettingName}
 # operationId: SynchronizationSettings_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  synchronizationSettingName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings get" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  synchronization_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1541,7 +1541,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/synchronizationSettings/($synchronizationSettingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, synchronization_setting_name: $synchronization_setting_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/synchronizationSettings/{synchronization_setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1552,12 +1552,12 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/synchronizationSettings/{synchronizationSettingName}
 # Discriminator (request): kind
 # operationId: SynchronizationSettings_Create
-export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  accountName: string
-  shareName: string
-  synchronizationSettingName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-share-accounts-shares-synchronization-settings create" [
+  subscription_id: string
+  resource_group_name: string
+  account_name: string
+  share_name: string
+  synchronization_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1573,8 +1573,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-share-account
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataShare/accounts/($accountName)/shares/($shareName)/synchronizationSettings/($synchronizationSettingName)" $qp)
-  let body = {kind: $kind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, account_name: $account_name, share_name: $share_name, synchronization_setting_name: $synchronization_setting_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataShare/accounts/{account_name}/shares/{share_name}/synchronizationSettings/{synchronization_setting_name}") $qp)
+  let body = {"kind": $kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

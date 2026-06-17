@@ -140,127 +140,127 @@ export def "realms-admin post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accessCodeLifespan: int # format: int32
-  --accessCodeLifespanLogin: int # format: int32
-  --accessCodeLifespanUserAction: int # format: int32
-  --accessTokenLifespan: int # format: int32
-  --accessTokenLifespanForImplicitFlow: int # format: int32
-  --accountTheme: string
-  --actionTokenGeneratedByAdminLifespan: int # format: int32
-  --actionTokenGeneratedByUserLifespan: int # format: int32
-  --adminEventsDetailsEnabled: oneof<nothing, bool>
-  --adminEventsEnabled: oneof<nothing, bool>
-  --adminTheme: string
+  --access-code-lifespan: int # format: int32
+  --access-code-lifespan-login: int # format: int32
+  --access-code-lifespan-user-action: int # format: int32
+  --access-token-lifespan: int # format: int32
+  --access-token-lifespan-for-implicit-flow: int # format: int32
+  --account-theme: string
+  --action-token-generated-by-admin-lifespan: int # format: int32
+  --action-token-generated-by-user-lifespan: int # format: int32
+  --admin-events-details-enabled: oneof<nothing, bool>
+  --admin-events-enabled: oneof<nothing, bool>
+  --admin-theme: string
   --attributes: record
-  --authenticationFlows: list # item shape: {alias?: string, authenticationExecutions?: list, builtIn?: bool, description?: string, id?: string, providerId?: string, topLevel?: bool}
-  --authenticatorConfig: list # item shape: {alias?: string, config?: record, id?: string}
-  --browserFlow: string
-  --browserSecurityHeaders: record
-  --bruteForceProtected: oneof<nothing, bool>
-  --clientAuthenticationFlow: string
-  --clientScopeMappings: record
-  --clientScopes: list # item shape: {attributes?: record, description?: string, id?: string, name?: string, protocol?: string, protocolMappers?: list}
-  --clientSessionIdleTimeout: int # format: int32
-  --clientSessionMaxLifespan: int # format: int32
+  --authentication-flows: list # item shape: {alias?: string, authenticationExecutions?: list, builtIn?: bool, description?: string, id?: string, providerId?: string, topLevel?: bool}
+  --authenticator-config: list # item shape: {alias?: string, config?: record, id?: string}
+  --browser-flow: string
+  --browser-security-headers: record
+  --brute-force-protected: oneof<nothing, bool>
+  --client-authentication-flow: string
+  --client-scope-mappings: record
+  --client-scopes: list # item shape: {attributes?: record, description?: string, id?: string, name?: string, protocol?: string, protocolMappers?: list}
+  --client-session-idle-timeout: int # format: int32
+  --client-session-max-lifespan: int # format: int32
   --clients: list # item shape: {access?: record, adminUrl?: string, alwaysDisplayInConsole?: bool, attributes?: record, authenticationFlowBindingOverrides?: record, authorizationServicesEnabled?: bool, authorizationSettings?: record, baseUrl?: string, bearerOnly?: bool, clientAuthenticatorType?: string, clientId?: string, consentRequired?: bool, defaultClientScopes?: list, defaultRoles?: list, description?: string, directAccessGrantsEnabled?: bool, enabled?: bool, frontchannelLogout?: bool, fullScopeAllowed?: bool, id?: string, implicitFlowEnabled?: bool, name?: string, nodeReRegistrationTimeout?: int, notBefore?: int, optionalClientScopes?: list, origin?: string, protocol?: string, protocolMappers?: list, publicClient?: bool, redirectUris?: list, registeredNodes?: record, registrationAccessToken?: string, rootUrl?: string, secret?: string, serviceAccountsEnabled?: bool, standardFlowEnabled?: bool, surrogateAuthRequired?: bool, webOrigins?: list}
   --components: record # shape: {empty?: bool, loadFactor?: float, threshold?: int}
-  --defaultDefaultClientScopes: list
-  --defaultGroups: list
-  --defaultLocale: string
-  --defaultOptionalClientScopes: list
-  --defaultRoles: list
-  --defaultSignatureAlgorithm: string
-  --directGrantFlow: string
-  --displayName: string
-  --displayNameHtml: string
-  --dockerAuthenticationFlow: string
-  --duplicateEmailsAllowed: oneof<nothing, bool>
-  --editUsernameAllowed: oneof<nothing, bool>
-  --emailTheme: string
+  --default-default-client-scopes: list
+  --default-groups: list
+  --default-locale: string
+  --default-optional-client-scopes: list
+  --default-roles: list
+  --default-signature-algorithm: string
+  --direct-grant-flow: string
+  --display-name: string
+  --display-name-html: string
+  --docker-authentication-flow: string
+  --duplicate-emails-allowed: oneof<nothing, bool>
+  --edit-username-allowed: oneof<nothing, bool>
+  --email-theme: string
   --enabled: oneof<nothing, bool>
-  --enabledEventTypes: list
-  --eventsEnabled: oneof<nothing, bool>
-  --eventsExpiration: int # format: int64
-  --eventsListeners: list
-  --failureFactor: int # format: int32
-  --federatedUsers: list # item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list, requiredActions?: list, self?: string, serviceAccountClientId?: string, username?: string}
+  --enabled-event-types: list
+  --events-enabled: oneof<nothing, bool>
+  --events-expiration: int # format: int64
+  --events-listeners: list
+  --failure-factor: int # format: int32
+  --federated-users: list # item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list, requiredActions?: list, self?: string, serviceAccountClientId?: string, username?: string}
   --groups: list # item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list, subGroups?: list}
   --id: string
-  --identityProviderMappers: list # item shape: {config?: record, id?: string, identityProviderAlias?: string, identityProviderMapper?: string, name?: string}
-  --identityProviders: list # item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
-  --internationalizationEnabled: oneof<nothing, bool>
-  --keycloakVersion: string
-  --loginTheme: string
-  --loginWithEmailAllowed: oneof<nothing, bool>
-  --maxDeltaTimeSeconds: int # format: int32
-  --maxFailureWaitSeconds: int # format: int32
-  --minimumQuickLoginWaitSeconds: int # format: int32
-  --notBefore: int # format: int32
-  --offlineSessionIdleTimeout: int # format: int32
-  --offlineSessionMaxLifespan: int # format: int32
-  --offlineSessionMaxLifespanEnabled: oneof<nothing, bool>
-  --otpPolicyAlgorithm: string
-  --otpPolicyDigits: int # format: int32
-  --otpPolicyInitialCounter: int # format: int32
-  --otpPolicyLookAheadWindow: int # format: int32
-  --otpPolicyPeriod: int # format: int32
-  --otpPolicyType: string
-  --otpSupportedApplications: list
-  --passwordPolicy: string
-  --permanentLockout: oneof<nothing, bool>
-  --protocolMappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-  --quickLoginCheckMilliSeconds: int # format: int64
+  --identity-provider-mappers: list # item shape: {config?: record, id?: string, identityProviderAlias?: string, identityProviderMapper?: string, name?: string}
+  --identity-providers: list # item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
+  --internationalization-enabled: oneof<nothing, bool>
+  --keycloak-version: string
+  --login-theme: string
+  --login-with-email-allowed: oneof<nothing, bool>
+  --max-delta-time-seconds: int # format: int32
+  --max-failure-wait-seconds: int # format: int32
+  --minimum-quick-login-wait-seconds: int # format: int32
+  --not-before: int # format: int32
+  --offline-session-idle-timeout: int # format: int32
+  --offline-session-max-lifespan: int # format: int32
+  --offline-session-max-lifespan-enabled: oneof<nothing, bool>
+  --otp-policy-algorithm: string
+  --otp-policy-digits: int # format: int32
+  --otp-policy-initial-counter: int # format: int32
+  --otp-policy-look-ahead-window: int # format: int32
+  --otp-policy-period: int # format: int32
+  --otp-policy-type: string
+  --otp-supported-applications: list
+  --password-policy: string
+  --permanent-lockout: oneof<nothing, bool>
+  --protocol-mappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
+  --quick-login-check-milli-seconds: int # format: int64
   --realm: string
-  --refreshTokenMaxReuse: int # format: int32
-  --registrationAllowed: oneof<nothing, bool>
-  --registrationEmailAsUsername: oneof<nothing, bool>
-  --registrationFlow: string
-  --rememberMe: oneof<nothing, bool>
-  --requiredActions: list # item shape: {alias?: string, config?: record, defaultAction?: bool, enabled?: bool, name?: string, priority?: int, providerId?: string}
-  --resetCredentialsFlow: string
-  --resetPasswordAllowed: oneof<nothing, bool>
-  --revokeRefreshToken: oneof<nothing, bool>
+  --refresh-token-max-reuse: int # format: int32
+  --registration-allowed: oneof<nothing, bool>
+  --registration-email-as-username: oneof<nothing, bool>
+  --registration-flow: string
+  --remember-me: oneof<nothing, bool>
+  --required-actions: list # item shape: {alias?: string, config?: record, defaultAction?: bool, enabled?: bool, name?: string, priority?: int, providerId?: string}
+  --reset-credentials-flow: string
+  --reset-password-allowed: oneof<nothing, bool>
+  --revoke-refresh-token: oneof<nothing, bool>
   --roles: record # shape: {client?: record, realm?: list}
-  --scopeMappings: list # item shape: {client?: string, clientScope?: string, roles?: list, self?: string}
-  --smtpServer: record
-  --sslRequired: string
-  --ssoSessionIdleTimeout: int # format: int32
-  --ssoSessionIdleTimeoutRememberMe: int # format: int32
-  --ssoSessionMaxLifespan: int # format: int32
-  --ssoSessionMaxLifespanRememberMe: int # format: int32
-  --supportedLocales: list
-  --userFederationMappers: list # item shape: {config?: record, federationMapperType?: string, federationProviderDisplayName?: string, id?: string, name?: string}
-  --userFederationProviders: list # item shape: {changedSyncPeriod?: int, config?: record, displayName?: string, fullSyncPeriod?: int, id?: string, lastSync?: int, priority?: int, providerName?: string}
-  --userManagedAccessAllowed: oneof<nothing, bool>
+  --scope-mappings: list # item shape: {client?: string, clientScope?: string, roles?: list, self?: string}
+  --smtp-server: record
+  --ssl-required: string
+  --sso-session-idle-timeout: int # format: int32
+  --sso-session-idle-timeout-remember-me: int # format: int32
+  --sso-session-max-lifespan: int # format: int32
+  --sso-session-max-lifespan-remember-me: int # format: int32
+  --supported-locales: list
+  --user-federation-mappers: list # item shape: {config?: record, federationMapperType?: string, federationProviderDisplayName?: string, id?: string, name?: string}
+  --user-federation-providers: list # item shape: {changedSyncPeriod?: int, config?: record, displayName?: string, fullSyncPeriod?: int, id?: string, lastSync?: int, priority?: int, providerName?: string}
+  --user-managed-access-allowed: oneof<nothing, bool>
   --users: list # item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list, requiredActions?: list, self?: string, serviceAccountClientId?: string, username?: string}
-  --verifyEmail: oneof<nothing, bool>
-  --waitIncrementSeconds: int # format: int32
-  --webAuthnPolicyAcceptableAaguids: list
-  --webAuthnPolicyAttestationConveyancePreference: string
-  --webAuthnPolicyAuthenticatorAttachment: string
-  --webAuthnPolicyAvoidSameAuthenticatorRegister: oneof<nothing, bool>
-  --webAuthnPolicyCreateTimeout: int # format: int32
-  --webAuthnPolicyPasswordlessAcceptableAaguids: list
-  --webAuthnPolicyPasswordlessAttestationConveyancePreference: string
-  --webAuthnPolicyPasswordlessAuthenticatorAttachment: string
-  --webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: oneof<nothing, bool>
-  --webAuthnPolicyPasswordlessCreateTimeout: int # format: int32
-  --webAuthnPolicyPasswordlessRequireResidentKey: string
-  --webAuthnPolicyPasswordlessRpEntityName: string
-  --webAuthnPolicyPasswordlessRpId: string
-  --webAuthnPolicyPasswordlessSignatureAlgorithms: list
-  --webAuthnPolicyPasswordlessUserVerificationRequirement: string
-  --webAuthnPolicyRequireResidentKey: string
-  --webAuthnPolicyRpEntityName: string
-  --webAuthnPolicyRpId: string
-  --webAuthnPolicySignatureAlgorithms: list
-  --webAuthnPolicyUserVerificationRequirement: string
+  --verify-email: oneof<nothing, bool>
+  --wait-increment-seconds: int # format: int32
+  --web-authn-policy-acceptable-aaguids: list
+  --web-authn-policy-attestation-conveyance-preference: string
+  --web-authn-policy-authenticator-attachment: string
+  --web-authn-policy-avoid-same-authenticator-register: oneof<nothing, bool>
+  --web-authn-policy-create-timeout: int # format: int32
+  --web-authn-policy-passwordless-acceptable-aaguids: list
+  --web-authn-policy-passwordless-attestation-conveyance-preference: string
+  --web-authn-policy-passwordless-authenticator-attachment: string
+  --web-authn-policy-passwordless-avoid-same-authenticator-register: oneof<nothing, bool>
+  --web-authn-policy-passwordless-create-timeout: int # format: int32
+  --web-authn-policy-passwordless-require-resident-key: string
+  --web-authn-policy-passwordless-rp-entity-name: string
+  --web-authn-policy-passwordless-rp-id: string
+  --web-authn-policy-passwordless-signature-algorithms: list
+  --web-authn-policy-passwordless-user-verification-requirement: string
+  --web-authn-policy-require-resident-key: string
+  --web-authn-policy-rp-entity-name: string
+  --web-authn-policy-rp-id: string
+  --web-authn-policy-signature-algorithms: list
+  --web-authn-policy-user-verification-requirement: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
-  let body = {accessCodeLifespan: $accessCodeLifespan, accessCodeLifespanLogin: $accessCodeLifespanLogin, accessCodeLifespanUserAction: $accessCodeLifespanUserAction, accessTokenLifespan: $accessTokenLifespan, accessTokenLifespanForImplicitFlow: $accessTokenLifespanForImplicitFlow, accountTheme: $accountTheme, actionTokenGeneratedByAdminLifespan: $actionTokenGeneratedByAdminLifespan, actionTokenGeneratedByUserLifespan: $actionTokenGeneratedByUserLifespan, adminEventsDetailsEnabled: $adminEventsDetailsEnabled, adminEventsEnabled: $adminEventsEnabled, adminTheme: $adminTheme, attributes: $attributes, authenticationFlows: $authenticationFlows, authenticatorConfig: $authenticatorConfig, browserFlow: $browserFlow, browserSecurityHeaders: $browserSecurityHeaders, bruteForceProtected: $bruteForceProtected, clientAuthenticationFlow: $clientAuthenticationFlow, clientScopeMappings: $clientScopeMappings, clientScopes: $clientScopes, clientSessionIdleTimeout: $clientSessionIdleTimeout, clientSessionMaxLifespan: $clientSessionMaxLifespan, clients: $clients, components: $components, defaultDefaultClientScopes: $defaultDefaultClientScopes, defaultGroups: $defaultGroups, defaultLocale: $defaultLocale, defaultOptionalClientScopes: $defaultOptionalClientScopes, defaultRoles: $defaultRoles, defaultSignatureAlgorithm: $defaultSignatureAlgorithm, directGrantFlow: $directGrantFlow, displayName: $displayName, displayNameHtml: $displayNameHtml, dockerAuthenticationFlow: $dockerAuthenticationFlow, duplicateEmailsAllowed: $duplicateEmailsAllowed, editUsernameAllowed: $editUsernameAllowed, emailTheme: $emailTheme, enabled: $enabled, enabledEventTypes: $enabledEventTypes, eventsEnabled: $eventsEnabled, eventsExpiration: $eventsExpiration, eventsListeners: $eventsListeners, failureFactor: $failureFactor, federatedUsers: $federatedUsers, groups: $groups, id: $id, identityProviderMappers: $identityProviderMappers, identityProviders: $identityProviders, internationalizationEnabled: $internationalizationEnabled, keycloakVersion: $keycloakVersion, loginTheme: $loginTheme, loginWithEmailAllowed: $loginWithEmailAllowed, maxDeltaTimeSeconds: $maxDeltaTimeSeconds, maxFailureWaitSeconds: $maxFailureWaitSeconds, minimumQuickLoginWaitSeconds: $minimumQuickLoginWaitSeconds, notBefore: $notBefore, offlineSessionIdleTimeout: $offlineSessionIdleTimeout, offlineSessionMaxLifespan: $offlineSessionMaxLifespan, offlineSessionMaxLifespanEnabled: $offlineSessionMaxLifespanEnabled, otpPolicyAlgorithm: $otpPolicyAlgorithm, otpPolicyDigits: $otpPolicyDigits, otpPolicyInitialCounter: $otpPolicyInitialCounter, otpPolicyLookAheadWindow: $otpPolicyLookAheadWindow, otpPolicyPeriod: $otpPolicyPeriod, otpPolicyType: $otpPolicyType, otpSupportedApplications: $otpSupportedApplications, passwordPolicy: $passwordPolicy, permanentLockout: $permanentLockout, protocolMappers: $protocolMappers, quickLoginCheckMilliSeconds: $quickLoginCheckMilliSeconds, realm: $realm, refreshTokenMaxReuse: $refreshTokenMaxReuse, registrationAllowed: $registrationAllowed, registrationEmailAsUsername: $registrationEmailAsUsername, registrationFlow: $registrationFlow, rememberMe: $rememberMe, requiredActions: $requiredActions, resetCredentialsFlow: $resetCredentialsFlow, resetPasswordAllowed: $resetPasswordAllowed, revokeRefreshToken: $revokeRefreshToken, roles: $roles, scopeMappings: $scopeMappings, smtpServer: $smtpServer, sslRequired: $sslRequired, ssoSessionIdleTimeout: $ssoSessionIdleTimeout, ssoSessionIdleTimeoutRememberMe: $ssoSessionIdleTimeoutRememberMe, ssoSessionMaxLifespan: $ssoSessionMaxLifespan, ssoSessionMaxLifespanRememberMe: $ssoSessionMaxLifespanRememberMe, supportedLocales: $supportedLocales, userFederationMappers: $userFederationMappers, userFederationProviders: $userFederationProviders, userManagedAccessAllowed: $userManagedAccessAllowed, users: $users, verifyEmail: $verifyEmail, waitIncrementSeconds: $waitIncrementSeconds, webAuthnPolicyAcceptableAaguids: $webAuthnPolicyAcceptableAaguids, webAuthnPolicyAttestationConveyancePreference: $webAuthnPolicyAttestationConveyancePreference, webAuthnPolicyAuthenticatorAttachment: $webAuthnPolicyAuthenticatorAttachment, webAuthnPolicyAvoidSameAuthenticatorRegister: $webAuthnPolicyAvoidSameAuthenticatorRegister, webAuthnPolicyCreateTimeout: $webAuthnPolicyCreateTimeout, webAuthnPolicyPasswordlessAcceptableAaguids: $webAuthnPolicyPasswordlessAcceptableAaguids, webAuthnPolicyPasswordlessAttestationConveyancePreference: $webAuthnPolicyPasswordlessAttestationConveyancePreference, webAuthnPolicyPasswordlessAuthenticatorAttachment: $webAuthnPolicyPasswordlessAuthenticatorAttachment, webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: $webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister, webAuthnPolicyPasswordlessCreateTimeout: $webAuthnPolicyPasswordlessCreateTimeout, webAuthnPolicyPasswordlessRequireResidentKey: $webAuthnPolicyPasswordlessRequireResidentKey, webAuthnPolicyPasswordlessRpEntityName: $webAuthnPolicyPasswordlessRpEntityName, webAuthnPolicyPasswordlessRpId: $webAuthnPolicyPasswordlessRpId, webAuthnPolicyPasswordlessSignatureAlgorithms: $webAuthnPolicyPasswordlessSignatureAlgorithms, webAuthnPolicyPasswordlessUserVerificationRequirement: $webAuthnPolicyPasswordlessUserVerificationRequirement, webAuthnPolicyRequireResidentKey: $webAuthnPolicyRequireResidentKey, webAuthnPolicyRpEntityName: $webAuthnPolicyRpEntityName, webAuthnPolicyRpId: $webAuthnPolicyRpId, webAuthnPolicySignatureAlgorithms: $webAuthnPolicySignatureAlgorithms, webAuthnPolicyUserVerificationRequirement: $webAuthnPolicyUserVerificationRequirement} | compact
+  let body = {"accessCodeLifespan": $access_code_lifespan, "accessCodeLifespanLogin": $access_code_lifespan_login, "accessCodeLifespanUserAction": $access_code_lifespan_user_action, "accessTokenLifespan": $access_token_lifespan, "accessTokenLifespanForImplicitFlow": $access_token_lifespan_for_implicit_flow, "accountTheme": $account_theme, "actionTokenGeneratedByAdminLifespan": $action_token_generated_by_admin_lifespan, "actionTokenGeneratedByUserLifespan": $action_token_generated_by_user_lifespan, "adminEventsDetailsEnabled": $admin_events_details_enabled, "adminEventsEnabled": $admin_events_enabled, "adminTheme": $admin_theme, "attributes": $attributes, "authenticationFlows": $authentication_flows, "authenticatorConfig": $authenticator_config, "browserFlow": $browser_flow, "browserSecurityHeaders": $browser_security_headers, "bruteForceProtected": $brute_force_protected, "clientAuthenticationFlow": $client_authentication_flow, "clientScopeMappings": $client_scope_mappings, "clientScopes": $client_scopes, "clientSessionIdleTimeout": $client_session_idle_timeout, "clientSessionMaxLifespan": $client_session_max_lifespan, "clients": $clients, "components": $components, "defaultDefaultClientScopes": $default_default_client_scopes, "defaultGroups": $default_groups, "defaultLocale": $default_locale, "defaultOptionalClientScopes": $default_optional_client_scopes, "defaultRoles": $default_roles, "defaultSignatureAlgorithm": $default_signature_algorithm, "directGrantFlow": $direct_grant_flow, "displayName": $display_name, "displayNameHtml": $display_name_html, "dockerAuthenticationFlow": $docker_authentication_flow, "duplicateEmailsAllowed": $duplicate_emails_allowed, "editUsernameAllowed": $edit_username_allowed, "emailTheme": $email_theme, "enabled": $enabled, "enabledEventTypes": $enabled_event_types, "eventsEnabled": $events_enabled, "eventsExpiration": $events_expiration, "eventsListeners": $events_listeners, "failureFactor": $failure_factor, "federatedUsers": $federated_users, "groups": $groups, "id": $id, "identityProviderMappers": $identity_provider_mappers, "identityProviders": $identity_providers, "internationalizationEnabled": $internationalization_enabled, "keycloakVersion": $keycloak_version, "loginTheme": $login_theme, "loginWithEmailAllowed": $login_with_email_allowed, "maxDeltaTimeSeconds": $max_delta_time_seconds, "maxFailureWaitSeconds": $max_failure_wait_seconds, "minimumQuickLoginWaitSeconds": $minimum_quick_login_wait_seconds, "notBefore": $not_before, "offlineSessionIdleTimeout": $offline_session_idle_timeout, "offlineSessionMaxLifespan": $offline_session_max_lifespan, "offlineSessionMaxLifespanEnabled": $offline_session_max_lifespan_enabled, "otpPolicyAlgorithm": $otp_policy_algorithm, "otpPolicyDigits": $otp_policy_digits, "otpPolicyInitialCounter": $otp_policy_initial_counter, "otpPolicyLookAheadWindow": $otp_policy_look_ahead_window, "otpPolicyPeriod": $otp_policy_period, "otpPolicyType": $otp_policy_type, "otpSupportedApplications": $otp_supported_applications, "passwordPolicy": $password_policy, "permanentLockout": $permanent_lockout, "protocolMappers": $protocol_mappers, "quickLoginCheckMilliSeconds": $quick_login_check_milli_seconds, "realm": $realm, "refreshTokenMaxReuse": $refresh_token_max_reuse, "registrationAllowed": $registration_allowed, "registrationEmailAsUsername": $registration_email_as_username, "registrationFlow": $registration_flow, "rememberMe": $remember_me, "requiredActions": $required_actions, "resetCredentialsFlow": $reset_credentials_flow, "resetPasswordAllowed": $reset_password_allowed, "revokeRefreshToken": $revoke_refresh_token, "roles": $roles, "scopeMappings": $scope_mappings, "smtpServer": $smtp_server, "sslRequired": $ssl_required, "ssoSessionIdleTimeout": $sso_session_idle_timeout, "ssoSessionIdleTimeoutRememberMe": $sso_session_idle_timeout_remember_me, "ssoSessionMaxLifespan": $sso_session_max_lifespan, "ssoSessionMaxLifespanRememberMe": $sso_session_max_lifespan_remember_me, "supportedLocales": $supported_locales, "userFederationMappers": $user_federation_mappers, "userFederationProviders": $user_federation_providers, "userManagedAccessAllowed": $user_managed_access_allowed, "users": $users, "verifyEmail": $verify_email, "waitIncrementSeconds": $wait_increment_seconds, "webAuthnPolicyAcceptableAaguids": $web_authn_policy_acceptable_aaguids, "webAuthnPolicyAttestationConveyancePreference": $web_authn_policy_attestation_conveyance_preference, "webAuthnPolicyAuthenticatorAttachment": $web_authn_policy_authenticator_attachment, "webAuthnPolicyAvoidSameAuthenticatorRegister": $web_authn_policy_avoid_same_authenticator_register, "webAuthnPolicyCreateTimeout": $web_authn_policy_create_timeout, "webAuthnPolicyPasswordlessAcceptableAaguids": $web_authn_policy_passwordless_acceptable_aaguids, "webAuthnPolicyPasswordlessAttestationConveyancePreference": $web_authn_policy_passwordless_attestation_conveyance_preference, "webAuthnPolicyPasswordlessAuthenticatorAttachment": $web_authn_policy_passwordless_authenticator_attachment, "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister": $web_authn_policy_passwordless_avoid_same_authenticator_register, "webAuthnPolicyPasswordlessCreateTimeout": $web_authn_policy_passwordless_create_timeout, "webAuthnPolicyPasswordlessRequireResidentKey": $web_authn_policy_passwordless_require_resident_key, "webAuthnPolicyPasswordlessRpEntityName": $web_authn_policy_passwordless_rp_entity_name, "webAuthnPolicyPasswordlessRpId": $web_authn_policy_passwordless_rp_id, "webAuthnPolicyPasswordlessSignatureAlgorithms": $web_authn_policy_passwordless_signature_algorithms, "webAuthnPolicyPasswordlessUserVerificationRequirement": $web_authn_policy_passwordless_user_verification_requirement, "webAuthnPolicyRequireResidentKey": $web_authn_policy_require_resident_key, "webAuthnPolicyRpEntityName": $web_authn_policy_rp_entity_name, "webAuthnPolicyRpId": $web_authn_policy_rp_id, "webAuthnPolicySignatureAlgorithms": $web_authn_policy_signature_algorithms, "webAuthnPolicyUserVerificationRequirement": $web_authn_policy_user_verification_requirement} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,7 +283,7 @@ export def "name get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($id)/name")
+  let full_url = (build-url $base ({id: $id} | format pattern "/{id}/name"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -305,7 +305,7 @@ export def "realms-admin delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,7 +327,7 @@ export def "realms-admin get" [
 ]: nothing -> record<accessCodeLifespan: int, accessCodeLifespanLogin: int, accessCodeLifespanUserAction: int, accessTokenLifespan: int, accessTokenLifespanForImplicitFlow: int, accountTheme: string, actionTokenGeneratedByAdminLifespan: int, actionTokenGeneratedByUserLifespan: int, adminEventsDetailsEnabled: bool, adminEventsEnabled: bool, adminTheme: string, attributes: record, authenticationFlows: table<alias: string, authenticationExecutions: list, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool>, authenticatorConfig: table<alias: string, config: record, id: string>, browserFlow: string, browserSecurityHeaders: record, bruteForceProtected: bool, clientAuthenticationFlow: string, clientScopeMappings: record, clientScopes: table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list>, clientSessionIdleTimeout: int, clientSessionMaxLifespan: int, clients: table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list, defaultRoles: list, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list, origin: string, protocol: string, protocolMappers: list, publicClient: bool, redirectUris: list, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list>, components: record<empty: bool, loadFactor: float, threshold: int>, defaultDefaultClientScopes: list<string>, defaultGroups: list<string>, defaultLocale: string, defaultOptionalClientScopes: list<string>, defaultRoles: list<string>, defaultSignatureAlgorithm: string, directGrantFlow: string, displayName: string, displayNameHtml: string, dockerAuthenticationFlow: string, duplicateEmailsAllowed: bool, editUsernameAllowed: bool, emailTheme: string, enabled: bool, enabledEventTypes: list<string>, eventsEnabled: bool, eventsExpiration: int, eventsListeners: list<string>, failureFactor: int, federatedUsers: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, groups: table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list, subGroups: list>, id: string, identityProviderMappers: table<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string>, identityProviders: table<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool>, internationalizationEnabled: bool, keycloakVersion: string, loginTheme: string, loginWithEmailAllowed: bool, maxDeltaTimeSeconds: int, maxFailureWaitSeconds: int, minimumQuickLoginWaitSeconds: int, notBefore: int, offlineSessionIdleTimeout: int, offlineSessionMaxLifespan: int, offlineSessionMaxLifespanEnabled: bool, otpPolicyAlgorithm: string, otpPolicyDigits: int, otpPolicyInitialCounter: int, otpPolicyLookAheadWindow: int, otpPolicyPeriod: int, otpPolicyType: string, otpSupportedApplications: list<string>, passwordPolicy: string, permanentLockout: bool, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, quickLoginCheckMilliSeconds: int, realm: string, refreshTokenMaxReuse: int, registrationAllowed: bool, registrationEmailAsUsername: bool, registrationFlow: string, rememberMe: bool, requiredActions: table<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string>, resetCredentialsFlow: string, resetPasswordAllowed: bool, revokeRefreshToken: bool, roles: record<client: record, realm: list<record>>, scopeMappings: table<client: string, clientScope: string, roles: list, self: string>, smtpServer: record, sslRequired: string, ssoSessionIdleTimeout: int, ssoSessionIdleTimeoutRememberMe: int, ssoSessionMaxLifespan: int, ssoSessionMaxLifespanRememberMe: int, supportedLocales: list<string>, userFederationMappers: table<config: record, federationMapperType: string, federationProviderDisplayName: string, id: string, name: string>, userFederationProviders: table<changedSyncPeriod: int, config: record, displayName: string, fullSyncPeriod: int, id: string, lastSync: int, priority: int, providerName: string>, userManagedAccessAllowed: bool, users: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, verifyEmail: bool, waitIncrementSeconds: int, webAuthnPolicyAcceptableAaguids: list<string>, webAuthnPolicyAttestationConveyancePreference: string, webAuthnPolicyAuthenticatorAttachment: string, webAuthnPolicyAvoidSameAuthenticatorRegister: bool, webAuthnPolicyCreateTimeout: int, webAuthnPolicyPasswordlessAcceptableAaguids: list<string>, webAuthnPolicyPasswordlessAttestationConveyancePreference: string, webAuthnPolicyPasswordlessAuthenticatorAttachment: string, webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: bool, webAuthnPolicyPasswordlessCreateTimeout: int, webAuthnPolicyPasswordlessRequireResidentKey: string, webAuthnPolicyPasswordlessRpEntityName: string, webAuthnPolicyPasswordlessRpId: string, webAuthnPolicyPasswordlessSignatureAlgorithms: list<string>, webAuthnPolicyPasswordlessUserVerificationRequirement: string, webAuthnPolicyRequireResidentKey: string, webAuthnPolicyRpEntityName: string, webAuthnPolicyRpId: string, webAuthnPolicySignatureAlgorithms: list<string>, webAuthnPolicyUserVerificationRequirement: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,127 +362,127 @@ export def "realms-admin put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accessCodeLifespan: int # format: int32
-  --accessCodeLifespanLogin: int # format: int32
-  --accessCodeLifespanUserAction: int # format: int32
-  --accessTokenLifespan: int # format: int32
-  --accessTokenLifespanForImplicitFlow: int # format: int32
-  --accountTheme: string
-  --actionTokenGeneratedByAdminLifespan: int # format: int32
-  --actionTokenGeneratedByUserLifespan: int # format: int32
-  --adminEventsDetailsEnabled: oneof<nothing, bool>
-  --adminEventsEnabled: oneof<nothing, bool>
-  --adminTheme: string
+  --access-code-lifespan: int # format: int32
+  --access-code-lifespan-login: int # format: int32
+  --access-code-lifespan-user-action: int # format: int32
+  --access-token-lifespan: int # format: int32
+  --access-token-lifespan-for-implicit-flow: int # format: int32
+  --account-theme: string
+  --action-token-generated-by-admin-lifespan: int # format: int32
+  --action-token-generated-by-user-lifespan: int # format: int32
+  --admin-events-details-enabled: oneof<nothing, bool>
+  --admin-events-enabled: oneof<nothing, bool>
+  --admin-theme: string
   --attributes: record
-  --authenticationFlows: list # item shape: {alias?: string, authenticationExecutions?: list, builtIn?: bool, description?: string, id?: string, providerId?: string, topLevel?: bool}
-  --authenticatorConfig: list # item shape: {alias?: string, config?: record, id?: string}
-  --browserFlow: string
-  --browserSecurityHeaders: record
-  --bruteForceProtected: oneof<nothing, bool>
-  --clientAuthenticationFlow: string
-  --clientScopeMappings: record
-  --clientScopes: list # item shape: {attributes?: record, description?: string, id?: string, name?: string, protocol?: string, protocolMappers?: list}
-  --clientSessionIdleTimeout: int # format: int32
-  --clientSessionMaxLifespan: int # format: int32
+  --authentication-flows: list # item shape: {alias?: string, authenticationExecutions?: list, builtIn?: bool, description?: string, id?: string, providerId?: string, topLevel?: bool}
+  --authenticator-config: list # item shape: {alias?: string, config?: record, id?: string}
+  --browser-flow: string
+  --browser-security-headers: record
+  --brute-force-protected: oneof<nothing, bool>
+  --client-authentication-flow: string
+  --client-scope-mappings: record
+  --client-scopes: list # item shape: {attributes?: record, description?: string, id?: string, name?: string, protocol?: string, protocolMappers?: list}
+  --client-session-idle-timeout: int # format: int32
+  --client-session-max-lifespan: int # format: int32
   --clients: list # item shape: {access?: record, adminUrl?: string, alwaysDisplayInConsole?: bool, attributes?: record, authenticationFlowBindingOverrides?: record, authorizationServicesEnabled?: bool, authorizationSettings?: record, baseUrl?: string, bearerOnly?: bool, clientAuthenticatorType?: string, clientId?: string, consentRequired?: bool, defaultClientScopes?: list, defaultRoles?: list, description?: string, directAccessGrantsEnabled?: bool, enabled?: bool, frontchannelLogout?: bool, fullScopeAllowed?: bool, id?: string, implicitFlowEnabled?: bool, name?: string, nodeReRegistrationTimeout?: int, notBefore?: int, optionalClientScopes?: list, origin?: string, protocol?: string, protocolMappers?: list, publicClient?: bool, redirectUris?: list, registeredNodes?: record, registrationAccessToken?: string, rootUrl?: string, secret?: string, serviceAccountsEnabled?: bool, standardFlowEnabled?: bool, surrogateAuthRequired?: bool, webOrigins?: list}
   --components: record # shape: {empty?: bool, loadFactor?: float, threshold?: int}
-  --defaultDefaultClientScopes: list
-  --defaultGroups: list
-  --defaultLocale: string
-  --defaultOptionalClientScopes: list
-  --defaultRoles: list
-  --defaultSignatureAlgorithm: string
-  --directGrantFlow: string
-  --displayName: string
-  --displayNameHtml: string
-  --dockerAuthenticationFlow: string
-  --duplicateEmailsAllowed: oneof<nothing, bool>
-  --editUsernameAllowed: oneof<nothing, bool>
-  --emailTheme: string
+  --default-default-client-scopes: list
+  --default-groups: list
+  --default-locale: string
+  --default-optional-client-scopes: list
+  --default-roles: list
+  --default-signature-algorithm: string
+  --direct-grant-flow: string
+  --display-name: string
+  --display-name-html: string
+  --docker-authentication-flow: string
+  --duplicate-emails-allowed: oneof<nothing, bool>
+  --edit-username-allowed: oneof<nothing, bool>
+  --email-theme: string
   --enabled: oneof<nothing, bool>
-  --enabledEventTypes: list
-  --eventsEnabled: oneof<nothing, bool>
-  --eventsExpiration: int # format: int64
-  --eventsListeners: list
-  --failureFactor: int # format: int32
-  --federatedUsers: list # item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list, requiredActions?: list, self?: string, serviceAccountClientId?: string, username?: string}
+  --enabled-event-types: list
+  --events-enabled: oneof<nothing, bool>
+  --events-expiration: int # format: int64
+  --events-listeners: list
+  --failure-factor: int # format: int32
+  --federated-users: list # item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list, requiredActions?: list, self?: string, serviceAccountClientId?: string, username?: string}
   --groups: list # item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list, subGroups?: list}
   --id: string
-  --identityProviderMappers: list # item shape: {config?: record, id?: string, identityProviderAlias?: string, identityProviderMapper?: string, name?: string}
-  --identityProviders: list # item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
-  --internationalizationEnabled: oneof<nothing, bool>
-  --keycloakVersion: string
-  --loginTheme: string
-  --loginWithEmailAllowed: oneof<nothing, bool>
-  --maxDeltaTimeSeconds: int # format: int32
-  --maxFailureWaitSeconds: int # format: int32
-  --minimumQuickLoginWaitSeconds: int # format: int32
-  --notBefore: int # format: int32
-  --offlineSessionIdleTimeout: int # format: int32
-  --offlineSessionMaxLifespan: int # format: int32
-  --offlineSessionMaxLifespanEnabled: oneof<nothing, bool>
-  --otpPolicyAlgorithm: string
-  --otpPolicyDigits: int # format: int32
-  --otpPolicyInitialCounter: int # format: int32
-  --otpPolicyLookAheadWindow: int # format: int32
-  --otpPolicyPeriod: int # format: int32
-  --otpPolicyType: string
-  --otpSupportedApplications: list
-  --passwordPolicy: string
-  --permanentLockout: oneof<nothing, bool>
-  --protocolMappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-  --quickLoginCheckMilliSeconds: int # format: int64
+  --identity-provider-mappers: list # item shape: {config?: record, id?: string, identityProviderAlias?: string, identityProviderMapper?: string, name?: string}
+  --identity-providers: list # item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
+  --internationalization-enabled: oneof<nothing, bool>
+  --keycloak-version: string
+  --login-theme: string
+  --login-with-email-allowed: oneof<nothing, bool>
+  --max-delta-time-seconds: int # format: int32
+  --max-failure-wait-seconds: int # format: int32
+  --minimum-quick-login-wait-seconds: int # format: int32
+  --not-before: int # format: int32
+  --offline-session-idle-timeout: int # format: int32
+  --offline-session-max-lifespan: int # format: int32
+  --offline-session-max-lifespan-enabled: oneof<nothing, bool>
+  --otp-policy-algorithm: string
+  --otp-policy-digits: int # format: int32
+  --otp-policy-initial-counter: int # format: int32
+  --otp-policy-look-ahead-window: int # format: int32
+  --otp-policy-period: int # format: int32
+  --otp-policy-type: string
+  --otp-supported-applications: list
+  --password-policy: string
+  --permanent-lockout: oneof<nothing, bool>
+  --protocol-mappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
+  --quick-login-check-milli-seconds: int # format: int64
   --body-realm: string
-  --refreshTokenMaxReuse: int # format: int32
-  --registrationAllowed: oneof<nothing, bool>
-  --registrationEmailAsUsername: oneof<nothing, bool>
-  --registrationFlow: string
-  --rememberMe: oneof<nothing, bool>
-  --requiredActions: list # item shape: {alias?: string, config?: record, defaultAction?: bool, enabled?: bool, name?: string, priority?: int, providerId?: string}
-  --resetCredentialsFlow: string
-  --resetPasswordAllowed: oneof<nothing, bool>
-  --revokeRefreshToken: oneof<nothing, bool>
+  --refresh-token-max-reuse: int # format: int32
+  --registration-allowed: oneof<nothing, bool>
+  --registration-email-as-username: oneof<nothing, bool>
+  --registration-flow: string
+  --remember-me: oneof<nothing, bool>
+  --required-actions: list # item shape: {alias?: string, config?: record, defaultAction?: bool, enabled?: bool, name?: string, priority?: int, providerId?: string}
+  --reset-credentials-flow: string
+  --reset-password-allowed: oneof<nothing, bool>
+  --revoke-refresh-token: oneof<nothing, bool>
   --roles: record # shape: {client?: record, realm?: list}
-  --scopeMappings: list # item shape: {client?: string, clientScope?: string, roles?: list, self?: string}
-  --smtpServer: record
-  --sslRequired: string
-  --ssoSessionIdleTimeout: int # format: int32
-  --ssoSessionIdleTimeoutRememberMe: int # format: int32
-  --ssoSessionMaxLifespan: int # format: int32
-  --ssoSessionMaxLifespanRememberMe: int # format: int32
-  --supportedLocales: list
-  --userFederationMappers: list # item shape: {config?: record, federationMapperType?: string, federationProviderDisplayName?: string, id?: string, name?: string}
-  --userFederationProviders: list # item shape: {changedSyncPeriod?: int, config?: record, displayName?: string, fullSyncPeriod?: int, id?: string, lastSync?: int, priority?: int, providerName?: string}
-  --userManagedAccessAllowed: oneof<nothing, bool>
+  --scope-mappings: list # item shape: {client?: string, clientScope?: string, roles?: list, self?: string}
+  --smtp-server: record
+  --ssl-required: string
+  --sso-session-idle-timeout: int # format: int32
+  --sso-session-idle-timeout-remember-me: int # format: int32
+  --sso-session-max-lifespan: int # format: int32
+  --sso-session-max-lifespan-remember-me: int # format: int32
+  --supported-locales: list
+  --user-federation-mappers: list # item shape: {config?: record, federationMapperType?: string, federationProviderDisplayName?: string, id?: string, name?: string}
+  --user-federation-providers: list # item shape: {changedSyncPeriod?: int, config?: record, displayName?: string, fullSyncPeriod?: int, id?: string, lastSync?: int, priority?: int, providerName?: string}
+  --user-managed-access-allowed: oneof<nothing, bool>
   --users: list # item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list, requiredActions?: list, self?: string, serviceAccountClientId?: string, username?: string}
-  --verifyEmail: oneof<nothing, bool>
-  --waitIncrementSeconds: int # format: int32
-  --webAuthnPolicyAcceptableAaguids: list
-  --webAuthnPolicyAttestationConveyancePreference: string
-  --webAuthnPolicyAuthenticatorAttachment: string
-  --webAuthnPolicyAvoidSameAuthenticatorRegister: oneof<nothing, bool>
-  --webAuthnPolicyCreateTimeout: int # format: int32
-  --webAuthnPolicyPasswordlessAcceptableAaguids: list
-  --webAuthnPolicyPasswordlessAttestationConveyancePreference: string
-  --webAuthnPolicyPasswordlessAuthenticatorAttachment: string
-  --webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: oneof<nothing, bool>
-  --webAuthnPolicyPasswordlessCreateTimeout: int # format: int32
-  --webAuthnPolicyPasswordlessRequireResidentKey: string
-  --webAuthnPolicyPasswordlessRpEntityName: string
-  --webAuthnPolicyPasswordlessRpId: string
-  --webAuthnPolicyPasswordlessSignatureAlgorithms: list
-  --webAuthnPolicyPasswordlessUserVerificationRequirement: string
-  --webAuthnPolicyRequireResidentKey: string
-  --webAuthnPolicyRpEntityName: string
-  --webAuthnPolicyRpId: string
-  --webAuthnPolicySignatureAlgorithms: list
-  --webAuthnPolicyUserVerificationRequirement: string
+  --verify-email: oneof<nothing, bool>
+  --wait-increment-seconds: int # format: int32
+  --web-authn-policy-acceptable-aaguids: list
+  --web-authn-policy-attestation-conveyance-preference: string
+  --web-authn-policy-authenticator-attachment: string
+  --web-authn-policy-avoid-same-authenticator-register: oneof<nothing, bool>
+  --web-authn-policy-create-timeout: int # format: int32
+  --web-authn-policy-passwordless-acceptable-aaguids: list
+  --web-authn-policy-passwordless-attestation-conveyance-preference: string
+  --web-authn-policy-passwordless-authenticator-attachment: string
+  --web-authn-policy-passwordless-avoid-same-authenticator-register: oneof<nothing, bool>
+  --web-authn-policy-passwordless-create-timeout: int # format: int32
+  --web-authn-policy-passwordless-require-resident-key: string
+  --web-authn-policy-passwordless-rp-entity-name: string
+  --web-authn-policy-passwordless-rp-id: string
+  --web-authn-policy-passwordless-signature-algorithms: list
+  --web-authn-policy-passwordless-user-verification-requirement: string
+  --web-authn-policy-require-resident-key: string
+  --web-authn-policy-rp-entity-name: string
+  --web-authn-policy-rp-id: string
+  --web-authn-policy-signature-algorithms: list
+  --web-authn-policy-user-verification-requirement: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)")
-  let body = {accessCodeLifespan: $accessCodeLifespan, accessCodeLifespanLogin: $accessCodeLifespanLogin, accessCodeLifespanUserAction: $accessCodeLifespanUserAction, accessTokenLifespan: $accessTokenLifespan, accessTokenLifespanForImplicitFlow: $accessTokenLifespanForImplicitFlow, accountTheme: $accountTheme, actionTokenGeneratedByAdminLifespan: $actionTokenGeneratedByAdminLifespan, actionTokenGeneratedByUserLifespan: $actionTokenGeneratedByUserLifespan, adminEventsDetailsEnabled: $adminEventsDetailsEnabled, adminEventsEnabled: $adminEventsEnabled, adminTheme: $adminTheme, attributes: $attributes, authenticationFlows: $authenticationFlows, authenticatorConfig: $authenticatorConfig, browserFlow: $browserFlow, browserSecurityHeaders: $browserSecurityHeaders, bruteForceProtected: $bruteForceProtected, clientAuthenticationFlow: $clientAuthenticationFlow, clientScopeMappings: $clientScopeMappings, clientScopes: $clientScopes, clientSessionIdleTimeout: $clientSessionIdleTimeout, clientSessionMaxLifespan: $clientSessionMaxLifespan, clients: $clients, components: $components, defaultDefaultClientScopes: $defaultDefaultClientScopes, defaultGroups: $defaultGroups, defaultLocale: $defaultLocale, defaultOptionalClientScopes: $defaultOptionalClientScopes, defaultRoles: $defaultRoles, defaultSignatureAlgorithm: $defaultSignatureAlgorithm, directGrantFlow: $directGrantFlow, displayName: $displayName, displayNameHtml: $displayNameHtml, dockerAuthenticationFlow: $dockerAuthenticationFlow, duplicateEmailsAllowed: $duplicateEmailsAllowed, editUsernameAllowed: $editUsernameAllowed, emailTheme: $emailTheme, enabled: $enabled, enabledEventTypes: $enabledEventTypes, eventsEnabled: $eventsEnabled, eventsExpiration: $eventsExpiration, eventsListeners: $eventsListeners, failureFactor: $failureFactor, federatedUsers: $federatedUsers, groups: $groups, id: $id, identityProviderMappers: $identityProviderMappers, identityProviders: $identityProviders, internationalizationEnabled: $internationalizationEnabled, keycloakVersion: $keycloakVersion, loginTheme: $loginTheme, loginWithEmailAllowed: $loginWithEmailAllowed, maxDeltaTimeSeconds: $maxDeltaTimeSeconds, maxFailureWaitSeconds: $maxFailureWaitSeconds, minimumQuickLoginWaitSeconds: $minimumQuickLoginWaitSeconds, notBefore: $notBefore, offlineSessionIdleTimeout: $offlineSessionIdleTimeout, offlineSessionMaxLifespan: $offlineSessionMaxLifespan, offlineSessionMaxLifespanEnabled: $offlineSessionMaxLifespanEnabled, otpPolicyAlgorithm: $otpPolicyAlgorithm, otpPolicyDigits: $otpPolicyDigits, otpPolicyInitialCounter: $otpPolicyInitialCounter, otpPolicyLookAheadWindow: $otpPolicyLookAheadWindow, otpPolicyPeriod: $otpPolicyPeriod, otpPolicyType: $otpPolicyType, otpSupportedApplications: $otpSupportedApplications, passwordPolicy: $passwordPolicy, permanentLockout: $permanentLockout, protocolMappers: $protocolMappers, quickLoginCheckMilliSeconds: $quickLoginCheckMilliSeconds, realm: $body_realm, refreshTokenMaxReuse: $refreshTokenMaxReuse, registrationAllowed: $registrationAllowed, registrationEmailAsUsername: $registrationEmailAsUsername, registrationFlow: $registrationFlow, rememberMe: $rememberMe, requiredActions: $requiredActions, resetCredentialsFlow: $resetCredentialsFlow, resetPasswordAllowed: $resetPasswordAllowed, revokeRefreshToken: $revokeRefreshToken, roles: $roles, scopeMappings: $scopeMappings, smtpServer: $smtpServer, sslRequired: $sslRequired, ssoSessionIdleTimeout: $ssoSessionIdleTimeout, ssoSessionIdleTimeoutRememberMe: $ssoSessionIdleTimeoutRememberMe, ssoSessionMaxLifespan: $ssoSessionMaxLifespan, ssoSessionMaxLifespanRememberMe: $ssoSessionMaxLifespanRememberMe, supportedLocales: $supportedLocales, userFederationMappers: $userFederationMappers, userFederationProviders: $userFederationProviders, userManagedAccessAllowed: $userManagedAccessAllowed, users: $users, verifyEmail: $verifyEmail, waitIncrementSeconds: $waitIncrementSeconds, webAuthnPolicyAcceptableAaguids: $webAuthnPolicyAcceptableAaguids, webAuthnPolicyAttestationConveyancePreference: $webAuthnPolicyAttestationConveyancePreference, webAuthnPolicyAuthenticatorAttachment: $webAuthnPolicyAuthenticatorAttachment, webAuthnPolicyAvoidSameAuthenticatorRegister: $webAuthnPolicyAvoidSameAuthenticatorRegister, webAuthnPolicyCreateTimeout: $webAuthnPolicyCreateTimeout, webAuthnPolicyPasswordlessAcceptableAaguids: $webAuthnPolicyPasswordlessAcceptableAaguids, webAuthnPolicyPasswordlessAttestationConveyancePreference: $webAuthnPolicyPasswordlessAttestationConveyancePreference, webAuthnPolicyPasswordlessAuthenticatorAttachment: $webAuthnPolicyPasswordlessAuthenticatorAttachment, webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: $webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister, webAuthnPolicyPasswordlessCreateTimeout: $webAuthnPolicyPasswordlessCreateTimeout, webAuthnPolicyPasswordlessRequireResidentKey: $webAuthnPolicyPasswordlessRequireResidentKey, webAuthnPolicyPasswordlessRpEntityName: $webAuthnPolicyPasswordlessRpEntityName, webAuthnPolicyPasswordlessRpId: $webAuthnPolicyPasswordlessRpId, webAuthnPolicyPasswordlessSignatureAlgorithms: $webAuthnPolicyPasswordlessSignatureAlgorithms, webAuthnPolicyPasswordlessUserVerificationRequirement: $webAuthnPolicyPasswordlessUserVerificationRequirement, webAuthnPolicyRequireResidentKey: $webAuthnPolicyRequireResidentKey, webAuthnPolicyRpEntityName: $webAuthnPolicyRpEntityName, webAuthnPolicyRpId: $webAuthnPolicyRpId, webAuthnPolicySignatureAlgorithms: $webAuthnPolicySignatureAlgorithms, webAuthnPolicyUserVerificationRequirement: $webAuthnPolicyUserVerificationRequirement} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}"))
+  let body = {"accessCodeLifespan": $access_code_lifespan, "accessCodeLifespanLogin": $access_code_lifespan_login, "accessCodeLifespanUserAction": $access_code_lifespan_user_action, "accessTokenLifespan": $access_token_lifespan, "accessTokenLifespanForImplicitFlow": $access_token_lifespan_for_implicit_flow, "accountTheme": $account_theme, "actionTokenGeneratedByAdminLifespan": $action_token_generated_by_admin_lifespan, "actionTokenGeneratedByUserLifespan": $action_token_generated_by_user_lifespan, "adminEventsDetailsEnabled": $admin_events_details_enabled, "adminEventsEnabled": $admin_events_enabled, "adminTheme": $admin_theme, "attributes": $attributes, "authenticationFlows": $authentication_flows, "authenticatorConfig": $authenticator_config, "browserFlow": $browser_flow, "browserSecurityHeaders": $browser_security_headers, "bruteForceProtected": $brute_force_protected, "clientAuthenticationFlow": $client_authentication_flow, "clientScopeMappings": $client_scope_mappings, "clientScopes": $client_scopes, "clientSessionIdleTimeout": $client_session_idle_timeout, "clientSessionMaxLifespan": $client_session_max_lifespan, "clients": $clients, "components": $components, "defaultDefaultClientScopes": $default_default_client_scopes, "defaultGroups": $default_groups, "defaultLocale": $default_locale, "defaultOptionalClientScopes": $default_optional_client_scopes, "defaultRoles": $default_roles, "defaultSignatureAlgorithm": $default_signature_algorithm, "directGrantFlow": $direct_grant_flow, "displayName": $display_name, "displayNameHtml": $display_name_html, "dockerAuthenticationFlow": $docker_authentication_flow, "duplicateEmailsAllowed": $duplicate_emails_allowed, "editUsernameAllowed": $edit_username_allowed, "emailTheme": $email_theme, "enabled": $enabled, "enabledEventTypes": $enabled_event_types, "eventsEnabled": $events_enabled, "eventsExpiration": $events_expiration, "eventsListeners": $events_listeners, "failureFactor": $failure_factor, "federatedUsers": $federated_users, "groups": $groups, "id": $id, "identityProviderMappers": $identity_provider_mappers, "identityProviders": $identity_providers, "internationalizationEnabled": $internationalization_enabled, "keycloakVersion": $keycloak_version, "loginTheme": $login_theme, "loginWithEmailAllowed": $login_with_email_allowed, "maxDeltaTimeSeconds": $max_delta_time_seconds, "maxFailureWaitSeconds": $max_failure_wait_seconds, "minimumQuickLoginWaitSeconds": $minimum_quick_login_wait_seconds, "notBefore": $not_before, "offlineSessionIdleTimeout": $offline_session_idle_timeout, "offlineSessionMaxLifespan": $offline_session_max_lifespan, "offlineSessionMaxLifespanEnabled": $offline_session_max_lifespan_enabled, "otpPolicyAlgorithm": $otp_policy_algorithm, "otpPolicyDigits": $otp_policy_digits, "otpPolicyInitialCounter": $otp_policy_initial_counter, "otpPolicyLookAheadWindow": $otp_policy_look_ahead_window, "otpPolicyPeriod": $otp_policy_period, "otpPolicyType": $otp_policy_type, "otpSupportedApplications": $otp_supported_applications, "passwordPolicy": $password_policy, "permanentLockout": $permanent_lockout, "protocolMappers": $protocol_mappers, "quickLoginCheckMilliSeconds": $quick_login_check_milli_seconds, "realm": $body_realm, "refreshTokenMaxReuse": $refresh_token_max_reuse, "registrationAllowed": $registration_allowed, "registrationEmailAsUsername": $registration_email_as_username, "registrationFlow": $registration_flow, "rememberMe": $remember_me, "requiredActions": $required_actions, "resetCredentialsFlow": $reset_credentials_flow, "resetPasswordAllowed": $reset_password_allowed, "revokeRefreshToken": $revoke_refresh_token, "roles": $roles, "scopeMappings": $scope_mappings, "smtpServer": $smtp_server, "sslRequired": $ssl_required, "ssoSessionIdleTimeout": $sso_session_idle_timeout, "ssoSessionIdleTimeoutRememberMe": $sso_session_idle_timeout_remember_me, "ssoSessionMaxLifespan": $sso_session_max_lifespan, "ssoSessionMaxLifespanRememberMe": $sso_session_max_lifespan_remember_me, "supportedLocales": $supported_locales, "userFederationMappers": $user_federation_mappers, "userFederationProviders": $user_federation_providers, "userManagedAccessAllowed": $user_managed_access_allowed, "users": $users, "verifyEmail": $verify_email, "waitIncrementSeconds": $wait_increment_seconds, "webAuthnPolicyAcceptableAaguids": $web_authn_policy_acceptable_aaguids, "webAuthnPolicyAttestationConveyancePreference": $web_authn_policy_attestation_conveyance_preference, "webAuthnPolicyAuthenticatorAttachment": $web_authn_policy_authenticator_attachment, "webAuthnPolicyAvoidSameAuthenticatorRegister": $web_authn_policy_avoid_same_authenticator_register, "webAuthnPolicyCreateTimeout": $web_authn_policy_create_timeout, "webAuthnPolicyPasswordlessAcceptableAaguids": $web_authn_policy_passwordless_acceptable_aaguids, "webAuthnPolicyPasswordlessAttestationConveyancePreference": $web_authn_policy_passwordless_attestation_conveyance_preference, "webAuthnPolicyPasswordlessAuthenticatorAttachment": $web_authn_policy_passwordless_authenticator_attachment, "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister": $web_authn_policy_passwordless_avoid_same_authenticator_register, "webAuthnPolicyPasswordlessCreateTimeout": $web_authn_policy_passwordless_create_timeout, "webAuthnPolicyPasswordlessRequireResidentKey": $web_authn_policy_passwordless_require_resident_key, "webAuthnPolicyPasswordlessRpEntityName": $web_authn_policy_passwordless_rp_entity_name, "webAuthnPolicyPasswordlessRpId": $web_authn_policy_passwordless_rp_id, "webAuthnPolicyPasswordlessSignatureAlgorithms": $web_authn_policy_passwordless_signature_algorithms, "webAuthnPolicyPasswordlessUserVerificationRequirement": $web_authn_policy_passwordless_user_verification_requirement, "webAuthnPolicyRequireResidentKey": $web_authn_policy_require_resident_key, "webAuthnPolicyRpEntityName": $web_authn_policy_rp_entity_name, "webAuthnPolicyRpId": $web_authn_policy_rp_id, "webAuthnPolicySignatureAlgorithms": $web_authn_policy_signature_algorithms, "webAuthnPolicyUserVerificationRequirement": $web_authn_policy_user_verification_requirement} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,7 +505,7 @@ export def "admin-events delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/admin-events")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/admin-events"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -524,22 +524,22 @@ export def "admin-events get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authClient: string
-  --authIpAddress: string
-  --authRealm: string
-  --authUser: string # user id
-  --dateFrom: string
-  --dateTo: string
+  --auth-client: string
+  --auth-ip-address: string
+  --auth-realm: string
+  --auth-user: string # user id
+  --date-from: string
+  --date-to: string
   --first: int # format: int32
   --max: int # Maximum results size (defaults to 100) (format: int32)
-  --operationTypes: list
-  --resourcePath: string
-  --resourceTypes: list
+  --operation-types: list
+  --resource-path: string
+  --resource-types: list
 ]: nothing -> table<authDetails: record<clientId: string, ipAddress: string, realmId: string, userId: string>, error: string, operationType: string, realmId: string, representation: string, resourcePath: string, resourceType: string, time: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "authClient" $authClient "scalar") (serialize-qp "authIpAddress" $authIpAddress "scalar") (serialize-qp "authRealm" $authRealm "scalar") (serialize-qp "authUser" $authUser "scalar") (serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "operationTypes" $operationTypes "multi") (serialize-qp "resourcePath" $resourcePath "scalar") (serialize-qp "resourceTypes" $resourceTypes "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/admin-events" $qp)
+  let qp = [(serialize-qp "authClient" $auth_client "scalar") (serialize-qp "authIpAddress" $auth_ip_address "scalar") (serialize-qp "authRealm" $auth_realm "scalar") (serialize-qp "authUser" $auth_user "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "operationTypes" $operation_types "multi") (serialize-qp "resourcePath" $resource_path "scalar") (serialize-qp "resourceTypes" $resource_types "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/admin-events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -561,7 +561,7 @@ export def "attack-detection-brute-force-users delete-by-realm" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/attack-detection/brute-force/users")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/attack-detection/brute-force/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -572,7 +572,7 @@ export def "attack-detection-brute-force-users delete-by-realm" [
 # DELETE /{realm}/attack-detection/brute-force/users/{userId}
 export def "attack-detection-brute-force-users delete-by-realm-userId" [
   realm: string
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "attack-detection-brute-force-users delete-by-realm-userId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/attack-detection/brute-force/users/($userId)")
+  let full_url = (build-url $base ({realm: $realm, user_id: $user_id} | format pattern "/{realm}/attack-detection/brute-force/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -595,7 +595,7 @@ export def "attack-detection-brute-force-users delete-by-realm-userId" [
 # GET /{realm}/attack-detection/brute-force/users/{userId}
 export def "attack-detection-brute-force-users get" [
   realm: string
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +607,7 @@ export def "attack-detection-brute-force-users get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/attack-detection/brute-force/users/($userId)")
+  let full_url = (build-url $base ({realm: $realm, user_id: $user_id} | format pattern "/{realm}/attack-detection/brute-force/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -629,7 +629,7 @@ export def "authentication-authenticator-providers get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/authenticator-providers")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/authenticator-providers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -651,7 +651,7 @@ export def "authentication-client-authenticator-providers get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/client-authenticator-providers")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/client-authenticator-providers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -662,7 +662,7 @@ export def "authentication-client-authenticator-providers get" [
 # GET /{realm}/authentication/config-description/{providerId}
 export def "authentication-config-description get" [
   realm: string
-  providerId: string
+  provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "authentication-config-description get" [
 ]: nothing -> record<helpText: string, name: string, properties: table<defaultValue: record, helpText: string, label: string, name: string, options: list, secret: bool, type: string>, providerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/config-description/($providerId)")
+  let full_url = (build-url $base ({realm: $realm, provider_id: $provider_id} | format pattern "/{realm}/authentication/config-description/{provider_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -697,7 +697,7 @@ export def "authentication-config delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/config/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/authentication/config/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -720,7 +720,7 @@ export def "authentication-config get" [
 ]: nothing -> record<alias: string, config: record, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/config/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/authentication/config/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -747,8 +747,8 @@ export def "authentication-config put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/config/($id)")
-  let body = {alias: $alias, config: $config, id: $body_id} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/authentication/config/{id}"))
+  let body = {"alias": $alias, "config": $config, "id": $body_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -769,20 +769,20 @@ export def "authentication-executions post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --authenticator: string
-  --authenticatorConfig: string
-  --authenticatorFlow: oneof<nothing, bool>
-  --autheticatorFlow: oneof<nothing, bool>
-  --flowId: string
+  --authenticator-config: string
+  --authenticator-flow: oneof<nothing, bool>
+  --autheticator-flow: oneof<nothing, bool>
+  --flow-id: string
   --id: string
-  --parentFlow: string
+  --parent-flow: string
   --priority: int # format: int32
   --requirement: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/executions")
-  let body = {authenticator: $authenticator, authenticatorConfig: $authenticatorConfig, authenticatorFlow: $authenticatorFlow, autheticatorFlow: $autheticatorFlow, flowId: $flowId, id: $id, parentFlow: $parentFlow, priority: $priority, requirement: $requirement} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/executions"))
+  let body = {"authenticator": $authenticator, "authenticatorConfig": $authenticator_config, "authenticatorFlow": $authenticator_flow, "autheticatorFlow": $autheticator_flow, "flowId": $flow_id, "id": $id, "parentFlow": $parent_flow, "priority": $priority, "requirement": $requirement} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -794,7 +794,7 @@ export def "authentication-executions post" [
 # DELETE /{realm}/authentication/executions/{executionId}
 export def "authentication-executions delete" [
   realm: string
-  executionId: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "authentication-executions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/executions/($executionId)")
+  let full_url = (build-url $base ({realm: $realm, execution_id: $execution_id} | format pattern "/{realm}/authentication/executions/{execution_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -817,7 +817,7 @@ export def "authentication-executions delete" [
 # GET /{realm}/authentication/executions/{executionId}
 export def "authentication-executions get" [
   realm: string
-  executionId: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -829,7 +829,7 @@ export def "authentication-executions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/executions/($executionId)")
+  let full_url = (build-url $base ({realm: $realm, execution_id: $execution_id} | format pattern "/{realm}/authentication/executions/{execution_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -840,7 +840,7 @@ export def "authentication-executions get" [
 # POST /{realm}/authentication/executions/{executionId}/config
 export def "authentication-executions-config post" [
   realm: string
-  executionId: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,8 +856,8 @@ export def "authentication-executions-config post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/executions/($executionId)/config")
-  let body = {alias: $alias, config: $config, id: $id} | compact
+  let full_url = (build-url $base ({realm: $realm, execution_id: $execution_id} | format pattern "/{realm}/authentication/executions/{execution_id}/config"))
+  let body = {"alias": $alias, "config": $config, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -869,7 +869,7 @@ export def "authentication-executions-config post" [
 # POST /{realm}/authentication/executions/{executionId}/lower-priority
 export def "authentication-executions-lower-priority post" [
   realm: string
-  executionId: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "authentication-executions-lower-priority post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/executions/($executionId)/lower-priority")
+  let full_url = (build-url $base ({realm: $realm, execution_id: $execution_id} | format pattern "/{realm}/authentication/executions/{execution_id}/lower-priority"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -892,7 +892,7 @@ export def "authentication-executions-lower-priority post" [
 # POST /{realm}/authentication/executions/{executionId}/raise-priority
 export def "authentication-executions-raise-priority post" [
   realm: string
-  executionId: string
+  execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -904,7 +904,7 @@ export def "authentication-executions-raise-priority post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/executions/($executionId)/raise-priority")
+  let full_url = (build-url $base ({realm: $realm, execution_id: $execution_id} | format pattern "/{realm}/authentication/executions/{execution_id}/raise-priority"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -926,7 +926,7 @@ export def "authentication-flows list" [
 ]: nothing -> table<alias: string, authenticationExecutions: list<record>, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/flows")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/flows"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -947,18 +947,18 @@ export def "authentication-flows post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alias: string
-  --authenticationExecutions: list # item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
-  --builtIn: oneof<nothing, bool>
+  --authentication-executions: list # item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
+  --built-in: oneof<nothing, bool>
   --description: string
   --id: string
-  --providerId: string
-  --topLevel: oneof<nothing, bool>
+  --provider-id: string
+  --top-level: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/flows")
-  let body = {alias: $alias, authenticationExecutions: $authenticationExecutions, builtIn: $builtIn, description: $description, id: $id, providerId: $providerId, topLevel: $topLevel} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/flows"))
+  let body = {"alias": $alias, "authenticationExecutions": $authentication_executions, "builtIn": $built_in, "description": $description, "id": $id, "providerId": $provider_id, "topLevel": $top_level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -970,7 +970,7 @@ export def "authentication-flows post" [
 # POST /{realm}/authentication/flows/{flowAlias}/copy
 export def "authentication-flows-copy post" [
   realm: string
-  flowAlias: string
+  flow_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,7 +984,7 @@ export def "authentication-flows-copy post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/flows/($flowAlias)/copy")
+  let full_url = (build-url $base ({realm: $realm, flow_alias: $flow_alias} | format pattern "/{realm}/authentication/flows/{flow_alias}/copy"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -996,7 +996,7 @@ export def "authentication-flows-copy post" [
 # GET /{realm}/authentication/flows/{flowAlias}/executions
 export def "authentication-flows-executions get" [
   realm: string
-  flowAlias: string
+  flow_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,7 +1008,7 @@ export def "authentication-flows-executions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/flows/($flowAlias)/executions")
+  let full_url = (build-url $base ({realm: $realm, flow_alias: $flow_alias} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1019,7 +1019,7 @@ export def "authentication-flows-executions get" [
 # PUT /{realm}/authentication/flows/{flowAlias}/executions
 export def "authentication-flows-executions put" [
   realm: string
-  flowAlias: string
+  flow_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,23 +1029,23 @@ export def "authentication-flows-executions put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alias: string
-  --authenticationConfig: string
-  --authenticationFlow: oneof<nothing, bool>
+  --authentication-config: string
+  --authentication-flow: oneof<nothing, bool>
   --configurable: oneof<nothing, bool>
-  --displayName: string
-  --flowId: string
+  --display-name: string
+  --flow-id: string
   --id: string
   --index: int # format: int32
   --level: int # format: int32
-  --providerId: string
+  --provider-id: string
   --requirement: string
-  --requirementChoices: list
+  --requirement-choices: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/flows/($flowAlias)/executions")
-  let body = {alias: $alias, authenticationConfig: $authenticationConfig, authenticationFlow: $authenticationFlow, configurable: $configurable, displayName: $displayName, flowId: $flowId, id: $id, index: $index, level: $level, providerId: $providerId, requirement: $requirement, requirementChoices: $requirementChoices} | compact
+  let full_url = (build-url $base ({realm: $realm, flow_alias: $flow_alias} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions"))
+  let body = {"alias": $alias, "authenticationConfig": $authentication_config, "authenticationFlow": $authentication_flow, "configurable": $configurable, "displayName": $display_name, "flowId": $flow_id, "id": $id, "index": $index, "level": $level, "providerId": $provider_id, "requirement": $requirement, "requirementChoices": $requirement_choices} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1057,7 +1057,7 @@ export def "authentication-flows-executions put" [
 # POST /{realm}/authentication/flows/{flowAlias}/executions/execution
 export def "authentication-flows-executions-execution post" [
   realm: string
-  flowAlias: string
+  flow_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,7 +1071,7 @@ export def "authentication-flows-executions-execution post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/flows/($flowAlias)/executions/execution")
+  let full_url = (build-url $base ({realm: $realm, flow_alias: $flow_alias} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions/execution"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1083,7 +1083,7 @@ export def "authentication-flows-executions-execution post" [
 # POST /{realm}/authentication/flows/{flowAlias}/executions/flow
 export def "authentication-flows-executions-flow post" [
   realm: string
-  flowAlias: string
+  flow_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1097,7 +1097,7 @@ export def "authentication-flows-executions-flow post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/flows/($flowAlias)/executions/flow")
+  let full_url = (build-url $base ({realm: $realm, flow_alias: $flow_alias} | format pattern "/{realm}/authentication/flows/{flow_alias}/executions/flow"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1121,7 +1121,7 @@ export def "authentication-flows delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/flows/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/authentication/flows/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1144,7 +1144,7 @@ export def "authentication-flows get" [
 ]: nothing -> record<alias: string, authenticationExecutions: table<authenticator: string, authenticatorConfig: string, authenticatorFlow: bool, autheticatorFlow: bool, flowAlias: string, priority: int, requirement: string, userSetupAllowed: bool>, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/flows/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/authentication/flows/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1166,18 +1166,18 @@ export def "authentication-flows put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --alias: string
-  --authenticationExecutions: list # item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
-  --builtIn: oneof<nothing, bool>
+  --authentication-executions: list # item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
+  --built-in: oneof<nothing, bool>
   --description: string
   --body-id: string
-  --providerId: string
-  --topLevel: oneof<nothing, bool>
+  --provider-id: string
+  --top-level: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/flows/($id)")
-  let body = {alias: $alias, authenticationExecutions: $authenticationExecutions, builtIn: $builtIn, description: $description, id: $body_id, providerId: $providerId, topLevel: $topLevel} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/authentication/flows/{id}"))
+  let body = {"alias": $alias, "authenticationExecutions": $authentication_executions, "builtIn": $built_in, "description": $description, "id": $body_id, "providerId": $provider_id, "topLevel": $top_level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1200,7 +1200,7 @@ export def "authentication-form-action-providers get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/form-action-providers")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/form-action-providers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1222,7 +1222,7 @@ export def "authentication-form-providers get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/form-providers")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/form-providers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1244,7 +1244,7 @@ export def "authentication-per-client-config-description get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/per-client-config-description")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/per-client-config-description"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1268,7 +1268,7 @@ export def "authentication-register-required-action post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/register-required-action")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/register-required-action"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1291,7 +1291,7 @@ export def "authentication-required-actions list" [
 ]: nothing -> table<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/required-actions")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/required-actions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1314,7 +1314,7 @@ export def "authentication-required-actions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/required-actions/($alias)")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/authentication/required-actions/{alias}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1337,7 +1337,7 @@ export def "authentication-required-actions get" [
 ]: nothing -> record<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/required-actions/($alias)")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/authentication/required-actions/{alias}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1359,17 +1359,17 @@ export def "authentication-required-actions put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-alias: string
   --config: record
-  --defaultAction: oneof<nothing, bool>
+  --default-action: oneof<nothing, bool>
   --enabled: oneof<nothing, bool>
   --name: string
   --priority: int # format: int32
-  --providerId: string
+  --provider-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/required-actions/($alias)")
-  let body = {alias: $body_alias, config: $config, defaultAction: $defaultAction, enabled: $enabled, name: $name, priority: $priority, providerId: $providerId} | compact
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/authentication/required-actions/{alias}"))
+  let body = {"alias": $body_alias, "config": $config, "defaultAction": $default_action, "enabled": $enabled, "name": $name, "priority": $priority, "providerId": $provider_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1393,7 +1393,7 @@ export def "authentication-required-actions-lower-priority post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/required-actions/($alias)/lower-priority")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/authentication/required-actions/{alias}/lower-priority"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1416,7 +1416,7 @@ export def "authentication-required-actions-raise-priority post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/required-actions/($alias)/raise-priority")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/authentication/required-actions/{alias}/raise-priority"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1438,7 +1438,7 @@ export def "authentication-unregistered-required-actions get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/authentication/unregistered-required-actions")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/authentication/unregistered-required-actions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1460,7 +1460,7 @@ export def "clear-keys-cache post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clear-keys-cache")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/clear-keys-cache"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1482,7 +1482,7 @@ export def "clear-realm-cache post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clear-realm-cache")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/clear-realm-cache"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1504,7 +1504,7 @@ export def "clear-user-cache post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clear-user-cache")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/clear-user-cache"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1528,7 +1528,7 @@ export def "client-description-converter post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-description-converter")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/client-description-converter"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1551,7 +1551,7 @@ export def "client-registration-policy-providers get" [
 ]: nothing -> table<helpText: string, id: string, metadata: record, properties: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-registration-policy/providers")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/client-registration-policy/providers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1573,7 +1573,7 @@ export def "client-scopes list" [
 ]: nothing -> table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/client-scopes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1598,13 +1598,13 @@ export def "client-scopes post" [
   --id: string
   --name: string
   --protocol: string
-  --protocolMappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
+  --protocol-mappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes")
-  let body = {attributes: $attributes, description: $description, id: $id, name: $name, protocol: $protocol, protocolMappers: $protocolMappers} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/client-scopes"))
+  let body = {"attributes": $attributes, "description": $description, "id": $id, "name": $name, "protocol": $protocol, "protocolMappers": $protocol_mappers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1629,7 +1629,7 @@ export def "client-scopes-protocol-mappers-models delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id1)/protocol-mappers/models/($id2)")
+  let full_url = (build-url $base ({realm: $realm, id1: $id1, id2: $id2} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1653,7 +1653,7 @@ export def "client-scopes-protocol-mappers-models get" [
 ]: nothing -> record<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id1)/protocol-mappers/models/($id2)")
+  let full_url = (build-url $base ({realm: $realm, id1: $id1, id2: $id2} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1678,13 +1678,13 @@ export def "client-scopes-protocol-mappers-models put" [
   --id: string
   --name: string
   --protocol: string
-  --protocolMapper: string
+  --protocol-mapper: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id1)/protocol-mappers/models/($id2)")
-  let body = {config: $config, id: $id, name: $name, protocol: $protocol, protocolMapper: $protocolMapper} | compact
+  let full_url = (build-url $base ({realm: $realm, id1: $id1, id2: $id2} | format pattern "/{realm}/client-scopes/{id1}/protocol-mappers/models/{id2}"))
+  let body = {"config": $config, "id": $id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1708,7 +1708,7 @@ export def "client-scopes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1731,7 +1731,7 @@ export def "client-scopes get" [
 ]: nothing -> record<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1757,13 +1757,13 @@ export def "client-scopes put" [
   --body-id: string
   --name: string
   --protocol: string
-  --protocolMappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
+  --protocol-mappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)")
-  let body = {attributes: $attributes, description: $description, id: $body_id, name: $name, protocol: $protocol, protocolMappers: $protocolMappers} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}"))
+  let body = {"attributes": $attributes, "description": $description, "id": $body_id, "name": $name, "protocol": $protocol, "protocolMappers": $protocol_mappers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1789,7 +1789,7 @@ export def "client-scopes-protocol-mappers-add-models post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/protocol-mappers/add-models")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/add-models"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1813,7 +1813,7 @@ export def "client-scopes-protocol-mappers-models list" [
 ]: nothing -> table<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/protocol-mappers/models")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/models"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1837,13 +1837,13 @@ export def "client-scopes-protocol-mappers-models post" [
   --body-id: string
   --name: string
   --protocol: string
-  --protocolMapper: string
+  --protocol-mapper: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/protocol-mappers/models")
-  let body = {config: $config, id: $body_id, name: $name, protocol: $protocol, protocolMapper: $protocolMapper} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/models"))
+  let body = {"config": $config, "id": $body_id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1868,7 +1868,7 @@ export def "client-scopes-protocol-mappers-protocol get" [
 ]: nothing -> table<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/protocol-mappers/protocol/($protocol)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, protocol: $protocol} | format pattern "/{realm}/client-scopes/{id}/protocol-mappers/protocol/{protocol}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1891,7 +1891,7 @@ export def "client-scopes-scope-mappings get" [
 ]: nothing -> record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}/scope-mappings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1917,7 +1917,7 @@ export def "client-scopes-scope-mappings-clients delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1942,7 +1942,7 @@ export def "client-scopes-scope-mappings-clients get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1968,7 +1968,7 @@ export def "client-scopes-scope-mappings-clients post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1993,7 +1993,7 @@ export def "client-scopes-scope-mappings-clients-available get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings/clients/($client)/available")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}/available"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2017,7 +2017,7 @@ export def "client-scopes-scope-mappings-clients-composite get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings/clients/($client)/composite")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/clients/{client}/composite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2042,7 +2042,7 @@ export def "client-scopes-scope-mappings-realm delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2066,7 +2066,7 @@ export def "client-scopes-scope-mappings-realm get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2091,7 +2091,7 @@ export def "client-scopes-scope-mappings-realm post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2115,7 +2115,7 @@ export def "client-scopes-scope-mappings-realm-available get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings/realm/available")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm/available"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2138,7 +2138,7 @@ export def "client-scopes-scope-mappings-realm-composite get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-scopes/($id)/scope-mappings/realm/composite")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/client-scopes/{id}/scope-mappings/realm/composite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2160,7 +2160,7 @@ export def "client-session-stats get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/client-session-stats")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/client-session-stats"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2179,16 +2179,16 @@ export def "clients list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --clientId: string # filter by clientId
+  --client-id: string # filter by clientId
   --first: int # the first result (format: int32)
   --max: int # the max results to return (format: int32)
   --search: oneof<nothing, bool> # whether this is a search query or a getClientById query
-  --viewableOnly: oneof<nothing, bool> # filter clients that cannot be viewed in full by admin
+  --viewable-only: oneof<nothing, bool> # filter clients that cannot be viewed in full by admin
 ]: nothing -> table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list, policyEnforcementMode: string, resources: list, scopes: list>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: list<record>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "clientId" $clientId "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "viewableOnly" $viewableOnly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/clients" $qp)
+  let qp = [(serialize-qp "clientId" $client_id "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "viewableOnly" $viewable_only "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/clients") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2210,49 +2210,49 @@ export def "clients post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: record
-  --adminUrl: string
-  --alwaysDisplayInConsole: oneof<nothing, bool>
+  --admin-url: string
+  --always-display-in-console: oneof<nothing, bool>
   --attributes: record
-  --authenticationFlowBindingOverrides: record
-  --authorizationServicesEnabled: oneof<nothing, bool>
-  --authorizationSettings: record # shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
-  --baseUrl: string
-  --bearerOnly: oneof<nothing, bool>
-  --clientAuthenticatorType: string
-  --clientId: string
-  --consentRequired: oneof<nothing, bool>
-  --defaultClientScopes: list
-  --defaultRoles: list
+  --authentication-flow-binding-overrides: record
+  --authorization-services-enabled: oneof<nothing, bool>
+  --authorization-settings: record # shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
+  --body-base-url: string
+  --bearer-only: oneof<nothing, bool>
+  --client-authenticator-type: string
+  --client-id: string
+  --consent-required: oneof<nothing, bool>
+  --default-client-scopes: list
+  --default-roles: list
   --description: string
-  --directAccessGrantsEnabled: oneof<nothing, bool>
+  --direct-access-grants-enabled: oneof<nothing, bool>
   --enabled: oneof<nothing, bool>
-  --frontchannelLogout: oneof<nothing, bool>
-  --fullScopeAllowed: oneof<nothing, bool>
+  --frontchannel-logout: oneof<nothing, bool>
+  --full-scope-allowed: oneof<nothing, bool>
   --id: string
-  --implicitFlowEnabled: oneof<nothing, bool>
+  --implicit-flow-enabled: oneof<nothing, bool>
   --name: string
-  --nodeReRegistrationTimeout: int # format: int32
-  --notBefore: int # format: int32
-  --optionalClientScopes: list
+  --node-re-registration-timeout: int # format: int32
+  --not-before: int # format: int32
+  --optional-client-scopes: list
   --origin: string
   --protocol: string
-  --protocolMappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-  --publicClient: oneof<nothing, bool>
-  --redirectUris: list
-  --registeredNodes: record
-  --registrationAccessToken: string
-  --rootUrl: string
+  --protocol-mappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
+  --public-client: oneof<nothing, bool>
+  --redirect-uris: list
+  --registered-nodes: record
+  --registration-access-token: string
+  --root-url: string
   --secret: string
-  --serviceAccountsEnabled: oneof<nothing, bool>
-  --standardFlowEnabled: oneof<nothing, bool>
-  --surrogateAuthRequired: oneof<nothing, bool>
-  --webOrigins: list
+  --service-accounts-enabled: oneof<nothing, bool>
+  --standard-flow-enabled: oneof<nothing, bool>
+  --surrogate-auth-required: oneof<nothing, bool>
+  --web-origins: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients")
-  let body = {access: $access, adminUrl: $adminUrl, alwaysDisplayInConsole: $alwaysDisplayInConsole, attributes: $attributes, authenticationFlowBindingOverrides: $authenticationFlowBindingOverrides, authorizationServicesEnabled: $authorizationServicesEnabled, authorizationSettings: $authorizationSettings, baseUrl: $baseUrl, bearerOnly: $bearerOnly, clientAuthenticatorType: $clientAuthenticatorType, clientId: $clientId, consentRequired: $consentRequired, defaultClientScopes: $defaultClientScopes, defaultRoles: $defaultRoles, description: $description, directAccessGrantsEnabled: $directAccessGrantsEnabled, enabled: $enabled, frontchannelLogout: $frontchannelLogout, fullScopeAllowed: $fullScopeAllowed, id: $id, implicitFlowEnabled: $implicitFlowEnabled, name: $name, nodeReRegistrationTimeout: $nodeReRegistrationTimeout, notBefore: $notBefore, optionalClientScopes: $optionalClientScopes, origin: $origin, protocol: $protocol, protocolMappers: $protocolMappers, publicClient: $publicClient, redirectUris: $redirectUris, registeredNodes: $registeredNodes, registrationAccessToken: $registrationAccessToken, rootUrl: $rootUrl, secret: $secret, serviceAccountsEnabled: $serviceAccountsEnabled, standardFlowEnabled: $standardFlowEnabled, surrogateAuthRequired: $surrogateAuthRequired, webOrigins: $webOrigins} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/clients"))
+  let body = {"access": $access, "adminUrl": $admin_url, "alwaysDisplayInConsole": $always_display_in_console, "attributes": $attributes, "authenticationFlowBindingOverrides": $authentication_flow_binding_overrides, "authorizationServicesEnabled": $authorization_services_enabled, "authorizationSettings": $authorization_settings, "baseUrl": $body_base_url, "bearerOnly": $bearer_only, "clientAuthenticatorType": $client_authenticator_type, "clientId": $client_id, "consentRequired": $consent_required, "defaultClientScopes": $default_client_scopes, "defaultRoles": $default_roles, "description": $description, "directAccessGrantsEnabled": $direct_access_grants_enabled, "enabled": $enabled, "frontchannelLogout": $frontchannel_logout, "fullScopeAllowed": $full_scope_allowed, "id": $id, "implicitFlowEnabled": $implicit_flow_enabled, "name": $name, "nodeReRegistrationTimeout": $node_re_registration_timeout, "notBefore": $not_before, "optionalClientScopes": $optional_client_scopes, "origin": $origin, "protocol": $protocol, "protocolMappers": $protocol_mappers, "publicClient": $public_client, "redirectUris": $redirect_uris, "registeredNodes": $registered_nodes, "registrationAccessToken": $registration_access_token, "rootUrl": $root_url, "secret": $secret, "serviceAccountsEnabled": $service_accounts_enabled, "standardFlowEnabled": $standard_flow_enabled, "surrogateAuthRequired": $surrogate_auth_required, "webOrigins": $web_origins} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2273,7 +2273,7 @@ export def "clients-initial-access get" [
 ]: nothing -> table<count: int, expiration: int, id: string, remainingCount: int, timestamp: int, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients-initial-access")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/clients-initial-access"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2298,8 +2298,8 @@ export def "clients-initial-access post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients-initial-access")
-  let body = {count: $count, expiration: $expiration} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/clients-initial-access"))
+  let body = {"count": $count, "expiration": $expiration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2321,7 +2321,7 @@ export def "clients-initial-access delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients-initial-access/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients-initial-access/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2345,7 +2345,7 @@ export def "clients-protocol-mappers-models delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id1)/protocol-mappers/models/($id2)")
+  let full_url = (build-url $base ({realm: $realm, id1: $id1, id2: $id2} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2369,7 +2369,7 @@ export def "clients-protocol-mappers-models get" [
 ]: nothing -> record<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id1)/protocol-mappers/models/($id2)")
+  let full_url = (build-url $base ({realm: $realm, id1: $id1, id2: $id2} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2394,13 +2394,13 @@ export def "clients-protocol-mappers-models put" [
   --id: string
   --name: string
   --protocol: string
-  --protocolMapper: string
+  --protocol-mapper: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id1)/protocol-mappers/models/($id2)")
-  let body = {config: $config, id: $id, name: $name, protocol: $protocol, protocolMapper: $protocolMapper} | compact
+  let full_url = (build-url $base ({realm: $realm, id1: $id1, id2: $id2} | format pattern "/{realm}/clients/{id1}/protocol-mappers/models/{id2}"))
+  let body = {"config": $config, "id": $id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2424,7 +2424,7 @@ export def "clients delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2447,7 +2447,7 @@ export def "clients get" [
 ]: nothing -> record<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list<record>, policyEnforcementMode: string, resources: list<record>, scopes: list<record>>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2470,49 +2470,49 @@ export def "clients put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: record
-  --adminUrl: string
-  --alwaysDisplayInConsole: oneof<nothing, bool>
+  --admin-url: string
+  --always-display-in-console: oneof<nothing, bool>
   --attributes: record
-  --authenticationFlowBindingOverrides: record
-  --authorizationServicesEnabled: oneof<nothing, bool>
-  --authorizationSettings: record # shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
-  --baseUrl: string
-  --bearerOnly: oneof<nothing, bool>
-  --clientAuthenticatorType: string
-  --clientId: string
-  --consentRequired: oneof<nothing, bool>
-  --defaultClientScopes: list
-  --defaultRoles: list
+  --authentication-flow-binding-overrides: record
+  --authorization-services-enabled: oneof<nothing, bool>
+  --authorization-settings: record # shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
+  --body-base-url: string
+  --bearer-only: oneof<nothing, bool>
+  --client-authenticator-type: string
+  --client-id: string
+  --consent-required: oneof<nothing, bool>
+  --default-client-scopes: list
+  --default-roles: list
   --description: string
-  --directAccessGrantsEnabled: oneof<nothing, bool>
+  --direct-access-grants-enabled: oneof<nothing, bool>
   --enabled: oneof<nothing, bool>
-  --frontchannelLogout: oneof<nothing, bool>
-  --fullScopeAllowed: oneof<nothing, bool>
+  --frontchannel-logout: oneof<nothing, bool>
+  --full-scope-allowed: oneof<nothing, bool>
   --body-id: string
-  --implicitFlowEnabled: oneof<nothing, bool>
+  --implicit-flow-enabled: oneof<nothing, bool>
   --name: string
-  --nodeReRegistrationTimeout: int # format: int32
-  --notBefore: int # format: int32
-  --optionalClientScopes: list
+  --node-re-registration-timeout: int # format: int32
+  --not-before: int # format: int32
+  --optional-client-scopes: list
   --origin: string
   --protocol: string
-  --protocolMappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-  --publicClient: oneof<nothing, bool>
-  --redirectUris: list
-  --registeredNodes: record
-  --registrationAccessToken: string
-  --rootUrl: string
+  --protocol-mappers: list # item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
+  --public-client: oneof<nothing, bool>
+  --redirect-uris: list
+  --registered-nodes: record
+  --registration-access-token: string
+  --root-url: string
   --secret: string
-  --serviceAccountsEnabled: oneof<nothing, bool>
-  --standardFlowEnabled: oneof<nothing, bool>
-  --surrogateAuthRequired: oneof<nothing, bool>
-  --webOrigins: list
+  --service-accounts-enabled: oneof<nothing, bool>
+  --standard-flow-enabled: oneof<nothing, bool>
+  --surrogate-auth-required: oneof<nothing, bool>
+  --web-origins: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)")
-  let body = {access: $access, adminUrl: $adminUrl, alwaysDisplayInConsole: $alwaysDisplayInConsole, attributes: $attributes, authenticationFlowBindingOverrides: $authenticationFlowBindingOverrides, authorizationServicesEnabled: $authorizationServicesEnabled, authorizationSettings: $authorizationSettings, baseUrl: $baseUrl, bearerOnly: $bearerOnly, clientAuthenticatorType: $clientAuthenticatorType, clientId: $clientId, consentRequired: $consentRequired, defaultClientScopes: $defaultClientScopes, defaultRoles: $defaultRoles, description: $description, directAccessGrantsEnabled: $directAccessGrantsEnabled, enabled: $enabled, frontchannelLogout: $frontchannelLogout, fullScopeAllowed: $fullScopeAllowed, id: $body_id, implicitFlowEnabled: $implicitFlowEnabled, name: $name, nodeReRegistrationTimeout: $nodeReRegistrationTimeout, notBefore: $notBefore, optionalClientScopes: $optionalClientScopes, origin: $origin, protocol: $protocol, protocolMappers: $protocolMappers, publicClient: $publicClient, redirectUris: $redirectUris, registeredNodes: $registeredNodes, registrationAccessToken: $registrationAccessToken, rootUrl: $rootUrl, secret: $secret, serviceAccountsEnabled: $serviceAccountsEnabled, standardFlowEnabled: $standardFlowEnabled, surrogateAuthRequired: $surrogateAuthRequired, webOrigins: $webOrigins} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}"))
+  let body = {"access": $access, "adminUrl": $admin_url, "alwaysDisplayInConsole": $always_display_in_console, "attributes": $attributes, "authenticationFlowBindingOverrides": $authentication_flow_binding_overrides, "authorizationServicesEnabled": $authorization_services_enabled, "authorizationSettings": $authorization_settings, "baseUrl": $body_base_url, "bearerOnly": $bearer_only, "clientAuthenticatorType": $client_authenticator_type, "clientId": $client_id, "consentRequired": $consent_required, "defaultClientScopes": $default_client_scopes, "defaultRoles": $default_roles, "description": $description, "directAccessGrantsEnabled": $direct_access_grants_enabled, "enabled": $enabled, "frontchannelLogout": $frontchannel_logout, "fullScopeAllowed": $full_scope_allowed, "id": $body_id, "implicitFlowEnabled": $implicit_flow_enabled, "name": $name, "nodeReRegistrationTimeout": $node_re_registration_timeout, "notBefore": $not_before, "optionalClientScopes": $optional_client_scopes, "origin": $origin, "protocol": $protocol, "protocolMappers": $protocol_mappers, "publicClient": $public_client, "redirectUris": $redirect_uris, "registeredNodes": $registered_nodes, "registrationAccessToken": $registration_access_token, "rootUrl": $root_url, "secret": $secret, "serviceAccountsEnabled": $service_accounts_enabled, "standardFlowEnabled": $standard_flow_enabled, "surrogateAuthRequired": $surrogate_auth_required, "webOrigins": $web_origins} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2537,7 +2537,7 @@ export def "clients-certificates get" [
 ]: nothing -> record<certificate: string, kid: string, privateKey: string, publicKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/certificates/($attr)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, attr: $attr} | format pattern "/{realm}/clients/{id}/certificates/{attr}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2559,17 +2559,17 @@ export def "clients-certificates-download post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string
-  --keyAlias: string
-  --keyPassword: string
-  --realmAlias: string
-  --realmCertificate: oneof<nothing, bool>
-  --storePassword: string
+  --key-alias: string
+  --key-password: string
+  --realm-alias: string
+  --realm-certificate: oneof<nothing, bool>
+  --store-password: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/certificates/($attr)/download")
-  let body = {format: $format, keyAlias: $keyAlias, keyPassword: $keyPassword, realmAlias: $realmAlias, realmCertificate: $realmCertificate, storePassword: $storePassword} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id, attr: $attr} | format pattern "/{realm}/clients/{id}/certificates/{attr}/download"))
+  let body = {"format": $format, "keyAlias": $key_alias, "keyPassword": $key_password, "realmAlias": $realm_alias, "realmCertificate": $realm_certificate, "storePassword": $store_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2594,7 +2594,7 @@ export def "clients-certificates-generate post" [
 ]: nothing -> record<certificate: string, kid: string, privateKey: string, publicKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/certificates/($attr)/generate")
+  let full_url = (build-url $base ({realm: $realm, id: $id, attr: $attr} | format pattern "/{realm}/clients/{id}/certificates/{attr}/generate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2616,17 +2616,17 @@ export def "clients-certificates-generate-and-download post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string
-  --keyAlias: string
-  --keyPassword: string
-  --realmAlias: string
-  --realmCertificate: oneof<nothing, bool>
-  --storePassword: string
+  --key-alias: string
+  --key-password: string
+  --realm-alias: string
+  --realm-certificate: oneof<nothing, bool>
+  --store-password: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/certificates/($attr)/generate-and-download")
-  let body = {format: $format, keyAlias: $keyAlias, keyPassword: $keyPassword, realmAlias: $realmAlias, realmCertificate: $realmCertificate, storePassword: $storePassword} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id, attr: $attr} | format pattern "/{realm}/clients/{id}/certificates/{attr}/generate-and-download"))
+  let body = {"format": $format, "keyAlias": $key_alias, "keyPassword": $key_password, "realmAlias": $realm_alias, "realmCertificate": $realm_certificate, "storePassword": $store_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2651,7 +2651,7 @@ export def "clients-certificates-upload post" [
 ]: nothing -> record<certificate: string, kid: string, privateKey: string, publicKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/certificates/($attr)/upload")
+  let full_url = (build-url $base ({realm: $realm, id: $id, attr: $attr} | format pattern "/{realm}/clients/{id}/certificates/{attr}/upload"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2675,7 +2675,7 @@ export def "clients-certificates-upload-certificate post" [
 ]: nothing -> record<certificate: string, kid: string, privateKey: string, publicKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/certificates/($attr)/upload-certificate")
+  let full_url = (build-url $base ({realm: $realm, id: $id, attr: $attr} | format pattern "/{realm}/clients/{id}/certificates/{attr}/upload-certificate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2698,7 +2698,7 @@ export def "clients-client-secret get" [
 ]: nothing -> record<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/client-secret")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/client-secret"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2721,7 +2721,7 @@ export def "clients-client-secret post" [
 ]: nothing -> record<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/client-secret")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/client-secret"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2744,7 +2744,7 @@ export def "clients-default-client-scopes get" [
 ]: nothing -> table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/default-client-scopes")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/default-client-scopes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2754,7 +2754,7 @@ export def "clients-default-client-scopes get" [
 export def "clients-default-client-scopes delete" [
   realm: string
   id: string
-  clientScopeId: string
+  client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2766,7 +2766,7 @@ export def "clients-default-client-scopes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/default-client-scopes/($clientScopeId)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client_scope_id: $client_scope_id} | format pattern "/{realm}/clients/{id}/default-client-scopes/{client_scope_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2776,7 +2776,7 @@ export def "clients-default-client-scopes delete" [
 export def "clients-default-client-scopes put" [
   realm: string
   id: string
-  clientScopeId: string
+  client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2788,7 +2788,7 @@ export def "clients-default-client-scopes put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/default-client-scopes/($clientScopeId)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client_scope_id: $client_scope_id} | format pattern "/{realm}/clients/{id}/default-client-scopes/{client_scope_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2809,12 +2809,12 @@ export def "clients-evaluate-scopes-generate-example-access-token get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string
-  --userId: string
+  --user-id: string
 ]: nothing -> record<acr: string, address: record<country: string, formatted: string, locality: string, postal_code: string, region: string, street_address: string>, allowed_origins: list<string>, at_hash: string, auth_time: int, authorization: record<permissions: list<record>>, azp: string, birthdate: string, c_hash: string, category: string, claims_locales: string, cnf: record<x5t_S256: string>, email: string, email_verified: bool, exp: int, family_name: string, gender: string, given_name: string, iat: int, iss: string, jti: string, locale: string, middle_name: string, name: string, nbf: int, nickname: string, nonce: string, otherClaims: record, phone_number: string, phone_number_verified: bool, picture: string, preferred_username: string, profile: string, realm_access: record<roles: list<string>, verify_caller: bool>, s_hash: string, scope: string, session_state: string, sub: string, trusted_certs: list<string>, typ: string, updated_at: int, website: string, zoneinfo: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "userId" $userId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/clients/($id)/evaluate-scopes/generate-example-access-token" $qp)
+  let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/evaluate-scopes/generate-example-access-token") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2839,7 +2839,7 @@ export def "clients-evaluate-scopes-protocol-mappers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/clients/($id)/evaluate-scopes/protocol-mappers" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/evaluate-scopes/protocol-mappers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2851,7 +2851,7 @@ export def "clients-evaluate-scopes-protocol-mappers get" [
 export def "clients-evaluate-scopes-scope-mappings-granted get" [
   realm: string
   id: string
-  roleContainerId: string
+  role_container_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2865,7 +2865,7 @@ export def "clients-evaluate-scopes-scope-mappings-granted get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/clients/($id)/evaluate-scopes/scope-mappings/($roleContainerId)/granted" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_container_id: $role_container_id} | format pattern "/{realm}/clients/{id}/evaluate-scopes/scope-mappings/{role_container_id}/granted") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2877,7 +2877,7 @@ export def "clients-evaluate-scopes-scope-mappings-granted get" [
 export def "clients-evaluate-scopes-scope-mappings-not-granted get" [
   realm: string
   id: string
-  roleContainerId: string
+  role_container_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2891,7 +2891,7 @@ export def "clients-evaluate-scopes-scope-mappings-not-granted get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/clients/($id)/evaluate-scopes/scope-mappings/($roleContainerId)/not-granted" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_container_id: $role_container_id} | format pattern "/{realm}/clients/{id}/evaluate-scopes/scope-mappings/{role_container_id}/not-granted") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2901,7 +2901,7 @@ export def "clients-evaluate-scopes-scope-mappings-not-granted get" [
 export def "clients-installation-providers get" [
   realm: string
   id: string
-  providerId: string
+  provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2913,7 +2913,7 @@ export def "clients-installation-providers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/installation/providers/($providerId)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, provider_id: $provider_id} | format pattern "/{realm}/clients/{id}/installation/providers/{provider_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2936,7 +2936,7 @@ export def "clients-management-permissions get" [
 ]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/management/permissions")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/management/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2958,13 +2958,13 @@ export def "clients-management-permissions put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool>
   --resource: string
-  --scopePermissions: record
+  --scope-permissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/management/permissions")
-  let body = {enabled: $enabled, resource: $resource, scopePermissions: $scopePermissions} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/management/permissions"))
+  let body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2990,7 +2990,7 @@ export def "clients-nodes post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/nodes")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/nodes"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3015,7 +3015,7 @@ export def "clients-nodes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/nodes/($node)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, node: $node} | format pattern "/{realm}/clients/{id}/nodes/{node}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3038,7 +3038,7 @@ export def "clients-offline-session-count get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/offline-session-count")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/offline-session-count"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3064,7 +3064,7 @@ export def "clients-offline-sessions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/clients/($id)/offline-sessions" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/offline-sessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3087,7 +3087,7 @@ export def "clients-optional-client-scopes get" [
 ]: nothing -> table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/optional-client-scopes")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/optional-client-scopes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3097,7 +3097,7 @@ export def "clients-optional-client-scopes get" [
 export def "clients-optional-client-scopes delete" [
   realm: string
   id: string
-  clientScopeId: string
+  client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3109,7 +3109,7 @@ export def "clients-optional-client-scopes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/optional-client-scopes/($clientScopeId)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client_scope_id: $client_scope_id} | format pattern "/{realm}/clients/{id}/optional-client-scopes/{client_scope_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3119,7 +3119,7 @@ export def "clients-optional-client-scopes delete" [
 export def "clients-optional-client-scopes put" [
   realm: string
   id: string
-  clientScopeId: string
+  client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3131,7 +3131,7 @@ export def "clients-optional-client-scopes put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/optional-client-scopes/($clientScopeId)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client_scope_id: $client_scope_id} | format pattern "/{realm}/clients/{id}/optional-client-scopes/{client_scope_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3156,7 +3156,7 @@ export def "clients-protocol-mappers-add-models post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/protocol-mappers/add-models")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/protocol-mappers/add-models"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3180,7 +3180,7 @@ export def "clients-protocol-mappers-models list" [
 ]: nothing -> table<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/protocol-mappers/models")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/protocol-mappers/models"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3204,13 +3204,13 @@ export def "clients-protocol-mappers-models post" [
   --body-id: string
   --name: string
   --protocol: string
-  --protocolMapper: string
+  --protocol-mapper: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/protocol-mappers/models")
-  let body = {config: $config, id: $body_id, name: $name, protocol: $protocol, protocolMapper: $protocolMapper} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/protocol-mappers/models"))
+  let body = {"config": $config, "id": $body_id, "name": $name, "protocol": $protocol, "protocolMapper": $protocol_mapper} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3235,7 +3235,7 @@ export def "clients-protocol-mappers-protocol get" [
 ]: nothing -> table<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/protocol-mappers/protocol/($protocol)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, protocol: $protocol} | format pattern "/{realm}/clients/{id}/protocol-mappers/protocol/{protocol}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3258,7 +3258,7 @@ export def "clients-push-revocation post" [
 ]: nothing -> record<failedRequests: list<string>, successRequests: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/push-revocation")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/push-revocation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3281,7 +3281,7 @@ export def "clients-registration-access-token post" [
 ]: nothing -> record<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list<record>, policyEnforcementMode: string, resources: list<record>, scopes: list<record>>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/registration-access-token")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/registration-access-token"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3301,15 +3301,15 @@ export def "clients-roles list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --briefRepresentation: oneof<nothing, bool>
+  --brief-representation: oneof<nothing, bool>
   --first: int # format: int32
   --max: int # format: int32
   --search: string
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "briefRepresentation" $briefRepresentation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles" $qp)
+  let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/roles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3331,10 +3331,10 @@ export def "clients-roles post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
-  --clientRole: oneof<nothing, bool>
+  --client-role: oneof<nothing, bool>
   --composite: oneof<nothing, bool>
   --composites: record # shape: {client?: record, realm?: list}
-  --containerId: string
+  --container-id: string
   --description: string
   --body-id: string
   --name: string
@@ -3342,8 +3342,8 @@ export def "clients-roles post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles")
-  let body = {attributes: $attributes, clientRole: $clientRole, composite: $composite, composites: $composites, containerId: $containerId, description: $description, id: $body_id, name: $name} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/roles"))
+  let body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $body_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3368,7 +3368,7 @@ export def "clients-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3392,7 +3392,7 @@ export def "clients-roles get" [
 ]: nothing -> record<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list<string>>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3415,10 +3415,10 @@ export def "clients-roles put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
-  --clientRole: oneof<nothing, bool>
+  --client-role: oneof<nothing, bool>
   --composite: oneof<nothing, bool>
   --composites: record # shape: {client?: record, realm?: list}
-  --containerId: string
+  --container-id: string
   --description: string
   --body-id: string
   --name: string
@@ -3426,8 +3426,8 @@ export def "clients-roles put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)")
-  let body = {attributes: $attributes, clientRole: $clientRole, composite: $composite, composites: $composites, containerId: $containerId, description: $description, id: $body_id, name: $name} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}"))
+  let body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $body_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3454,7 +3454,7 @@ export def "clients-roles-composites delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)/composites")
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3479,7 +3479,7 @@ export def "clients-roles-composites get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)/composites")
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3505,7 +3505,7 @@ export def "clients-roles-composites post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)/composites")
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3531,7 +3531,7 @@ export def "clients-roles-composites-clients get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)/composites/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name, client: $client} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites/clients/{client}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3555,7 +3555,7 @@ export def "clients-roles-composites-realm get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)/composites/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}/composites/realm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3576,14 +3576,14 @@ export def "clients-roles-groups get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --briefRepresentation: oneof<nothing, bool> # if false, return a full representation of the GroupRepresentation objects
+  --brief-representation: oneof<nothing, bool> # if false, return a full representation of the GroupRepresentation objects
   --first: int # format: int32
   --max: int # format: int32
 ]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "briefRepresentation" $briefRepresentation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)/groups" $qp)
+  let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3607,7 +3607,7 @@ export def "clients-roles-management-permissions get" [
 ]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)/management/permissions")
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}/management/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3630,13 +3630,13 @@ export def "clients-roles-management-permissions put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool>
   --resource: string
-  --scopePermissions: record
+  --scope-permissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)/management/permissions")
-  let body = {enabled: $enabled, resource: $resource, scopePermissions: $scopePermissions} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}/management/permissions"))
+  let body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3664,7 +3664,7 @@ export def "clients-roles-users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/clients/($id)/roles/($role_name)/users" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id, role_name: $role_name} | format pattern "/{realm}/clients/{id}/roles/{role_name}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3687,7 +3687,7 @@ export def "clients-scope-mappings get" [
 ]: nothing -> record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/scope-mappings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3713,7 +3713,7 @@ export def "clients-scope-mappings-clients delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3738,7 +3738,7 @@ export def "clients-scope-mappings-clients get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3764,7 +3764,7 @@ export def "clients-scope-mappings-clients post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3789,7 +3789,7 @@ export def "clients-scope-mappings-clients-available get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings/clients/($client)/available")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}/available"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3813,7 +3813,7 @@ export def "clients-scope-mappings-clients-composite get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings/clients/($client)/composite")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/clients/{id}/scope-mappings/clients/{client}/composite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3838,7 +3838,7 @@ export def "clients-scope-mappings-realm delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/scope-mappings/realm"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3862,7 +3862,7 @@ export def "clients-scope-mappings-realm get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/scope-mappings/realm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3887,7 +3887,7 @@ export def "clients-scope-mappings-realm post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/scope-mappings/realm"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3911,7 +3911,7 @@ export def "clients-scope-mappings-realm-available get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings/realm/available")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/scope-mappings/realm/available"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3934,7 +3934,7 @@ export def "clients-scope-mappings-realm-composite get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/scope-mappings/realm/composite")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/scope-mappings/realm/composite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3957,7 +3957,7 @@ export def "clients-service-account-user get" [
 ]: nothing -> record<access: record, attributes: record, clientConsents: table<clientId: string, createdDate: int, grantedClientScopes: list, lastUpdatedDate: int>, clientRoles: record, createdTimestamp: int, credentials: table<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: table<identityProvider: string, userId: string, userName: string>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/service-account-user")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/service-account-user"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3980,7 +3980,7 @@ export def "clients-session-count get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/session-count")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/session-count"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4003,7 +4003,7 @@ export def "clients-test-nodes-available get" [
 ]: nothing -> record<failedRequests: list<string>, successRequests: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/clients/($id)/test-nodes-available")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/test-nodes-available"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4029,7 +4029,7 @@ export def "clients-user-sessions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/clients/($id)/user-sessions" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/clients/{id}/user-sessions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4053,7 +4053,7 @@ export def "components list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/components" $qp)
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/components") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4075,16 +4075,16 @@ export def "components post" [
   --config: record # shape: {empty?: bool, loadFactor?: float, threshold?: int}
   --id: string
   --name: string
-  --parentId: string
-  --providerId: string
-  --providerType: string
-  --subType: string
+  --parent-id: string
+  --provider-id: string
+  --provider-type: string
+  --sub-type: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/components")
-  let body = {config: $config, id: $id, name: $name, parentId: $parentId, providerId: $providerId, providerType: $providerType, subType: $subType} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/components"))
+  let body = {"config": $config, "id": $id, "name": $name, "parentId": $parent_id, "providerId": $provider_id, "providerType": $provider_type, "subType": $sub_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4106,7 +4106,7 @@ export def "components delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/components/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/components/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4127,7 +4127,7 @@ export def "components get" [
 ]: nothing -> record<config: record<empty: bool, loadFactor: float, threshold: int>, id: string, name: string, parentId: string, providerId: string, providerType: string, subType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/components/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/components/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4150,16 +4150,16 @@ export def "components put" [
   --config: record # shape: {empty?: bool, loadFactor?: float, threshold?: int}
   --body-id: string
   --name: string
-  --parentId: string
-  --providerId: string
-  --providerType: string
-  --subType: string
+  --parent-id: string
+  --provider-id: string
+  --provider-type: string
+  --sub-type: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/components/($id)")
-  let body = {config: $config, id: $body_id, name: $name, parentId: $parentId, providerId: $providerId, providerType: $providerType, subType: $subType} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/components/{id}"))
+  let body = {"config": $config, "id": $body_id, "name": $name, "parentId": $parent_id, "providerId": $provider_id, "providerType": $provider_type, "subType": $sub_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4185,7 +4185,7 @@ export def "components-sub-component-types get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/components/($id)/sub-component-types" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/components/{id}/sub-component-types") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4205,7 +4205,7 @@ export def "credential-registrators get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/credential-registrators")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/credential-registrators"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4227,7 +4227,7 @@ export def "default-default-client-scopes get" [
 ]: nothing -> table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/default-default-client-scopes")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/default-default-client-scopes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4236,7 +4236,7 @@ export def "default-default-client-scopes get" [
 # DELETE /{realm}/default-default-client-scopes/{clientScopeId}
 export def "default-default-client-scopes delete" [
   realm: string
-  clientScopeId: string
+  client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4248,7 +4248,7 @@ export def "default-default-client-scopes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/default-default-client-scopes/($clientScopeId)")
+  let full_url = (build-url $base ({realm: $realm, client_scope_id: $client_scope_id} | format pattern "/{realm}/default-default-client-scopes/{client_scope_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4257,7 +4257,7 @@ export def "default-default-client-scopes delete" [
 # PUT /{realm}/default-default-client-scopes/{clientScopeId}
 export def "default-default-client-scopes put" [
   realm: string
-  clientScopeId: string
+  client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4269,7 +4269,7 @@ export def "default-default-client-scopes put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/default-default-client-scopes/($clientScopeId)")
+  let full_url = (build-url $base ({realm: $realm, client_scope_id: $client_scope_id} | format pattern "/{realm}/default-default-client-scopes/{client_scope_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4291,7 +4291,7 @@ export def "default-groups get" [
 ]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/default-groups")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/default-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4300,7 +4300,7 @@ export def "default-groups get" [
 # DELETE /{realm}/default-groups/{groupId}
 export def "default-groups delete" [
   realm: string
-  groupId: string
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4312,7 +4312,7 @@ export def "default-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/default-groups/($groupId)")
+  let full_url = (build-url $base ({realm: $realm, group_id: $group_id} | format pattern "/{realm}/default-groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4321,7 +4321,7 @@ export def "default-groups delete" [
 # PUT /{realm}/default-groups/{groupId}
 export def "default-groups put" [
   realm: string
-  groupId: string
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4333,7 +4333,7 @@ export def "default-groups put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/default-groups/($groupId)")
+  let full_url = (build-url $base ({realm: $realm, group_id: $group_id} | format pattern "/{realm}/default-groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4355,7 +4355,7 @@ export def "default-optional-client-scopes get" [
 ]: nothing -> table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/default-optional-client-scopes")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/default-optional-client-scopes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4364,7 +4364,7 @@ export def "default-optional-client-scopes get" [
 # DELETE /{realm}/default-optional-client-scopes/{clientScopeId}
 export def "default-optional-client-scopes delete" [
   realm: string
-  clientScopeId: string
+  client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4376,7 +4376,7 @@ export def "default-optional-client-scopes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/default-optional-client-scopes/($clientScopeId)")
+  let full_url = (build-url $base ({realm: $realm, client_scope_id: $client_scope_id} | format pattern "/{realm}/default-optional-client-scopes/{client_scope_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4385,7 +4385,7 @@ export def "default-optional-client-scopes delete" [
 # PUT /{realm}/default-optional-client-scopes/{clientScopeId}
 export def "default-optional-client-scopes put" [
   realm: string
-  clientScopeId: string
+  client_scope_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4397,7 +4397,7 @@ export def "default-optional-client-scopes put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/default-optional-client-scopes/($clientScopeId)")
+  let full_url = (build-url $base ({realm: $realm, client_scope_id: $client_scope_id} | format pattern "/{realm}/default-optional-client-scopes/{client_scope_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4419,7 +4419,7 @@ export def "events delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/events")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/events"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4439,18 +4439,18 @@ export def "events get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --client: string # App or oauth client name
-  --dateFrom: string # From date
-  --dateTo: string # To date
+  --date-from: string # From date
+  --date-to: string # To date
   --first: int # Paging offset (format: int32)
-  --ipAddress: string # IP address
+  --ip-address: string # IP address
   --max: int # Maximum results size (defaults to 100) (format: int32)
   --type: list # The types of events to return
   --user: string # User id
 ]: nothing -> table<clientId: string, details: record, error: string, ipAddress: string, realmId: string, sessionId: string, time: int, type: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "client" $client "scalar") (serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "ipAddress" $ipAddress "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "type" $type "multi") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/events" $qp)
+  let qp = [(serialize-qp "client" $client "scalar") (serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "ipAddress" $ip_address "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "type" $type "multi") (serialize-qp "user" $user "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4472,7 +4472,7 @@ export def "events-config get" [
 ]: nothing -> record<adminEventsDetailsEnabled: bool, adminEventsEnabled: bool, enabledEventTypes: list<string>, eventsEnabled: bool, eventsExpiration: int, eventsListeners: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/events/config")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/events/config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4491,18 +4491,18 @@ export def "events-config put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --adminEventsDetailsEnabled: oneof<nothing, bool>
-  --adminEventsEnabled: oneof<nothing, bool>
-  --enabledEventTypes: list
-  --eventsEnabled: oneof<nothing, bool>
-  --eventsExpiration: int # format: int64
-  --eventsListeners: list
+  --admin-events-details-enabled: oneof<nothing, bool>
+  --admin-events-enabled: oneof<nothing, bool>
+  --enabled-event-types: list
+  --events-enabled: oneof<nothing, bool>
+  --events-expiration: int # format: int64
+  --events-listeners: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/events/config")
-  let body = {adminEventsDetailsEnabled: $adminEventsDetailsEnabled, adminEventsEnabled: $adminEventsEnabled, enabledEventTypes: $enabledEventTypes, eventsEnabled: $eventsEnabled, eventsExpiration: $eventsExpiration, eventsListeners: $eventsListeners} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/events/config"))
+  let body = {"adminEventsDetailsEnabled": $admin_events_details_enabled, "adminEventsEnabled": $admin_events_enabled, "enabledEventTypes": $enabled_event_types, "eventsEnabled": $events_enabled, "eventsExpiration": $events_expiration, "eventsListeners": $events_listeners} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4524,7 +4524,7 @@ export def "group-by-path get" [
 ]: nothing -> record<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/group-by-path/($path)")
+  let full_url = (build-url $base ({realm: $realm, path: $path} | format pattern "/{realm}/group-by-path/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4543,15 +4543,15 @@ export def "groups list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --briefRepresentation: oneof<nothing, bool>
+  --brief-representation: oneof<nothing, bool>
   --first: int # format: int32
   --max: int # format: int32
   --search: string
 ]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "briefRepresentation" $briefRepresentation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/groups" $qp)
+  let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4573,18 +4573,18 @@ export def "groups post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: record
   --attributes: record
-  --clientRoles: record
+  --client-roles: record
   --id: string
   --name: string
   --path: string
-  --realmRoles: list
-  --subGroups: list # item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list, subGroups?: list}
+  --realm-roles: list
+  --sub-groups: list # item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list, subGroups?: list}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups")
-  let body = {access: $access, attributes: $attributes, clientRoles: $clientRoles, id: $id, name: $name, path: $path, realmRoles: $realmRoles, subGroups: $subGroups} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/groups"))
+  let body = {"access": $access, "attributes": $attributes, "clientRoles": $client_roles, "id": $id, "name": $name, "path": $path, "realmRoles": $realm_roles, "subGroups": $sub_groups} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4610,7 +4610,7 @@ export def "groups-count get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/groups/count" $qp)
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/groups/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4631,7 +4631,7 @@ export def "groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4652,7 +4652,7 @@ export def "groups get" [
 ]: nothing -> record<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4675,18 +4675,18 @@ export def "groups put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: record
   --attributes: record
-  --clientRoles: record
+  --client-roles: record
   --body-id: string
   --name: string
   --path: string
-  --realmRoles: list
-  --subGroups: list # item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list, subGroups?: list}
+  --realm-roles: list
+  --sub-groups: list # item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list, subGroups?: list}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)")
-  let body = {access: $access, attributes: $attributes, clientRoles: $clientRoles, id: $body_id, name: $name, path: $path, realmRoles: $realmRoles, subGroups: $subGroups} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}"))
+  let body = {"access": $access, "attributes": $attributes, "clientRoles": $client_roles, "id": $body_id, "name": $name, "path": $path, "realmRoles": $realm_roles, "subGroups": $sub_groups} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4710,18 +4710,18 @@ export def "groups-children post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: record
   --attributes: record
-  --clientRoles: record
+  --client-roles: record
   --body-id: string
   --name: string
   --path: string
-  --realmRoles: list
-  --subGroups: list # item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list, subGroups?: list}
+  --realm-roles: list
+  --sub-groups: list # item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list, subGroups?: list}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/children")
-  let body = {access: $access, attributes: $attributes, clientRoles: $clientRoles, id: $body_id, name: $name, path: $path, realmRoles: $realmRoles, subGroups: $subGroups} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}/children"))
+  let body = {"access": $access, "attributes": $attributes, "clientRoles": $client_roles, "id": $body_id, "name": $name, "path": $path, "realmRoles": $realm_roles, "subGroups": $sub_groups} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4745,7 +4745,7 @@ export def "groups-management-permissions get" [
 ]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/management/permissions")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}/management/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4767,13 +4767,13 @@ export def "groups-management-permissions put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool>
   --resource: string
-  --scopePermissions: record
+  --scope-permissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/management/permissions")
-  let body = {enabled: $enabled, resource: $resource, scopePermissions: $scopePermissions} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}/management/permissions"))
+  let body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4794,14 +4794,14 @@ export def "groups-members get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --briefRepresentation: oneof<nothing, bool> # Only return basic information (only guaranteed to return id, username, created, first and last name,  email, enabled state, email verification state, federation link, and access.  Note that it means that namely user attributes, required actions, and not before are not returned.)
+  --brief-representation: oneof<nothing, bool> # Only return basic information (only guaranteed to return id, username, created, first and last name,  email, enabled state, email verification state, federation link, and access.  Note that it means that namely user attributes, required actions, and not before are not returned.)
   --first: int # Pagination offset (format: int32)
   --max: int # Maximum results size (defaults to 100) (format: int32)
 ]: nothing -> table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "briefRepresentation" $briefRepresentation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/groups/($id)/members" $qp)
+  let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4824,7 +4824,7 @@ export def "groups-role-mappings get" [
 ]: nothing -> record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}/role-mappings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4850,7 +4850,7 @@ export def "groups-role-mappings-clients delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4875,7 +4875,7 @@ export def "groups-role-mappings-clients get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4901,7 +4901,7 @@ export def "groups-role-mappings-clients post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4926,7 +4926,7 @@ export def "groups-role-mappings-clients-available get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings/clients/($client)/available")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}/available"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4950,7 +4950,7 @@ export def "groups-role-mappings-clients-composite get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings/clients/($client)/composite")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/groups/{id}/role-mappings/clients/{client}/composite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4975,7 +4975,7 @@ export def "groups-role-mappings-realm delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}/role-mappings/realm"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4999,7 +4999,7 @@ export def "groups-role-mappings-realm get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}/role-mappings/realm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5024,7 +5024,7 @@ export def "groups-role-mappings-realm post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}/role-mappings/realm"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5048,7 +5048,7 @@ export def "groups-role-mappings-realm-available get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings/realm/available")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}/role-mappings/realm/available"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5071,7 +5071,7 @@ export def "groups-role-mappings-realm-composite get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/groups/($id)/role-mappings/realm/composite")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/groups/{id}/role-mappings/realm/composite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5093,7 +5093,7 @@ export def "identity-provider-import-config post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/import-config")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/identity-provider/import-config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5115,7 +5115,7 @@ export def "identity-provider-instances list" [
 ]: nothing -> table<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/identity-provider/instances"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5134,24 +5134,24 @@ export def "identity-provider-instances post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --addReadTokenRoleOnCreate: oneof<nothing, bool>
+  --add-read-token-role-on-create: oneof<nothing, bool>
   --alias: string
   --config: record
-  --displayName: string
+  --display-name: string
   --enabled: oneof<nothing, bool>
-  --firstBrokerLoginFlowAlias: string
-  --internalId: string
-  --linkOnly: oneof<nothing, bool>
-  --postBrokerLoginFlowAlias: string
-  --providerId: string
-  --storeToken: oneof<nothing, bool>
-  --trustEmail: oneof<nothing, bool>
+  --first-broker-login-flow-alias: string
+  --internal-id: string
+  --link-only: oneof<nothing, bool>
+  --post-broker-login-flow-alias: string
+  --provider-id: string
+  --store-token: oneof<nothing, bool>
+  --trust-email: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances")
-  let body = {addReadTokenRoleOnCreate: $addReadTokenRoleOnCreate, alias: $alias, config: $config, displayName: $displayName, enabled: $enabled, firstBrokerLoginFlowAlias: $firstBrokerLoginFlowAlias, internalId: $internalId, linkOnly: $linkOnly, postBrokerLoginFlowAlias: $postBrokerLoginFlowAlias, providerId: $providerId, storeToken: $storeToken, trustEmail: $trustEmail} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/identity-provider/instances"))
+  let body = {"addReadTokenRoleOnCreate": $add_read_token_role_on_create, "alias": $alias, "config": $config, "displayName": $display_name, "enabled": $enabled, "firstBrokerLoginFlowAlias": $first_broker_login_flow_alias, "internalId": $internal_id, "linkOnly": $link_only, "postBrokerLoginFlowAlias": $post_broker_login_flow_alias, "providerId": $provider_id, "storeToken": $store_token, "trustEmail": $trust_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5175,7 +5175,7 @@ export def "identity-provider-instances delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/identity-provider/instances/{alias}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5198,7 +5198,7 @@ export def "identity-provider-instances get" [
 ]: nothing -> record<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/identity-provider/instances/{alias}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5218,24 +5218,24 @@ export def "identity-provider-instances put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --addReadTokenRoleOnCreate: oneof<nothing, bool>
+  --add-read-token-role-on-create: oneof<nothing, bool>
   --body-alias: string
   --config: record
-  --displayName: string
+  --display-name: string
   --enabled: oneof<nothing, bool>
-  --firstBrokerLoginFlowAlias: string
-  --internalId: string
-  --linkOnly: oneof<nothing, bool>
-  --postBrokerLoginFlowAlias: string
-  --providerId: string
-  --storeToken: oneof<nothing, bool>
-  --trustEmail: oneof<nothing, bool>
+  --first-broker-login-flow-alias: string
+  --internal-id: string
+  --link-only: oneof<nothing, bool>
+  --post-broker-login-flow-alias: string
+  --provider-id: string
+  --store-token: oneof<nothing, bool>
+  --trust-email: oneof<nothing, bool>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)")
-  let body = {addReadTokenRoleOnCreate: $addReadTokenRoleOnCreate, alias: $body_alias, config: $config, displayName: $displayName, enabled: $enabled, firstBrokerLoginFlowAlias: $firstBrokerLoginFlowAlias, internalId: $internalId, linkOnly: $linkOnly, postBrokerLoginFlowAlias: $postBrokerLoginFlowAlias, providerId: $providerId, storeToken: $storeToken, trustEmail: $trustEmail} | compact
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/identity-provider/instances/{alias}"))
+  let body = {"addReadTokenRoleOnCreate": $add_read_token_role_on_create, "alias": $body_alias, "config": $config, "displayName": $display_name, "enabled": $enabled, "firstBrokerLoginFlowAlias": $first_broker_login_flow_alias, "internalId": $internal_id, "linkOnly": $link_only, "postBrokerLoginFlowAlias": $post_broker_login_flow_alias, "providerId": $provider_id, "storeToken": $store_token, "trustEmail": $trust_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5261,7 +5261,7 @@ export def "identity-provider-instances-export get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)/export" $qp)
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/identity-provider/instances/{alias}/export") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5284,7 +5284,7 @@ export def "identity-provider-instances-management-permissions get" [
 ]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)/management/permissions")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/identity-provider/instances/{alias}/management/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5306,13 +5306,13 @@ export def "identity-provider-instances-management-permissions put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool>
   --resource: string
-  --scopePermissions: record
+  --scope-permissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)/management/permissions")
-  let body = {enabled: $enabled, resource: $resource, scopePermissions: $scopePermissions} | compact
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/identity-provider/instances/{alias}/management/permissions"))
+  let body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5336,7 +5336,7 @@ export def "identity-provider-instances-mapper-types get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)/mapper-types")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/identity-provider/instances/{alias}/mapper-types"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5359,7 +5359,7 @@ export def "identity-provider-instances-mappers list" [
 ]: nothing -> table<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)/mappers")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5381,15 +5381,15 @@ export def "identity-provider-instances-mappers post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --config: record
   --id: string
-  --identityProviderAlias: string
-  --identityProviderMapper: string
+  --identity-provider-alias: string
+  --identity-provider-mapper: string
   --name: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)/mappers")
-  let body = {config: $config, id: $id, identityProviderAlias: $identityProviderAlias, identityProviderMapper: $identityProviderMapper, name: $name} | compact
+  let full_url = (build-url $base ({realm: $realm, alias: $alias} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers"))
+  let body = {"config": $config, "id": $id, "identityProviderAlias": $identity_provider_alias, "identityProviderMapper": $identity_provider_mapper, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5414,7 +5414,7 @@ export def "identity-provider-instances-mappers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)/mappers/($id)")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias, id: $id} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5438,7 +5438,7 @@ export def "identity-provider-instances-mappers get" [
 ]: nothing -> record<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)/mappers/($id)")
+  let full_url = (build-url $base ({realm: $realm, alias: $alias, id: $id} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5461,15 +5461,15 @@ export def "identity-provider-instances-mappers put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --config: record
   --body-id: string
-  --identityProviderAlias: string
-  --identityProviderMapper: string
+  --identity-provider-alias: string
+  --identity-provider-mapper: string
   --name: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/instances/($alias)/mappers/($id)")
-  let body = {config: $config, id: $body_id, identityProviderAlias: $identityProviderAlias, identityProviderMapper: $identityProviderMapper, name: $name} | compact
+  let full_url = (build-url $base ({realm: $realm, alias: $alias, id: $id} | format pattern "/{realm}/identity-provider/instances/{alias}/mappers/{id}"))
+  let body = {"config": $config, "id": $body_id, "identityProviderAlias": $identity_provider_alias, "identityProviderMapper": $identity_provider_mapper, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5493,7 +5493,7 @@ export def "identity-provider-providers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/identity-provider/providers/($provider_id)")
+  let full_url = (build-url $base ({realm: $realm, provider_id: $provider_id} | format pattern "/{realm}/identity-provider/providers/{provider_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5513,7 +5513,7 @@ export def "keys get" [
 ]: nothing -> record<active: record, keys: table<algorithm: string, certificate: string, kid: string, providerId: string, providerPriority: int, publicKey: string, status: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/keys")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5535,7 +5535,7 @@ export def "logout-all post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/logout-all")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/logout-all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5554,13 +5554,13 @@ export def "partial-export post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --exportClients: oneof<nothing, bool>
-  --exportGroupsAndRoles: oneof<nothing, bool>
+  --export-clients: oneof<nothing, bool>
+  --export-groups-and-roles: oneof<nothing, bool>
 ]: nothing -> record<accessCodeLifespan: int, accessCodeLifespanLogin: int, accessCodeLifespanUserAction: int, accessTokenLifespan: int, accessTokenLifespanForImplicitFlow: int, accountTheme: string, actionTokenGeneratedByAdminLifespan: int, actionTokenGeneratedByUserLifespan: int, adminEventsDetailsEnabled: bool, adminEventsEnabled: bool, adminTheme: string, attributes: record, authenticationFlows: table<alias: string, authenticationExecutions: list, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool>, authenticatorConfig: table<alias: string, config: record, id: string>, browserFlow: string, browserSecurityHeaders: record, bruteForceProtected: bool, clientAuthenticationFlow: string, clientScopeMappings: record, clientScopes: table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list>, clientSessionIdleTimeout: int, clientSessionMaxLifespan: int, clients: table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list, defaultRoles: list, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list, origin: string, protocol: string, protocolMappers: list, publicClient: bool, redirectUris: list, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list>, components: record<empty: bool, loadFactor: float, threshold: int>, defaultDefaultClientScopes: list<string>, defaultGroups: list<string>, defaultLocale: string, defaultOptionalClientScopes: list<string>, defaultRoles: list<string>, defaultSignatureAlgorithm: string, directGrantFlow: string, displayName: string, displayNameHtml: string, dockerAuthenticationFlow: string, duplicateEmailsAllowed: bool, editUsernameAllowed: bool, emailTheme: string, enabled: bool, enabledEventTypes: list<string>, eventsEnabled: bool, eventsExpiration: int, eventsListeners: list<string>, failureFactor: int, federatedUsers: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, groups: table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list, subGroups: list>, id: string, identityProviderMappers: table<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string>, identityProviders: table<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool>, internationalizationEnabled: bool, keycloakVersion: string, loginTheme: string, loginWithEmailAllowed: bool, maxDeltaTimeSeconds: int, maxFailureWaitSeconds: int, minimumQuickLoginWaitSeconds: int, notBefore: int, offlineSessionIdleTimeout: int, offlineSessionMaxLifespan: int, offlineSessionMaxLifespanEnabled: bool, otpPolicyAlgorithm: string, otpPolicyDigits: int, otpPolicyInitialCounter: int, otpPolicyLookAheadWindow: int, otpPolicyPeriod: int, otpPolicyType: string, otpSupportedApplications: list<string>, passwordPolicy: string, permanentLockout: bool, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, quickLoginCheckMilliSeconds: int, realm: string, refreshTokenMaxReuse: int, registrationAllowed: bool, registrationEmailAsUsername: bool, registrationFlow: string, rememberMe: bool, requiredActions: table<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string>, resetCredentialsFlow: string, resetPasswordAllowed: bool, revokeRefreshToken: bool, roles: record<client: record, realm: list<record>>, scopeMappings: table<client: string, clientScope: string, roles: list, self: string>, smtpServer: record, sslRequired: string, ssoSessionIdleTimeout: int, ssoSessionIdleTimeoutRememberMe: int, ssoSessionMaxLifespan: int, ssoSessionMaxLifespanRememberMe: int, supportedLocales: list<string>, userFederationMappers: table<config: record, federationMapperType: string, federationProviderDisplayName: string, id: string, name: string>, userFederationProviders: table<changedSyncPeriod: int, config: record, displayName: string, fullSyncPeriod: int, id: string, lastSync: int, priority: int, providerName: string>, userManagedAccessAllowed: bool, users: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, verifyEmail: bool, waitIncrementSeconds: int, webAuthnPolicyAcceptableAaguids: list<string>, webAuthnPolicyAttestationConveyancePreference: string, webAuthnPolicyAuthenticatorAttachment: string, webAuthnPolicyAvoidSameAuthenticatorRegister: bool, webAuthnPolicyCreateTimeout: int, webAuthnPolicyPasswordlessAcceptableAaguids: list<string>, webAuthnPolicyPasswordlessAttestationConveyancePreference: string, webAuthnPolicyPasswordlessAuthenticatorAttachment: string, webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: bool, webAuthnPolicyPasswordlessCreateTimeout: int, webAuthnPolicyPasswordlessRequireResidentKey: string, webAuthnPolicyPasswordlessRpEntityName: string, webAuthnPolicyPasswordlessRpId: string, webAuthnPolicyPasswordlessSignatureAlgorithms: list<string>, webAuthnPolicyPasswordlessUserVerificationRequirement: string, webAuthnPolicyRequireResidentKey: string, webAuthnPolicyRpEntityName: string, webAuthnPolicyRpId: string, webAuthnPolicySignatureAlgorithms: list<string>, webAuthnPolicyUserVerificationRequirement: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "exportClients" $exportClients "scalar") (serialize-qp "exportGroupsAndRoles" $exportGroupsAndRoles "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/partial-export" $qp)
+  let qp = [(serialize-qp "exportClients" $export_clients "scalar") (serialize-qp "exportGroupsAndRoles" $export_groups_and_roles "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/partial-export") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5586,8 +5586,8 @@ export def "partial-import post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --clients: list # item shape: {access?: record, adminUrl?: string, alwaysDisplayInConsole?: bool, attributes?: record, authenticationFlowBindingOverrides?: record, authorizationServicesEnabled?: bool, authorizationSettings?: record, baseUrl?: string, bearerOnly?: bool, clientAuthenticatorType?: string, clientId?: string, consentRequired?: bool, defaultClientScopes?: list, defaultRoles?: list, description?: string, directAccessGrantsEnabled?: bool, enabled?: bool, frontchannelLogout?: bool, fullScopeAllowed?: bool, id?: string, implicitFlowEnabled?: bool, name?: string, nodeReRegistrationTimeout?: int, notBefore?: int, optionalClientScopes?: list, origin?: string, protocol?: string, protocolMappers?: list, publicClient?: bool, redirectUris?: list, registeredNodes?: record, registrationAccessToken?: string, rootUrl?: string, secret?: string, serviceAccountsEnabled?: bool, standardFlowEnabled?: bool, surrogateAuthRequired?: bool, webOrigins?: list}
   --groups: list # item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list, subGroups?: list}
-  --identityProviders: list # item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
-  --ifResourceExists: string
+  --identity-providers: list # item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
+  --if-resource-exists: string
   --policy: string@policy-completer
   --roles: record # shape: {client?: record, realm?: list}
   --users: list # item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list, requiredActions?: list, self?: string, serviceAccountClientId?: string, username?: string}
@@ -5595,8 +5595,8 @@ export def "partial-import post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/partialImport")
-  let body = {clients: $clients, groups: $groups, identityProviders: $identityProviders, ifResourceExists: $ifResourceExists, policy: $policy, roles: $roles, users: $users} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/partialImport"))
+  let body = {"clients": $clients, "groups": $groups, "identityProviders": $identity_providers, "ifResourceExists": $if_resource_exists, "policy": $policy, "roles": $roles, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5619,7 +5619,7 @@ export def "push-revocation post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/push-revocation")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/push-revocation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5638,15 +5638,15 @@ export def "roles list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --briefRepresentation: oneof<nothing, bool>
+  --brief-representation: oneof<nothing, bool>
   --first: int # format: int32
   --max: int # format: int32
   --search: string
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "briefRepresentation" $briefRepresentation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/roles" $qp)
+  let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/roles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5667,10 +5667,10 @@ export def "roles post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
-  --clientRole: oneof<nothing, bool>
+  --client-role: oneof<nothing, bool>
   --composite: oneof<nothing, bool>
   --composites: record # shape: {client?: record, realm?: list}
-  --containerId: string
+  --container-id: string
   --description: string
   --id: string
   --name: string
@@ -5678,8 +5678,8 @@ export def "roles post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles")
-  let body = {attributes: $attributes, clientRole: $clientRole, composite: $composite, composites: $composites, containerId: $containerId, description: $description, id: $id, name: $name} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/roles"))
+  let body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5703,7 +5703,7 @@ export def "roles-by-id delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles-by-id/($role_id)")
+  let full_url = (build-url $base ({realm: $realm, role_id: $role_id} | format pattern "/{realm}/roles-by-id/{role_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5726,7 +5726,7 @@ export def "roles-by-id get" [
 ]: nothing -> record<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list<string>>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles-by-id/($role_id)")
+  let full_url = (build-url $base ({realm: $realm, role_id: $role_id} | format pattern "/{realm}/roles-by-id/{role_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5748,10 +5748,10 @@ export def "roles-by-id put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
-  --clientRole: oneof<nothing, bool>
+  --client-role: oneof<nothing, bool>
   --composite: oneof<nothing, bool>
   --composites: record # shape: {client?: record, realm?: list}
-  --containerId: string
+  --container-id: string
   --description: string
   --id: string
   --name: string
@@ -5759,8 +5759,8 @@ export def "roles-by-id put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles-by-id/($role_id)")
-  let body = {attributes: $attributes, clientRole: $clientRole, composite: $composite, composites: $composites, containerId: $containerId, description: $description, id: $id, name: $name} | compact
+  let full_url = (build-url $base ({realm: $realm, role_id: $role_id} | format pattern "/{realm}/roles-by-id/{role_id}"))
+  let body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5786,7 +5786,7 @@ export def "roles-by-id-composites delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles-by-id/($role_id)/composites")
+  let full_url = (build-url $base ({realm: $realm, role_id: $role_id} | format pattern "/{realm}/roles-by-id/{role_id}/composites"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5810,7 +5810,7 @@ export def "roles-by-id-composites get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles-by-id/($role_id)/composites")
+  let full_url = (build-url $base ({realm: $realm, role_id: $role_id} | format pattern "/{realm}/roles-by-id/{role_id}/composites"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5835,7 +5835,7 @@ export def "roles-by-id-composites post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles-by-id/($role_id)/composites")
+  let full_url = (build-url $base ({realm: $realm, role_id: $role_id} | format pattern "/{realm}/roles-by-id/{role_id}/composites"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5860,7 +5860,7 @@ export def "roles-by-id-composites-clients get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles-by-id/($role_id)/composites/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, role_id: $role_id, client: $client} | format pattern "/{realm}/roles-by-id/{role_id}/composites/clients/{client}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5883,7 +5883,7 @@ export def "roles-by-id-composites-realm get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles-by-id/($role_id)/composites/realm")
+  let full_url = (build-url $base ({realm: $realm, role_id: $role_id} | format pattern "/{realm}/roles-by-id/{role_id}/composites/realm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5906,7 +5906,7 @@ export def "roles-by-id-management-permissions get" [
 ]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles-by-id/($role_id)/management/permissions")
+  let full_url = (build-url $base ({realm: $realm, role_id: $role_id} | format pattern "/{realm}/roles-by-id/{role_id}/management/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5928,13 +5928,13 @@ export def "roles-by-id-management-permissions put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool>
   --resource: string
-  --scopePermissions: record
+  --scope-permissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles-by-id/($role_id)/management/permissions")
-  let body = {enabled: $enabled, resource: $resource, scopePermissions: $scopePermissions} | compact
+  let full_url = (build-url $base ({realm: $realm, role_id: $role_id} | format pattern "/{realm}/roles-by-id/{role_id}/management/permissions"))
+  let body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5958,7 +5958,7 @@ export def "roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)")
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5981,7 +5981,7 @@ export def "roles get" [
 ]: nothing -> record<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list<string>>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)")
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6003,10 +6003,10 @@ export def "roles put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --attributes: record
-  --clientRole: oneof<nothing, bool>
+  --client-role: oneof<nothing, bool>
   --composite: oneof<nothing, bool>
   --composites: record # shape: {client?: record, realm?: list}
-  --containerId: string
+  --container-id: string
   --description: string
   --id: string
   --name: string
@@ -6014,8 +6014,8 @@ export def "roles put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)")
-  let body = {attributes: $attributes, clientRole: $clientRole, composite: $composite, composites: $composites, containerId: $containerId, description: $description, id: $id, name: $name} | compact
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}"))
+  let body = {"attributes": $attributes, "clientRole": $client_role, "composite": $composite, "composites": $composites, "containerId": $container_id, "description": $description, "id": $id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6041,7 +6041,7 @@ export def "roles-composites delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)/composites")
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}/composites"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6065,7 +6065,7 @@ export def "roles-composites get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)/composites")
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}/composites"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6090,7 +6090,7 @@ export def "roles-composites post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)/composites")
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}/composites"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6115,7 +6115,7 @@ export def "roles-composites-clients get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)/composites/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name, client: $client} | format pattern "/{realm}/roles/{role_name}/composites/clients/{client}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6138,7 +6138,7 @@ export def "roles-composites-realm get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)/composites/realm")
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}/composites/realm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6158,14 +6158,14 @@ export def "roles-groups get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --briefRepresentation: oneof<nothing, bool> # if false, return a full representation of the GroupRepresentation objects
+  --brief-representation: oneof<nothing, bool> # if false, return a full representation of the GroupRepresentation objects
   --first: int # format: int32
   --max: int # format: int32
 ]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "briefRepresentation" $briefRepresentation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)/groups" $qp)
+  let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6188,7 +6188,7 @@ export def "roles-management-permissions get" [
 ]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)/management/permissions")
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}/management/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6210,13 +6210,13 @@ export def "roles-management-permissions put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool>
   --resource: string
-  --scopePermissions: record
+  --scope-permissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)/management/permissions")
-  let body = {enabled: $enabled, resource: $resource, scopePermissions: $scopePermissions} | compact
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}/management/permissions"))
+  let body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6243,7 +6243,7 @@ export def "roles-users get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/roles/($role_name)/users" $qp)
+  let full_url = (build-url $base ({realm: $realm, role_name: $role_name} | format pattern "/{realm}/roles/{role_name}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6266,7 +6266,7 @@ export def "sessions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/sessions/($session)")
+  let full_url = (build-url $base ({realm: $realm, session: $session} | format pattern "/{realm}/sessions/{session}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6286,19 +6286,19 @@ export def "test-ldap-connection post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string
-  --bindCredential: string
-  --bindDn: string
-  --componentId: string
-  --connectionTimeout: string
-  --connectionUrl: string
-  --startTls: string
-  --useTruststoreSpi: string
+  --bind-credential: string
+  --bind-dn: string
+  --component-id: string
+  --connection-timeout: string
+  --connection-url: string
+  --start-tls: string
+  --use-truststore-spi: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/testLDAPConnection")
-  let body = {action: $action, bindCredential: $bindCredential, bindDn: $bindDn, componentId: $componentId, connectionTimeout: $connectionTimeout, connectionUrl: $connectionUrl, startTls: $startTls, useTruststoreSpi: $useTruststoreSpi} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/testLDAPConnection"))
+  let body = {"action": $action, "bindCredential": $bind_credential, "bindDn": $bind_dn, "componentId": $component_id, "connectionTimeout": $connection_timeout, "connectionUrl": $connection_url, "startTls": $start_tls, "useTruststoreSpi": $use_truststore_spi} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6321,7 +6321,7 @@ export def "test-smtp-connection post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/testSMTPConnection")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/testSMTPConnection"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6345,7 +6345,7 @@ export def "user-storage-name get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/user-storage/($id)/name")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/user-storage/{id}/name"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6368,7 +6368,7 @@ export def "user-storage-remove-imported-users post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/user-storage/($id)/remove-imported-users")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/user-storage/{id}/remove-imported-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6393,7 +6393,7 @@ export def "user-storage-sync post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/user-storage/($id)/sync" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/user-storage/{id}/sync") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6416,7 +6416,7 @@ export def "user-storage-unlink-users post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/user-storage/($id)/unlink-users")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/user-storage/{id}/unlink-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6427,7 +6427,7 @@ export def "user-storage-unlink-users post" [
 # POST /{realm}/user-storage/{parentId}/mappers/{id}/sync
 export def "user-storage-mappers-sync post" [
   realm: string
-  parentId: string
+  parent_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6442,7 +6442,7 @@ export def "user-storage-mappers-sync post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/user-storage/($parentId)/mappers/($id)/sync" $qp)
+  let full_url = (build-url $base ({realm: $realm, parent_id: $parent_id, id: $id} | format pattern "/{realm}/user-storage/{parent_id}/mappers/{id}/sync") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6461,19 +6461,19 @@ export def "users list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --briefRepresentation: oneof<nothing, bool>
+  --brief-representation: oneof<nothing, bool>
   --email: string
   --first: int # format: int32
-  --firstName: string
-  --lastName: string
+  --first-name: string
+  --last-name: string
   --max: int # Maximum results size (defaults to 100) (format: int32)
   --search: string # A String contained in username, first or last name, or email
   --username: string
 ]: nothing -> table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "briefRepresentation" $briefRepresentation "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/users" $qp)
+  let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6497,33 +6497,33 @@ export def "users post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: record
   --attributes: record
-  --clientConsents: list # item shape: {clientId?: string, createdDate?: int, grantedClientScopes?: list, lastUpdatedDate?: int}
-  --clientRoles: record
-  --createdTimestamp: int # format: int64
+  --client-consents: list # item shape: {clientId?: string, createdDate?: int, grantedClientScopes?: list, lastUpdatedDate?: int}
+  --client-roles: record
+  --created-timestamp: int # format: int64
   --credentials: list # item shape: {createdDate?: int, credentialData?: string, id?: string, priority?: int, secretData?: string, temporary?: bool, type?: string, userLabel?: string, value?: string}
-  --disableableCredentialTypes: list
+  --disableable-credential-types: list
   --email: string
-  --emailVerified: oneof<nothing, bool>
+  --email-verified: oneof<nothing, bool>
   --enabled: oneof<nothing, bool>
-  --federatedIdentities: list # item shape: {identityProvider?: string, userId?: string, userName?: string}
-  --federationLink: string
-  --firstName: string
+  --federated-identities: list # item shape: {identityProvider?: string, userId?: string, userName?: string}
+  --federation-link: string
+  --first-name: string
   --groups: list
   --id: string
-  --lastName: string
-  --notBefore: int # format: int32
+  --last-name: string
+  --not-before: int # format: int32
   --origin: string
-  --realmRoles: list
-  --requiredActions: list
+  --realm-roles: list
+  --required-actions: list
   --self: string
-  --serviceAccountClientId: string
+  --service-account-client-id: string
   --username: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users")
-  let body = {access: $access, attributes: $attributes, clientConsents: $clientConsents, clientRoles: $clientRoles, createdTimestamp: $createdTimestamp, credentials: $credentials, disableableCredentialTypes: $disableableCredentialTypes, email: $email, emailVerified: $emailVerified, enabled: $enabled, federatedIdentities: $federatedIdentities, federationLink: $federationLink, firstName: $firstName, groups: $groups, id: $id, lastName: $lastName, notBefore: $notBefore, origin: $origin, realmRoles: $realmRoles, requiredActions: $requiredActions, self: $self, serviceAccountClientId: $serviceAccountClientId, username: $username} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/users"))
+  let body = {"access": $access, "attributes": $attributes, "clientConsents": $client_consents, "clientRoles": $client_roles, "createdTimestamp": $created_timestamp, "credentials": $credentials, "disableableCredentialTypes": $disableable_credential_types, "email": $email, "emailVerified": $email_verified, "enabled": $enabled, "federatedIdentities": $federated_identities, "federationLink": $federation_link, "firstName": $first_name, "groups": $groups, "id": $id, "lastName": $last_name, "notBefore": $not_before, "origin": $origin, "realmRoles": $realm_roles, "requiredActions": $required_actions, "self": $self, "serviceAccountClientId": $service_account_client_id, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6544,7 +6544,7 @@ export def "users-management-permissions get" [
 ]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users-management-permissions")
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/users-management-permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6563,13 +6563,13 @@ export def "users-management-permissions put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool>
   --resource: string
-  --scopePermissions: record
+  --scope-permissions: record
 ]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users-management-permissions")
-  let body = {enabled: $enabled, resource: $resource, scopePermissions: $scopePermissions} | compact
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/users-management-permissions"))
+  let body = {"enabled": $enabled, "resource": $resource, "scopePermissions": $scope_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6590,15 +6590,15 @@ export def "users-count get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # email filter
-  --firstName: string # first name filter
-  --lastName: string # last name filter
+  --first-name: string # first name filter
+  --last-name: string # last name filter
   --search: string # arbitrary search string for all the fields below
   --username: string # username filter
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/users/count" $qp)
+  let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm} | format pattern "/{realm}/users/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6621,7 +6621,7 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6644,7 +6644,7 @@ export def "users get" [
 ]: nothing -> record<access: record, attributes: record, clientConsents: table<clientId: string, createdDate: int, grantedClientScopes: list, lastUpdatedDate: int>, clientRoles: record, createdTimestamp: int, credentials: table<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: table<identityProvider: string, userId: string, userName: string>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6669,33 +6669,33 @@ export def "users put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: record
   --attributes: record
-  --clientConsents: list # item shape: {clientId?: string, createdDate?: int, grantedClientScopes?: list, lastUpdatedDate?: int}
-  --clientRoles: record
-  --createdTimestamp: int # format: int64
+  --client-consents: list # item shape: {clientId?: string, createdDate?: int, grantedClientScopes?: list, lastUpdatedDate?: int}
+  --client-roles: record
+  --created-timestamp: int # format: int64
   --credentials: list # item shape: {createdDate?: int, credentialData?: string, id?: string, priority?: int, secretData?: string, temporary?: bool, type?: string, userLabel?: string, value?: string}
-  --disableableCredentialTypes: list
+  --disableable-credential-types: list
   --email: string
-  --emailVerified: oneof<nothing, bool>
+  --email-verified: oneof<nothing, bool>
   --enabled: oneof<nothing, bool>
-  --federatedIdentities: list # item shape: {identityProvider?: string, userId?: string, userName?: string}
-  --federationLink: string
-  --firstName: string
+  --federated-identities: list # item shape: {identityProvider?: string, userId?: string, userName?: string}
+  --federation-link: string
+  --first-name: string
   --groups: list
   --body-id: string
-  --lastName: string
-  --notBefore: int # format: int32
+  --last-name: string
+  --not-before: int # format: int32
   --origin: string
-  --realmRoles: list
-  --requiredActions: list
+  --realm-roles: list
+  --required-actions: list
   --self: string
-  --serviceAccountClientId: string
+  --service-account-client-id: string
   --username: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)")
-  let body = {access: $access, attributes: $attributes, clientConsents: $clientConsents, clientRoles: $clientRoles, createdTimestamp: $createdTimestamp, credentials: $credentials, disableableCredentialTypes: $disableableCredentialTypes, email: $email, emailVerified: $emailVerified, enabled: $enabled, federatedIdentities: $federatedIdentities, federationLink: $federationLink, firstName: $firstName, groups: $groups, id: $body_id, lastName: $lastName, notBefore: $notBefore, origin: $origin, realmRoles: $realmRoles, requiredActions: $requiredActions, self: $self, serviceAccountClientId: $serviceAccountClientId, username: $username} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}"))
+  let body = {"access": $access, "attributes": $attributes, "clientConsents": $client_consents, "clientRoles": $client_roles, "createdTimestamp": $created_timestamp, "credentials": $credentials, "disableableCredentialTypes": $disableable_credential_types, "email": $email, "emailVerified": $email_verified, "enabled": $enabled, "federatedIdentities": $federated_identities, "federationLink": $federation_link, "firstName": $first_name, "groups": $groups, "id": $body_id, "lastName": $last_name, "notBefore": $not_before, "origin": $origin, "realmRoles": $realm_roles, "requiredActions": $required_actions, "self": $self, "serviceAccountClientId": $service_account_client_id, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6719,7 +6719,7 @@ export def "users-configured-user-storage-credential-types get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/configured-user-storage-credential-types")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/configured-user-storage-credential-types"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6742,7 +6742,7 @@ export def "users-consents get" [
 ]: nothing -> list<record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/consents")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/consents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6766,7 +6766,7 @@ export def "users-consents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/consents/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/users/{id}/consents/{client}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6787,7 +6787,7 @@ export def "users-credentials get" [
 ]: nothing -> table<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/credentials")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/credentials"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6799,7 +6799,7 @@ export def "users-credentials get" [
 export def "users-credentials delete" [
   realm: string
   id: string
-  credentialId: string
+  credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6811,7 +6811,7 @@ export def "users-credentials delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/credentials/($credentialId)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, credential_id: $credential_id} | format pattern "/{realm}/users/{id}/credentials/{credential_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6823,8 +6823,8 @@ export def "users-credentials delete" [
 export def "users-credentials-move-after post" [
   realm: string
   id: string
-  credentialId: string
-  newPreviousCredentialId: string
+  credential_id: string
+  new_previous_credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6836,7 +6836,7 @@ export def "users-credentials-move-after post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/credentials/($credentialId)/moveAfter/($newPreviousCredentialId)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, credential_id: $credential_id, new_previous_credential_id: $new_previous_credential_id} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/moveAfter/{new_previous_credential_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6848,7 +6848,7 @@ export def "users-credentials-move-after post" [
 export def "users-credentials-move-to-first post" [
   realm: string
   id: string
-  credentialId: string
+  credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6860,7 +6860,7 @@ export def "users-credentials-move-to-first post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/credentials/($credentialId)/moveToFirst")
+  let full_url = (build-url $base ({realm: $realm, id: $id, credential_id: $credential_id} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/moveToFirst"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6872,7 +6872,7 @@ export def "users-credentials-move-to-first post" [
 export def "users-credentials-user-label put" [
   realm: string
   id: string
-  credentialId: string
+  credential_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6886,7 +6886,7 @@ export def "users-credentials-user-label put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/credentials/($credentialId)/userLabel")
+  let full_url = (build-url $base ({realm: $realm, id: $id, credential_id: $credential_id} | format pattern "/{realm}/users/{id}/credentials/{credential_id}/userLabel"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6912,7 +6912,7 @@ export def "users-disable-credential-types put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/disable-credential-types")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/disable-credential-types"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6942,7 +6942,7 @@ export def "users-execute-actions-email put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "lifespan" $lifespan "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/users/($id)/execute-actions-email" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/execute-actions-email") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6966,7 +6966,7 @@ export def "users-federated-identity get" [
 ]: nothing -> table<identityProvider: string, userId: string, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/federated-identity")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/federated-identity"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6990,7 +6990,7 @@ export def "users-federated-identity delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/federated-identity/($provider)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, provider: $provider} | format pattern "/{realm}/users/{id}/federated-identity/{provider}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7011,15 +7011,15 @@ export def "users-federated-identity post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --identityProvider: string
-  --userId: string
-  --userName: string
+  --identity-provider: string
+  --user-id: string
+  --user-name: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/federated-identity/($provider)")
-  let body = {identityProvider: $identityProvider, userId: $userId, userName: $userName} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id, provider: $provider} | format pattern "/{realm}/users/{id}/federated-identity/{provider}"))
+  let body = {"identityProvider": $identity_provider, "userId": $user_id, "userName": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7038,15 +7038,15 @@ export def "users-groups get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --briefRepresentation: oneof<nothing, bool>
+  --brief-representation: oneof<nothing, bool>
   --first: int # format: int32
   --max: int # format: int32
   --search: string
 ]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "briefRepresentation" $briefRepresentation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/users/($id)/groups" $qp)
+  let qp = [(serialize-qp "briefRepresentation" $brief_representation "scalar") (serialize-qp "first" $first "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7069,7 +7069,7 @@ export def "users-groups-count get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/users/($id)/groups/count" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/groups/count") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7079,7 +7079,7 @@ export def "users-groups-count get" [
 export def "users-groups delete" [
   realm: string
   id: string
-  groupId: string
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7091,7 +7091,7 @@ export def "users-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/groups/($groupId)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, group_id: $group_id} | format pattern "/{realm}/users/{id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7101,7 +7101,7 @@ export def "users-groups delete" [
 export def "users-groups put" [
   realm: string
   id: string
-  groupId: string
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7113,7 +7113,7 @@ export def "users-groups put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/groups/($groupId)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, group_id: $group_id} | format pattern "/{realm}/users/{id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7136,7 +7136,7 @@ export def "users-impersonation post" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/impersonation")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/impersonation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7159,7 +7159,7 @@ export def "users-logout post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/logout")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/logout"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7171,7 +7171,7 @@ export def "users-logout post" [
 export def "users-offline-sessions get" [
   realm: string
   id: string
-  clientId: string
+  client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7183,7 +7183,7 @@ export def "users-offline-sessions get" [
 ]: nothing -> table<clients: record, id: string, ipAddress: string, lastAccess: int, start: int, userId: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/offline-sessions/($clientId)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client_id: $client_id} | format pattern "/{realm}/users/{id}/offline-sessions/{client_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7203,21 +7203,21 @@ export def "users-reset-password put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --createdDate: int # format: int64
-  --credentialData: string
+  --created-date: int # format: int64
+  --credential-data: string
   --body-id: string
   --priority: int # format: int32
-  --secretData: string
+  --secret-data: string
   --temporary: oneof<nothing, bool>
   --type: string
-  --userLabel: string
+  --user-label: string
   --value: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/reset-password")
-  let body = {createdDate: $createdDate, credentialData: $credentialData, id: $body_id, priority: $priority, secretData: $secretData, temporary: $temporary, type: $type, userLabel: $userLabel, value: $value} | compact
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/reset-password"))
+  let body = {"createdDate": $created_date, "credentialData": $credential_data, "id": $body_id, "priority": $priority, "secretData": $secret_data, "temporary": $temporary, "type": $type, "userLabel": $user_label, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7241,7 +7241,7 @@ export def "users-role-mappings get" [
 ]: nothing -> record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/role-mappings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7267,7 +7267,7 @@ export def "users-role-mappings-clients delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7292,7 +7292,7 @@ export def "users-role-mappings-clients get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7318,7 +7318,7 @@ export def "users-role-mappings-clients post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings/clients/($client)")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7343,7 +7343,7 @@ export def "users-role-mappings-clients-available get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings/clients/($client)/available")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}/available"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7367,7 +7367,7 @@ export def "users-role-mappings-clients-composite get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings/clients/($client)/composite")
+  let full_url = (build-url $base ({realm: $realm, id: $id, client: $client} | format pattern "/{realm}/users/{id}/role-mappings/clients/{client}/composite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7392,7 +7392,7 @@ export def "users-role-mappings-realm delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/role-mappings/realm"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7416,7 +7416,7 @@ export def "users-role-mappings-realm get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/role-mappings/realm"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7441,7 +7441,7 @@ export def "users-role-mappings-realm post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings/realm")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/role-mappings/realm"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7465,7 +7465,7 @@ export def "users-role-mappings-realm-available get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings/realm/available")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/role-mappings/realm/available"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7488,7 +7488,7 @@ export def "users-role-mappings-realm-composite get" [
 ]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/role-mappings/realm/composite")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/role-mappings/realm/composite"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7514,7 +7514,7 @@ export def "users-send-verify-email put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($realm)/users/($id)/send-verify-email" $qp)
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/send-verify-email") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7537,7 +7537,7 @@ export def "users-sessions get" [
 ]: nothing -> table<clients: record, id: string, ipAddress: string, lastAccess: int, start: int, userId: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($realm)/users/($id)/sessions")
+  let full_url = (build-url $base ({realm: $realm, id: $id} | format pattern "/{realm}/users/{id}/sessions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

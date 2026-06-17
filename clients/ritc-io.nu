@@ -66,18 +66,18 @@ def base-url-completer [] { ["https://api.ritc.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def authType-completer [] { ["apikey" "basic" "none" "oauth2"] }
+def auth-type-completer [] { ["apikey" "basic" "none" "oauth2"] }
 def status-completer [] { ["active" "inactive"] }
-def apiType-completer [] { ["Internal" "REST" "SDK"] }
-def httpMethod-completer [] { ["DELETE" "GET" "PATCH" "POST"] }
-def responseFormat-completer [] { ["Html" "Json" "Text" "Xml"] }
+def api-type-completer [] { ["Internal" "REST" "SDK"] }
+def http-method-completer [] { ["DELETE" "GET" "PATCH" "POST"] }
+def response-format-completer [] { ["Html" "Json" "Text" "Xml"] }
 def type-completer [] { ["action" "trigger"] }
 def type-completer-1 [] { ["admin" "guest"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions listActions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /actions
 # operationId: listActions
-export def "actions listActions" [
+export def "actions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -123,7 +123,7 @@ export def "actions listActions" [
 #
 # POST /actions
 # operationId: addAction
-export def "actions addAction" [
+export def "actions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,10 +132,10 @@ export def "actions addAction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  channelId: int # Id of channel used by action (format: int32)
+  channel_id: int # Id of channel used by action (format: int32)
   --codes: record # Object containing named Javascript code sets
   --desc: string # Action description
-  functionId: string # Hash id of channel function used by action
+  function_id: string # Hash id of channel function used by action
   name: string # Action name
   --parameters: record # Object containing channel-defined action parameters
 ]: any -> record<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string> {
@@ -143,7 +143,7 @@ export def "actions addAction" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/actions")
-  let body = {channelId: $channelId, codes: $codes, desc: $desc, functionId: $functionId, name: $name, parameters: $parameters} | compact
+  let body = {"channelId": $channel_id, "codes": $codes, "desc": $desc, "functionId": $function_id, "name": $name, "parameters": $parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -154,7 +154,7 @@ export def "actions addAction" [
 #
 # DELETE /actions/{action_id}
 # operationId: removeAction
-export def "actions removeAction" [
+export def "actions delete" [
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,7 +167,7 @@ export def "actions removeAction" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/actions/($action_id)")
+  let full_url = (build-url $base ({action_id: $action_id} | format pattern "/actions/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,7 +190,7 @@ export def "actions get" [
 ]: nothing -> table<channelId: int, codes: record, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, parameters: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/actions/($action_id)")
+  let full_url = (build-url $base ({action_id: $action_id} | format pattern "/actions/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,7 +200,7 @@ export def "actions get" [
 #
 # PATCH /actions/{action_id}
 # operationId: updateAction
-export def "actions updateAction" [
+export def "actions update" [
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -210,18 +210,18 @@ export def "actions updateAction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  channelId: int # Id of channel used by action (format: int32)
+  channel_id: int # Id of channel used by action (format: int32)
   --codes: record # Object containing named Javascript code sets
   --desc: string # Action description
-  functionId: string # Hash id of channel function used by action
+  function_id: string # Hash id of channel function used by action
   name: string # Action name
   --parameters: record # Object containing channel-defined action parameters
 ]: any -> record<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/actions/($action_id)")
-  let body = {channelId: $channelId, codes: $codes, desc: $desc, functionId: $functionId, name: $name, parameters: $parameters} | compact
+  let full_url = (build-url $base ({action_id: $action_id} | format pattern "/actions/{action_id}"))
+  let body = {"channelId": $channel_id, "codes": $codes, "desc": $desc, "functionId": $function_id, "name": $name, "parameters": $parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,7 +232,7 @@ export def "actions updateAction" [
 #
 # GET /admin
 # operationId: admin
-export def "admin admin" [
+export def "admin get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "admin-log logInRitc" [
 #
 # GET /admin/ping
 # operationId: pingRitc
-export def "admin-ping pingRitc" [
+export def "admin-ping ping-ritc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "admin-ping pingRitc" [
 #
 # GET /apps
 # operationId: listApps
-export def "apps listApps" [
+export def "apps list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "apps listApps" [
 #
 # POST /apps
 # operationId: addApp
-export def "apps addApp" [
+export def "apps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "apps addApp" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/apps")
-  let body = {desc: $desc, name: $name} | compact
+  let body = {"desc": $desc, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -350,7 +350,7 @@ export def "apps addApp" [
 #
 # GET /apps/channels/users
 # operationId: listAppChannels
-export def "apps-channels-users listAppChannels" [
+export def "apps-channels-users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "apps-channels-users listAppChannels" [
 #
 # GET /apps/channels/{channel_id}/users
 # operationId: listAppChannelUsers
-export def "apps-channels-users listAppChannelUsers" [
+export def "apps-channels-users list-1" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -385,7 +385,7 @@ export def "apps-channels-users listAppChannelUsers" [
 ]: nothing -> table<channelId: int, createdDate: string, id: int, status: string, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/channels/($channel_id)/users")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/apps/channels/{channel_id}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -409,7 +409,7 @@ export def "apps-channels-users get" [
 ]: nothing -> table<channelId: int, createdDate: string, id: int, status: string, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/channels/($channel_id)/users/($user_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, user_id: $user_id} | format pattern "/apps/channels/{channel_id}/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -419,7 +419,7 @@ export def "apps-channels-users get" [
 #
 # POST /apps/channels/{channel_id}/users/{user_id}
 # operationId: addAppChannelUser
-export def "apps-channels-users addAppChannelUser" [
+export def "apps-channels-users create" [
   channel_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -433,7 +433,7 @@ export def "apps-channels-users addAppChannelUser" [
 ]: nothing -> record<channelId: int, createdDate: string, id: int, status: string, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/channels/($channel_id)/users/($user_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, user_id: $user_id} | format pattern "/apps/channels/{channel_id}/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -443,7 +443,7 @@ export def "apps-channels-users addAppChannelUser" [
 #
 # GET /apps/ext/api/credentials
 # operationId: listChannelExternalCredentials
-export def "apps-ext-credentials listChannelExternalCredentials" [
+export def "apps-ext-credentials list-channel-external" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "apps-ext-credentials listChannelExternalCredentials" [
 #
 # POST /apps/ext/api/credentials
 # operationId: addChannelExternalCredentials
-export def "apps-ext-credentials addChannelExternalCredentials" [
+export def "apps-ext-credentials create-channel-external" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,7 +474,7 @@ export def "apps-ext-credentials addChannelExternalCredentials" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authType: string@authType-completer
+  --auth-type: string@auth-type-completer
   --channel-id: string
   --credentials: record
   --name: string # App external credentials api name
@@ -483,7 +483,7 @@ export def "apps-ext-credentials addChannelExternalCredentials" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/apps/ext/api/credentials")
-  let body = {authType: $authType, channel_id: $channel_id, credentials: $credentials, name: $name} | compact
+  let body = {"authType": $auth_type, "channel_id": $channel_id, "credentials": $credentials, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -494,7 +494,7 @@ export def "apps-ext-credentials addChannelExternalCredentials" [
 #
 # DELETE /apps/ext/api/credentials/{channel_id}
 # operationId: removeChannelExternalCredentials
-export def "apps-ext-credentials removeChannelExternalCredentials" [
+export def "apps-ext-credentials delete-channel-external" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "apps-ext-credentials removeChannelExternalCredentials" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/ext/api/credentials/($channel_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/apps/ext/api/credentials/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -517,7 +517,7 @@ export def "apps-ext-credentials removeChannelExternalCredentials" [
 #
 # GET /apps/ext/api/credentials/{channel_id}
 # operationId: getChannelExternalCredentials
-export def "apps-ext-credentials get" [
+export def "apps-ext-credentials get-channel-external" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,7 +530,7 @@ export def "apps-ext-credentials get" [
 ]: nothing -> table<authType: string, channel_id: string, credentials: record, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/ext/api/credentials/($channel_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/apps/ext/api/credentials/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -540,7 +540,7 @@ export def "apps-ext-credentials get" [
 #
 # PATCH /apps/ext/api/credentials/{channel_id}
 # operationId: updateChannelExternalCredentials
-export def "apps-ext-credentials updateChannelExternalCredentials" [
+export def "apps-ext-credentials update-channel-external" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,7 +550,7 @@ export def "apps-ext-credentials updateChannelExternalCredentials" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --authType: string@authType-completer
+  --auth-type: string@auth-type-completer
   --body-channel-id: string
   --credentials: record
   --name: string # App external credentials api name
@@ -558,8 +558,8 @@ export def "apps-ext-credentials updateChannelExternalCredentials" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/ext/api/credentials/($channel_id)")
-  let body = {authType: $authType, channel_id: $body_channel_id, credentials: $credentials, name: $name} | compact
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/apps/ext/api/credentials/{channel_id}"))
+  let body = {"authType": $auth_type, "channel_id": $body_channel_id, "credentials": $credentials, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -587,7 +587,7 @@ export def "apps-rulegroup-run runRuleGroup" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "break_when_rule_fires" $break_when_rule_fires "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/apps/rulegroup/run/($rule_id_list)" $qp)
+  let full_url = (build-url $base ({rule_id_list: $rule_id_list} | format pattern "/apps/rulegroup/run/{rule_id_list}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -625,7 +625,7 @@ export def "apps-rules-run runApp" [
 #
 # DELETE /apps/{app_id}
 # operationId: removeApp
-export def "apps removeApp" [
+export def "apps delete" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +638,7 @@ export def "apps removeApp" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -661,7 +661,7 @@ export def "apps get" [
 ]: nothing -> table<apiKey: string, createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -671,7 +671,7 @@ export def "apps get" [
 #
 # PATCH /apps/{app_id}
 # operationId: updateApp
-export def "apps updateApp" [
+export def "apps update" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -687,8 +687,8 @@ export def "apps updateApp" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/apps/($app_id)")
-  let body = {desc: $desc, name: $name} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/apps/{app_id}"))
+  let body = {"desc": $desc, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -699,7 +699,7 @@ export def "apps updateApp" [
 #
 # GET /channels
 # operationId: listChannels
-export def "channels listChannels" [
+export def "channels list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "channels listChannels" [
 # POST /channels
 # operationId: addChannel
 # --functions item shape: {id?: string, name?: string, parameters?: list, type?: "action"|"trigger"}
-export def "channels addChannel" [
+export def "channels create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "channels addChannel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels")
-  let body = {description: $description, functions: $functions, id: $id, name: $name, type: $type} | compact
+  let body = {"description": $description, "functions": $functions, "id": $id, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -752,7 +752,7 @@ export def "channels addChannel" [
 #
 # GET /channels/anonymous
 # operationId: listAnonymousChannels
-export def "channels-anonymous listAnonymousChannels" [
+export def "channels-anonymous list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +774,7 @@ export def "channels-anonymous listAnonymousChannels" [
 #
 # DELETE /channels/{channel_id}
 # operationId: removeChannel
-export def "channels removeChannel" [
+export def "channels delete" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -787,7 +787,7 @@ export def "channels removeChannel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -810,7 +810,7 @@ export def "channels get" [
 ]: nothing -> table<description: string, functions: list<record>, id: string, name: string, type: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -820,7 +820,7 @@ export def "channels get" [
 #
 # PATCH /channels/{channel_id}
 # operationId: updateChannel
-export def "channels updateChannel" [
+export def "channels update" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -830,17 +830,17 @@ export def "channels updateChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --actionIds: string # Rule description
+  --action-ids: string # Rule description
   --description: string # Rule description
   --name: string # Rule name
   --status: string@status-completer
-  --triggerIds: string # Rule description
+  --trigger-ids: string # Rule description
 ]: any -> record<description: string, functions: table<description: string, id: string, name: string, type: string>, id: string, name: string, type: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)")
-  let body = {actionIds: $actionIds, description: $description, name: $name, status: $status, triggerIds: $triggerIds} | compact
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}"))
+  let body = {"actionIds": $action_ids, "description": $description, "name": $name, "status": $status, "triggerIds": $trigger_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,7 +851,7 @@ export def "channels updateChannel" [
 #
 # GET /channels/{channel_id}/functions
 # operationId: listChannelFunctions
-export def "channels-functions listChannelFunctions" [
+export def "channels-functions list" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -864,7 +864,7 @@ export def "channels-functions listChannelFunctions" [
 ]: nothing -> table<apiType: string, description: string, endpoint: string, httpMethod: string, id: string, name: string, requestParameters: list<record>, responseFormat: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/functions")
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/functions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -875,7 +875,7 @@ export def "channels-functions listChannelFunctions" [
 # POST /channels/{channel_id}/functions
 # operationId: addChannelFunction
 # --requestParameters item shape: {description?: string, fieldType?: string, label?: string, name?: string, schema?: record}
-export def "channels-functions addChannelFunction" [
+export def "channels-functions create" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -885,20 +885,20 @@ export def "channels-functions addChannelFunction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiType: string@apiType-completer
+  --api-type: string@api-type-completer
   --desc: string # Function description
   --endpoint: string # Function endpoint
-  --httpMethod: string@httpMethod-completer
+  --http-method: string@http-method-completer
   --name: string # Function name
-  --requestParameters: list # item shape: {description?: string, fieldType?: string, label?: string, name?: string, schema?: record}
-  --responseFormat: string@responseFormat-completer
+  --request-parameters: list # item shape: {description?: string, fieldType?: string, label?: string, name?: string, schema?: record}
+  --response-format: string@response-format-completer
   --type: string@type-completer
 ]: any -> record<apiType: string, description: string, endpoint: string, httpMethod: string, id: string, name: string, requestParameters: table<description: string, fieldType: string, label: string, name: string, schema: record>, responseFormat: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/functions")
-  let body = {apiType: $apiType, desc: $desc, endpoint: $endpoint, httpMethod: $httpMethod, name: $name, requestParameters: $requestParameters, responseFormat: $responseFormat, type: $type} | compact
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channels/{channel_id}/functions"))
+  let body = {"apiType": $api_type, "desc": $desc, "endpoint": $endpoint, "httpMethod": $http_method, "name": $name, "requestParameters": $request_parameters, "responseFormat": $response_format, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -923,7 +923,7 @@ export def "channels-functions get" [
 ]: nothing -> table<apiType: string, description: string, endpoint: string, httpMethod: string, id: string, name: string, requestParameters: list<record>, responseFormat: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/channels/($channel_id)/functions/($function_id)")
+  let full_url = (build-url $base ({channel_id: $channel_id, function_id: $function_id} | format pattern "/channels/{channel_id}/functions/{function_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -933,7 +933,7 @@ export def "channels-functions get" [
 #
 # POST /orgs
 # operationId: addOrganization
-export def "orgs addOrganization" [
+export def "orgs create-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,7 +950,7 @@ export def "orgs addOrganization" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orgs")
-  let body = {desc: $desc, name: $name, type: $type} | compact
+  let body = {"desc": $desc, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -961,7 +961,7 @@ export def "orgs addOrganization" [
 #
 # GET /orgs/me
 # operationId: getMyOrganization
-export def "orgs-me get" [
+export def "orgs-me get-my-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,7 +983,7 @@ export def "orgs-me get" [
 #
 # GET /rules
 # operationId: listRules
-export def "rules listRules" [
+export def "rules list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,7 +1005,7 @@ export def "rules listRules" [
 #
 # POST /rules
 # operationId: addRule
-export def "rules addRule" [
+export def "rules create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1014,17 +1014,17 @@ export def "rules addRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --actionIds: string # Rule description
+  --action-ids: string # Rule description
   --description: string # Rule description
   --name: string # Rule name
   --status: string@status-completer
-  --triggerIds: string # Rule description
+  --trigger-ids: string # Rule description
 ]: any -> record<actions: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rules")
-  let body = {actionIds: $actionIds, description: $description, name: $name, status: $status, triggerIds: $triggerIds} | compact
+  let body = {"actionIds": $action_ids, "description": $description, "name": $name, "status": $status, "triggerIds": $trigger_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1035,7 +1035,7 @@ export def "rules addRule" [
 #
 # DELETE /rules/{rule_id}
 # operationId: removeRule
-export def "rules removeRule" [
+export def "rules delete" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1048,7 +1048,7 @@ export def "rules removeRule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rules/($rule_id)")
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1071,7 +1071,7 @@ export def "rules get" [
 ]: nothing -> table<actions: list<record>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rules/($rule_id)")
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1081,7 +1081,7 @@ export def "rules get" [
 #
 # PATCH /rules/{rule_id}
 # operationId: updateRule
-export def "rules updateRule" [
+export def "rules update" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1091,17 +1091,17 @@ export def "rules updateRule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --actionIds: string # Rule description
+  --action-ids: string # Rule description
   --description: string # Rule description
   --name: string # Rule name
   --status: string@status-completer
-  --triggerIds: string # Rule description
+  --trigger-ids: string # Rule description
 ]: any -> record<actions: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rules/($rule_id)")
-  let body = {actionIds: $actionIds, description: $description, name: $name, status: $status, triggerIds: $triggerIds} | compact
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/rules/{rule_id}"))
+  let body = {"actionIds": $action_ids, "description": $description, "name": $name, "status": $status, "triggerIds": $trigger_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1127,7 +1127,7 @@ export def "rules-run runRule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rules/($rule_id)/run")
+  let full_url = (build-url $base ({rule_id: $rule_id} | format pattern "/rules/{rule_id}/run"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1138,7 +1138,7 @@ export def "rules-run runRule" [
 #
 # GET /triggers
 # operationId: listTriggers
-export def "triggers listTriggers" [
+export def "triggers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1160,7 +1160,7 @@ export def "triggers listTriggers" [
 #
 # POST /triggers
 # operationId: addTrigger
-export def "triggers addTrigger" [
+export def "triggers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1169,10 +1169,10 @@ export def "triggers addTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  channelId: int # Id of channel used by trigger (format: int32)
+  channel_id: int # Id of channel used by trigger (format: int32)
   --codes: record # Object containing named Javascript code sets
   --desc: string # Trigger description
-  functionId: string # Hash id of channel function used by trigger
+  function_id: string # Hash id of channel function used by trigger
   name: string # Trigger name
   --parameters: record # Object containing channel-defined trigger parameters
 ]: any -> record<channelId: int, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, status: string> {
@@ -1180,7 +1180,7 @@ export def "triggers addTrigger" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/triggers")
-  let body = {channelId: $channelId, codes: $codes, desc: $desc, functionId: $functionId, name: $name, parameters: $parameters} | compact
+  let body = {"channelId": $channel_id, "codes": $codes, "desc": $desc, "functionId": $function_id, "name": $name, "parameters": $parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1191,7 +1191,7 @@ export def "triggers addTrigger" [
 #
 # DELETE /triggers/{trigger_id}
 # operationId: removeTrigger
-export def "triggers removeTrigger" [
+export def "triggers delete" [
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1204,7 +1204,7 @@ export def "triggers removeTrigger" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/triggers/($trigger_id)")
+  let full_url = (build-url $base ({trigger_id: $trigger_id} | format pattern "/triggers/{trigger_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1227,7 +1227,7 @@ export def "triggers get" [
 ]: nothing -> table<channelId: int, codes: record, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, parameters: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/triggers/($trigger_id)")
+  let full_url = (build-url $base ({trigger_id: $trigger_id} | format pattern "/triggers/{trigger_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1237,7 +1237,7 @@ export def "triggers get" [
 #
 # PATCH /triggers/{trigger_id}
 # operationId: updateTrigger
-export def "triggers updateTrigger" [
+export def "triggers update" [
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1247,18 +1247,18 @@ export def "triggers updateTrigger" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  channelId: int # Id of channel used by trigger (format: int32)
+  channel_id: int # Id of channel used by trigger (format: int32)
   --codes: record # Object containing named Javascript code sets
   --desc: string # Trigger description
-  functionId: string # Hash id of channel function used by trigger
+  function_id: string # Hash id of channel function used by trigger
   name: string # Trigger name
   --parameters: record # Object containing channel-defined trigger parameters
 ]: any -> record<channelId: int, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/triggers/($trigger_id)")
-  let body = {channelId: $channelId, codes: $codes, desc: $desc, functionId: $functionId, name: $name, parameters: $parameters} | compact
+  let full_url = (build-url $base ({trigger_id: $trigger_id} | format pattern "/triggers/{trigger_id}"))
+  let body = {"channelId": $channel_id, "codes": $codes, "desc": $desc, "functionId": $function_id, "name": $name, "parameters": $parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1269,7 +1269,7 @@ export def "triggers updateTrigger" [
 #
 # GET /users
 # operationId: listAppUsers
-export def "users listAppUsers" [
+export def "users list-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1291,7 +1291,7 @@ export def "users listAppUsers" [
 #
 # POST /users
 # operationId: addAppUser
-export def "users addAppUser" [
+export def "users create-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1308,7 +1308,7 @@ export def "users addAppUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {config: $config, name: $name, password: $password} | compact
+  let body = {"config": $config, "name": $name, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1319,7 +1319,7 @@ export def "users addAppUser" [
 #
 # GET /users/admin
 # operationId: listAdminUsers
-export def "users-admin listAdminUsers" [
+export def "users-admin list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1341,7 +1341,7 @@ export def "users-admin listAdminUsers" [
 #
 # POST /users/admin
 # operationId: addAdminUser
-export def "users-admin addAdminUser" [
+export def "users-admin create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1358,7 +1358,7 @@ export def "users-admin addAdminUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/admin")
-  let body = {email: $email, password: $password, type: $type} | compact
+  let body = {"email": $email, "password": $password, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1369,7 +1369,7 @@ export def "users-admin addAdminUser" [
 #
 # DELETE /users/admin/{user_id}
 # operationId: removeAdminUser
-export def "users-admin removeAdminUser" [
+export def "users-admin delete" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1382,7 +1382,7 @@ export def "users-admin removeAdminUser" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/admin/($user_id)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/admin/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1405,7 +1405,7 @@ export def "users-admin get" [
 ]: nothing -> table<createdDate: string, email: string, id: int, modifiedDate: string, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/admin/($user_id)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/admin/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1415,7 +1415,7 @@ export def "users-admin get" [
 #
 # PATCH /users/admin/{user_id}
 # operationId: updateAdminUser
-export def "users-admin updateAdminUser" [
+export def "users-admin update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1432,8 +1432,8 @@ export def "users-admin updateAdminUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/admin/($user_id)")
-  let body = {email: $email, password: $password, type: $type} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/admin/{user_id}"))
+  let body = {"email": $email, "password": $password, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1458,7 +1458,7 @@ export def "users-authenticate-channel authenticateAppUserForChannel" [
 ]: nothing -> table<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/authenticate/($user_id)/channel/($channel_id)")
+  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/users/authenticate/{user_id}/channel/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1468,7 +1468,7 @@ export def "users-authenticate-channel authenticateAppUserForChannel" [
 #
 # DELETE /users/{user_id}
 # operationId: removeAppUser
-export def "users removeAppUser" [
+export def "users delete-app" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1481,7 +1481,7 @@ export def "users removeAppUser" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1491,7 +1491,7 @@ export def "users removeAppUser" [
 #
 # GET /users/{user_id}
 # operationId: getAppUser
-export def "users get" [
+export def "users get-app" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1504,7 +1504,7 @@ export def "users get" [
 ]: nothing -> table<createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1514,7 +1514,7 @@ export def "users get" [
 #
 # PATCH /users/{user_id}
 # operationId: updateAppUser
-export def "users updateAppUser" [
+export def "users update-app" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1531,8 +1531,8 @@ export def "users updateAppUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)")
-  let body = {config: $config, name: $name, password: $password} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
+  let body = {"config": $config, "name": $name, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1543,7 +1543,7 @@ export def "users updateAppUser" [
 #
 # GET /users/{user_id}/channels
 # operationId: listAppUserChannels
-export def "users-channels listAppUserChannels" [
+export def "users-channels list-app" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1556,7 +1556,7 @@ export def "users-channels listAppUserChannels" [
 ]: nothing -> table<channelId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/channels")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/channels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1566,7 +1566,7 @@ export def "users-channels listAppUserChannels" [
 #
 # POST /users/{user_id}/channels
 # operationId: addAppUserToChannel
-export def "users-channels addAppUserToChannel" [
+export def "users-channels create-app-user-to" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1581,7 +1581,7 @@ export def "users-channels addAppUserToChannel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/channels")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/channels"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1592,7 +1592,7 @@ export def "users-channels addAppUserToChannel" [
 #
 # DELETE /users/{user_id}/channels/{channel_id}
 # operationId: removeAppUserFromChannel
-export def "users-channels removeAppUserFromChannel" [
+export def "users-channels delete-app-user-from" [
   user_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1606,7 +1606,7 @@ export def "users-channels removeAppUserFromChannel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/channels/($channel_id)")
+  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/users/{user_id}/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1616,7 +1616,7 @@ export def "users-channels removeAppUserFromChannel" [
 #
 # GET /users/{user_id}/channels/{channel_id}
 # operationId: getAppUserChannel
-export def "users-channels get" [
+export def "users-channels get-app" [
   user_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1630,7 +1630,7 @@ export def "users-channels get" [
 ]: nothing -> table<channelId: int, userId: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/channels/($channel_id)")
+  let full_url = (build-url $base ({user_id: $user_id, channel_id: $channel_id} | format pattern "/users/{user_id}/channels/{channel_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1640,7 +1640,7 @@ export def "users-channels get" [
 #
 # GET /users/{user_id}/rules
 # operationId: listAppUserRules
-export def "users-rules listAppUserRules" [
+export def "users-rules list-app" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1653,7 +1653,7 @@ export def "users-rules listAppUserRules" [
 ]: nothing -> table<createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/rules")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/rules"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1663,7 +1663,7 @@ export def "users-rules listAppUserRules" [
 #
 # DELETE /users/{user_id}/rules/{rule_id}
 # operationId: removeAppUserFromRule
-export def "users-rules removeAppUserFromRule" [
+export def "users-rules delete-app-user-from" [
   user_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1677,7 +1677,7 @@ export def "users-rules removeAppUserFromRule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/rules/($rule_id)")
+  let full_url = (build-url $base ({user_id: $user_id, rule_id: $rule_id} | format pattern "/users/{user_id}/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1687,7 +1687,7 @@ export def "users-rules removeAppUserFromRule" [
 #
 # GET /users/{user_id}/rules/{rule_id}
 # operationId: getAppUserRule
-export def "users-rules get" [
+export def "users-rules get-app" [
   user_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1701,7 +1701,7 @@ export def "users-rules get" [
 ]: nothing -> table<actions: list<record>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/rules/($rule_id)")
+  let full_url = (build-url $base ({user_id: $user_id, rule_id: $rule_id} | format pattern "/users/{user_id}/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1711,7 +1711,7 @@ export def "users-rules get" [
 #
 # POST /users/{user_id}/rules/{rule_id}
 # operationId: addAppUserToRule
-export def "users-rules addAppUserToRule" [
+export def "users-rules create-app-user-to" [
   user_id: string
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1725,7 +1725,7 @@ export def "users-rules addAppUserToRule" [
 ]: nothing -> record<createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/rules/($rule_id)")
+  let full_url = (build-url $base ({user_id: $user_id, rule_id: $rule_id} | format pattern "/users/{user_id}/rules/{rule_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1749,7 +1749,7 @@ export def "users-rules-run runRuleForAppUser" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/rules/($rule_id)/run")
+  let full_url = (build-url $base ({user_id: $user_id, rule_id: $rule_id} | format pattern "/users/{user_id}/rules/{rule_id}/run"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

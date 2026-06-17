@@ -65,13 +65,13 @@ def base-url-completer [] { ["https://marketplace.walmartapis.com" "https://sand
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def feedType-completer [] { ["MP_INVENTORY" "inventory"] }
+def feed-type-completer [] { ["MP_INVENTORY" "inventory"] }
 def accept-completer [] { ["application/json" "application/xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "feeds updateBulkInventory" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "feeds update-bulk-inventory" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # POST /v3/feeds
 # operationId: updateBulkInventory
-export def "feeds updateBulkInventory" [
+export def "feeds update-bulk-inventory" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,22 +105,22 @@ export def "feeds updateBulkInventory" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --feedType: string@feedType-completer # The feed Type
-  --shipNode: string # The shipNode for which the inventory is to be updated. Not required in case of Multi Node Inventory Update Feed (feedType=MP_INVENTORY)
-  --WM-SECACCESS-TOKEN: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
-  --WM-CONSUMERCHANNELTYPE: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --WM-QOSCORRELATION-ID: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --WM-SVCNAME: string # Walmart Service Name (e.g. Walmart Service Name)
+  --feed-type: string@feed-type-completer # The feed Type
+  --ship-node: string # The shipNode for which the inventory is to be updated. Not required in case of Multi Node Inventory Update Feed (feedType=MP_INVENTORY)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
   file: string # Feed file to upload (format: binary)
 ]: any -> record<additionalAttributes: record, errors: record, feedId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "feedType" $feedType "scalar") (serialize-qp "shipNode" $shipNode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "feedType" $feed_type "scalar") (serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/feeds" $qp)
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $WM_SECACCESS_TOKEN, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID, "WM_SVC.NAME": $WM_SVCNAME} | compact
+  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,7 +131,7 @@ export def "feeds updateBulkInventory" [
 #
 # GET /v3/fulfillment/inventory
 # operationId: getWFSInventory
-export def "fulfillment-inventory get" [
+export def "fulfillment-inventory get-wfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,20 +141,20 @@ export def "fulfillment-inventory get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --sku: string # An arbitrary alphanumeric unique ID, specified by the seller, which identifies each item. This will be used by the seller in the XSD file to refer to each item. Special characters in the sku needing encoding are: ':', '/', '?', '#', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '=', ‘ ’ as well as '%' itself if it's a part of sku. Make sure to encode space with %20. Other characters don't need to be encoded.
-  --fromModifiedDate: string # last inventory modified date - starting range.
-  --toModifiedDate: string # last inventory modified date - starting range.
+  --from-modified-date: string # last inventory modified date - starting range.
+  --to-modified-date: string # last inventory modified date - starting range.
   --limit: string # Number of Sku to be returned. Cannot be larger than 300. (default: 10)
   --offset: string # Offset is the number of records you wish to skip before selecting records. (default: 0)
-  --WM-SECACCESS-TOKEN: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
-  --WM-CONSUMERCHANNELTYPE: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --WM-QOSCORRELATION-ID: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --WM-SVCNAME: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
 ]: nothing -> record<headers: record<limit: int, offset: int, totalCount: int>, payload: record<inventory: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "fromModifiedDate" $fromModifiedDate "scalar") (serialize-qp "toModifiedDate" $toModifiedDate "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "fromModifiedDate" $from_modified_date "scalar") (serialize-qp "toModifiedDate" $to_modified_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/fulfillment/inventory" $qp)
-  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $WM_SECACCESS_TOKEN, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID, "WM_SVC.NAME": $WM_SVCNAME} | compact
+  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -165,7 +165,7 @@ export def "fulfillment-inventory get" [
 #
 # GET /v3/inventories
 # operationId: getMultiNodeInventoryForAllSkuAndAllShipNodes
-export def "inventories list" [
+export def "inventories get-multi-node-inventory-for-all-sku-and-all-ship-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,17 +175,17 @@ export def "inventories list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # The number of items returned. Cannot be more than 50. (default: 10)
-  --nextCursor: string # String returned from initial API call to indicate pagination. Specify nextCursor value to retrieve the next 50 items.
-  --WM-SECACCESS-TOKEN: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
-  --WM-CONSUMERCHANNELTYPE: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --WM-QOSCORRELATION-ID: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --WM-SVCNAME: string # Walmart Service Name (e.g. Walmart Service Name)
+  --next-cursor: string # String returned from initial API call to indicate pagination. Specify nextCursor value to retrieve the next 50 items.
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
 ]: nothing -> record<elements: record<inventories: list<record>>, meta: record<nextCursor: string, totalCount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextCursor" $nextCursor "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "nextCursor" $next_cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/inventories" $qp)
-  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $WM_SECACCESS_TOKEN, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID, "WM_SVC.NAME": $WM_SVCNAME} | compact
+  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -196,7 +196,7 @@ export def "inventories list" [
 #
 # GET /v3/inventories/{sku}
 # operationId: getMultiNodeInventoryForSkuAndAllShipnodes
-export def "inventories get" [
+export def "inventories get-multi-node-inventory-for-and-all-shipnodes" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,17 +206,17 @@ export def "inventories get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --shipNode: string # ShipNode Id of the ship node for which the inventory is requested
-  --WM-SECACCESS-TOKEN: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
-  --WM-CONSUMERCHANNELTYPE: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --WM-QOSCORRELATION-ID: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --WM-SVCNAME: string # Walmart Service Name (e.g. Walmart Service Name)
+  --ship-node: string # ShipNode Id of the ship node for which the inventory is requested
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
 ]: nothing -> record<nodes: table<availToSellQty: record, errors: list, inputQty: record, reservedQty: record, shipNode: string>, sku: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "shipNode" $shipNode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/inventories/($sku)" $qp)
-  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $WM_SECACCESS_TOKEN, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID, "WM_SVC.NAME": $WM_SVCNAME} | compact
+  let qp = [(serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({sku: $sku} | format pattern "/v3/inventories/{sku}") $qp)
+  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -228,7 +228,7 @@ export def "inventories get" [
 # PUT /v3/inventories/{sku}
 # operationId: updateMultiNodeInventory
 # --inventories shape: {nodes: list}
-export def "inventories updateMultiNodeInventory" [
+export def "inventories update-multi-node-inventory" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -238,19 +238,19 @@ export def "inventories updateMultiNodeInventory" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --WM-SECACCESS-TOKEN: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
-  --WM-CONSUMERCHANNELTYPE: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --WM-QOSCORRELATION-ID: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --WM-SVCNAME: string # Walmart Service Name (e.g. Walmart Service Name)
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
   inventories: record # shape: {nodes: list}
 ]: any -> record<nodes: table<errors: list, shipNode: string, status: string>, sku: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/inventories/($sku)")
-  let body = {inventories: $inventories} | compact
+  let full_url = (build-url $base ({sku: $sku} | format pattern "/v3/inventories/{sku}"))
+  let body = {"inventories": $inventories} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $WM_SECACCESS_TOKEN, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID, "WM_SVC.NAME": $WM_SVCNAME} | compact
+  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -272,17 +272,17 @@ export def "inventory get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --sku: string # An arbitrary alphanumeric unique ID, specified by the seller, which identifies each item. This will be used by the seller in the XSD file to refer to each item. Special characters in the sku needing encoding are: ':', '/', '?', '#', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '=', ‘ ’, '{', '}' as well as '%' itself if it's a part of sku. Make sure to encode space with %20. Other characters don't need to be encoded.
-  --shipNode: string # The shipNode for which the inventory is requested
-  --WM-SECACCESS-TOKEN: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
-  --WM-CONSUMERCHANNELTYPE: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --WM-QOSCORRELATION-ID: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --WM-SVCNAME: string # Walmart Service Name (e.g. Walmart Service Name)
+  --ship-node: string # The shipNode for which the inventory is requested
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
 ]: nothing -> record<quantity: record<amount: float, unit: string>, sku: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "shipNode" $shipNode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/inventory" $qp)
-  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $WM_SECACCESS_TOKEN, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID, "WM_SVC.NAME": $WM_SVCNAME} | compact
+  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -294,7 +294,7 @@ export def "inventory get" [
 # PUT /v3/inventory
 # operationId: updateInventoryForAnItem
 # --quantity shape: {amount: float, unit: "EACH"}
-export def "inventory updateInventoryForAnItem" [
+export def "inventory update-inventory-for-an-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,22 +305,22 @@ export def "inventory updateInventoryForAnItem" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --sku: string # An arbitrary alphanumeric unique ID, specified by the seller, which identifies each item. This will be used by the seller in the XSD file to refer to each item. Special characters in the sku needing encoding are: ':', '/', '?', '#', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '=', ‘ ’, '{', '}' as well as '%' itself if it's a part of sku. Make sure to encode space with %20. Other characters don't need to be encoded.
-  --shipNode: string # The shipNode for which the inventory is to be updated.
-  --WM-SECACCESS-TOKEN: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
-  --WM-CONSUMERCHANNELTYPE: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
-  --WM-QOSCORRELATION-ID: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
-  --WM-SVCNAME: string # Walmart Service Name (e.g. Walmart Service Name)
+  --ship-node: string # The shipNode for which the inventory is to be updated.
+  --wm-sec-access-token: string # The access token retrieved in the Token API call (e.g. eyJraWQiOiIzZjVhYTFmNS1hYWE5LTQzM.....)
+  --wm-consumer-channel-type: string # A unique ID to track the consumer request by channel. Use the Consumer Channel Type received during onboarding
+  --wm-qos-correlation-id: string # A unique ID which identifies each API call and used to track and debug issues; use a random generated GUID for this ID (e.g. b3261d2d-028a-4ef7-8602-633c23200af6)
+  --wm-svc-name: string # Walmart Service Name (e.g. Walmart Service Name)
   quantity: record # Quantity that has been ordered by the customers but not yet shipped — shape: {amount: float, unit: "EACH"}
   sku: string # A seller-provided Product ID. Response will have decoded value.
 ]: any -> record<quantity: record<amount: float, unit: string>, sku: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "shipNode" $shipNode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sku" $sku "scalar") (serialize-qp "shipNode" $ship_node "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v3/inventory" $qp)
-  let body = {quantity: $quantity, sku: $sku} | compact
+  let body = {"quantity": $quantity, "sku": $sku} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $WM_SECACCESS_TOKEN, "WM_CONSUMER.CHANNEL.TYPE": $WM_CONSUMERCHANNELTYPE, "WM_QOS.CORRELATION_ID": $WM_QOSCORRELATION_ID, "WM_SVC.NAME": $WM_SVCNAME} | compact
+  let extra_headers = {"WM_SEC.ACCESS_TOKEN": $wm_sec_access_token, "WM_CONSUMER.CHANNEL.TYPE": $wm_consumer_channel_type, "WM_QOS.CORRELATION_ID": $wm_qos_correlation_id, "WM_SVC.NAME": $wm_svc_name} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-pvt-skusellers GetbySkuId" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-pvt-skusellers get-by-sku" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,8 +94,8 @@ export def commands []: nothing -> table {
 #
 # GET /catalog/pvt/skusellers/{skuId}
 # operationId: GetbySkuId
-export def "catalog-pvt-skusellers GetbySkuId" [
-  skuId: string
+export def "catalog-pvt-skusellers get-by-sku" [
+  sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,13 +104,13 @@ export def "catalog-pvt-skusellers GetbySkuId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<Id: int, IsActive: bool, LastUpdateDate: string, SalesPolicy: int, SellerId: string, SellerSkuId: string, StockKeepingUnitId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/catalog/pvt/skusellers/($skuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/catalog/pvt/skusellers/{sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,9 +121,9 @@ export def "catalog-pvt-skusellers GetbySkuId" [
 #
 # POST /sku-binding/pvt/skuseller/activate/{sellerId}/{skuSellerId}
 # operationId: ActivateSKUBinding
-export def "sku-binding-pvt-skuseller-activate ActivateSKUBinding" [
-  sellerId: string
-  skuSellerId: string
+export def "sku-binding-pvt-skuseller-activate post" [
+  seller_id: string
+  sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,13 +132,13 @@ export def "sku-binding-pvt-skuseller-activate ActivateSKUBinding" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sku-binding/pvt/skuseller/activate/($sellerId)/($skuSellerId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id, sku_seller_id: $sku_seller_id} | format pattern "/sku-binding/pvt/skuseller/activate/{seller_id}/{sku_seller_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,7 +149,7 @@ export def "sku-binding-pvt-skuseller-activate ActivateSKUBinding" [
 #
 # GET /sku-binding/pvt/skuseller/admin
 # operationId: Getpagedadmin
-export def "sku-binding-pvt-skuseller-admin Getpagedadmin" [
+export def "sku-binding-pvt-skuseller-admin get-pagedadmin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,19 +158,19 @@ export def "sku-binding-pvt-skuseller-admin Getpagedadmin" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sellerId: string # ID that identifies the seller in the marketplace. It can be the same as the seller name or a unique number. Check the **Sellers management** section in the Admin to get the correct ID. (e.g. vtxkfj7352)
-  --skuId: string # SKU's unique identifier in the marketplace. (e.g. 1)
-  --sellerSkuId: string # SKU ID in the seller's store. (e.g. 71)
-  --isActive: oneof<nothing, bool> # Defines if the SKU binding is active. (e.g. true)
+  --seller-id: string # ID that identifies the seller in the marketplace. It can be the same as the seller name or a unique number. Check the **Sellers management** section in the Admin to get the correct ID. (e.g. vtxkfj7352)
+  --sku-id: string # SKU's unique identifier in the marketplace. (e.g. 1)
+  --seller-sku-id: string # SKU ID in the seller's store. (e.g. 71)
+  --is-active: oneof<nothing, bool> # Defines if the SKU binding is active. (e.g. true)
   --size: string # Amount of results. (e.g. 1)
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<IsActive: bool, IsPersisted: bool, IsRemoved: bool, RequestedUpdateDate: string, SellerId: string, SellerStockKeepingUnitId: string, SkuSellerId: int, StockKeepingUnitId: int, UpdateDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sellerId" $sellerId "scalar") (serialize-qp "skuId" $skuId "scalar") (serialize-qp "sellerSkuId" $sellerSkuId "scalar") (serialize-qp "isActive" $isActive "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sellerId" $seller_id "scalar") (serialize-qp "skuId" $sku_id "scalar") (serialize-qp "sellerSkuId" $seller_sku_id "scalar") (serialize-qp "isActive" $is_active "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sku-binding/pvt/skuseller/admin" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,9 +180,9 @@ export def "sku-binding-pvt-skuseller-admin Getpagedadmin" [
 # Change Notification with Seller ID and Seller SKU ID
 #
 # POST /sku-binding/pvt/skuseller/changenotification/{sellerId}/{sellerSkuId}
-export def "sku-binding-pvt-skuseller-changenotification post" [
-  sellerId: string
-  sellerSkuId: string
+export def "sku-binding-pvt-skuseller-changenotification post-by-sellerId-sellerSkuId" [
+  seller_id: string
+  seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,13 +191,13 @@ export def "sku-binding-pvt-skuseller-changenotification post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sku-binding/pvt/skuseller/changenotification/($sellerId)/($sellerSkuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/sku-binding/pvt/skuseller/changenotification/{seller_id}/{seller_sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,8 +208,8 @@ export def "sku-binding-pvt-skuseller-changenotification post" [
 #
 # POST /sku-binding/pvt/skuseller/changenotification/{skuId}
 # operationId: ChangeNotification
-export def "sku-binding-pvt-skuseller-changenotification ChangeNotification" [
-  skuId: string
+export def "sku-binding-pvt-skuseller-changenotification post-by-skuId" [
+  sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,13 +218,13 @@ export def "sku-binding-pvt-skuseller-changenotification ChangeNotification" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sku-binding/pvt/skuseller/changenotification/($skuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/sku-binding/pvt/skuseller/changenotification/{sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,9 +235,9 @@ export def "sku-binding-pvt-skuseller-changenotification ChangeNotification" [
 #
 # POST /sku-binding/pvt/skuseller/inactivate/{sellerId}/{skuSellerId}
 # operationId: DeactivateSKUBinding
-export def "sku-binding-pvt-skuseller-inactivate DeactivateSKUBinding" [
-  sellerId: string
-  skuSellerId: string
+export def "sku-binding-pvt-skuseller-inactivate post" [
+  seller_id: string
+  sku_seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,13 +246,13 @@ export def "sku-binding-pvt-skuseller-inactivate DeactivateSKUBinding" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sku-binding/pvt/skuseller/inactivate/($sellerId)/($skuSellerId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id, sku_seller_id: $sku_seller_id} | format pattern "/sku-binding/pvt/skuseller/inactivate/{seller_id}/{sku_seller_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -263,7 +263,7 @@ export def "sku-binding-pvt-skuseller-inactivate DeactivateSKUBinding" [
 #
 # POST /sku-binding/pvt/skuseller/insertion
 # operationId: InsertSKUBinding
-export def "sku-binding-pvt-skuseller-insertion InsertSKUBinding" [
+export def "sku-binding-pvt-skuseller-insertion create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,20 +272,20 @@ export def "sku-binding-pvt-skuseller-insertion InsertSKUBinding" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --IsActive: oneof<nothing, bool> # Defines if the SKU binding is active.
-  SellerId: string # ID that identifies the seller in the marketplace. It can be the same as the seller name or a unique number. Check the **Sellers management** section in the Admin to get the correct ID.
-  SellerStockKeepingUnitId: string # SKU seller ID.
-  StockKeepingUnitId: int # SKU ID in the marketplace. (format: int32)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --is-active: oneof<nothing, bool> # Defines if the SKU binding is active.
+  seller_id: string # ID that identifies the seller in the marketplace. It can be the same as the seller name or a unique number. Check the **Sellers management** section in the Admin to get the correct ID.
+  seller_stock_keeping_unit_id: string # SKU seller ID.
+  stock_keeping_unit_id: int # SKU ID in the marketplace. (format: int32)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sku-binding/pvt/skuseller/insertion")
-  let body = {IsActive: $IsActive, SellerId: $SellerId, SellerStockKeepingUnitId: $SellerStockKeepingUnitId, StockKeepingUnitId: $StockKeepingUnitId} | compact
+  let body = {"IsActive": $is_active, "SellerId": $seller_id, "SellerStockKeepingUnitId": $seller_stock_keeping_unit_id, "StockKeepingUnitId": $stock_keeping_unit_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,8 +296,8 @@ export def "sku-binding-pvt-skuseller-insertion InsertSKUBinding" [
 #
 # GET /sku-binding/pvt/skuseller/list/bysellerId/{sellerId}
 # operationId: GetallbySellerId
-export def "sku-binding-pvt-skuseller-list-byseller-id GetallbySellerId" [
-  sellerId: string
+export def "sku-binding-pvt-skuseller-list-byseller-id get-allby-seller" [
+  seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,13 +306,13 @@ export def "sku-binding-pvt-skuseller-list-byseller-id GetallbySellerId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<FreightCommissionPercentage: float, IsActive: bool, ProductCommissionPercentage: float, SellerId: string, SellerStockKeepingUnitId: string, StockKeepingUnitId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sku-binding/pvt/skuseller/list/bysellerId/($sellerId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/sku-binding/pvt/skuseller/list/bysellerId/{seller_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -323,8 +323,8 @@ export def "sku-binding-pvt-skuseller-list-byseller-id GetallbySellerId" [
 #
 # GET /sku-binding/pvt/skuseller/paged/sellerid/{sellerId}
 # operationId: GetpagedbySellerId
-export def "sku-binding-pvt-skuseller-paged-sellerid GetpagedbySellerId" [
-  sellerId: string
+export def "sku-binding-pvt-skuseller-paged-sellerid get-pagedby-seller" [
+  seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,14 +335,14 @@ export def "sku-binding-pvt-skuseller-paged-sellerid GetpagedbySellerId" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Page number. (e.g. 1)
   --size: string # Amount of results per page. (e.g. 2)
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<FreightCommissionPercentage: float, IsActive: bool, ProductCommissionPercentage: float, SellerId: string, SellerStockKeepingUnitId: string, StockKeepingUnitId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sku-binding/pvt/skuseller/paged/sellerid/($sellerId)" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/sku-binding/pvt/skuseller/paged/sellerid/{seller_id}") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -353,9 +353,9 @@ export def "sku-binding-pvt-skuseller-paged-sellerid GetpagedbySellerId" [
 #
 # POST /sku-binding/pvt/skuseller/remove/{sellerId}/{sellerSkuId}
 # operationId: DeleteSKUsellerassociation
-export def "sku-binding-pvt-skuseller-remove DeleteSKUsellerassociation" [
-  sellerId: string
-  sellerSkuId: string
+export def "sku-binding-pvt-skuseller-remove delete-sk-usellerassociation" [
+  seller_id: string
+  seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,13 +364,13 @@ export def "sku-binding-pvt-skuseller-remove DeleteSKUsellerassociation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sku-binding/pvt/skuseller/remove/($sellerId)/($sellerSkuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/sku-binding/pvt/skuseller/remove/{seller_id}/{seller_sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,9 +381,9 @@ export def "sku-binding-pvt-skuseller-remove DeleteSKUsellerassociation" [
 #
 # GET /sku-binding/pvt/skuseller/{sellerId}/{sellerSkuId}
 # operationId: GetSKUseller
-export def "sku-binding-pvt-skuseller GetSKUseller" [
-  sellerId: string
-  sellerSkuId: string
+export def "sku-binding-pvt-skuseller get" [
+  seller_id: string
+  seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,13 +392,13 @@ export def "sku-binding-pvt-skuseller GetSKUseller" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<IsActive: bool, IsPersisted: bool, IsRemoved: bool, RequestedUpdateDate: string, SellerId: string, SellerStockKeepingUnitId: string, SkuSellerId: int, StockKeepingUnitId: int, UpdateDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sku-binding/pvt/skuseller/($sellerId)/($sellerSkuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/sku-binding/pvt/skuseller/{seller_id}/{seller_sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -409,9 +409,9 @@ export def "sku-binding-pvt-skuseller GetSKUseller" [
 #
 # PUT /sku-binding/pvt/skuseller/{sellerId}/{sellerSkuId}
 # operationId: Bindtoanothersku
-export def "sku-binding-pvt-skuseller Bindtoanothersku" [
-  sellerId: string
-  sellerSkuId: string
+export def "sku-binding-pvt-skuseller put" [
+  seller_id: string
+  seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,17 +420,17 @@ export def "sku-binding-pvt-skuseller Bindtoanothersku" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  StockKeepingUnitId: int # SKU ID in the marketplace. (format: int32, e.g. 1)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  stock_keeping_unit_id: int # SKU ID in the marketplace. (format: int32, e.g. 1)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sku-binding/pvt/skuseller/($sellerId)/($sellerSkuId)")
-  let body = {StockKeepingUnitId: $StockKeepingUnitId} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/sku-binding/pvt/skuseller/{seller_id}/{seller_sku_id}"))
+  let body = {"StockKeepingUnitId": $stock_keeping_unit_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

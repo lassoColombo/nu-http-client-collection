@@ -341,7 +341,7 @@ export def "metering-reading meteringPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --180: int # Meter Reading (prefered in Wh)
+  --1-8-0: int # Meter Reading (prefered in Wh)
   --account: string # Stromkonto account (address) associated with this metering.
   --energy: int # Alias for 1.8.0
   --secret: string # Some private password you might choose on first update. However you need to use the same secret on every further posts.
@@ -352,7 +352,7 @@ export def "metering-reading meteringPost" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metering/reading")
-  let body = {1.8.0: $180, account: $account, energy: $energy, secret: $secret, value: $value, zip: $zip} | compact
+  let body = {"1.8.0": $1_8_0, "account": $account, "energy": $energy, "secret": $secret, "value": $value, "zip": $zip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,7 +378,7 @@ export def "quittung-commit quittungComit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quittung/commit")
-  let body = {account: $account} | compact
+  let body = {"account": $account} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +404,7 @@ export def "quittung-create quittungCreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quittung/create")
-  let body = {email: $email} | compact
+  let body = {"email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -430,7 +430,7 @@ export def "quittung-prepare quittungPrepare" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/quittung/prepare")
-  let body = {account: $account} | compact
+  let body = {"account": $account} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -600,7 +600,7 @@ export def "stromkonto-login stromkontoLogin" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stromkonto/login")
-  let body = {email: $email} | compact
+  let body = {"email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -630,7 +630,7 @@ export def "stromkonto-prepare-transaction prepareTransaction" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stromkonto/prepareTransaction")
-  let body = {account: $account, signature: $signature, to: $body_to, value: $value, variation: $variation} | compact
+  let body = {"account": $account, "signature": $signature, "to": $body_to, "value": $value, "variation": $variation} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -659,7 +659,7 @@ export def "stromkonto-register stromkontoRegister" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stromkonto/register")
-  let body = {email: $email, first_name: $first_name, last_name: $last_name, zipcode: $zipcode} | compact
+  let body = {"email": $email, "first_name": $first_name, "last_name": $last_name, "zipcode": $zipcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

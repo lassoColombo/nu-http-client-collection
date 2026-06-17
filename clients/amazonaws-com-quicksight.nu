@@ -66,24 +66,24 @@ def base-url-completer [] { ["http://quicksight.us-east-1.amazonaws.com" "http:/
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def IngestionType-completer [] { ["FULL_REFRESH" "INCREMENTAL_REFRESH"] }
-def Edition-completer [] { ["ENTERPRISE" "ENTERPRISE_AND_Q" "STANDARD"] }
-def AuthenticationMethod-completer [] { ["ACTIVE_DIRECTORY" "IAM_AND_QUICKSIGHT" "IAM_ONLY"] }
-def ImportMode-completer [] { ["DIRECT_QUERY" "SPICE"] }
-def Type-completer [] { ["ADOBE_ANALYTICS" "AMAZON_ELASTICSEARCH" "AMAZON_OPENSEARCH" "ATHENA" "AURORA" "AURORA_POSTGRESQL" "AWS_IOT_ANALYTICS" "DATABRICKS" "EXASOL" "GITHUB" "JIRA" "MARIADB" "MYSQL" "ORACLE" "POSTGRESQL" "PRESTO" "REDSHIFT" "S3" "SALESFORCE" "SERVICENOW" "SNOWFLAKE" "SPARK" "SQLSERVER" "TERADATA" "TIMESTREAM" "TWITTER"] }
-def FolderType-completer [] { ["SHARED"] }
-def AssignmentStatus-completer [] { ["DISABLED" "DRAFT" "ENABLED"] }
-def IdentityStore-completer [] { ["QUICKSIGHT"] }
-def Role-completer [] { ["ADMIN" "AUTHOR" "READER" "RESTRICTED_AUTHOR" "RESTRICTED_READER"] }
+def ingestion-type-completer [] { ["FULL_REFRESH" "INCREMENTAL_REFRESH"] }
+def edition-completer [] { ["ENTERPRISE" "ENTERPRISE_AND_Q" "STANDARD"] }
+def authentication-method-completer [] { ["ACTIVE_DIRECTORY" "IAM_AND_QUICKSIGHT" "IAM_ONLY"] }
+def import-mode-completer [] { ["DIRECT_QUERY" "SPICE"] }
+def type-completer [] { ["ADOBE_ANALYTICS" "AMAZON_ELASTICSEARCH" "AMAZON_OPENSEARCH" "ATHENA" "AURORA" "AURORA_POSTGRESQL" "AWS_IOT_ANALYTICS" "DATABRICKS" "EXASOL" "GITHUB" "JIRA" "MARIADB" "MYSQL" "ORACLE" "POSTGRESQL" "PRESTO" "REDSHIFT" "S3" "SALESFORCE" "SERVICENOW" "SNOWFLAKE" "SPARK" "SQLSERVER" "TERADATA" "TIMESTREAM" "TWITTER"] }
+def folder-type-completer [] { ["SHARED"] }
+def assignment-status-completer [] { ["DISABLED" "DRAFT" "ENABLED"] }
+def identity-store-completer [] { ["QUICKSIGHT"] }
+def role-completer [] { ["ADMIN" "AUTHOR" "READER" "RESTRICTED_AUTHOR" "RESTRICTED_READER"] }
 def creds-type-completer [] { ["ANONYMOUS" "IAM" "QUICKSIGHT"] }
-def type-completer [] { ["ALL" "CUSTOM" "QUICKSIGHT"] }
-def IdentityType-completer [] { ["IAM" "QUICKSIGHT"] }
-def UserRole-completer [] { ["ADMIN" "AUTHOR" "READER" "RESTRICTED_AUTHOR" "RESTRICTED_READER"] }
+def type-completer-1 [] { ["ALL" "CUSTOM" "QUICKSIGHT"] }
+def identity-type-completer [] { ["IAM" "QUICKSIGHT"] }
+def user-role-completer [] { ["ADMIN" "AUTHOR" "READER" "RESTRICTED_AUTHOR" "RESTRICTED_READER"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-data-sets-ingestions CancelIngestion" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-data-sets-ingestions cancel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -107,10 +107,10 @@ export def commands []: nothing -> table {
 #
 # DELETE /accounts/{AwsAccountId}/data-sets/{DataSetId}/ingestions/{IngestionId}
 # operationId: CancelIngestion
-export def "accounts-data-sets-ingestions CancelIngestion" [
-  AwsAccountId: string
-  DataSetId: string
-  IngestionId: string
+export def "accounts-data-sets-ingestions cancel" [
+  aws_account_id: string
+  data_set_id: string
+  ingestion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,18 +119,18 @@ export def "accounts-data-sets-ingestions CancelIngestion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, IngestionId: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/ingestions/($IngestionId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id, ingestion_id: $ingestion_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions/{ingestion_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -141,10 +141,10 @@ export def "accounts-data-sets-ingestions CancelIngestion" [
 #
 # PUT /accounts/{AwsAccountId}/data-sets/{DataSetId}/ingestions/{IngestionId}
 # operationId: CreateIngestion
-export def "accounts-data-sets-ingestions CreateIngestion" [
-  DataSetId: string
-  IngestionId: string
-  AwsAccountId: string
+export def "accounts-data-sets-ingestions create" [
+  aws_account_id: string
+  data_set_id: string
+  ingestion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,22 +153,22 @@ export def "accounts-data-sets-ingestions CreateIngestion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --IngestionType: string@IngestionType-completer # This defines the type of ingestion user wants to trigger. This is part of create ingestion request.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --ingestion-type: string@ingestion-type-completer # This defines the type of ingestion user wants to trigger. This is part of create ingestion request.
 ]: any -> record<Arn: record, IngestionId: record, IngestionStatus: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/ingestions/($IngestionId)")
-  let body = {IngestionType: $IngestionType} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id, ingestion_id: $ingestion_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions/{ingestion_id}"))
+  let body = {"IngestionType": $ingestion_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,10 +179,10 @@ export def "accounts-data-sets-ingestions CreateIngestion" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/ingestions/{IngestionId}
 # operationId: DescribeIngestion
-export def "accounts-data-sets-ingestions DescribeIngestion" [
-  AwsAccountId: string
-  DataSetId: string
-  IngestionId: string
+export def "accounts-data-sets-ingestions get" [
+  aws_account_id: string
+  data_set_id: string
+  ingestion_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,18 +191,18 @@ export def "accounts-data-sets-ingestions DescribeIngestion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Ingestion: record<Arn: record, IngestionId: record, IngestionStatus: record, ErrorInfo: record<Type: record, Message: record>, RowInfo: record<RowsIngested: record, RowsDropped: record, TotalRowsInDataset: record>, QueueInfo: record<WaitingOnIngestion: record, QueuedIngestion: record>, CreatedTime: record, IngestionTimeInSeconds: record, IngestionSizeInBytes: record, RequestSource: record, RequestType: record>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/ingestions/($IngestionId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id, ingestion_id: $ingestion_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions/{ingestion_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -215,8 +215,8 @@ export def "accounts-data-sets-ingestions DescribeIngestion" [
 # operationId: CreateAccountCustomization
 # --AccountCustomization shape: {DefaultTheme?: any, DefaultEmailCustomizationTemplate?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "accounts-customizations CreateAccountCustomization" [
-  AwsAccountId: string
+export def "accounts-customizations create" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,24 +226,24 @@ export def "accounts-customizations CreateAccountCustomization" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string # The Amazon QuickSight namespace that you want to add customizations to.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AccountCustomization: record # The Amazon QuickSight customizations associated with your Amazon Web Services account or a QuickSight namespace in a specific Amazon Web Services Region. — shape: {DefaultTheme?: any, DefaultEmailCustomizationTemplate?: any}
-  --Tags: list # A list of the tags that you want to attach to this resource. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  account_customization: record # The Amazon QuickSight customizations associated with your Amazon Web Services account or a QuickSight namespace in a specific Amazon Web Services Region. — shape: {DefaultTheme?: any, DefaultEmailCustomizationTemplate?: any}
+  --tags: list # A list of the tags that you want to attach to this resource. — item shape: {Key: any, Value: any}
 ]: any -> record<Arn: record, AwsAccountId: record, Namespace: record, AccountCustomization: record<DefaultTheme: record, DefaultEmailCustomizationTemplate: record>, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "namespace" $namespace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/customizations" $qp)
-  let body = {AccountCustomization: $AccountCustomization, Tags: $Tags} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/customizations") $qp)
+  let body = {"AccountCustomization": $account_customization, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -254,8 +254,8 @@ export def "accounts-customizations CreateAccountCustomization" [
 #
 # DELETE /accounts/{AwsAccountId}/customizations
 # operationId: DeleteAccountCustomization
-export def "accounts-customizations DeleteAccountCustomization" [
-  AwsAccountId: string
+export def "accounts-customizations delete" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,19 +265,19 @@ export def "accounts-customizations DeleteAccountCustomization" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string # The Amazon QuickSight namespace that you're deleting the customizations from.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "namespace" $namespace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/customizations" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/customizations") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -288,8 +288,8 @@ export def "accounts-customizations DeleteAccountCustomization" [
 #
 # GET /accounts/{AwsAccountId}/customizations
 # operationId: DescribeAccountCustomization
-export def "accounts-customizations DescribeAccountCustomization" [
-  AwsAccountId: string
+export def "accounts-customizations get" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,19 +300,19 @@ export def "accounts-customizations DescribeAccountCustomization" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string # The Amazon QuickSight namespace that you want to describe Amazon QuickSight customizations for.
   --resolved: oneof<nothing, bool> # The <code>Resolved</code> flag works with the other parameters to determine which view of Amazon QuickSight customizations is returned. You can add this flag to your command to use the same view that Amazon QuickSight uses to identify which customizations to apply to the console. Omit this flag, or set it to <code>no-resolved</code>, to reveal customizations that are configured at different levels. 
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, AwsAccountId: record, Namespace: record, AccountCustomization: record<DefaultTheme: record, DefaultEmailCustomizationTemplate: record>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "namespace" $namespace "scalar") (serialize-qp "resolved" $resolved "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/customizations" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/customizations") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,8 +324,8 @@ export def "accounts-customizations DescribeAccountCustomization" [
 # PUT /accounts/{AwsAccountId}/customizations
 # operationId: UpdateAccountCustomization
 # --AccountCustomization shape: {DefaultTheme?: any, DefaultEmailCustomizationTemplate?: any}
-export def "accounts-customizations UpdateAccountCustomization" [
-  AwsAccountId: string
+export def "accounts-customizations update" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,23 +335,23 @@ export def "accounts-customizations UpdateAccountCustomization" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string # The namespace that you want to update Amazon QuickSight customizations for.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AccountCustomization: record # The Amazon QuickSight customizations associated with your Amazon Web Services account or a QuickSight namespace in a specific Amazon Web Services Region. — shape: {DefaultTheme?: any, DefaultEmailCustomizationTemplate?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  account_customization: record # The Amazon QuickSight customizations associated with your Amazon Web Services account or a QuickSight namespace in a specific Amazon Web Services Region. — shape: {DefaultTheme?: any, DefaultEmailCustomizationTemplate?: any}
 ]: any -> record<Arn: record, AwsAccountId: record, Namespace: record, AccountCustomization: record<DefaultTheme: record, DefaultEmailCustomizationTemplate: record>, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "namespace" $namespace "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/customizations" $qp)
-  let body = {AccountCustomization: $AccountCustomization} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/customizations") $qp)
+  let body = {"AccountCustomization": $account_customization} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -362,8 +362,8 @@ export def "accounts-customizations UpdateAccountCustomization" [
 #
 # POST /account/{AwsAccountId}
 # operationId: CreateAccountSubscription
-export def "account CreateAccountSubscription" [
-  AwsAccountId: string
+export def "account create-account-subscription" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,35 +372,35 @@ export def "account CreateAccountSubscription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Edition: string@Edition-completer # <p>The edition of Amazon QuickSight that you want your account to have. Currently, you can choose from <code>ENTERPRISE</code> or <code>ENTERPRISE_AND_Q</code>.</p> <p>If you choose <code>ENTERPRISE_AND_Q</code>, the following parameters are required:</p> <ul> <li> <p> <code>FirstName</code> </p> </li> <li> <p> <code>LastName</code> </p> </li> <li> <p> <code>EmailAddress</code> </p> </li> <li> <p> <code>ContactNumber</code> </p> </li> </ul>
-  AuthenticationMethod: string@AuthenticationMethod-completer # <p>The method that you want to use to authenticate your Amazon QuickSight account. Currently, the valid values for this parameter are <code>IAM_AND_QUICKSIGHT</code>, <code>IAM_ONLY</code>, and <code>ACTIVE_DIRECTORY</code>.</p> <p>If you choose <code>ACTIVE_DIRECTORY</code>, provide an <code>ActiveDirectoryName</code> and an <code>AdminGroup</code> associated with your Active Directory.</p>
-  AccountName: string # The name of your Amazon QuickSight account. This name is unique over all of Amazon Web Services, and it appears only when users sign in. You can't change <code>AccountName</code> value after the Amazon QuickSight account is created.
-  NotificationEmail: string # The email address that you want Amazon QuickSight to send notifications to regarding your Amazon QuickSight account or Amazon QuickSight subscription.
-  --ActiveDirectoryName: string # The name of your Active Directory. This field is required if <code>ACTIVE_DIRECTORY</code> is the selected authentication method of the new Amazon QuickSight account.
-  --Realm: string # The realm of the Active Directory that is associated with your Amazon QuickSight account. This field is required if <code>ACTIVE_DIRECTORY</code> is the selected authentication method of the new Amazon QuickSight account.
-  --DirectoryId: string # The ID of the Active Directory that is associated with your Amazon QuickSight account.
-  --AdminGroup: list # The admin group associated with your Active Directory. This field is required if <code>ACTIVE_DIRECTORY</code> is the selected authentication method of the new Amazon QuickSight account. For more information about using Active Directory in Amazon QuickSight, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/aws-directory-service.html">Using Active Directory with Amazon QuickSight Enterprise Edition</a> in the Amazon QuickSight User Guide.
-  --AuthorGroup: list # The author group associated with your Active Directory. For more information about using Active Directory in Amazon QuickSight, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/aws-directory-service.html">Using Active Directory with Amazon QuickSight Enterprise Edition</a> in the Amazon QuickSight User Guide.
-  --ReaderGroup: list # The reader group associated with your Active Direcrtory. For more information about using Active Directory in Amazon QuickSight, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/aws-directory-service.html">Using Active Directory with Amazon QuickSight Enterprise Edition</a> in the <i>Amazon QuickSight User Guide</i>.
-  --FirstName: string # The first name of the author of the Amazon QuickSight account to use for future communications. This field is required if <code>ENTERPPRISE_AND_Q</code> is the selected edition of the new Amazon QuickSight account.
-  --LastName: string # The last name of the author of the Amazon QuickSight account to use for future communications. This field is required if <code>ENTERPPRISE_AND_Q</code> is the selected edition of the new Amazon QuickSight account.
-  --EmailAddress: string # The email address of the author of the Amazon QuickSight account to use for future communications. This field is required if <code>ENTERPPRISE_AND_Q</code> is the selected edition of the new Amazon QuickSight account.
-  --ContactNumber: string # A 10-digit phone number for the author of the Amazon QuickSight account to use for future communications. This field is required if <code>ENTERPPRISE_AND_Q</code> is the selected edition of the new Amazon QuickSight account.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  edition: string@edition-completer # <p>The edition of Amazon QuickSight that you want your account to have. Currently, you can choose from <code>ENTERPRISE</code> or <code>ENTERPRISE_AND_Q</code>.</p> <p>If you choose <code>ENTERPRISE_AND_Q</code>, the following parameters are required:</p> <ul> <li> <p> <code>FirstName</code> </p> </li> <li> <p> <code>LastName</code> </p> </li> <li> <p> <code>EmailAddress</code> </p> </li> <li> <p> <code>ContactNumber</code> </p> </li> </ul>
+  authentication_method: string@authentication-method-completer # <p>The method that you want to use to authenticate your Amazon QuickSight account. Currently, the valid values for this parameter are <code>IAM_AND_QUICKSIGHT</code>, <code>IAM_ONLY</code>, and <code>ACTIVE_DIRECTORY</code>.</p> <p>If you choose <code>ACTIVE_DIRECTORY</code>, provide an <code>ActiveDirectoryName</code> and an <code>AdminGroup</code> associated with your Active Directory.</p>
+  account_name: string # The name of your Amazon QuickSight account. This name is unique over all of Amazon Web Services, and it appears only when users sign in. You can't change <code>AccountName</code> value after the Amazon QuickSight account is created.
+  notification_email: string # The email address that you want Amazon QuickSight to send notifications to regarding your Amazon QuickSight account or Amazon QuickSight subscription.
+  --active-directory-name: string # The name of your Active Directory. This field is required if <code>ACTIVE_DIRECTORY</code> is the selected authentication method of the new Amazon QuickSight account.
+  --realm: string # The realm of the Active Directory that is associated with your Amazon QuickSight account. This field is required if <code>ACTIVE_DIRECTORY</code> is the selected authentication method of the new Amazon QuickSight account.
+  --directory-id: string # The ID of the Active Directory that is associated with your Amazon QuickSight account.
+  --admin-group: list # The admin group associated with your Active Directory. This field is required if <code>ACTIVE_DIRECTORY</code> is the selected authentication method of the new Amazon QuickSight account. For more information about using Active Directory in Amazon QuickSight, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/aws-directory-service.html">Using Active Directory with Amazon QuickSight Enterprise Edition</a> in the Amazon QuickSight User Guide.
+  --author-group: list # The author group associated with your Active Directory. For more information about using Active Directory in Amazon QuickSight, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/aws-directory-service.html">Using Active Directory with Amazon QuickSight Enterprise Edition</a> in the Amazon QuickSight User Guide.
+  --reader-group: list # The reader group associated with your Active Direcrtory. For more information about using Active Directory in Amazon QuickSight, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/aws-directory-service.html">Using Active Directory with Amazon QuickSight Enterprise Edition</a> in the <i>Amazon QuickSight User Guide</i>.
+  --first-name: string # The first name of the author of the Amazon QuickSight account to use for future communications. This field is required if <code>ENTERPPRISE_AND_Q</code> is the selected edition of the new Amazon QuickSight account.
+  --last-name: string # The last name of the author of the Amazon QuickSight account to use for future communications. This field is required if <code>ENTERPPRISE_AND_Q</code> is the selected edition of the new Amazon QuickSight account.
+  --email-address: string # The email address of the author of the Amazon QuickSight account to use for future communications. This field is required if <code>ENTERPPRISE_AND_Q</code> is the selected edition of the new Amazon QuickSight account.
+  --contact-number: string # A 10-digit phone number for the author of the Amazon QuickSight account to use for future communications. This field is required if <code>ENTERPPRISE_AND_Q</code> is the selected edition of the new Amazon QuickSight account.
 ]: any -> record<SignupResponse: record<IAMUser: record, userLoginName: record, accountName: record, directoryType: record>, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/($AwsAccountId)")
-  let body = {Edition: $Edition, AuthenticationMethod: $AuthenticationMethod, AccountName: $AccountName, NotificationEmail: $NotificationEmail, ActiveDirectoryName: $ActiveDirectoryName, Realm: $Realm, DirectoryId: $DirectoryId, AdminGroup: $AdminGroup, AuthorGroup: $AuthorGroup, ReaderGroup: $ReaderGroup, FirstName: $FirstName, LastName: $LastName, EmailAddress: $EmailAddress, ContactNumber: $ContactNumber} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/account/{aws_account_id}"))
+  let body = {"Edition": $edition, "AuthenticationMethod": $authentication_method, "AccountName": $account_name, "NotificationEmail": $notification_email, "ActiveDirectoryName": $active_directory_name, "Realm": $realm, "DirectoryId": $directory_id, "AdminGroup": $admin_group, "AuthorGroup": $author_group, "ReaderGroup": $reader_group, "FirstName": $first_name, "LastName": $last_name, "EmailAddress": $email_address, "ContactNumber": $contact_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -411,8 +411,8 @@ export def "account CreateAccountSubscription" [
 #
 # DELETE /account/{AwsAccountId}
 # operationId: DeleteAccountSubscription
-export def "account DeleteAccountSubscription" [
-  AwsAccountId: string
+export def "account delete-account-subscription" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,18 +421,18 @@ export def "account DeleteAccountSubscription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/($AwsAccountId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/account/{aws_account_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -443,8 +443,8 @@ export def "account DeleteAccountSubscription" [
 #
 # GET /account/{AwsAccountId}
 # operationId: DescribeAccountSubscription
-export def "account DescribeAccountSubscription" [
-  AwsAccountId: string
+export def "account get" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,18 +453,18 @@ export def "account DescribeAccountSubscription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AccountInfo: record<AccountName: record, Edition: record, NotificationEmail: record, AuthenticationType: record, AccountSubscriptionStatus: record>, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/($AwsAccountId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/account/{aws_account_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -480,9 +480,9 @@ export def "account DescribeAccountSubscription" [
 # --SourceEntity shape: {SourceTemplate?: any}
 # --Tags item shape: {Key: any, Value: any}
 # --Definition shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-analyses CreateAnalysis" [
-  AwsAccountId: string
-  AnalysisId: string
+export def "accounts-analyses create-analysis" [
+  aws_account_id: string
+  analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,28 +491,28 @@ export def "accounts-analyses CreateAnalysis" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Name: string # A descriptive name for the analysis that you're creating. This name displays for the analysis in the Amazon QuickSight console. 
-  --Parameters: record # A list of Amazon QuickSight parameters and the list's override values. — shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
-  --Permissions: list # <p>A structure that describes the principals and the resource-level permissions on an analysis. You can use the <code>Permissions</code> structure to grant permissions by providing a list of Identity and Access Management (IAM) action information for each principal listed by Amazon Resource Name (ARN). </p> <p>To specify no permissions, omit <code>Permissions</code>.</p> — item shape: {Principal: any, Actions: any}
-  --SourceEntity: record # The source entity of an analysis. — shape: {SourceTemplate?: any}
-  --ThemeArn: string # The ARN for the theme to apply to the analysis that you're creating. To see the theme in the Amazon QuickSight console, make sure that you have access to it.
-  --Tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the analysis. — item shape: {Key: any, Value: any}
-  --Definition: record # The definition of an analysis. — shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  name: string # A descriptive name for the analysis that you're creating. This name displays for the analysis in the Amazon QuickSight console. 
+  --parameters: record # A list of Amazon QuickSight parameters and the list's override values. — shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
+  --permissions: list # <p>A structure that describes the principals and the resource-level permissions on an analysis. You can use the <code>Permissions</code> structure to grant permissions by providing a list of Identity and Access Management (IAM) action information for each principal listed by Amazon Resource Name (ARN). </p> <p>To specify no permissions, omit <code>Permissions</code>.</p> — item shape: {Principal: any, Actions: any}
+  --source-entity: record # The source entity of an analysis. — shape: {SourceTemplate?: any}
+  --theme-arn: string # The ARN for the theme to apply to the analysis that you're creating. To see the theme in the Amazon QuickSight console, make sure that you have access to it.
+  --tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the analysis. — item shape: {Key: any, Value: any}
+  --definition: record # The definition of an analysis. — shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
 ]: any -> record<Arn: record, AnalysisId: record, CreationStatus: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/analyses/($AnalysisId)")
-  let body = {Name: $Name, Parameters: $Parameters, Permissions: $Permissions, SourceEntity: $SourceEntity, ThemeArn: $ThemeArn, Tags: $Tags, Definition: $Definition} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, analysis_id: $analysis_id} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}"))
+  let body = {"Name": $name, "Parameters": $parameters, "Permissions": $permissions, "SourceEntity": $source_entity, "ThemeArn": $theme_arn, "Tags": $tags, "Definition": $definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -523,9 +523,9 @@ export def "accounts-analyses CreateAnalysis" [
 #
 # DELETE /accounts/{AwsAccountId}/analyses/{AnalysisId}
 # operationId: DeleteAnalysis
-export def "accounts-analyses DeleteAnalysis" [
-  AwsAccountId: string
-  AnalysisId: string
+export def "accounts-analyses delete-analysis" [
+  aws_account_id: string
+  analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,19 +536,19 @@ export def "accounts-analyses DeleteAnalysis" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --recovery-window-in-days: int # A value that specifies the number of days that Amazon QuickSight waits before it deletes the analysis. You can't use this parameter with the <code>ForceDeleteWithoutRecovery</code> option in the same API call. The default value is 30.
   --force-delete-without-recovery: oneof<nothing, bool> # This option defaults to the value <code>NoForceDeleteWithoutRecovery</code>. To immediately delete the analysis, add the <code>ForceDeleteWithoutRecovery</code> option. You can't restore an analysis after it's deleted. 
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, Arn: record, AnalysisId: record, DeletionTime: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recovery-window-in-days" $recovery_window_in_days "scalar") (serialize-qp "force-delete-without-recovery" $force_delete_without_recovery "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/analyses/($AnalysisId)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, analysis_id: $analysis_id} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -559,9 +559,9 @@ export def "accounts-analyses DeleteAnalysis" [
 #
 # GET /accounts/{AwsAccountId}/analyses/{AnalysisId}
 # operationId: DescribeAnalysis
-export def "accounts-analyses DescribeAnalysis" [
-  AwsAccountId: string
-  AnalysisId: string
+export def "accounts-analyses get" [
+  aws_account_id: string
+  analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,18 +570,18 @@ export def "accounts-analyses DescribeAnalysis" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Analysis: record<AnalysisId: record, Arn: record, Name: record, Status: record, Errors: record, DataSetArns: record, ThemeArn: record, CreatedTime: record, LastUpdatedTime: record, Sheets: record>, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/analyses/($AnalysisId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, analysis_id: $analysis_id} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -595,9 +595,9 @@ export def "accounts-analyses DescribeAnalysis" [
 # --Parameters shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
 # --SourceEntity shape: {SourceTemplate?: any}
 # --Definition shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-analyses UpdateAnalysis" [
-  AwsAccountId: string
-  AnalysisId: string
+export def "accounts-analyses update-analysis" [
+  aws_account_id: string
+  analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -606,26 +606,26 @@ export def "accounts-analyses UpdateAnalysis" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Name: string # A descriptive name for the analysis that you're updating. This name displays for the analysis in the Amazon QuickSight console.
-  --Parameters: record # A list of Amazon QuickSight parameters and the list's override values. — shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
-  --SourceEntity: record # The source entity of an analysis. — shape: {SourceTemplate?: any}
-  --ThemeArn: string # The Amazon Resource Name (ARN) for the theme to apply to the analysis that you're creating. To see the theme in the Amazon QuickSight console, make sure that you have access to it.
-  --Definition: record # The definition of an analysis. — shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  name: string # A descriptive name for the analysis that you're updating. This name displays for the analysis in the Amazon QuickSight console.
+  --parameters: record # A list of Amazon QuickSight parameters and the list's override values. — shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
+  --source-entity: record # The source entity of an analysis. — shape: {SourceTemplate?: any}
+  --theme-arn: string # The Amazon Resource Name (ARN) for the theme to apply to the analysis that you're creating. To see the theme in the Amazon QuickSight console, make sure that you have access to it.
+  --definition: record # The definition of an analysis. — shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
 ]: any -> record<Arn: record, AnalysisId: record, UpdateStatus: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/analyses/($AnalysisId)")
-  let body = {Name: $Name, Parameters: $Parameters, SourceEntity: $SourceEntity, ThemeArn: $ThemeArn, Definition: $Definition} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, analysis_id: $analysis_id} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}"))
+  let body = {"Name": $name, "Parameters": $parameters, "SourceEntity": $source_entity, "ThemeArn": $theme_arn, "Definition": $definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -642,9 +642,9 @@ export def "accounts-analyses UpdateAnalysis" [
 # --Tags item shape: {Key: any, Value: any}
 # --DashboardPublishOptions shape: {AdHocFilteringOption?: any, ExportToCSVOption?: any, SheetControlsOption?: any, VisualPublishOptions?: any, SheetLayoutElementMaximizationOption?: any, VisualMenuOption?: any, VisualAxisSortOption?: any, ExportWithHiddenFieldsOption?: any, DataPointDrillUpDownOption?: any, DataPointMenuLabelOption?: any, DataPointTooltipOption?: any}
 # --Definition shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-dashboards CreateDashboard" [
-  AwsAccountId: string
-  DashboardId: string
+export def "accounts-dashboards create" [
+  aws_account_id: string
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,30 +653,30 @@ export def "accounts-dashboards CreateDashboard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Name: string # The display name of the dashboard.
-  --Parameters: record # A list of Amazon QuickSight parameters and the list's override values. — shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
-  --Permissions: list # <p>A structure that contains the permissions of the dashboard. You can use this structure for granting permissions by providing a list of IAM action information for each principal ARN. </p> <p>To specify no permissions, omit the permissions list.</p> — item shape: {Principal: any, Actions: any}
-  --SourceEntity: record # Dashboard source entity. — shape: {SourceTemplate?: any}
-  --Tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the dashboard. — item shape: {Key: any, Value: any}
-  --VersionDescription: string # A description for the first version of the dashboard being created.
-  --DashboardPublishOptions: record # Dashboard publish options. — shape: {AdHocFilteringOption?: any, ExportToCSVOption?: any, SheetControlsOption?: any, VisualPublishOptions?: any, SheetLayoutElementMaximizationOption?: any, VisualMenuOption?: any, VisualAxisSortOption?: any, ExportWithHiddenFieldsOption?: any, DataPointDrillUpDownOption?: any, DataPointMenuLabelOption?: any, DataPointTooltipOption?: any}
-  --ThemeArn: string # The Amazon Resource Name (ARN) of the theme that is being used for this dashboard. If you add a value for this field, it overrides the value that is used in the source entity. The theme ARN must exist in the same Amazon Web Services account where you create the dashboard.
-  --Definition: record # The contents of a dashboard. — shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  name: string # The display name of the dashboard.
+  --parameters: record # A list of Amazon QuickSight parameters and the list's override values. — shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
+  --permissions: list # <p>A structure that contains the permissions of the dashboard. You can use this structure for granting permissions by providing a list of IAM action information for each principal ARN. </p> <p>To specify no permissions, omit the permissions list.</p> — item shape: {Principal: any, Actions: any}
+  --source-entity: record # Dashboard source entity. — shape: {SourceTemplate?: any}
+  --tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the dashboard. — item shape: {Key: any, Value: any}
+  --version-description: string # A description for the first version of the dashboard being created.
+  --dashboard-publish-options: record # Dashboard publish options. — shape: {AdHocFilteringOption?: any, ExportToCSVOption?: any, SheetControlsOption?: any, VisualPublishOptions?: any, SheetLayoutElementMaximizationOption?: any, VisualMenuOption?: any, VisualAxisSortOption?: any, ExportWithHiddenFieldsOption?: any, DataPointDrillUpDownOption?: any, DataPointMenuLabelOption?: any, DataPointTooltipOption?: any}
+  --theme-arn: string # The Amazon Resource Name (ARN) of the theme that is being used for this dashboard. If you add a value for this field, it overrides the value that is used in the source entity. The theme ARN must exist in the same Amazon Web Services account where you create the dashboard.
+  --definition: record # The contents of a dashboard. — shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
 ]: any -> record<Arn: record, VersionArn: record, DashboardId: record, CreationStatus: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards/($DashboardId)")
-  let body = {Name: $Name, Parameters: $Parameters, Permissions: $Permissions, SourceEntity: $SourceEntity, Tags: $Tags, VersionDescription: $VersionDescription, DashboardPublishOptions: $DashboardPublishOptions, ThemeArn: $ThemeArn, Definition: $Definition} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, dashboard_id: $dashboard_id} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}"))
+  let body = {"Name": $name, "Parameters": $parameters, "Permissions": $permissions, "SourceEntity": $source_entity, "Tags": $tags, "VersionDescription": $version_description, "DashboardPublishOptions": $dashboard_publish_options, "ThemeArn": $theme_arn, "Definition": $definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -687,9 +687,9 @@ export def "accounts-dashboards CreateDashboard" [
 #
 # DELETE /accounts/{AwsAccountId}/dashboards/{DashboardId}
 # operationId: DeleteDashboard
-export def "accounts-dashboards DeleteDashboard" [
-  AwsAccountId: string
-  DashboardId: string
+export def "accounts-dashboards delete" [
+  aws_account_id: string
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,19 +699,19 @@ export def "accounts-dashboards DeleteDashboard" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-number: int # The version number of the dashboard. If the version number property is provided, only the specified version of the dashboard is deleted.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, Arn: record, DashboardId: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version-number" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards/($DashboardId)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, dashboard_id: $dashboard_id} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,9 +722,9 @@ export def "accounts-dashboards DeleteDashboard" [
 #
 # GET /accounts/{AwsAccountId}/dashboards/{DashboardId}
 # operationId: DescribeDashboard
-export def "accounts-dashboards DescribeDashboard" [
-  AwsAccountId: string
-  DashboardId: string
+export def "accounts-dashboards get" [
+  aws_account_id: string
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,19 +735,19 @@ export def "accounts-dashboards DescribeDashboard" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-number: int # The version number for the dashboard. If a version number isn't passed, the latest published dashboard version is described. 
   --alias-name: string # The alias name.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Dashboard: record<DashboardId: record, Arn: record, Name: record, Version: record<CreatedTime: record, Errors: record, VersionNumber: record, Status: record, Arn: record, SourceEntityArn: record, DataSetArns: record, Description: record, ThemeArn: record, Sheets: record>, CreatedTime: record, LastPublishedTime: record, LastUpdatedTime: record>, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version-number" $version_number "scalar") (serialize-qp "alias-name" $alias_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards/($DashboardId)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, dashboard_id: $dashboard_id} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -762,9 +762,9 @@ export def "accounts-dashboards DescribeDashboard" [
 # --Parameters shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
 # --DashboardPublishOptions shape: {AdHocFilteringOption?: any, ExportToCSVOption?: any, SheetControlsOption?: any, VisualPublishOptions?: any, SheetLayoutElementMaximizationOption?: any, VisualMenuOption?: any, VisualAxisSortOption?: any, ExportWithHiddenFieldsOption?: any, DataPointDrillUpDownOption?: any, DataPointMenuLabelOption?: any, DataPointTooltipOption?: any}
 # --Definition shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-dashboards UpdateDashboard" [
-  AwsAccountId: string
-  DashboardId: string
+export def "accounts-dashboards update" [
+  aws_account_id: string
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,28 +773,28 @@ export def "accounts-dashboards UpdateDashboard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Name: string # The display name of the dashboard.
-  --SourceEntity: record # Dashboard source entity. — shape: {SourceTemplate?: any}
-  --Parameters: record # A list of Amazon QuickSight parameters and the list's override values. — shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
-  --VersionDescription: string # A description for the first version of the dashboard being created.
-  --DashboardPublishOptions: record # Dashboard publish options. — shape: {AdHocFilteringOption?: any, ExportToCSVOption?: any, SheetControlsOption?: any, VisualPublishOptions?: any, SheetLayoutElementMaximizationOption?: any, VisualMenuOption?: any, VisualAxisSortOption?: any, ExportWithHiddenFieldsOption?: any, DataPointDrillUpDownOption?: any, DataPointMenuLabelOption?: any, DataPointTooltipOption?: any}
-  --ThemeArn: string # The Amazon Resource Name (ARN) of the theme that is being used for this dashboard. If you add a value for this field, it overrides the value that was originally associated with the entity. The theme ARN must exist in the same Amazon Web Services account where you create the dashboard.
-  --Definition: record # The contents of a dashboard. — shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  name: string # The display name of the dashboard.
+  --source-entity: record # Dashboard source entity. — shape: {SourceTemplate?: any}
+  --parameters: record # A list of Amazon QuickSight parameters and the list's override values. — shape: {StringParameters?: any, IntegerParameters?: any, DecimalParameters?: any, DateTimeParameters?: any}
+  --version-description: string # A description for the first version of the dashboard being created.
+  --dashboard-publish-options: record # Dashboard publish options. — shape: {AdHocFilteringOption?: any, ExportToCSVOption?: any, SheetControlsOption?: any, VisualPublishOptions?: any, SheetLayoutElementMaximizationOption?: any, VisualMenuOption?: any, VisualAxisSortOption?: any, ExportWithHiddenFieldsOption?: any, DataPointDrillUpDownOption?: any, DataPointMenuLabelOption?: any, DataPointTooltipOption?: any}
+  --theme-arn: string # The Amazon Resource Name (ARN) of the theme that is being used for this dashboard. If you add a value for this field, it overrides the value that was originally associated with the entity. The theme ARN must exist in the same Amazon Web Services account where you create the dashboard.
+  --definition: record # The contents of a dashboard. — shape: {DataSetIdentifierDeclarations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
 ]: any -> record<Arn: record, VersionArn: record, DashboardId: record, CreationStatus: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards/($DashboardId)")
-  let body = {Name: $Name, SourceEntity: $SourceEntity, Parameters: $Parameters, VersionDescription: $VersionDescription, DashboardPublishOptions: $DashboardPublishOptions, ThemeArn: $ThemeArn, Definition: $Definition} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, dashboard_id: $dashboard_id} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}"))
+  let body = {"Name": $name, "SourceEntity": $source_entity, "Parameters": $parameters, "VersionDescription": $version_description, "DashboardPublishOptions": $dashboard_publish_options, "ThemeArn": $theme_arn, "Definition": $definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -812,8 +812,8 @@ export def "accounts-dashboards UpdateDashboard" [
 # --ColumnLevelPermissionRules item shape: {Principals?: any, ColumnNames?: any}
 # --Tags item shape: {Key: any, Value: any}
 # --DataSetUsageConfiguration shape: {DisableUseAsDirectQuerySource?: any, DisableUseAsImportedSource?: any}
-export def "accounts-data-sets CreateDataSet" [
-  AwsAccountId: string
+export def "accounts-data-sets create" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,34 +822,34 @@ export def "accounts-data-sets CreateDataSet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  DataSetId: string # An ID for the dataset that you want to create. This ID is unique per Amazon Web Services Region for each Amazon Web Services account.
-  Name: string # The display name for the dataset.
-  PhysicalTableMap: record # Declares the physical tables that are available in the underlying data sources.
-  --LogicalTableMap: record # Configures the combination and transformation of the data from the physical tables.
-  ImportMode: string@ImportMode-completer # Indicates whether you want to import the data into SPICE.
-  --ColumnGroups: list # Groupings of columns that work together in certain Amazon QuickSight features. Currently, only geospatial hierarchy is supported. — item shape: {GeoSpatialColumnGroup?: any}
-  --FieldFolders: record # The folder that contains fields and nested subfolders for your dataset.
-  --Permissions: list # A list of resource permissions on the dataset. — item shape: {Principal: any, Actions: any}
-  --RowLevelPermissionDataSet: record # <p>Information about a dataset that contains permissions for row-level security (RLS). The permissions dataset maps fields to users or groups. For more information, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/restrict-access-to-a-data-set-using-row-level-security.html">Using Row-Level Security (RLS) to Restrict Access to a Dataset</a> in the <i>Amazon QuickSight User Guide</i>.</p> <p>The option to deny permissions by setting <code>PermissionPolicy</code> to <code>DENY_ACCESS</code> is not supported for new RLS datasets.</p> — shape: {Namespace?: any, Arn?: any, PermissionPolicy?: any, FormatVersion?: any, Status?: any}
-  --RowLevelPermissionTagConfiguration: record # The configuration of tags on a dataset to set row-level security.  — shape: {Status?: any, TagRules?: any, TagRuleConfigurations?: any}
-  --ColumnLevelPermissionRules: list # A set of one or more definitions of a <code> <a href="https://docs.aws.amazon.com/quicksight/latest/APIReference/API_ColumnLevelPermissionRule.html">ColumnLevelPermissionRule</a> </code>. — item shape: {Principals?: any, ColumnNames?: any}
-  --Tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the dataset. — item shape: {Key: any, Value: any}
-  --DataSetUsageConfiguration: record # The usage configuration to apply to child datasets that reference this dataset as a source. — shape: {DisableUseAsDirectQuerySource?: any, DisableUseAsImportedSource?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  data_set_id: string # An ID for the dataset that you want to create. This ID is unique per Amazon Web Services Region for each Amazon Web Services account.
+  name: string # The display name for the dataset.
+  physical_table_map: record # Declares the physical tables that are available in the underlying data sources.
+  --logical-table-map: record # Configures the combination and transformation of the data from the physical tables.
+  import_mode: string@import-mode-completer # Indicates whether you want to import the data into SPICE.
+  --column-groups: list # Groupings of columns that work together in certain Amazon QuickSight features. Currently, only geospatial hierarchy is supported. — item shape: {GeoSpatialColumnGroup?: any}
+  --field-folders: record # The folder that contains fields and nested subfolders for your dataset.
+  --permissions: list # A list of resource permissions on the dataset. — item shape: {Principal: any, Actions: any}
+  --row-level-permission-data-set: record # <p>Information about a dataset that contains permissions for row-level security (RLS). The permissions dataset maps fields to users or groups. For more information, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/restrict-access-to-a-data-set-using-row-level-security.html">Using Row-Level Security (RLS) to Restrict Access to a Dataset</a> in the <i>Amazon QuickSight User Guide</i>.</p> <p>The option to deny permissions by setting <code>PermissionPolicy</code> to <code>DENY_ACCESS</code> is not supported for new RLS datasets.</p> — shape: {Namespace?: any, Arn?: any, PermissionPolicy?: any, FormatVersion?: any, Status?: any}
+  --row-level-permission-tag-configuration: record # The configuration of tags on a dataset to set row-level security.  — shape: {Status?: any, TagRules?: any, TagRuleConfigurations?: any}
+  --column-level-permission-rules: list # A set of one or more definitions of a <code> <a href="https://docs.aws.amazon.com/quicksight/latest/APIReference/API_ColumnLevelPermissionRule.html">ColumnLevelPermissionRule</a> </code>. — item shape: {Principals?: any, ColumnNames?: any}
+  --tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the dataset. — item shape: {Key: any, Value: any}
+  --data-set-usage-configuration: record # The usage configuration to apply to child datasets that reference this dataset as a source. — shape: {DisableUseAsDirectQuerySource?: any, DisableUseAsImportedSource?: any}
 ]: any -> record<Arn: record, DataSetId: record, IngestionArn: record, IngestionId: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets")
-  let body = {DataSetId: $DataSetId, Name: $Name, PhysicalTableMap: $PhysicalTableMap, LogicalTableMap: $LogicalTableMap, ImportMode: $ImportMode, ColumnGroups: $ColumnGroups, FieldFolders: $FieldFolders, Permissions: $Permissions, RowLevelPermissionDataSet: $RowLevelPermissionDataSet, RowLevelPermissionTagConfiguration: $RowLevelPermissionTagConfiguration, ColumnLevelPermissionRules: $ColumnLevelPermissionRules, Tags: $Tags, DataSetUsageConfiguration: $DataSetUsageConfiguration} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/data-sets"))
+  let body = {"DataSetId": $data_set_id, "Name": $name, "PhysicalTableMap": $physical_table_map, "LogicalTableMap": $logical_table_map, "ImportMode": $import_mode, "ColumnGroups": $column_groups, "FieldFolders": $field_folders, "Permissions": $permissions, "RowLevelPermissionDataSet": $row_level_permission_data_set, "RowLevelPermissionTagConfiguration": $row_level_permission_tag_configuration, "ColumnLevelPermissionRules": $column_level_permission_rules, "Tags": $tags, "DataSetUsageConfiguration": $data_set_usage_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -860,8 +860,8 @@ export def "accounts-data-sets CreateDataSet" [
 #
 # GET /accounts/{AwsAccountId}/data-sets
 # operationId: ListDataSets
-export def "accounts-data-sets ListDataSets" [
-  AwsAccountId: string
+export def "accounts-data-sets list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,21 +872,21 @@ export def "accounts-data-sets ListDataSets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DataSetSummaries: record, NextToken: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/data-sets") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -903,8 +903,8 @@ export def "accounts-data-sets ListDataSets" [
 # --VpcConnectionProperties shape: {VpcConnectionArn?: any}
 # --SslProperties shape: {DisableSsl?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "accounts-data-sources CreateDataSource" [
-  AwsAccountId: string
+export def "accounts-data-sources create" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,30 +913,30 @@ export def "accounts-data-sources CreateDataSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  DataSourceId: string # An ID for the data source. This ID is unique per Amazon Web Services Region for each Amazon Web Services account. 
-  Name: string # A display name for the data source.
-  Type: string@Type-completer # <p>The type of the data source. To return a list of all data sources, use <code>ListDataSources</code>.</p> <p>Use <code>AMAZON_ELASTICSEARCH</code> for Amazon OpenSearch Service.</p>
-  --DataSourceParameters: record # The parameters that Amazon QuickSight uses to connect to your underlying data source. This is a variant type structure. For this structure to be valid, only one of the attributes can be non-null. — shape: {AmazonElasticsearchParameters?: any, AthenaParameters?: any, AuroraParameters?: any, AuroraPostgreSqlParameters?: any, AwsIotAnalyticsParameters?: any, JiraParameters?: any, MariaDbParameters?: any, MySqlParameters?: any, OracleParameters?: any, PostgreSqlParameters?: any, PrestoParameters?: any, RdsParameters?: any, RedshiftParameters?: any, S3Parameters?: any, ServiceNowParameters?: any, SnowflakeParameters?: any, SparkParameters?: any, SqlServerParameters?: any, TeradataParameters?: any, TwitterParameters?: any, AmazonOpenSearchParameters?: any, ExasolParameters?: any, DatabricksParameters?: any}
-  --Credentials: record # Data source credentials. This is a variant type structure. For this structure to be valid, only one of the attributes can be non-null. — shape: {CredentialPair?: any, CopySourceArn?: any, SecretArn?: any}
-  --Permissions: list # A list of resource permissions on the data source. — item shape: {Principal: any, Actions: any}
-  --VpcConnectionProperties: record # VPC connection properties. — shape: {VpcConnectionArn?: any}
-  --SslProperties: record # Secure Socket Layer (SSL) properties that apply when Amazon QuickSight connects to your underlying data source. — shape: {DisableSsl?: any}
-  --Tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the data source. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  data_source_id: string # An ID for the data source. This ID is unique per Amazon Web Services Region for each Amazon Web Services account. 
+  name: string # A display name for the data source.
+  type: string@type-completer # <p>The type of the data source. To return a list of all data sources, use <code>ListDataSources</code>.</p> <p>Use <code>AMAZON_ELASTICSEARCH</code> for Amazon OpenSearch Service.</p>
+  --data-source-parameters: record # The parameters that Amazon QuickSight uses to connect to your underlying data source. This is a variant type structure. For this structure to be valid, only one of the attributes can be non-null. — shape: {AmazonElasticsearchParameters?: any, AthenaParameters?: any, AuroraParameters?: any, AuroraPostgreSqlParameters?: any, AwsIotAnalyticsParameters?: any, JiraParameters?: any, MariaDbParameters?: any, MySqlParameters?: any, OracleParameters?: any, PostgreSqlParameters?: any, PrestoParameters?: any, RdsParameters?: any, RedshiftParameters?: any, S3Parameters?: any, ServiceNowParameters?: any, SnowflakeParameters?: any, SparkParameters?: any, SqlServerParameters?: any, TeradataParameters?: any, TwitterParameters?: any, AmazonOpenSearchParameters?: any, ExasolParameters?: any, DatabricksParameters?: any}
+  --credentials: record # Data source credentials. This is a variant type structure. For this structure to be valid, only one of the attributes can be non-null. — shape: {CredentialPair?: any, CopySourceArn?: any, SecretArn?: any}
+  --permissions: list # A list of resource permissions on the data source. — item shape: {Principal: any, Actions: any}
+  --vpc-connection-properties: record # VPC connection properties. — shape: {VpcConnectionArn?: any}
+  --ssl-properties: record # Secure Socket Layer (SSL) properties that apply when Amazon QuickSight connects to your underlying data source. — shape: {DisableSsl?: any}
+  --tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the data source. — item shape: {Key: any, Value: any}
 ]: any -> record<Arn: record, DataSourceId: record, CreationStatus: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sources")
-  let body = {DataSourceId: $DataSourceId, Name: $Name, Type: $Type, DataSourceParameters: $DataSourceParameters, Credentials: $Credentials, Permissions: $Permissions, VpcConnectionProperties: $VpcConnectionProperties, SslProperties: $SslProperties, Tags: $Tags} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/data-sources"))
+  let body = {"DataSourceId": $data_source_id, "Name": $name, "Type": $type, "DataSourceParameters": $data_source_parameters, "Credentials": $credentials, "Permissions": $permissions, "VpcConnectionProperties": $vpc_connection_properties, "SslProperties": $ssl_properties, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -947,8 +947,8 @@ export def "accounts-data-sources CreateDataSource" [
 #
 # GET /accounts/{AwsAccountId}/data-sources
 # operationId: ListDataSources
-export def "accounts-data-sources ListDataSources" [
-  AwsAccountId: string
+export def "accounts-data-sources list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,21 +959,21 @@ export def "accounts-data-sources ListDataSources" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DataSources: record, NextToken: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sources" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/data-sources") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -986,9 +986,9 @@ export def "accounts-data-sources ListDataSources" [
 # operationId: CreateFolder
 # --Permissions item shape: {Principal: any, Actions: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "accounts-folders CreateFolder" [
-  AwsAccountId: string
-  FolderId: string
+export def "accounts-folders create" [
+  aws_account_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,26 +997,26 @@ export def "accounts-folders CreateFolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Name: string # The name of the folder.
-  --FolderType: string@FolderType-completer # The type of folder. By default, <code>folderType</code> is <code>SHARED</code>.
-  --ParentFolderArn: string # <p>The Amazon Resource Name (ARN) for the parent folder.</p> <p> <code>ParentFolderArn</code> can be null. An empty <code>parentFolderArn</code> creates a root-level folder.</p>
-  --Permissions: list # <p>A structure that describes the principals and the resource-level permissions of a folder.</p> <p>To specify no permissions, omit <code>Permissions</code>.</p> — item shape: {Principal: any, Actions: any}
-  --Tags: list # Tags for the folder. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --name: string # The name of the folder.
+  --folder-type: string@folder-type-completer # The type of folder. By default, <code>folderType</code> is <code>SHARED</code>.
+  --parent-folder-arn: string # <p>The Amazon Resource Name (ARN) for the parent folder.</p> <p> <code>ParentFolderArn</code> can be null. An empty <code>parentFolderArn</code> creates a root-level folder.</p>
+  --permissions: list # <p>A structure that describes the principals and the resource-level permissions of a folder.</p> <p>To specify no permissions, omit <code>Permissions</code>.</p> — item shape: {Principal: any, Actions: any}
+  --tags: list # Tags for the folder. — item shape: {Key: any, Value: any}
 ]: any -> record<Status: record, Arn: record, FolderId: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders/($FolderId)")
-  let body = {Name: $Name, FolderType: $FolderType, ParentFolderArn: $ParentFolderArn, Permissions: $Permissions, Tags: $Tags} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, folder_id: $folder_id} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}"))
+  let body = {"Name": $name, "FolderType": $folder_type, "ParentFolderArn": $parent_folder_arn, "Permissions": $permissions, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1027,9 +1027,9 @@ export def "accounts-folders CreateFolder" [
 #
 # DELETE /accounts/{AwsAccountId}/folders/{FolderId}
 # operationId: DeleteFolder
-export def "accounts-folders DeleteFolder" [
-  AwsAccountId: string
-  FolderId: string
+export def "accounts-folders delete" [
+  aws_account_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,18 +1038,18 @@ export def "accounts-folders DeleteFolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, Arn: record, FolderId: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders/($FolderId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, folder_id: $folder_id} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1060,9 +1060,9 @@ export def "accounts-folders DeleteFolder" [
 #
 # GET /accounts/{AwsAccountId}/folders/{FolderId}
 # operationId: DescribeFolder
-export def "accounts-folders DescribeFolder" [
-  AwsAccountId: string
-  FolderId: string
+export def "accounts-folders get" [
+  aws_account_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,18 +1071,18 @@ export def "accounts-folders DescribeFolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, Folder: record<FolderId: record, Arn: record, Name: record, FolderType: record, FolderPath: record, CreatedTime: record, LastUpdatedTime: record>, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders/($FolderId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, folder_id: $folder_id} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1093,9 +1093,9 @@ export def "accounts-folders DescribeFolder" [
 #
 # PUT /accounts/{AwsAccountId}/folders/{FolderId}
 # operationId: UpdateFolder
-export def "accounts-folders UpdateFolder" [
-  AwsAccountId: string
-  FolderId: string
+export def "accounts-folders update" [
+  aws_account_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,22 +1104,22 @@ export def "accounts-folders UpdateFolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Name: string # The name of the folder.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  name: string # The name of the folder.
 ]: any -> record<Status: record, Arn: record, FolderId: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders/($FolderId)")
-  let body = {Name: $Name} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, folder_id: $folder_id} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}"))
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1130,11 +1130,11 @@ export def "accounts-folders UpdateFolder" [
 #
 # PUT /accounts/{AwsAccountId}/folders/{FolderId}/members/{MemberType}/{MemberId}
 # operationId: CreateFolderMembership
-export def "accounts-folders-members CreateFolderMembership" [
-  AwsAccountId: string
-  FolderId: string
-  MemberId: string
-  MemberType: string
+export def "accounts-folders-members create-folder-membership" [
+  aws_account_id: string
+  folder_id: string
+  member_type: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1143,18 +1143,18 @@ export def "accounts-folders-members CreateFolderMembership" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, FolderMember: record<MemberId: record, MemberType: record>, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders/($FolderId)/members/($MemberType)/($MemberId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, folder_id: $folder_id, member_type: $member_type, member_id: $member_id} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/members/{member_type}/{member_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1165,11 +1165,11 @@ export def "accounts-folders-members CreateFolderMembership" [
 #
 # DELETE /accounts/{AwsAccountId}/folders/{FolderId}/members/{MemberType}/{MemberId}
 # operationId: DeleteFolderMembership
-export def "accounts-folders-members DeleteFolderMembership" [
-  AwsAccountId: string
-  FolderId: string
-  MemberId: string
-  MemberType: string
+export def "accounts-folders-members delete-folder-membership" [
+  aws_account_id: string
+  folder_id: string
+  member_type: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1178,18 +1178,18 @@ export def "accounts-folders-members DeleteFolderMembership" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders/($FolderId)/members/($MemberType)/($MemberId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, folder_id: $folder_id, member_type: $member_type, member_id: $member_id} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/members/{member_type}/{member_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1200,9 +1200,9 @@ export def "accounts-folders-members DeleteFolderMembership" [
 #
 # POST /accounts/{AwsAccountId}/namespaces/{Namespace}/groups
 # operationId: CreateGroup
-export def "accounts-namespaces-groups CreateGroup" [
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-groups create" [
+  aws_account_id: string
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1211,23 +1211,23 @@ export def "accounts-namespaces-groups CreateGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  GroupName: string # A name for the group that you want to create.
-  --Description: string # A description for the group that you want to create.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  group_name: string # A name for the group that you want to create.
+  --description: string # A description for the group that you want to create.
 ]: any -> record<Group: record<Arn: record, GroupName: record, Description: record, PrincipalId: record>, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/groups")
-  let body = {GroupName: $GroupName, Description: $Description} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups"))
+  let body = {"GroupName": $group_name, "Description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1238,9 +1238,9 @@ export def "accounts-namespaces-groups CreateGroup" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/groups
 # operationId: ListGroups
-export def "accounts-namespaces-groups ListGroups" [
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-groups list" [
+  aws_account_id: string
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1251,19 +1251,19 @@ export def "accounts-namespaces-groups ListGroups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A pagination token that can be used in a subsequent request.
   --max-results: int # The maximum number of results to return.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<GroupList: record, NextToken: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/groups" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1274,11 +1274,11 @@ export def "accounts-namespaces-groups ListGroups" [
 #
 # PUT /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}/members/{MemberName}
 # operationId: CreateGroupMembership
-export def "accounts-namespaces-groups-members CreateGroupMembership" [
-  MemberName: string
-  GroupName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-groups-members create-group-membership" [
+  aws_account_id: string
+  namespace: string
+  group_name: string
+  member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1287,18 +1287,18 @@ export def "accounts-namespaces-groups-members CreateGroupMembership" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<GroupMember: record<Arn: record, MemberName: record>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/groups/($GroupName)/members/($MemberName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, group_name: $group_name, member_name: $member_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members/{member_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1309,11 +1309,11 @@ export def "accounts-namespaces-groups-members CreateGroupMembership" [
 #
 # DELETE /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}/members/{MemberName}
 # operationId: DeleteGroupMembership
-export def "accounts-namespaces-groups-members DeleteGroupMembership" [
-  MemberName: string
-  GroupName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-groups-members delete-group-membership" [
+  aws_account_id: string
+  namespace: string
+  group_name: string
+  member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1322,18 +1322,18 @@ export def "accounts-namespaces-groups-members DeleteGroupMembership" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/groups/($GroupName)/members/($MemberName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, group_name: $group_name, member_name: $member_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members/{member_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1344,11 +1344,11 @@ export def "accounts-namespaces-groups-members DeleteGroupMembership" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}/members/{MemberName}
 # operationId: DescribeGroupMembership
-export def "accounts-namespaces-groups-members DescribeGroupMembership" [
-  MemberName: string
-  GroupName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-groups-members get" [
+  aws_account_id: string
+  namespace: string
+  group_name: string
+  member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1357,18 +1357,18 @@ export def "accounts-namespaces-groups-members DescribeGroupMembership" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<GroupMember: record<Arn: record, MemberName: record>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/groups/($GroupName)/members/($MemberName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, group_name: $group_name, member_name: $member_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members/{member_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1379,9 +1379,9 @@ export def "accounts-namespaces-groups-members DescribeGroupMembership" [
 #
 # POST /accounts/{AwsAccountId}/namespaces/{Namespace}/iam-policy-assignments/
 # operationId: CreateIAMPolicyAssignment
-export def "accounts-namespaces-iam-policy-assignments CreateIAMPolicyAssignment" [
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-iam-policy-assignments create" [
+  aws_account_id: string
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1390,25 +1390,25 @@ export def "accounts-namespaces-iam-policy-assignments CreateIAMPolicyAssignment
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AssignmentName: string # The name of the assignment, also called a rule. It must be unique within an Amazon Web Services account.
-  AssignmentStatus: string@AssignmentStatus-completer # <p>The status of the assignment. Possible values are as follows:</p> <ul> <li> <p> <code>ENABLED</code> - Anything specified in this assignment is used when creating the data source.</p> </li> <li> <p> <code>DISABLED</code> - This assignment isn't used when creating the data source.</p> </li> <li> <p> <code>DRAFT</code> - This assignment is an unfinished draft and isn't used when creating the data source.</p> </li> </ul>
-  --PolicyArn: string # The ARN for the IAM policy to apply to the Amazon QuickSight users and groups specified in this assignment.
-  --Identities: record # The Amazon QuickSight users, groups, or both that you want to assign the policy to.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  assignment_name: string # The name of the assignment, also called a rule. It must be unique within an Amazon Web Services account.
+  assignment_status: string@assignment-status-completer # <p>The status of the assignment. Possible values are as follows:</p> <ul> <li> <p> <code>ENABLED</code> - Anything specified in this assignment is used when creating the data source.</p> </li> <li> <p> <code>DISABLED</code> - This assignment isn't used when creating the data source.</p> </li> <li> <p> <code>DRAFT</code> - This assignment is an unfinished draft and isn't used when creating the data source.</p> </li> </ul>
+  --policy-arn: string # The ARN for the IAM policy to apply to the Amazon QuickSight users and groups specified in this assignment.
+  --identities: record # The Amazon QuickSight users, groups, or both that you want to assign the policy to.
 ]: any -> record<AssignmentName: record, AssignmentId: record, AssignmentStatus: record, PolicyArn: record, Identities: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/iam-policy-assignments/")
-  let body = {AssignmentName: $AssignmentName, AssignmentStatus: $AssignmentStatus, PolicyArn: $PolicyArn, Identities: $Identities} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments/"))
+  let body = {"AssignmentName": $assignment_name, "AssignmentStatus": $assignment_status, "PolicyArn": $policy_arn, "Identities": $identities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1420,8 +1420,8 @@ export def "accounts-namespaces-iam-policy-assignments CreateIAMPolicyAssignment
 # POST /accounts/{AwsAccountId}
 # operationId: CreateNamespace
 # --Tags item shape: {Key: any, Value: any}
-export def "accounts CreateNamespace" [
-  AwsAccountId: string
+export def "accounts create-namespace" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,24 +1430,24 @@ export def "accounts CreateNamespace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Namespace: string # The name that you want to use to describe the new namespace.
-  IdentityStore: string@IdentityStore-completer # Specifies the type of your user identity directory. Currently, this supports users with an identity type of <code>QUICKSIGHT</code>.
-  --Tags: list # The tags that you want to associate with the namespace that you're creating. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  namespace: string # The name that you want to use to describe the new namespace.
+  identity_store: string@identity-store-completer # Specifies the type of your user identity directory. Currently, this supports users with an identity type of <code>QUICKSIGHT</code>.
+  --tags: list # The tags that you want to associate with the namespace that you're creating. — item shape: {Key: any, Value: any}
 ]: any -> record<Arn: record, Name: record, CapacityRegion: record, CreationStatus: record, IdentityStore: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)")
-  let body = {Namespace: $Namespace, IdentityStore: $IdentityStore, Tags: $Tags} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}"))
+  let body = {"Namespace": $namespace, "IdentityStore": $identity_store, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1459,9 +1459,9 @@ export def "accounts CreateNamespace" [
 # POST /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-schedules
 # operationId: CreateRefreshSchedule
 # --Schedule shape: {ScheduleId?: any, ScheduleFrequency?: any, StartAfterDateTime?: any, RefreshType?: any, Arn?: any}
-export def "accounts-data-sets-refresh-schedules CreateRefreshSchedule" [
-  DataSetId: string
-  AwsAccountId: string
+export def "accounts-data-sets-refresh-schedules create" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,22 +1470,22 @@ export def "accounts-data-sets-refresh-schedules CreateRefreshSchedule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Schedule: record # The refresh schedule of a dataset. — shape: {ScheduleId?: any, ScheduleFrequency?: any, StartAfterDateTime?: any, RefreshType?: any, Arn?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  schedule: record # The refresh schedule of a dataset. — shape: {ScheduleId?: any, ScheduleFrequency?: any, StartAfterDateTime?: any, RefreshType?: any, Arn?: any}
 ]: any -> record<Status: record, RequestId: record, ScheduleId: record, Arn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/refresh-schedules")
-  let body = {Schedule: $Schedule} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules"))
+  let body = {"Schedule": $schedule} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1496,9 +1496,9 @@ export def "accounts-data-sets-refresh-schedules CreateRefreshSchedule" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-schedules
 # operationId: ListRefreshSchedules
-export def "accounts-data-sets-refresh-schedules ListRefreshSchedules" [
-  AwsAccountId: string
-  DataSetId: string
+export def "accounts-data-sets-refresh-schedules list" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1507,18 +1507,18 @@ export def "accounts-data-sets-refresh-schedules ListRefreshSchedules" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RefreshSchedules: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/refresh-schedules")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1530,9 +1530,9 @@ export def "accounts-data-sets-refresh-schedules ListRefreshSchedules" [
 # PUT /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-schedules
 # operationId: UpdateRefreshSchedule
 # --Schedule shape: {ScheduleId?: any, ScheduleFrequency?: any, StartAfterDateTime?: any, RefreshType?: any, Arn?: any}
-export def "accounts-data-sets-refresh-schedules UpdateRefreshSchedule" [
-  DataSetId: string
-  AwsAccountId: string
+export def "accounts-data-sets-refresh-schedules update" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1541,22 +1541,22 @@ export def "accounts-data-sets-refresh-schedules UpdateRefreshSchedule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Schedule: record # The refresh schedule of a dataset. — shape: {ScheduleId?: any, ScheduleFrequency?: any, StartAfterDateTime?: any, RefreshType?: any, Arn?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  schedule: record # The refresh schedule of a dataset. — shape: {ScheduleId?: any, ScheduleFrequency?: any, StartAfterDateTime?: any, RefreshType?: any, Arn?: any}
 ]: any -> record<Status: record, RequestId: record, ScheduleId: record, Arn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/refresh-schedules")
-  let body = {Schedule: $Schedule} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules"))
+  let body = {"Schedule": $schedule} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1571,9 +1571,9 @@ export def "accounts-data-sets-refresh-schedules UpdateRefreshSchedule" [
 # --SourceEntity shape: {SourceAnalysis?: any, SourceTemplate?: any}
 # --Tags item shape: {Key: any, Value: any}
 # --Definition shape: {DataSetConfigurations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-templates CreateTemplate" [
-  AwsAccountId: string
-  TemplateId: string
+export def "accounts-templates create" [
+  aws_account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1582,27 +1582,27 @@ export def "accounts-templates CreateTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Name: string # A display name for the template.
-  --Permissions: list # A list of resource permissions to be set on the template.  — item shape: {Principal: any, Actions: any}
-  --SourceEntity: record # The source entity of the template. — shape: {SourceAnalysis?: any, SourceTemplate?: any}
-  --Tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the resource. — item shape: {Key: any, Value: any}
-  --VersionDescription: string # A description of the current template version being created. This API operation creates the first version of the template. Every time <code>UpdateTemplate</code> is called, a new version is created. Each version of the template maintains a description of the version in the <code>VersionDescription</code> field.
-  --Definition: record # The detailed definition of a template. — shape: {DataSetConfigurations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --name: string # A display name for the template.
+  --permissions: list # A list of resource permissions to be set on the template.  — item shape: {Principal: any, Actions: any}
+  --source-entity: record # The source entity of the template. — shape: {SourceAnalysis?: any, SourceTemplate?: any}
+  --tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the resource. — item shape: {Key: any, Value: any}
+  --version-description: string # A description of the current template version being created. This API operation creates the first version of the template. Every time <code>UpdateTemplate</code> is called, a new version is created. Each version of the template maintains a description of the version in the <code>VersionDescription</code> field.
+  --definition: record # The detailed definition of a template. — shape: {DataSetConfigurations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
 ]: any -> record<Arn: record, VersionArn: record, TemplateId: record, CreationStatus: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)")
-  let body = {Name: $Name, Permissions: $Permissions, SourceEntity: $SourceEntity, Tags: $Tags, VersionDescription: $VersionDescription, Definition: $Definition} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id} | format pattern "/accounts/{aws_account_id}/templates/{template_id}"))
+  let body = {"Name": $name, "Permissions": $permissions, "SourceEntity": $source_entity, "Tags": $tags, "VersionDescription": $version_description, "Definition": $definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1613,9 +1613,9 @@ export def "accounts-templates CreateTemplate" [
 #
 # DELETE /accounts/{AwsAccountId}/templates/{TemplateId}
 # operationId: DeleteTemplate
-export def "accounts-templates DeleteTemplate" [
-  AwsAccountId: string
-  TemplateId: string
+export def "accounts-templates delete" [
+  aws_account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,19 +1625,19 @@ export def "accounts-templates DeleteTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-number: int # Specifies the version of the template that you want to delete. If you don't provide a version number, <code>DeleteTemplate</code> deletes all versions of the template. 
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Arn: record, TemplateId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version-number" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id} | format pattern "/accounts/{aws_account_id}/templates/{template_id}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1648,9 +1648,9 @@ export def "accounts-templates DeleteTemplate" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}
 # operationId: DescribeTemplate
-export def "accounts-templates DescribeTemplate" [
-  AwsAccountId: string
-  TemplateId: string
+export def "accounts-templates get" [
+  aws_account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1661,19 +1661,19 @@ export def "accounts-templates DescribeTemplate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-number: int # (Optional) The number for the version to describe. If a <code>VersionNumber</code> parameter value isn't provided, the latest version of the template is described.
   --alias-name: string # The alias of the template that you want to describe. If you name a specific alias, you describe the version that the alias points to. You can specify the latest version of the template by providing the keyword <code>$LATEST</code> in the <code>AliasName</code> parameter. The keyword <code>$PUBLISHED</code> doesn't apply to templates.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Template: record<Arn: record, Name: record, Version: record<CreatedTime: record, Errors: record, VersionNumber: record, Status: record, DataSetConfigurations: record, Description: record, SourceEntityArn: record, ThemeArn: record, Sheets: record>, TemplateId: record, LastUpdatedTime: record, CreatedTime: record>, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version-number" $version_number "scalar") (serialize-qp "alias-name" $alias_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id} | format pattern "/accounts/{aws_account_id}/templates/{template_id}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1686,9 +1686,9 @@ export def "accounts-templates DescribeTemplate" [
 # operationId: UpdateTemplate
 # --SourceEntity shape: {SourceAnalysis?: any, SourceTemplate?: any}
 # --Definition shape: {DataSetConfigurations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
-export def "accounts-templates UpdateTemplate" [
-  AwsAccountId: string
-  TemplateId: string
+export def "accounts-templates update" [
+  aws_account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1697,25 +1697,25 @@ export def "accounts-templates UpdateTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --SourceEntity: record # The source entity of the template. — shape: {SourceAnalysis?: any, SourceTemplate?: any}
-  --VersionDescription: string # A description of the current template version that is being updated. Every time you call <code>UpdateTemplate</code>, you create a new version of the template. Each version of the template maintains a description of the version in the <code>VersionDescription</code> field.
-  --Name: string # The name for the template.
-  --Definition: record # The detailed definition of a template. — shape: {DataSetConfigurations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --source-entity: record # The source entity of the template. — shape: {SourceAnalysis?: any, SourceTemplate?: any}
+  --version-description: string # A description of the current template version that is being updated. Every time you call <code>UpdateTemplate</code>, you create a new version of the template. Each version of the template maintains a description of the version in the <code>VersionDescription</code> field.
+  --name: string # The name for the template.
+  --definition: record # The detailed definition of a template. — shape: {DataSetConfigurations?: any, Sheets?: any, CalculatedFields?: any, ParameterDeclarations?: any, FilterGroups?: any, ColumnConfigurations?: any, AnalysisDefaults?: record}
 ]: any -> record<TemplateId: record, Arn: record, VersionArn: record, CreationStatus: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)")
-  let body = {SourceEntity: $SourceEntity, VersionDescription: $VersionDescription, Name: $Name, Definition: $Definition} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id} | format pattern "/accounts/{aws_account_id}/templates/{template_id}"))
+  let body = {"SourceEntity": $source_entity, "VersionDescription": $version_description, "Name": $name, "Definition": $definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1726,10 +1726,10 @@ export def "accounts-templates UpdateTemplate" [
 #
 # POST /accounts/{AwsAccountId}/templates/{TemplateId}/aliases/{AliasName}
 # operationId: CreateTemplateAlias
-export def "accounts-templates-aliases CreateTemplateAlias" [
-  AwsAccountId: string
-  TemplateId: string
-  AliasName: string
+export def "accounts-templates-aliases create-template-alias" [
+  aws_account_id: string
+  template_id: string
+  alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1738,22 +1738,22 @@ export def "accounts-templates-aliases CreateTemplateAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TemplateVersionNumber: int # The version number of the template.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  template_version_number: int # The version number of the template.
 ]: any -> record<TemplateAlias: record<AliasName: record, Arn: record, TemplateVersionNumber: record>, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)/aliases/($AliasName)")
-  let body = {TemplateVersionNumber: $TemplateVersionNumber} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id, alias_name: $alias_name} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}"))
+  let body = {"TemplateVersionNumber": $template_version_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1764,10 +1764,10 @@ export def "accounts-templates-aliases CreateTemplateAlias" [
 #
 # DELETE /accounts/{AwsAccountId}/templates/{TemplateId}/aliases/{AliasName}
 # operationId: DeleteTemplateAlias
-export def "accounts-templates-aliases DeleteTemplateAlias" [
-  AwsAccountId: string
-  TemplateId: string
-  AliasName: string
+export def "accounts-templates-aliases delete-template-alias" [
+  aws_account_id: string
+  template_id: string
+  alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,18 +1776,18 @@ export def "accounts-templates-aliases DeleteTemplateAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, TemplateId: record, AliasName: record, Arn: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)/aliases/($AliasName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id, alias_name: $alias_name} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1798,10 +1798,10 @@ export def "accounts-templates-aliases DeleteTemplateAlias" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}/aliases/{AliasName}
 # operationId: DescribeTemplateAlias
-export def "accounts-templates-aliases DescribeTemplateAlias" [
-  AwsAccountId: string
-  TemplateId: string
-  AliasName: string
+export def "accounts-templates-aliases get" [
+  aws_account_id: string
+  template_id: string
+  alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1810,18 +1810,18 @@ export def "accounts-templates-aliases DescribeTemplateAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<TemplateAlias: record<AliasName: record, Arn: record, TemplateVersionNumber: record>, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)/aliases/($AliasName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id, alias_name: $alias_name} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1832,10 +1832,10 @@ export def "accounts-templates-aliases DescribeTemplateAlias" [
 #
 # PUT /accounts/{AwsAccountId}/templates/{TemplateId}/aliases/{AliasName}
 # operationId: UpdateTemplateAlias
-export def "accounts-templates-aliases UpdateTemplateAlias" [
-  AwsAccountId: string
-  TemplateId: string
-  AliasName: string
+export def "accounts-templates-aliases update-template-alias" [
+  aws_account_id: string
+  template_id: string
+  alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,22 +1844,22 @@ export def "accounts-templates-aliases UpdateTemplateAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TemplateVersionNumber: int # The version number of the template.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  template_version_number: int # The version number of the template.
 ]: any -> record<TemplateAlias: record<AliasName: record, Arn: record, TemplateVersionNumber: record>, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)/aliases/($AliasName)")
-  let body = {TemplateVersionNumber: $TemplateVersionNumber} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id, alias_name: $alias_name} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases/{alias_name}"))
+  let body = {"TemplateVersionNumber": $template_version_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1873,9 +1873,9 @@ export def "accounts-templates-aliases UpdateTemplateAlias" [
 # --Configuration shape: {DataColorPalette?: any, UIColorPalette?: any, Sheet?: any, Typography?: record}
 # --Permissions item shape: {Principal: any, Actions: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "accounts-themes CreateTheme" [
-  AwsAccountId: string
-  ThemeId: string
+export def "accounts-themes create" [
+  aws_account_id: string
+  theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1884,27 +1884,27 @@ export def "accounts-themes CreateTheme" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Name: string # A display name for the theme.
-  BaseThemeId: string # The ID of the theme that a custom theme will inherit from. All themes inherit from one of the starting themes defined by Amazon QuickSight. For a list of the starting themes, use <code>ListThemes</code> or choose <b>Themes</b> from within an analysis. 
-  --VersionDescription: string # A description of the first version of the theme that you're creating. Every time <code>UpdateTheme</code> is called, a new version is created. Each version of the theme has a description of the version in the <code>VersionDescription</code> field.
-  Configuration: record # The theme configuration. This configuration contains all of the display properties for a theme. — shape: {DataColorPalette?: any, UIColorPalette?: any, Sheet?: any, Typography?: record}
-  --Permissions: list # A valid grouping of resource permissions to apply to the new theme.  — item shape: {Principal: any, Actions: any}
-  --Tags: list # A map of the key-value pairs for the resource tag or tags that you want to add to the resource. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  name: string # A display name for the theme.
+  base_theme_id: string # The ID of the theme that a custom theme will inherit from. All themes inherit from one of the starting themes defined by Amazon QuickSight. For a list of the starting themes, use <code>ListThemes</code> or choose <b>Themes</b> from within an analysis. 
+  --version-description: string # A description of the first version of the theme that you're creating. Every time <code>UpdateTheme</code> is called, a new version is created. Each version of the theme has a description of the version in the <code>VersionDescription</code> field.
+  configuration: record # The theme configuration. This configuration contains all of the display properties for a theme. — shape: {DataColorPalette?: any, UIColorPalette?: any, Sheet?: any, Typography?: record}
+  --permissions: list # A valid grouping of resource permissions to apply to the new theme.  — item shape: {Principal: any, Actions: any}
+  --tags: list # A map of the key-value pairs for the resource tag or tags that you want to add to the resource. — item shape: {Key: any, Value: any}
 ]: any -> record<Arn: record, VersionArn: record, ThemeId: record, CreationStatus: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)")
-  let body = {Name: $Name, BaseThemeId: $BaseThemeId, VersionDescription: $VersionDescription, Configuration: $Configuration, Permissions: $Permissions, Tags: $Tags} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}"))
+  let body = {"Name": $name, "BaseThemeId": $base_theme_id, "VersionDescription": $version_description, "Configuration": $configuration, "Permissions": $permissions, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1915,9 +1915,9 @@ export def "accounts-themes CreateTheme" [
 #
 # DELETE /accounts/{AwsAccountId}/themes/{ThemeId}
 # operationId: DeleteTheme
-export def "accounts-themes DeleteTheme" [
-  AwsAccountId: string
-  ThemeId: string
+export def "accounts-themes delete" [
+  aws_account_id: string
+  theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1927,19 +1927,19 @@ export def "accounts-themes DeleteTheme" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-number: int # <p>The version of the theme that you want to delete. </p> <p> <b>Note:</b> If you don't provide a version number, you're using this call to <code>DeleteTheme</code> to delete all versions of the theme.</p>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, RequestId: record, Status: record, ThemeId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version-number" $version_number "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1950,9 +1950,9 @@ export def "accounts-themes DeleteTheme" [
 #
 # GET /accounts/{AwsAccountId}/themes/{ThemeId}
 # operationId: DescribeTheme
-export def "accounts-themes DescribeTheme" [
-  AwsAccountId: string
-  ThemeId: string
+export def "accounts-themes get" [
+  aws_account_id: string
+  theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1963,19 +1963,19 @@ export def "accounts-themes DescribeTheme" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-number: int # The version number for the version to describe. If a <code>VersionNumber</code> parameter value isn't provided, the latest version of the theme is described.
   --alias-name: string # The alias of the theme that you want to describe. If you name a specific alias, you describe the version that the alias points to. You can specify the latest version of the theme by providing the keyword <code>$LATEST</code> in the <code>AliasName</code> parameter. The keyword <code>$PUBLISHED</code> doesn't apply to themes.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Theme: record<Arn: record, Name: record, ThemeId: record, Version: record<VersionNumber: record, Arn: record, Description: record, BaseThemeId: record, CreatedTime: record, Configuration: record, Errors: record, Status: record>, CreatedTime: record, LastUpdatedTime: record, Type: record>, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version-number" $version_number "scalar") (serialize-qp "alias-name" $alias_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1987,9 +1987,9 @@ export def "accounts-themes DescribeTheme" [
 # PUT /accounts/{AwsAccountId}/themes/{ThemeId}
 # operationId: UpdateTheme
 # --Configuration shape: {DataColorPalette?: any, UIColorPalette?: any, Sheet?: any, Typography?: record}
-export def "accounts-themes UpdateTheme" [
-  AwsAccountId: string
-  ThemeId: string
+export def "accounts-themes update" [
+  aws_account_id: string
+  theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1998,25 +1998,25 @@ export def "accounts-themes UpdateTheme" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Name: string # The name for the theme.
-  BaseThemeId: string # The theme ID, defined by Amazon QuickSight, that a custom theme inherits from. All themes initially inherit from a default Amazon QuickSight theme.
-  --VersionDescription: string # A description of the theme version that you're updating Every time that you call <code>UpdateTheme</code>, you create a new version of the theme. Each version of the theme maintains a description of the version in <code>VersionDescription</code>.
-  --Configuration: record # The theme configuration. This configuration contains all of the display properties for a theme. — shape: {DataColorPalette?: any, UIColorPalette?: any, Sheet?: any, Typography?: record}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --name: string # The name for the theme.
+  base_theme_id: string # The theme ID, defined by Amazon QuickSight, that a custom theme inherits from. All themes initially inherit from a default Amazon QuickSight theme.
+  --version-description: string # A description of the theme version that you're updating Every time that you call <code>UpdateTheme</code>, you create a new version of the theme. Each version of the theme maintains a description of the version in <code>VersionDescription</code>.
+  --configuration: record # The theme configuration. This configuration contains all of the display properties for a theme. — shape: {DataColorPalette?: any, UIColorPalette?: any, Sheet?: any, Typography?: record}
 ]: any -> record<ThemeId: record, Arn: record, VersionArn: record, CreationStatus: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)")
-  let body = {Name: $Name, BaseThemeId: $BaseThemeId, VersionDescription: $VersionDescription, Configuration: $Configuration} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}"))
+  let body = {"Name": $name, "BaseThemeId": $base_theme_id, "VersionDescription": $version_description, "Configuration": $configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2027,10 +2027,10 @@ export def "accounts-themes UpdateTheme" [
 #
 # POST /accounts/{AwsAccountId}/themes/{ThemeId}/aliases/{AliasName}
 # operationId: CreateThemeAlias
-export def "accounts-themes-aliases CreateThemeAlias" [
-  AwsAccountId: string
-  ThemeId: string
-  AliasName: string
+export def "accounts-themes-aliases create-theme-alias" [
+  aws_account_id: string
+  theme_id: string
+  alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2039,22 +2039,22 @@ export def "accounts-themes-aliases CreateThemeAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ThemeVersionNumber: int # The version number of the theme.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  theme_version_number: int # The version number of the theme.
 ]: any -> record<ThemeAlias: record<Arn: record, AliasName: record, ThemeVersionNumber: record>, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)/aliases/($AliasName)")
-  let body = {ThemeVersionNumber: $ThemeVersionNumber} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id, alias_name: $alias_name} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}"))
+  let body = {"ThemeVersionNumber": $theme_version_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2065,10 +2065,10 @@ export def "accounts-themes-aliases CreateThemeAlias" [
 #
 # DELETE /accounts/{AwsAccountId}/themes/{ThemeId}/aliases/{AliasName}
 # operationId: DeleteThemeAlias
-export def "accounts-themes-aliases DeleteThemeAlias" [
-  AwsAccountId: string
-  ThemeId: string
-  AliasName: string
+export def "accounts-themes-aliases delete-theme-alias" [
+  aws_account_id: string
+  theme_id: string
+  alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2077,18 +2077,18 @@ export def "accounts-themes-aliases DeleteThemeAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AliasName: record, Arn: record, RequestId: record, Status: record, ThemeId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)/aliases/($AliasName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id, alias_name: $alias_name} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2099,10 +2099,10 @@ export def "accounts-themes-aliases DeleteThemeAlias" [
 #
 # GET /accounts/{AwsAccountId}/themes/{ThemeId}/aliases/{AliasName}
 # operationId: DescribeThemeAlias
-export def "accounts-themes-aliases DescribeThemeAlias" [
-  AwsAccountId: string
-  ThemeId: string
-  AliasName: string
+export def "accounts-themes-aliases get" [
+  aws_account_id: string
+  theme_id: string
+  alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2111,18 +2111,18 @@ export def "accounts-themes-aliases DescribeThemeAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ThemeAlias: record<Arn: record, AliasName: record, ThemeVersionNumber: record>, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)/aliases/($AliasName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id, alias_name: $alias_name} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2133,10 +2133,10 @@ export def "accounts-themes-aliases DescribeThemeAlias" [
 #
 # PUT /accounts/{AwsAccountId}/themes/{ThemeId}/aliases/{AliasName}
 # operationId: UpdateThemeAlias
-export def "accounts-themes-aliases UpdateThemeAlias" [
-  AwsAccountId: string
-  ThemeId: string
-  AliasName: string
+export def "accounts-themes-aliases update-theme-alias" [
+  aws_account_id: string
+  theme_id: string
+  alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2145,22 +2145,22 @@ export def "accounts-themes-aliases UpdateThemeAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ThemeVersionNumber: int # The version number of the theme that the alias should reference.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  theme_version_number: int # The version number of the theme that the alias should reference.
 ]: any -> record<ThemeAlias: record<Arn: record, AliasName: record, ThemeVersionNumber: record>, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)/aliases/($AliasName)")
-  let body = {ThemeVersionNumber: $ThemeVersionNumber} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id, alias_name: $alias_name} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases/{alias_name}"))
+  let body = {"ThemeVersionNumber": $theme_version_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2171,9 +2171,9 @@ export def "accounts-themes-aliases UpdateThemeAlias" [
 #
 # DELETE /accounts/{AwsAccountId}/data-sets/{DataSetId}
 # operationId: DeleteDataSet
-export def "accounts-data-sets DeleteDataSet" [
-  AwsAccountId: string
-  DataSetId: string
+export def "accounts-data-sets delete" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2182,18 +2182,18 @@ export def "accounts-data-sets DeleteDataSet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, DataSetId: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2204,9 +2204,9 @@ export def "accounts-data-sets DeleteDataSet" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}
 # operationId: DescribeDataSet
-export def "accounts-data-sets DescribeDataSet" [
-  AwsAccountId: string
-  DataSetId: string
+export def "accounts-data-sets get" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2215,18 +2215,18 @@ export def "accounts-data-sets DescribeDataSet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DataSet: record<Arn: record, DataSetId: record, Name: record, CreatedTime: record, LastUpdatedTime: record, PhysicalTableMap: record, LogicalTableMap: record, OutputColumns: record, ImportMode: record, ConsumedSpiceCapacityInBytes: record, ColumnGroups: record, FieldFolders: record, RowLevelPermissionDataSet: record<Namespace: record, Arn: record, PermissionPolicy: record, FormatVersion: record, Status: record>, RowLevelPermissionTagConfiguration: record<Status: record, TagRules: record, TagRuleConfigurations: record>, ColumnLevelPermissionRules: record, DataSetUsageConfiguration: record<DisableUseAsDirectQuerySource: record, DisableUseAsImportedSource: record>>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2242,9 +2242,9 @@ export def "accounts-data-sets DescribeDataSet" [
 # --RowLevelPermissionTagConfiguration shape: {Status?: any, TagRules?: any, TagRuleConfigurations?: any}
 # --ColumnLevelPermissionRules item shape: {Principals?: any, ColumnNames?: any}
 # --DataSetUsageConfiguration shape: {DisableUseAsDirectQuerySource?: any, DisableUseAsImportedSource?: any}
-export def "accounts-data-sets UpdateDataSet" [
-  AwsAccountId: string
-  DataSetId: string
+export def "accounts-data-sets update" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2253,31 +2253,31 @@ export def "accounts-data-sets UpdateDataSet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Name: string # The display name for the dataset.
-  PhysicalTableMap: record # Declares the physical tables that are available in the underlying data sources.
-  --LogicalTableMap: record # Configures the combination and transformation of the data from the physical tables.
-  ImportMode: string@ImportMode-completer # Indicates whether you want to import the data into SPICE.
-  --ColumnGroups: list # Groupings of columns that work together in certain Amazon QuickSight features. Currently, only geospatial hierarchy is supported. — item shape: {GeoSpatialColumnGroup?: any}
-  --FieldFolders: record # The folder that contains fields and nested subfolders for your dataset.
-  --RowLevelPermissionDataSet: record # <p>Information about a dataset that contains permissions for row-level security (RLS). The permissions dataset maps fields to users or groups. For more information, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/restrict-access-to-a-data-set-using-row-level-security.html">Using Row-Level Security (RLS) to Restrict Access to a Dataset</a> in the <i>Amazon QuickSight User Guide</i>.</p> <p>The option to deny permissions by setting <code>PermissionPolicy</code> to <code>DENY_ACCESS</code> is not supported for new RLS datasets.</p> — shape: {Namespace?: any, Arn?: any, PermissionPolicy?: any, FormatVersion?: any, Status?: any}
-  --RowLevelPermissionTagConfiguration: record # The configuration of tags on a dataset to set row-level security.  — shape: {Status?: any, TagRules?: any, TagRuleConfigurations?: any}
-  --ColumnLevelPermissionRules: list # A set of one or more definitions of a <code> <a href="https://docs.aws.amazon.com/quicksight/latest/APIReference/API_ColumnLevelPermissionRule.html">ColumnLevelPermissionRule</a> </code>. — item shape: {Principals?: any, ColumnNames?: any}
-  --DataSetUsageConfiguration: record # The usage configuration to apply to child datasets that reference this dataset as a source. — shape: {DisableUseAsDirectQuerySource?: any, DisableUseAsImportedSource?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  name: string # The display name for the dataset.
+  physical_table_map: record # Declares the physical tables that are available in the underlying data sources.
+  --logical-table-map: record # Configures the combination and transformation of the data from the physical tables.
+  import_mode: string@import-mode-completer # Indicates whether you want to import the data into SPICE.
+  --column-groups: list # Groupings of columns that work together in certain Amazon QuickSight features. Currently, only geospatial hierarchy is supported. — item shape: {GeoSpatialColumnGroup?: any}
+  --field-folders: record # The folder that contains fields and nested subfolders for your dataset.
+  --row-level-permission-data-set: record # <p>Information about a dataset that contains permissions for row-level security (RLS). The permissions dataset maps fields to users or groups. For more information, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/restrict-access-to-a-data-set-using-row-level-security.html">Using Row-Level Security (RLS) to Restrict Access to a Dataset</a> in the <i>Amazon QuickSight User Guide</i>.</p> <p>The option to deny permissions by setting <code>PermissionPolicy</code> to <code>DENY_ACCESS</code> is not supported for new RLS datasets.</p> — shape: {Namespace?: any, Arn?: any, PermissionPolicy?: any, FormatVersion?: any, Status?: any}
+  --row-level-permission-tag-configuration: record # The configuration of tags on a dataset to set row-level security.  — shape: {Status?: any, TagRules?: any, TagRuleConfigurations?: any}
+  --column-level-permission-rules: list # A set of one or more definitions of a <code> <a href="https://docs.aws.amazon.com/quicksight/latest/APIReference/API_ColumnLevelPermissionRule.html">ColumnLevelPermissionRule</a> </code>. — item shape: {Principals?: any, ColumnNames?: any}
+  --data-set-usage-configuration: record # The usage configuration to apply to child datasets that reference this dataset as a source. — shape: {DisableUseAsDirectQuerySource?: any, DisableUseAsImportedSource?: any}
 ]: any -> record<Arn: record, DataSetId: record, IngestionArn: record, IngestionId: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)")
-  let body = {Name: $Name, PhysicalTableMap: $PhysicalTableMap, LogicalTableMap: $LogicalTableMap, ImportMode: $ImportMode, ColumnGroups: $ColumnGroups, FieldFolders: $FieldFolders, RowLevelPermissionDataSet: $RowLevelPermissionDataSet, RowLevelPermissionTagConfiguration: $RowLevelPermissionTagConfiguration, ColumnLevelPermissionRules: $ColumnLevelPermissionRules, DataSetUsageConfiguration: $DataSetUsageConfiguration} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}"))
+  let body = {"Name": $name, "PhysicalTableMap": $physical_table_map, "LogicalTableMap": $logical_table_map, "ImportMode": $import_mode, "ColumnGroups": $column_groups, "FieldFolders": $field_folders, "RowLevelPermissionDataSet": $row_level_permission_data_set, "RowLevelPermissionTagConfiguration": $row_level_permission_tag_configuration, "ColumnLevelPermissionRules": $column_level_permission_rules, "DataSetUsageConfiguration": $data_set_usage_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2288,9 +2288,9 @@ export def "accounts-data-sets UpdateDataSet" [
 #
 # DELETE /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-properties
 # operationId: DeleteDataSetRefreshProperties
-export def "accounts-data-sets-refresh-properties DeleteDataSetRefreshProperties" [
-  AwsAccountId: string
-  DataSetId: string
+export def "accounts-data-sets-refresh-properties delete" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2299,18 +2299,18 @@ export def "accounts-data-sets-refresh-properties DeleteDataSetRefreshProperties
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/refresh-properties")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-properties"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2321,9 +2321,9 @@ export def "accounts-data-sets-refresh-properties DeleteDataSetRefreshProperties
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-properties
 # operationId: DescribeDataSetRefreshProperties
-export def "accounts-data-sets-refresh-properties DescribeDataSetRefreshProperties" [
-  AwsAccountId: string
-  DataSetId: string
+export def "accounts-data-sets-refresh-properties get" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2332,18 +2332,18 @@ export def "accounts-data-sets-refresh-properties DescribeDataSetRefreshProperti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Status: record, DataSetRefreshProperties: record<RefreshConfiguration: record<IncrementalRefresh: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/refresh-properties")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-properties"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2355,9 +2355,9 @@ export def "accounts-data-sets-refresh-properties DescribeDataSetRefreshProperti
 # PUT /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-properties
 # operationId: PutDataSetRefreshProperties
 # --DataSetRefreshProperties shape: {RefreshConfiguration?: any}
-export def "accounts-data-sets-refresh-properties PutDataSetRefreshProperties" [
-  AwsAccountId: string
-  DataSetId: string
+export def "accounts-data-sets-refresh-properties update" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2366,22 +2366,22 @@ export def "accounts-data-sets-refresh-properties PutDataSetRefreshProperties" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  DataSetRefreshProperties: record # The refresh properties of a dataset. — shape: {RefreshConfiguration?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  data_set_refresh_properties: record # The refresh properties of a dataset. — shape: {RefreshConfiguration?: any}
 ]: any -> record<RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/refresh-properties")
-  let body = {DataSetRefreshProperties: $DataSetRefreshProperties} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-properties"))
+  let body = {"DataSetRefreshProperties": $data_set_refresh_properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2392,9 +2392,9 @@ export def "accounts-data-sets-refresh-properties PutDataSetRefreshProperties" [
 #
 # DELETE /accounts/{AwsAccountId}/data-sources/{DataSourceId}
 # operationId: DeleteDataSource
-export def "accounts-data-sources DeleteDataSource" [
-  AwsAccountId: string
-  DataSourceId: string
+export def "accounts-data-sources delete" [
+  aws_account_id: string
+  data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2403,18 +2403,18 @@ export def "accounts-data-sources DeleteDataSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Arn: record, DataSourceId: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sources/($DataSourceId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_source_id: $data_source_id} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2425,9 +2425,9 @@ export def "accounts-data-sources DeleteDataSource" [
 #
 # GET /accounts/{AwsAccountId}/data-sources/{DataSourceId}
 # operationId: DescribeDataSource
-export def "accounts-data-sources DescribeDataSource" [
-  AwsAccountId: string
-  DataSourceId: string
+export def "accounts-data-sources get" [
+  aws_account_id: string
+  data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2436,18 +2436,18 @@ export def "accounts-data-sources DescribeDataSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DataSource: record<Arn: record, DataSourceId: record, Name: record, Type: record, Status: record, CreatedTime: record, LastUpdatedTime: record, DataSourceParameters: record<AmazonElasticsearchParameters: record, AthenaParameters: record, AuroraParameters: record, AuroraPostgreSqlParameters: record, AwsIotAnalyticsParameters: record, JiraParameters: record, MariaDbParameters: record, MySqlParameters: record, OracleParameters: record, PostgreSqlParameters: record, PrestoParameters: record, RdsParameters: record, RedshiftParameters: record, S3Parameters: record, ServiceNowParameters: record, SnowflakeParameters: record, SparkParameters: record, SqlServerParameters: record, TeradataParameters: record, TwitterParameters: record, AmazonOpenSearchParameters: record, ExasolParameters: record, DatabricksParameters: record>, AlternateDataSourceParameters: record, VpcConnectionProperties: record<VpcConnectionArn: record>, SslProperties: record<DisableSsl: record>, ErrorInfo: record<Type: record, Message: record>, SecretArn: record>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sources/($DataSourceId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_source_id: $data_source_id} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2462,9 +2462,9 @@ export def "accounts-data-sources DescribeDataSource" [
 # --Credentials shape: {CredentialPair?: any, CopySourceArn?: any, SecretArn?: any}
 # --VpcConnectionProperties shape: {VpcConnectionArn?: any}
 # --SslProperties shape: {DisableSsl?: any}
-export def "accounts-data-sources UpdateDataSource" [
-  AwsAccountId: string
-  DataSourceId: string
+export def "accounts-data-sources update" [
+  aws_account_id: string
+  data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2473,26 +2473,26 @@ export def "accounts-data-sources UpdateDataSource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Name: string # A display name for the data source.
-  --DataSourceParameters: record # The parameters that Amazon QuickSight uses to connect to your underlying data source. This is a variant type structure. For this structure to be valid, only one of the attributes can be non-null. — shape: {AmazonElasticsearchParameters?: any, AthenaParameters?: any, AuroraParameters?: any, AuroraPostgreSqlParameters?: any, AwsIotAnalyticsParameters?: any, JiraParameters?: any, MariaDbParameters?: any, MySqlParameters?: any, OracleParameters?: any, PostgreSqlParameters?: any, PrestoParameters?: any, RdsParameters?: any, RedshiftParameters?: any, S3Parameters?: any, ServiceNowParameters?: any, SnowflakeParameters?: any, SparkParameters?: any, SqlServerParameters?: any, TeradataParameters?: any, TwitterParameters?: any, AmazonOpenSearchParameters?: any, ExasolParameters?: any, DatabricksParameters?: any}
-  --Credentials: record # Data source credentials. This is a variant type structure. For this structure to be valid, only one of the attributes can be non-null. — shape: {CredentialPair?: any, CopySourceArn?: any, SecretArn?: any}
-  --VpcConnectionProperties: record # VPC connection properties. — shape: {VpcConnectionArn?: any}
-  --SslProperties: record # Secure Socket Layer (SSL) properties that apply when Amazon QuickSight connects to your underlying data source. — shape: {DisableSsl?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  name: string # A display name for the data source.
+  --data-source-parameters: record # The parameters that Amazon QuickSight uses to connect to your underlying data source. This is a variant type structure. For this structure to be valid, only one of the attributes can be non-null. — shape: {AmazonElasticsearchParameters?: any, AthenaParameters?: any, AuroraParameters?: any, AuroraPostgreSqlParameters?: any, AwsIotAnalyticsParameters?: any, JiraParameters?: any, MariaDbParameters?: any, MySqlParameters?: any, OracleParameters?: any, PostgreSqlParameters?: any, PrestoParameters?: any, RdsParameters?: any, RedshiftParameters?: any, S3Parameters?: any, ServiceNowParameters?: any, SnowflakeParameters?: any, SparkParameters?: any, SqlServerParameters?: any, TeradataParameters?: any, TwitterParameters?: any, AmazonOpenSearchParameters?: any, ExasolParameters?: any, DatabricksParameters?: any}
+  --credentials: record # Data source credentials. This is a variant type structure. For this structure to be valid, only one of the attributes can be non-null. — shape: {CredentialPair?: any, CopySourceArn?: any, SecretArn?: any}
+  --vpc-connection-properties: record # VPC connection properties. — shape: {VpcConnectionArn?: any}
+  --ssl-properties: record # Secure Socket Layer (SSL) properties that apply when Amazon QuickSight connects to your underlying data source. — shape: {DisableSsl?: any}
 ]: any -> record<Arn: record, DataSourceId: record, UpdateStatus: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sources/($DataSourceId)")
-  let body = {Name: $Name, DataSourceParameters: $DataSourceParameters, Credentials: $Credentials, VpcConnectionProperties: $VpcConnectionProperties, SslProperties: $SslProperties} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_source_id: $data_source_id} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}"))
+  let body = {"Name": $name, "DataSourceParameters": $data_source_parameters, "Credentials": $credentials, "VpcConnectionProperties": $vpc_connection_properties, "SslProperties": $ssl_properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2503,10 +2503,10 @@ export def "accounts-data-sources UpdateDataSource" [
 #
 # DELETE /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}
 # operationId: DeleteGroup
-export def "accounts-namespaces-groups DeleteGroup" [
-  GroupName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-groups delete" [
+  aws_account_id: string
+  namespace: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2515,18 +2515,18 @@ export def "accounts-namespaces-groups DeleteGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/groups/($GroupName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, group_name: $group_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2537,10 +2537,10 @@ export def "accounts-namespaces-groups DeleteGroup" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}
 # operationId: DescribeGroup
-export def "accounts-namespaces-groups DescribeGroup" [
-  GroupName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-groups get" [
+  aws_account_id: string
+  namespace: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2549,18 +2549,18 @@ export def "accounts-namespaces-groups DescribeGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Group: record<Arn: record, GroupName: record, Description: record, PrincipalId: record>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/groups/($GroupName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, group_name: $group_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2571,10 +2571,10 @@ export def "accounts-namespaces-groups DescribeGroup" [
 #
 # PUT /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}
 # operationId: UpdateGroup
-export def "accounts-namespaces-groups UpdateGroup" [
-  GroupName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-groups update" [
+  aws_account_id: string
+  namespace: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2583,22 +2583,22 @@ export def "accounts-namespaces-groups UpdateGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Description: string # The description for the group that you want to update.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --description: string # The description for the group that you want to update.
 ]: any -> record<Group: record<Arn: record, GroupName: record, Description: record, PrincipalId: record>, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/groups/($GroupName)")
-  let body = {Description: $Description} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, group_name: $group_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}"))
+  let body = {"Description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2609,10 +2609,10 @@ export def "accounts-namespaces-groups UpdateGroup" [
 #
 # DELETE /accounts/{AwsAccountId}/namespace/{Namespace}/iam-policy-assignments/{AssignmentName}
 # operationId: DeleteIAMPolicyAssignment
-export def "accounts-namespace-iam-policy-assignments DeleteIAMPolicyAssignment" [
-  AwsAccountId: string
-  AssignmentName: string
-  Namespace: string
+export def "accounts-namespace-iam-policy-assignments delete" [
+  aws_account_id: string
+  namespace: string
+  assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2621,18 +2621,18 @@ export def "accounts-namespace-iam-policy-assignments DeleteIAMPolicyAssignment"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AssignmentName: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespace/($Namespace)/iam-policy-assignments/($AssignmentName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, assignment_name: $assignment_name} | format pattern "/accounts/{aws_account_id}/namespace/{namespace}/iam-policy-assignments/{assignment_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2643,9 +2643,9 @@ export def "accounts-namespace-iam-policy-assignments DeleteIAMPolicyAssignment"
 #
 # DELETE /accounts/{AwsAccountId}/namespaces/{Namespace}
 # operationId: DeleteNamespace
-export def "accounts-namespaces DeleteNamespace" [
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces delete" [
+  aws_account_id: string
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2654,18 +2654,18 @@ export def "accounts-namespaces DeleteNamespace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2676,9 +2676,9 @@ export def "accounts-namespaces DeleteNamespace" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}
 # operationId: DescribeNamespace
-export def "accounts-namespaces DescribeNamespace" [
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces get" [
+  aws_account_id: string
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2687,18 +2687,18 @@ export def "accounts-namespaces DescribeNamespace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Namespace: record<Name: record, Arn: record, CapacityRegion: record, CreationStatus: record, IdentityStore: record, NamespaceError: record<Type: record, Message: record>>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2709,10 +2709,10 @@ export def "accounts-namespaces DescribeNamespace" [
 #
 # DELETE /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-schedules/{ScheduleId}
 # operationId: DeleteRefreshSchedule
-export def "accounts-data-sets-refresh-schedules DeleteRefreshSchedule" [
-  DataSetId: string
-  AwsAccountId: string
-  ScheduleId: string
+export def "accounts-data-sets-refresh-schedules delete" [
+  aws_account_id: string
+  data_set_id: string
+  schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2721,18 +2721,18 @@ export def "accounts-data-sets-refresh-schedules DeleteRefreshSchedule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, RequestId: record, ScheduleId: record, Arn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/refresh-schedules/($ScheduleId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id, schedule_id: $schedule_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules/{schedule_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2743,10 +2743,10 @@ export def "accounts-data-sets-refresh-schedules DeleteRefreshSchedule" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/refresh-schedules/{ScheduleId}
 # operationId: DescribeRefreshSchedule
-export def "accounts-data-sets-refresh-schedules DescribeRefreshSchedule" [
-  AwsAccountId: string
-  DataSetId: string
-  ScheduleId: string
+export def "accounts-data-sets-refresh-schedules get" [
+  aws_account_id: string
+  data_set_id: string
+  schedule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2755,18 +2755,18 @@ export def "accounts-data-sets-refresh-schedules DescribeRefreshSchedule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RefreshSchedule: record<ScheduleId: record, ScheduleFrequency: record<Interval: record, RefreshOnDay: record, Timezone: record, TimeOfTheDay: record>, StartAfterDateTime: record, RefreshType: record, Arn: record>, Status: record, RequestId: record, Arn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/refresh-schedules/($ScheduleId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id, schedule_id: $schedule_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/refresh-schedules/{schedule_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2777,10 +2777,10 @@ export def "accounts-data-sets-refresh-schedules DescribeRefreshSchedule" [
 #
 # DELETE /accounts/{AwsAccountId}/namespaces/{Namespace}/users/{UserName}
 # operationId: DeleteUser
-export def "accounts-namespaces-users DeleteUser" [
-  UserName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-users delete" [
+  aws_account_id: string
+  namespace: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2789,18 +2789,18 @@ export def "accounts-namespaces-users DeleteUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/users/($UserName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, user_name: $user_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2811,10 +2811,10 @@ export def "accounts-namespaces-users DeleteUser" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/users/{UserName}
 # operationId: DescribeUser
-export def "accounts-namespaces-users DescribeUser" [
-  UserName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-users get" [
+  aws_account_id: string
+  namespace: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2823,18 +2823,18 @@ export def "accounts-namespaces-users DescribeUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<User: record<Arn: record, UserName: record, Email: record, Role: record, IdentityType: record, Active: record, PrincipalId: record, CustomPermissionsName: record, ExternalLoginFederationProviderType: record, ExternalLoginFederationProviderUrl: record, ExternalLoginId: record>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/users/($UserName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, user_name: $user_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2845,10 +2845,10 @@ export def "accounts-namespaces-users DescribeUser" [
 #
 # PUT /accounts/{AwsAccountId}/namespaces/{Namespace}/users/{UserName}
 # operationId: UpdateUser
-export def "accounts-namespaces-users UpdateUser" [
-  UserName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-users update" [
+  aws_account_id: string
+  namespace: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2857,28 +2857,28 @@ export def "accounts-namespaces-users UpdateUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Email: string # The email address of the user that you want to update.
-  Role: string@Role-completer # <p>The Amazon QuickSight role of the user. The role can be one of the following default security cohorts:</p> <ul> <li> <p> <code>READER</code>: A user who has read-only access to dashboards.</p> </li> <li> <p> <code>AUTHOR</code>: A user who can create data sources, datasets, analyses, and dashboards.</p> </li> <li> <p> <code>ADMIN</code>: A user who is an author, who can also manage Amazon QuickSight settings.</p> </li> </ul> <p>The name of the Amazon QuickSight role is invisible to the user except for the console screens dealing with permissions.</p>
-  --CustomPermissionsName: string # <p>(Enterprise edition only) The name of the custom permissions profile that you want to assign to this user. Customized permissions allows you to control a user's access by restricting access the following operations:</p> <ul> <li> <p>Create and update data sources</p> </li> <li> <p>Create and update datasets</p> </li> <li> <p>Create and update email reports</p> </li> <li> <p>Subscribe to email reports</p> </li> </ul> <p>A set of custom permissions includes any combination of these restrictions. Currently, you need to create the profile names for custom permission sets by using the Amazon QuickSight console. Then, you use the <code>RegisterUser</code> API operation to assign the named set of permissions to a Amazon QuickSight user. </p> <p>Amazon QuickSight custom permissions are applied through IAM policies. Therefore, they override the permissions typically granted by assigning Amazon QuickSight users to one of the default security cohorts in Amazon QuickSight (admin, author, reader).</p> <p>This feature is available only to Amazon QuickSight Enterprise edition subscriptions.</p>
-  --UnapplyCustomPermissions: oneof<nothing, bool> # A flag that you use to indicate that you want to remove all custom permissions from this user. Using this parameter resets the user to the state it was in before a custom permissions profile was applied. This parameter defaults to NULL and it doesn't accept any other value.
-  --ExternalLoginFederationProviderType: string # <p>The type of supported external login provider that provides identity to let a user federate into Amazon QuickSight with an associated Identity and Access Management(IAM) role. The type of supported external login provider can be one of the following.</p> <ul> <li> <p> <code>COGNITO</code>: Amazon Cognito. The provider URL is cognito-identity.amazonaws.com. When choosing the <code>COGNITO</code> provider type, don’t use the "CustomFederationProviderUrl" parameter which is only needed when the external provider is custom.</p> </li> <li> <p> <code>CUSTOM_OIDC</code>: Custom OpenID Connect (OIDC) provider. When choosing <code>CUSTOM_OIDC</code> type, use the <code>CustomFederationProviderUrl</code> parameter to provide the custom OIDC provider URL.</p> </li> <li> <p> <code>NONE</code>: This clears all the previously saved external login information for a user. Use the <code> <a href="https://docs.aws.amazon.com/quicksight/latest/APIReference/API_DescribeUser.html">DescribeUser</a> </code> API operation to check the external login information.</p> </li> </ul>
-  --CustomFederationProviderUrl: string # The URL of the custom OpenID Connect (OIDC) provider that provides identity to let a user federate into Amazon QuickSight with an associated Identity and Access Management(IAM) role. This parameter should only be used when <code>ExternalLoginFederationProviderType</code> parameter is set to <code>CUSTOM_OIDC</code>.
-  --ExternalLoginId: string # The identity ID for a user in the external login provider.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  email: string # The email address of the user that you want to update.
+  role: string@role-completer # <p>The Amazon QuickSight role of the user. The role can be one of the following default security cohorts:</p> <ul> <li> <p> <code>READER</code>: A user who has read-only access to dashboards.</p> </li> <li> <p> <code>AUTHOR</code>: A user who can create data sources, datasets, analyses, and dashboards.</p> </li> <li> <p> <code>ADMIN</code>: A user who is an author, who can also manage Amazon QuickSight settings.</p> </li> </ul> <p>The name of the Amazon QuickSight role is invisible to the user except for the console screens dealing with permissions.</p>
+  --custom-permissions-name: string # <p>(Enterprise edition only) The name of the custom permissions profile that you want to assign to this user. Customized permissions allows you to control a user's access by restricting access the following operations:</p> <ul> <li> <p>Create and update data sources</p> </li> <li> <p>Create and update datasets</p> </li> <li> <p>Create and update email reports</p> </li> <li> <p>Subscribe to email reports</p> </li> </ul> <p>A set of custom permissions includes any combination of these restrictions. Currently, you need to create the profile names for custom permission sets by using the Amazon QuickSight console. Then, you use the <code>RegisterUser</code> API operation to assign the named set of permissions to a Amazon QuickSight user. </p> <p>Amazon QuickSight custom permissions are applied through IAM policies. Therefore, they override the permissions typically granted by assigning Amazon QuickSight users to one of the default security cohorts in Amazon QuickSight (admin, author, reader).</p> <p>This feature is available only to Amazon QuickSight Enterprise edition subscriptions.</p>
+  --unapply-custom-permissions: oneof<nothing, bool> # A flag that you use to indicate that you want to remove all custom permissions from this user. Using this parameter resets the user to the state it was in before a custom permissions profile was applied. This parameter defaults to NULL and it doesn't accept any other value.
+  --external-login-federation-provider-type: string # <p>The type of supported external login provider that provides identity to let a user federate into Amazon QuickSight with an associated Identity and Access Management(IAM) role. The type of supported external login provider can be one of the following.</p> <ul> <li> <p> <code>COGNITO</code>: Amazon Cognito. The provider URL is cognito-identity.amazonaws.com. When choosing the <code>COGNITO</code> provider type, don’t use the "CustomFederationProviderUrl" parameter which is only needed when the external provider is custom.</p> </li> <li> <p> <code>CUSTOM_OIDC</code>: Custom OpenID Connect (OIDC) provider. When choosing <code>CUSTOM_OIDC</code> type, use the <code>CustomFederationProviderUrl</code> parameter to provide the custom OIDC provider URL.</p> </li> <li> <p> <code>NONE</code>: This clears all the previously saved external login information for a user. Use the <code> <a href="https://docs.aws.amazon.com/quicksight/latest/APIReference/API_DescribeUser.html">DescribeUser</a> </code> API operation to check the external login information.</p> </li> </ul>
+  --custom-federation-provider-url: string # The URL of the custom OpenID Connect (OIDC) provider that provides identity to let a user federate into Amazon QuickSight with an associated Identity and Access Management(IAM) role. This parameter should only be used when <code>ExternalLoginFederationProviderType</code> parameter is set to <code>CUSTOM_OIDC</code>.
+  --external-login-id: string # The identity ID for a user in the external login provider.
 ]: any -> record<User: record<Arn: record, UserName: record, Email: record, Role: record, IdentityType: record, Active: record, PrincipalId: record, CustomPermissionsName: record, ExternalLoginFederationProviderType: record, ExternalLoginFederationProviderUrl: record, ExternalLoginId: record>, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/users/($UserName)")
-  let body = {Email: $Email, Role: $Role, CustomPermissionsName: $CustomPermissionsName, UnapplyCustomPermissions: $UnapplyCustomPermissions, ExternalLoginFederationProviderType: $ExternalLoginFederationProviderType, CustomFederationProviderUrl: $CustomFederationProviderUrl, ExternalLoginId: $ExternalLoginId} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, user_name: $user_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}"))
+  let body = {"Email": $email, "Role": $role, "CustomPermissionsName": $custom_permissions_name, "UnapplyCustomPermissions": $unapply_custom_permissions, "ExternalLoginFederationProviderType": $external_login_federation_provider_type, "CustomFederationProviderUrl": $custom_federation_provider_url, "ExternalLoginId": $external_login_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2889,10 +2889,10 @@ export def "accounts-namespaces-users UpdateUser" [
 #
 # DELETE /accounts/{AwsAccountId}/namespaces/{Namespace}/user-principals/{PrincipalId}
 # operationId: DeleteUserByPrincipalId
-export def "accounts-namespaces-user-principals DeleteUserByPrincipalId" [
-  PrincipalId: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-user-principals delete" [
+  aws_account_id: string
+  namespace: string
+  principal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2901,18 +2901,18 @@ export def "accounts-namespaces-user-principals DeleteUserByPrincipalId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/user-principals/($PrincipalId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, principal_id: $principal_id} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/user-principals/{principal_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2923,8 +2923,8 @@ export def "accounts-namespaces-user-principals DeleteUserByPrincipalId" [
 #
 # GET /accounts/{AwsAccountId}/settings
 # operationId: DescribeAccountSettings
-export def "accounts-settings DescribeAccountSettings" [
-  AwsAccountId: string
+export def "accounts-settings get" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2933,18 +2933,18 @@ export def "accounts-settings DescribeAccountSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AccountSettings: record<AccountName: record, Edition: record, DefaultNamespace: record, NotificationEmail: record, PublicSharingEnabled: record, TerminationProtectionEnabled: record>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/settings")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/settings"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2955,8 +2955,8 @@ export def "accounts-settings DescribeAccountSettings" [
 #
 # PUT /accounts/{AwsAccountId}/settings
 # operationId: UpdateAccountSettings
-export def "accounts-settings UpdateAccountSettings" [
-  AwsAccountId: string
+export def "accounts-settings update" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2965,24 +2965,24 @@ export def "accounts-settings UpdateAccountSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  DefaultNamespace: string # The default namespace for this Amazon Web Services account. Currently, the default is <code>default</code>. IAM users that register for the first time with Amazon QuickSight provide an email address that becomes associated with the default namespace. 
-  --NotificationEmail: string # The email address that you want Amazon QuickSight to send notifications to regarding your Amazon Web Services account or Amazon QuickSight subscription.
-  --TerminationProtectionEnabled: oneof<nothing, bool> # A boolean value that determines whether or not an Amazon QuickSight account can be deleted. A <code>True</code> value doesn't allow the account to be deleted and results in an error message if a user tries to make a <code>DeleteAccountSubscription</code> request. A <code>False</code> value will allow the account to be deleted.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  default_namespace: string # The default namespace for this Amazon Web Services account. Currently, the default is <code>default</code>. IAM users that register for the first time with Amazon QuickSight provide an email address that becomes associated with the default namespace. 
+  --notification-email: string # The email address that you want Amazon QuickSight to send notifications to regarding your Amazon Web Services account or Amazon QuickSight subscription.
+  --termination-protection-enabled: oneof<nothing, bool> # A boolean value that determines whether or not an Amazon QuickSight account can be deleted. A <code>True</code> value doesn't allow the account to be deleted and results in an error message if a user tries to make a <code>DeleteAccountSubscription</code> request. A <code>False</code> value will allow the account to be deleted.
 ]: any -> record<RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/settings")
-  let body = {DefaultNamespace: $DefaultNamespace, NotificationEmail: $NotificationEmail, TerminationProtectionEnabled: $TerminationProtectionEnabled} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/settings"))
+  let body = {"DefaultNamespace": $default_namespace, "NotificationEmail": $notification_email, "TerminationProtectionEnabled": $termination_protection_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2993,9 +2993,9 @@ export def "accounts-settings UpdateAccountSettings" [
 #
 # GET /accounts/{AwsAccountId}/analyses/{AnalysisId}/definition
 # operationId: DescribeAnalysisDefinition
-export def "accounts-analyses-definition DescribeAnalysisDefinition" [
-  AwsAccountId: string
-  AnalysisId: string
+export def "accounts-analyses-definition get" [
+  aws_account_id: string
+  analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3004,18 +3004,18 @@ export def "accounts-analyses-definition DescribeAnalysisDefinition" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AnalysisId: record, Name: record, Errors: record, ResourceStatus: record, ThemeArn: record, Definition: record<DataSetIdentifierDeclarations: record, Sheets: record, CalculatedFields: record, ParameterDeclarations: record, FilterGroups: record, ColumnConfigurations: record, AnalysisDefaults: record<DefaultNewSheetConfiguration: record>>, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/analyses/($AnalysisId)/definition")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, analysis_id: $analysis_id} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}/definition"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3026,9 +3026,9 @@ export def "accounts-analyses-definition DescribeAnalysisDefinition" [
 #
 # GET /accounts/{AwsAccountId}/analyses/{AnalysisId}/permissions
 # operationId: DescribeAnalysisPermissions
-export def "accounts-analyses-permissions DescribeAnalysisPermissions" [
-  AwsAccountId: string
-  AnalysisId: string
+export def "accounts-analyses-permissions get" [
+  aws_account_id: string
+  analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3037,18 +3037,18 @@ export def "accounts-analyses-permissions DescribeAnalysisPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AnalysisId: record, AnalysisArn: record, Permissions: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/analyses/($AnalysisId)/permissions")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, analysis_id: $analysis_id} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}/permissions"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3061,9 +3061,9 @@ export def "accounts-analyses-permissions DescribeAnalysisPermissions" [
 # operationId: UpdateAnalysisPermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-analyses-permissions UpdateAnalysisPermissions" [
-  AwsAccountId: string
-  AnalysisId: string
+export def "accounts-analyses-permissions update-analysis" [
+  aws_account_id: string
+  analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3072,23 +3072,23 @@ export def "accounts-analyses-permissions UpdateAnalysisPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --GrantPermissions: list # A structure that describes the permissions to add and the principal to add them to. — item shape: {Principal: any, Actions: any}
-  --RevokePermissions: list # A structure that describes the permissions to remove and the principal to remove them from. — item shape: {Principal: any, Actions: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --grant-permissions: list # A structure that describes the permissions to add and the principal to add them to. — item shape: {Principal: any, Actions: any}
+  --revoke-permissions: list # A structure that describes the permissions to remove and the principal to remove them from. — item shape: {Principal: any, Actions: any}
 ]: any -> record<AnalysisArn: record, AnalysisId: record, Permissions: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/analyses/($AnalysisId)/permissions")
-  let body = {GrantPermissions: $GrantPermissions, RevokePermissions: $RevokePermissions} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, analysis_id: $analysis_id} | format pattern "/accounts/{aws_account_id}/analyses/{analysis_id}/permissions"))
+  let body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3099,9 +3099,9 @@ export def "accounts-analyses-permissions UpdateAnalysisPermissions" [
 #
 # GET /accounts/{AwsAccountId}/dashboards/{DashboardId}/definition
 # operationId: DescribeDashboardDefinition
-export def "accounts-dashboards-definition DescribeDashboardDefinition" [
-  AwsAccountId: string
-  DashboardId: string
+export def "accounts-dashboards-definition get" [
+  aws_account_id: string
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3112,19 +3112,19 @@ export def "accounts-dashboards-definition DescribeDashboardDefinition" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-number: int # The version number for the dashboard. If a version number isn't passed, the latest published dashboard version is described. 
   --alias-name: string # The alias name.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DashboardId: record, Errors: record, Name: record, ResourceStatus: record, ThemeArn: record, Definition: record<DataSetIdentifierDeclarations: record, Sheets: record, CalculatedFields: record, ParameterDeclarations: record, FilterGroups: record, ColumnConfigurations: record, AnalysisDefaults: record<DefaultNewSheetConfiguration: record>>, Status: record, RequestId: record, DashboardPublishOptions: record<AdHocFilteringOption: record<AvailabilityStatus: record>, ExportToCSVOption: record<AvailabilityStatus: record>, SheetControlsOption: record<VisibilityState: record>, VisualPublishOptions: record<ExportHiddenFieldsOption: record>, SheetLayoutElementMaximizationOption: record<AvailabilityStatus: record>, VisualMenuOption: record<AvailabilityStatus: record>, VisualAxisSortOption: record<AvailabilityStatus: record>, ExportWithHiddenFieldsOption: record<AvailabilityStatus: record>, DataPointDrillUpDownOption: record<AvailabilityStatus: record>, DataPointMenuLabelOption: record<AvailabilityStatus: record>, DataPointTooltipOption: record<AvailabilityStatus: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version-number" $version_number "scalar") (serialize-qp "alias-name" $alias_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards/($DashboardId)/definition" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, dashboard_id: $dashboard_id} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/definition") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3135,9 +3135,9 @@ export def "accounts-dashboards-definition DescribeDashboardDefinition" [
 #
 # GET /accounts/{AwsAccountId}/dashboards/{DashboardId}/permissions
 # operationId: DescribeDashboardPermissions
-export def "accounts-dashboards-permissions DescribeDashboardPermissions" [
-  AwsAccountId: string
-  DashboardId: string
+export def "accounts-dashboards-permissions get" [
+  aws_account_id: string
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3146,18 +3146,18 @@ export def "accounts-dashboards-permissions DescribeDashboardPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DashboardId: record, DashboardArn: record, Permissions: record, Status: record, RequestId: record, LinkSharingConfiguration: record<Permissions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards/($DashboardId)/permissions")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, dashboard_id: $dashboard_id} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/permissions"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3172,9 +3172,9 @@ export def "accounts-dashboards-permissions DescribeDashboardPermissions" [
 # --RevokePermissions item shape: {Principal: any, Actions: any}
 # --GrantLinkPermissions item shape: {Principal: any, Actions: any}
 # --RevokeLinkPermissions item shape: {Principal: any, Actions: any}
-export def "accounts-dashboards-permissions UpdateDashboardPermissions" [
-  AwsAccountId: string
-  DashboardId: string
+export def "accounts-dashboards-permissions update" [
+  aws_account_id: string
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3183,25 +3183,25 @@ export def "accounts-dashboards-permissions UpdateDashboardPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --GrantPermissions: list # The permissions that you want to grant on this resource. — item shape: {Principal: any, Actions: any}
-  --RevokePermissions: list # The permissions that you want to revoke from this resource. — item shape: {Principal: any, Actions: any}
-  --GrantLinkPermissions: list # Grants link permissions to all users in a defined namespace. — item shape: {Principal: any, Actions: any}
-  --RevokeLinkPermissions: list # Revokes link permissions from all users in a defined namespace. — item shape: {Principal: any, Actions: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --grant-permissions: list # The permissions that you want to grant on this resource. — item shape: {Principal: any, Actions: any}
+  --revoke-permissions: list # The permissions that you want to revoke from this resource. — item shape: {Principal: any, Actions: any}
+  --grant-link-permissions: list # Grants link permissions to all users in a defined namespace. — item shape: {Principal: any, Actions: any}
+  --revoke-link-permissions: list # Revokes link permissions from all users in a defined namespace. — item shape: {Principal: any, Actions: any}
 ]: any -> record<DashboardArn: record, DashboardId: record, Permissions: record, RequestId: record, Status: record, LinkSharingConfiguration: record<Permissions: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards/($DashboardId)/permissions")
-  let body = {GrantPermissions: $GrantPermissions, RevokePermissions: $RevokePermissions, GrantLinkPermissions: $GrantLinkPermissions, RevokeLinkPermissions: $RevokeLinkPermissions} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, dashboard_id: $dashboard_id} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/permissions"))
+  let body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions, "GrantLinkPermissions": $grant_link_permissions, "RevokeLinkPermissions": $revoke_link_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3212,9 +3212,9 @@ export def "accounts-dashboards-permissions UpdateDashboardPermissions" [
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/permissions
 # operationId: DescribeDataSetPermissions
-export def "accounts-data-sets-permissions DescribeDataSetPermissions" [
-  AwsAccountId: string
-  DataSetId: string
+export def "accounts-data-sets-permissions get" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3223,18 +3223,18 @@ export def "accounts-data-sets-permissions DescribeDataSetPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DataSetArn: record, DataSetId: record, Permissions: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/permissions")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/permissions"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3247,9 +3247,9 @@ export def "accounts-data-sets-permissions DescribeDataSetPermissions" [
 # operationId: UpdateDataSetPermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-data-sets-permissions UpdateDataSetPermissions" [
-  AwsAccountId: string
-  DataSetId: string
+export def "accounts-data-sets-permissions update" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3258,23 +3258,23 @@ export def "accounts-data-sets-permissions UpdateDataSetPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --GrantPermissions: list # The resource permissions that you want to grant to the dataset. — item shape: {Principal: any, Actions: any}
-  --RevokePermissions: list # The resource permissions that you want to revoke from the dataset. — item shape: {Principal: any, Actions: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --grant-permissions: list # The resource permissions that you want to grant to the dataset. — item shape: {Principal: any, Actions: any}
+  --revoke-permissions: list # The resource permissions that you want to revoke from the dataset. — item shape: {Principal: any, Actions: any}
 ]: any -> record<DataSetArn: record, DataSetId: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/permissions")
-  let body = {GrantPermissions: $GrantPermissions, RevokePermissions: $RevokePermissions} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/permissions"))
+  let body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3285,9 +3285,9 @@ export def "accounts-data-sets-permissions UpdateDataSetPermissions" [
 #
 # GET /accounts/{AwsAccountId}/data-sources/{DataSourceId}/permissions
 # operationId: DescribeDataSourcePermissions
-export def "accounts-data-sources-permissions DescribeDataSourcePermissions" [
-  AwsAccountId: string
-  DataSourceId: string
+export def "accounts-data-sources-permissions get" [
+  aws_account_id: string
+  data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3296,18 +3296,18 @@ export def "accounts-data-sources-permissions DescribeDataSourcePermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DataSourceArn: record, DataSourceId: record, Permissions: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sources/($DataSourceId)/permissions")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_source_id: $data_source_id} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}/permissions"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3320,9 +3320,9 @@ export def "accounts-data-sources-permissions DescribeDataSourcePermissions" [
 # operationId: UpdateDataSourcePermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-data-sources-permissions UpdateDataSourcePermissions" [
-  AwsAccountId: string
-  DataSourceId: string
+export def "accounts-data-sources-permissions update" [
+  aws_account_id: string
+  data_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3331,23 +3331,23 @@ export def "accounts-data-sources-permissions UpdateDataSourcePermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --GrantPermissions: list # A list of resource permissions that you want to grant on the data source. — item shape: {Principal: any, Actions: any}
-  --RevokePermissions: list # A list of resource permissions that you want to revoke on the data source. — item shape: {Principal: any, Actions: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --grant-permissions: list # A list of resource permissions that you want to grant on the data source. — item shape: {Principal: any, Actions: any}
+  --revoke-permissions: list # A list of resource permissions that you want to revoke on the data source. — item shape: {Principal: any, Actions: any}
 ]: any -> record<DataSourceArn: record, DataSourceId: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sources/($DataSourceId)/permissions")
-  let body = {GrantPermissions: $GrantPermissions, RevokePermissions: $RevokePermissions} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_source_id: $data_source_id} | format pattern "/accounts/{aws_account_id}/data-sources/{data_source_id}/permissions"))
+  let body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3358,9 +3358,9 @@ export def "accounts-data-sources-permissions UpdateDataSourcePermissions" [
 #
 # GET /accounts/{AwsAccountId}/folders/{FolderId}/permissions
 # operationId: DescribeFolderPermissions
-export def "accounts-folders-permissions DescribeFolderPermissions" [
-  AwsAccountId: string
-  FolderId: string
+export def "accounts-folders-permissions get" [
+  aws_account_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3369,18 +3369,18 @@ export def "accounts-folders-permissions DescribeFolderPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, FolderId: record, Arn: record, Permissions: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders/($FolderId)/permissions")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, folder_id: $folder_id} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/permissions"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3393,9 +3393,9 @@ export def "accounts-folders-permissions DescribeFolderPermissions" [
 # operationId: UpdateFolderPermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-folders-permissions UpdateFolderPermissions" [
-  AwsAccountId: string
-  FolderId: string
+export def "accounts-folders-permissions update" [
+  aws_account_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3404,23 +3404,23 @@ export def "accounts-folders-permissions UpdateFolderPermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --GrantPermissions: list # The permissions that you want to grant on a resource. — item shape: {Principal: any, Actions: any}
-  --RevokePermissions: list # The permissions that you want to revoke from a resource. — item shape: {Principal: any, Actions: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --grant-permissions: list # The permissions that you want to grant on a resource. — item shape: {Principal: any, Actions: any}
+  --revoke-permissions: list # The permissions that you want to revoke from a resource. — item shape: {Principal: any, Actions: any}
 ]: any -> record<Status: record, Arn: record, FolderId: record, Permissions: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders/($FolderId)/permissions")
-  let body = {GrantPermissions: $GrantPermissions, RevokePermissions: $RevokePermissions} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, folder_id: $folder_id} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/permissions"))
+  let body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3431,9 +3431,9 @@ export def "accounts-folders-permissions UpdateFolderPermissions" [
 #
 # GET /accounts/{AwsAccountId}/folders/{FolderId}/resolved-permissions
 # operationId: DescribeFolderResolvedPermissions
-export def "accounts-folders-resolved-permissions DescribeFolderResolvedPermissions" [
-  AwsAccountId: string
-  FolderId: string
+export def "accounts-folders-resolved-permissions get" [
+  aws_account_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3442,18 +3442,18 @@ export def "accounts-folders-resolved-permissions DescribeFolderResolvedPermissi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, FolderId: record, Arn: record, Permissions: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders/($FolderId)/resolved-permissions")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, folder_id: $folder_id} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/resolved-permissions"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3464,10 +3464,10 @@ export def "accounts-folders-resolved-permissions DescribeFolderResolvedPermissi
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/iam-policy-assignments/{AssignmentName}
 # operationId: DescribeIAMPolicyAssignment
-export def "accounts-namespaces-iam-policy-assignments DescribeIAMPolicyAssignment" [
-  AwsAccountId: string
-  AssignmentName: string
-  Namespace: string
+export def "accounts-namespaces-iam-policy-assignments get" [
+  aws_account_id: string
+  namespace: string
+  assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3476,18 +3476,18 @@ export def "accounts-namespaces-iam-policy-assignments DescribeIAMPolicyAssignme
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<IAMPolicyAssignment: record<AwsAccountId: record, AssignmentId: record, AssignmentName: record, PolicyArn: record, Identities: record, AssignmentStatus: record>, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/iam-policy-assignments/($AssignmentName)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, assignment_name: $assignment_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments/{assignment_name}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3498,10 +3498,10 @@ export def "accounts-namespaces-iam-policy-assignments DescribeIAMPolicyAssignme
 #
 # PUT /accounts/{AwsAccountId}/namespaces/{Namespace}/iam-policy-assignments/{AssignmentName}
 # operationId: UpdateIAMPolicyAssignment
-export def "accounts-namespaces-iam-policy-assignments UpdateIAMPolicyAssignment" [
-  AwsAccountId: string
-  AssignmentName: string
-  Namespace: string
+export def "accounts-namespaces-iam-policy-assignments update" [
+  aws_account_id: string
+  namespace: string
+  assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3510,24 +3510,24 @@ export def "accounts-namespaces-iam-policy-assignments UpdateIAMPolicyAssignment
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --AssignmentStatus: string@AssignmentStatus-completer # <p>The status of the assignment. Possible values are as follows:</p> <ul> <li> <p> <code>ENABLED</code> - Anything specified in this assignment is used when creating the data source.</p> </li> <li> <p> <code>DISABLED</code> - This assignment isn't used when creating the data source.</p> </li> <li> <p> <code>DRAFT</code> - This assignment is an unfinished draft and isn't used when creating the data source.</p> </li> </ul>
-  --PolicyArn: string # The ARN for the IAM policy to apply to the Amazon QuickSight users and groups specified in this assignment.
-  --Identities: record # The Amazon QuickSight users, groups, or both that you want to assign the policy to.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --assignment-status: string@assignment-status-completer # <p>The status of the assignment. Possible values are as follows:</p> <ul> <li> <p> <code>ENABLED</code> - Anything specified in this assignment is used when creating the data source.</p> </li> <li> <p> <code>DISABLED</code> - This assignment isn't used when creating the data source.</p> </li> <li> <p> <code>DRAFT</code> - This assignment is an unfinished draft and isn't used when creating the data source.</p> </li> </ul>
+  --policy-arn: string # The ARN for the IAM policy to apply to the Amazon QuickSight users and groups specified in this assignment.
+  --identities: record # The Amazon QuickSight users, groups, or both that you want to assign the policy to.
 ]: any -> record<AssignmentName: record, AssignmentId: record, PolicyArn: record, Identities: record, AssignmentStatus: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/iam-policy-assignments/($AssignmentName)")
-  let body = {AssignmentStatus: $AssignmentStatus, PolicyArn: $PolicyArn, Identities: $Identities} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, assignment_name: $assignment_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments/{assignment_name}"))
+  let body = {"AssignmentStatus": $assignment_status, "PolicyArn": $policy_arn, "Identities": $identities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3538,8 +3538,8 @@ export def "accounts-namespaces-iam-policy-assignments UpdateIAMPolicyAssignment
 #
 # GET /accounts/{AwsAccountId}/ip-restriction
 # operationId: DescribeIpRestriction
-export def "accounts-ip-restriction DescribeIpRestriction" [
-  AwsAccountId: string
+export def "accounts-ip-restriction get" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3548,18 +3548,18 @@ export def "accounts-ip-restriction DescribeIpRestriction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AwsAccountId: record, IpRestrictionRuleMap: record, Enabled: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/ip-restriction")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/ip-restriction"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3570,8 +3570,8 @@ export def "accounts-ip-restriction DescribeIpRestriction" [
 #
 # POST /accounts/{AwsAccountId}/ip-restriction
 # operationId: UpdateIpRestriction
-export def "accounts-ip-restriction UpdateIpRestriction" [
-  AwsAccountId: string
+export def "accounts-ip-restriction update" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3580,23 +3580,23 @@ export def "accounts-ip-restriction UpdateIpRestriction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --IpRestrictionRuleMap: record # A map that describes the updated IP rules with CIDR ranges and descriptions.
-  --Enabled: oneof<nothing, bool> # A value that specifies whether IP rules are turned on.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --ip-restriction-rule-map: record # A map that describes the updated IP rules with CIDR ranges and descriptions.
+  --enabled: oneof<nothing, bool> # A value that specifies whether IP rules are turned on.
 ]: any -> record<AwsAccountId: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/ip-restriction")
-  let body = {IpRestrictionRuleMap: $IpRestrictionRuleMap, Enabled: $Enabled} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/ip-restriction"))
+  let body = {"IpRestrictionRuleMap": $ip_restriction_rule_map, "Enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3607,9 +3607,9 @@ export def "accounts-ip-restriction UpdateIpRestriction" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}/definition
 # operationId: DescribeTemplateDefinition
-export def "accounts-templates-definition DescribeTemplateDefinition" [
-  AwsAccountId: string
-  TemplateId: string
+export def "accounts-templates-definition get" [
+  aws_account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3620,19 +3620,19 @@ export def "accounts-templates-definition DescribeTemplateDefinition" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --version-number: int # The version number of the template.
   --alias-name: string # The alias of the template that you want to describe. If you name a specific alias, you describe the version that the alias points to. You can specify the latest version of the template by providing the keyword <code>$LATEST</code> in the <code>AliasName</code> parameter. The keyword <code>$PUBLISHED</code> doesn't apply to templates.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Name: record, TemplateId: record, Errors: record, ResourceStatus: record, ThemeArn: record, Definition: record<DataSetConfigurations: record, Sheets: record, CalculatedFields: record, ParameterDeclarations: record, FilterGroups: record, ColumnConfigurations: record, AnalysisDefaults: record<DefaultNewSheetConfiguration: record>>, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version-number" $version_number "scalar") (serialize-qp "alias-name" $alias_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)/definition" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/definition") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3643,9 +3643,9 @@ export def "accounts-templates-definition DescribeTemplateDefinition" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}/permissions
 # operationId: DescribeTemplatePermissions
-export def "accounts-templates-permissions DescribeTemplatePermissions" [
-  AwsAccountId: string
-  TemplateId: string
+export def "accounts-templates-permissions get" [
+  aws_account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3654,18 +3654,18 @@ export def "accounts-templates-permissions DescribeTemplatePermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<TemplateId: record, TemplateArn: record, Permissions: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)/permissions")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/permissions"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3678,9 +3678,9 @@ export def "accounts-templates-permissions DescribeTemplatePermissions" [
 # operationId: UpdateTemplatePermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-templates-permissions UpdateTemplatePermissions" [
-  AwsAccountId: string
-  TemplateId: string
+export def "accounts-templates-permissions update" [
+  aws_account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3689,23 +3689,23 @@ export def "accounts-templates-permissions UpdateTemplatePermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --GrantPermissions: list # A list of resource permissions to be granted on the template.  — item shape: {Principal: any, Actions: any}
-  --RevokePermissions: list # A list of resource permissions to be revoked from the template.  — item shape: {Principal: any, Actions: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --grant-permissions: list # A list of resource permissions to be granted on the template.  — item shape: {Principal: any, Actions: any}
+  --revoke-permissions: list # A list of resource permissions to be revoked from the template.  — item shape: {Principal: any, Actions: any}
 ]: any -> record<TemplateId: record, TemplateArn: record, Permissions: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)/permissions")
-  let body = {GrantPermissions: $GrantPermissions, RevokePermissions: $RevokePermissions} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/permissions"))
+  let body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3716,9 +3716,9 @@ export def "accounts-templates-permissions UpdateTemplatePermissions" [
 #
 # GET /accounts/{AwsAccountId}/themes/{ThemeId}/permissions
 # operationId: DescribeThemePermissions
-export def "accounts-themes-permissions DescribeThemePermissions" [
-  AwsAccountId: string
-  ThemeId: string
+export def "accounts-themes-permissions get" [
+  aws_account_id: string
+  theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3727,18 +3727,18 @@ export def "accounts-themes-permissions DescribeThemePermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ThemeId: record, ThemeArn: record, Permissions: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)/permissions")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/permissions"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3751,9 +3751,9 @@ export def "accounts-themes-permissions DescribeThemePermissions" [
 # operationId: UpdateThemePermissions
 # --GrantPermissions item shape: {Principal: any, Actions: any}
 # --RevokePermissions item shape: {Principal: any, Actions: any}
-export def "accounts-themes-permissions UpdateThemePermissions" [
-  AwsAccountId: string
-  ThemeId: string
+export def "accounts-themes-permissions update" [
+  aws_account_id: string
+  theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3762,23 +3762,23 @@ export def "accounts-themes-permissions UpdateThemePermissions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --GrantPermissions: list # A list of resource permissions to be granted for the theme. — item shape: {Principal: any, Actions: any}
-  --RevokePermissions: list # A list of resource permissions to be revoked from the theme. — item shape: {Principal: any, Actions: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --grant-permissions: list # A list of resource permissions to be granted for the theme. — item shape: {Principal: any, Actions: any}
+  --revoke-permissions: list # A list of resource permissions to be revoked from the theme. — item shape: {Principal: any, Actions: any}
 ]: any -> record<ThemeId: record, ThemeArn: record, Permissions: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)/permissions")
-  let body = {GrantPermissions: $GrantPermissions, RevokePermissions: $RevokePermissions} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/permissions"))
+  let body = {"GrantPermissions": $grant_permissions, "RevokePermissions": $revoke_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3791,8 +3791,8 @@ export def "accounts-themes-permissions UpdateThemePermissions" [
 # operationId: GenerateEmbedUrlForAnonymousUser
 # --SessionTags item shape: {Key: any, Value: any}
 # --ExperienceConfiguration shape: {Dashboard?: any, DashboardVisual?: any, QSearchBar?: any}
-export def "accounts-embed-url-anonymous-user GenerateEmbedUrlForAnonymousUser" [
-  AwsAccountId: string
+export def "accounts-embed-url-anonymous-user post" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3801,27 +3801,27 @@ export def "accounts-embed-url-anonymous-user GenerateEmbedUrlForAnonymousUser" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --SessionLifetimeInMinutes: int # How many minutes the session is valid. The session lifetime must be in [15-600] minutes range.
-  Namespace: string # The Amazon QuickSight namespace that the anonymous user virtually belongs to. If you are not using an Amazon QuickSight custom namespace, set this to <code>default</code>.
-  --SessionTags: list # <p>The session tags used for row-level security. Before you use this parameter, make sure that you have configured the relevant datasets using the <code>DataSet$RowLevelPermissionTagConfiguration</code> parameter so that session tags can be used to provide row-level security.</p> <p>These are not the tags used for the Amazon Web Services resource tagging feature. For more information, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/quicksight-dev-rls-tags.html">Using Row-Level Security (RLS) with Tags</a>in the <i>Amazon QuickSight User Guide</i>.</p> — item shape: {Key: any, Value: any}
-  AuthorizedResourceArns: list # The Amazon Resource Names (ARNs) for the Amazon QuickSight resources that the user is authorized to access during the lifetime of the session. If you choose <code>Dashboard</code> embedding experience, pass the list of dashboard ARNs in the account that you want the user to be able to view. Currently, you can pass up to 25 dashboard ARNs in each API call.
-  ExperienceConfiguration: record # The type of experience you want to embed. For anonymous users, you can embed Amazon QuickSight dashboards. — shape: {Dashboard?: any, DashboardVisual?: any, QSearchBar?: any}
-  --AllowedDomains: list # <p>The domains that you want to add to the allow list for access to the generated URL that is then embedded. This optional parameter overrides the static domains that are configured in the Manage QuickSight menu in the Amazon QuickSight console. Instead, it allows only the domains that you include in this parameter. You can list up to three domains or subdomains in each API call.</p> <p>To include all subdomains under a specific domain to the allow list, use <code>*</code>. For example, <code>https://*.sapp.amazon.com</code> includes all subdomains under <code>https://sapp.amazon.com</code>.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --session-lifetime-in-minutes: int # How many minutes the session is valid. The session lifetime must be in [15-600] minutes range.
+  namespace: string # The Amazon QuickSight namespace that the anonymous user virtually belongs to. If you are not using an Amazon QuickSight custom namespace, set this to <code>default</code>.
+  --session-tags: list # <p>The session tags used for row-level security. Before you use this parameter, make sure that you have configured the relevant datasets using the <code>DataSet$RowLevelPermissionTagConfiguration</code> parameter so that session tags can be used to provide row-level security.</p> <p>These are not the tags used for the Amazon Web Services resource tagging feature. For more information, see <a href="https://docs.aws.amazon.com/quicksight/latest/user/quicksight-dev-rls-tags.html">Using Row-Level Security (RLS) with Tags</a>in the <i>Amazon QuickSight User Guide</i>.</p> — item shape: {Key: any, Value: any}
+  authorized_resource_arns: list # The Amazon Resource Names (ARNs) for the Amazon QuickSight resources that the user is authorized to access during the lifetime of the session. If you choose <code>Dashboard</code> embedding experience, pass the list of dashboard ARNs in the account that you want the user to be able to view. Currently, you can pass up to 25 dashboard ARNs in each API call.
+  experience_configuration: record # The type of experience you want to embed. For anonymous users, you can embed Amazon QuickSight dashboards. — shape: {Dashboard?: any, DashboardVisual?: any, QSearchBar?: any}
+  --allowed-domains: list # <p>The domains that you want to add to the allow list for access to the generated URL that is then embedded. This optional parameter overrides the static domains that are configured in the Manage QuickSight menu in the Amazon QuickSight console. Instead, it allows only the domains that you include in this parameter. You can list up to three domains or subdomains in each API call.</p> <p>To include all subdomains under a specific domain to the allow list, use <code>*</code>. For example, <code>https://*.sapp.amazon.com</code> includes all subdomains under <code>https://sapp.amazon.com</code>.</p>
 ]: any -> record<EmbedUrl: record, Status: record, RequestId: record, AnonymousUserArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/embed-url/anonymous-user")
-  let body = {SessionLifetimeInMinutes: $SessionLifetimeInMinutes, Namespace: $Namespace, SessionTags: $SessionTags, AuthorizedResourceArns: $AuthorizedResourceArns, ExperienceConfiguration: $ExperienceConfiguration, AllowedDomains: $AllowedDomains} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/embed-url/anonymous-user"))
+  let body = {"SessionLifetimeInMinutes": $session_lifetime_in_minutes, "Namespace": $namespace, "SessionTags": $session_tags, "AuthorizedResourceArns": $authorized_resource_arns, "ExperienceConfiguration": $experience_configuration, "AllowedDomains": $allowed_domains} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3833,8 +3833,8 @@ export def "accounts-embed-url-anonymous-user GenerateEmbedUrlForAnonymousUser" 
 # POST /accounts/{AwsAccountId}/embed-url/registered-user
 # operationId: GenerateEmbedUrlForRegisteredUser
 # --ExperienceConfiguration shape: {Dashboard?: any, QuickSightConsole?: any, QSearchBar?: any, DashboardVisual?: any}
-export def "accounts-embed-url-registered-user GenerateEmbedUrlForRegisteredUser" [
-  AwsAccountId: string
+export def "accounts-embed-url-registered-user post" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3843,25 +3843,25 @@ export def "accounts-embed-url-registered-user GenerateEmbedUrlForRegisteredUser
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --SessionLifetimeInMinutes: int # How many minutes the session is valid. The session lifetime must be in [15-600] minutes range.
-  UserArn: string # The Amazon Resource Name for the registered user.
-  ExperienceConfiguration: record # <p>The type of experience you want to embed. For registered users, you can embed Amazon QuickSight dashboards or the Amazon QuickSight console.</p> <note> <p>Exactly one of the experience configurations is required. You can choose <code>Dashboard</code> or <code>QuickSightConsole</code>. You cannot choose more than one experience configuration.</p> </note> — shape: {Dashboard?: any, QuickSightConsole?: any, QSearchBar?: any, DashboardVisual?: any}
-  --AllowedDomains: list # <p>The domains that you want to add to the allow list for access to the generated URL that is then embedded. This optional parameter overrides the static domains that are configured in the Manage QuickSight menu in the Amazon QuickSight console. Instead, it allows only the domains that you include in this parameter. You can list up to three domains or subdomains in each API call.</p> <p>To include all subdomains under a specific domain to the allow list, use <code>*</code>. For example, <code>https://*.sapp.amazon.com</code> includes all subdomains under <code>https://sapp.amazon.com</code>.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --session-lifetime-in-minutes: int # How many minutes the session is valid. The session lifetime must be in [15-600] minutes range.
+  user_arn: string # The Amazon Resource Name for the registered user.
+  experience_configuration: record # <p>The type of experience you want to embed. For registered users, you can embed Amazon QuickSight dashboards or the Amazon QuickSight console.</p> <note> <p>Exactly one of the experience configurations is required. You can choose <code>Dashboard</code> or <code>QuickSightConsole</code>. You cannot choose more than one experience configuration.</p> </note> — shape: {Dashboard?: any, QuickSightConsole?: any, QSearchBar?: any, DashboardVisual?: any}
+  --allowed-domains: list # <p>The domains that you want to add to the allow list for access to the generated URL that is then embedded. This optional parameter overrides the static domains that are configured in the Manage QuickSight menu in the Amazon QuickSight console. Instead, it allows only the domains that you include in this parameter. You can list up to three domains or subdomains in each API call.</p> <p>To include all subdomains under a specific domain to the allow list, use <code>*</code>. For example, <code>https://*.sapp.amazon.com</code> includes all subdomains under <code>https://sapp.amazon.com</code>.</p>
 ]: any -> record<EmbedUrl: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/embed-url/registered-user")
-  let body = {SessionLifetimeInMinutes: $SessionLifetimeInMinutes, UserArn: $UserArn, ExperienceConfiguration: $ExperienceConfiguration, AllowedDomains: $AllowedDomains} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/embed-url/registered-user"))
+  let body = {"SessionLifetimeInMinutes": $session_lifetime_in_minutes, "UserArn": $user_arn, "ExperienceConfiguration": $experience_configuration, "AllowedDomains": $allowed_domains} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3872,9 +3872,9 @@ export def "accounts-embed-url-registered-user GenerateEmbedUrlForRegisteredUser
 #
 # GET /accounts/{AwsAccountId}/dashboards/{DashboardId}/embed-url#creds-type
 # operationId: GetDashboardEmbedUrl
-export def "accounts-dashboards-embed-urlcreds-type GetDashboardEmbedUrl" [
-  AwsAccountId: string
-  DashboardId: string
+export def "accounts-dashboards-embed-urlcreds-type get-dashboard-embed-url" [
+  aws_account_id: string
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3891,19 +3891,19 @@ export def "accounts-dashboards-embed-urlcreds-type GetDashboardEmbedUrl" [
   --user-arn: string # <p>The Amazon QuickSight user's Amazon Resource Name (ARN), for use with <code>QUICKSIGHT</code> identity type. You can use this for any Amazon QuickSight users in your account (readers, authors, or admins) authenticated as one of the following:</p> <ul> <li> <p>Active Directory (AD) users or group members</p> </li> <li> <p>Invited nonfederated users</p> </li> <li> <p>IAM users and IAM role-based sessions authenticated through Federated Single Sign-On using SAML, OpenID Connect, or IAM federation.</p> </li> </ul> <p>Omit this parameter for users in the third group – IAM users and IAM role-based sessions.</p>
   --namespace: string # The Amazon QuickSight namespace that contains the dashboard IDs in this request. If you're not using a custom namespace, set <code>Namespace = default</code>.
   --additional-dashboard-ids: list # A list of one or more dashboard IDs that you want anonymous users to have tempporary access to. Currently, the <code>IdentityType</code> parameter must be set to <code>ANONYMOUS</code> because other identity types authenticate as Amazon QuickSight or IAM users. For example, if you set "<code>--dashboard-id dash_id1 --dashboard-id dash_id2 dash_id3 identity-type ANONYMOUS</code>", the session can access all three dashboards.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EmbedUrl: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "creds-type" $creds_type "scalar") (serialize-qp "session-lifetime" $session_lifetime "scalar") (serialize-qp "undo-redo-disabled" $undo_redo_disabled "scalar") (serialize-qp "reset-disabled" $reset_disabled "scalar") (serialize-qp "state-persistence-enabled" $state_persistence_enabled "scalar") (serialize-qp "user-arn" $user_arn "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "additional-dashboard-ids" $additional_dashboard_ids "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards/($DashboardId)/embed-url#creds-type" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, dashboard_id: $dashboard_id} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/embed-url#creds-type") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3914,8 +3914,8 @@ export def "accounts-dashboards-embed-urlcreds-type GetDashboardEmbedUrl" [
 #
 # GET /accounts/{AwsAccountId}/session-embed-url
 # operationId: GetSessionEmbedUrl
-export def "accounts-session-embed-url GetSessionEmbedUrl" [
-  AwsAccountId: string
+export def "accounts-session-embed-url get" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3927,19 +3927,19 @@ export def "accounts-session-embed-url GetSessionEmbedUrl" [
   --entry-point: string # <p>The URL you use to access the embedded session. The entry point URL is constrained to the following paths:</p> <ul> <li> <p> <code>/start</code> </p> </li> <li> <p> <code>/start/analyses</code> </p> </li> <li> <p> <code>/start/dashboards</code> </p> </li> <li> <p> <code>/start/favorites</code> </p> </li> <li> <p> <code>/dashboards/<i>DashboardId</i> </code> - where <code>DashboardId</code> is the actual ID key from the Amazon QuickSight console URL of the dashboard</p> </li> <li> <p> <code>/analyses/<i>AnalysisId</i> </code> - where <code>AnalysisId</code> is the actual ID key from the Amazon QuickSight console URL of the analysis</p> </li> </ul>
   --session-lifetime: int # How many minutes the session is valid. The session lifetime must be 15-600 minutes.
   --user-arn: string # <p>The Amazon QuickSight user's Amazon Resource Name (ARN), for use with <code>QUICKSIGHT</code> identity type. You can use this for any type of Amazon QuickSight users in your account (readers, authors, or admins). They need to be authenticated as one of the following:</p> <ol> <li> <p>Active Directory (AD) users or group members</p> </li> <li> <p>Invited nonfederated users</p> </li> <li> <p>IAM users and IAM role-based sessions authenticated through Federated Single Sign-On using SAML, OpenID Connect, or IAM federation</p> </li> </ol> <p>Omit this parameter for users in the third group, IAM users and IAM role-based sessions.</p>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EmbedUrl: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entry-point" $entry_point "scalar") (serialize-qp "session-lifetime" $session_lifetime "scalar") (serialize-qp "user-arn" $user_arn "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/session-embed-url" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/session-embed-url") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3950,8 +3950,8 @@ export def "accounts-session-embed-url GetSessionEmbedUrl" [
 #
 # GET /accounts/{AwsAccountId}/analyses
 # operationId: ListAnalyses
-export def "accounts-analyses ListAnalyses" [
-  AwsAccountId: string
+export def "accounts-analyses list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3962,21 +3962,21 @@ export def "accounts-analyses ListAnalyses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A pagination token that can be used in a subsequent request.
   --max-results: int # The maximum number of results to return.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AnalysisSummaryList: record, NextToken: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/analyses" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/analyses") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3987,9 +3987,9 @@ export def "accounts-analyses ListAnalyses" [
 #
 # GET /accounts/{AwsAccountId}/dashboards/{DashboardId}/versions
 # operationId: ListDashboardVersions
-export def "accounts-dashboards-versions ListDashboardVersions" [
-  AwsAccountId: string
-  DashboardId: string
+export def "accounts-dashboards-versions list" [
+  aws_account_id: string
+  dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4000,21 +4000,21 @@ export def "accounts-dashboards-versions ListDashboardVersions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DashboardVersionSummaryList: record, NextToken: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards/($DashboardId)/versions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, dashboard_id: $dashboard_id} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/versions") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4025,8 +4025,8 @@ export def "accounts-dashboards-versions ListDashboardVersions" [
 #
 # GET /accounts/{AwsAccountId}/dashboards
 # operationId: ListDashboards
-export def "accounts-dashboards ListDashboards" [
-  AwsAccountId: string
+export def "accounts-dashboards list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4037,21 +4037,21 @@ export def "accounts-dashboards ListDashboards" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DashboardSummaryList: record, NextToken: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/dashboards") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4062,9 +4062,9 @@ export def "accounts-dashboards ListDashboards" [
 #
 # GET /accounts/{AwsAccountId}/folders/{FolderId}/members
 # operationId: ListFolderMembers
-export def "accounts-folders-members ListFolderMembers" [
-  AwsAccountId: string
-  FolderId: string
+export def "accounts-folders-members list" [
+  aws_account_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4075,19 +4075,19 @@ export def "accounts-folders-members ListFolderMembers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, FolderMemberList: record, NextToken: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders/($FolderId)/members" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, folder_id: $folder_id} | format pattern "/accounts/{aws_account_id}/folders/{folder_id}/members") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4098,8 +4098,8 @@ export def "accounts-folders-members ListFolderMembers" [
 #
 # GET /accounts/{AwsAccountId}/folders
 # operationId: ListFolders
-export def "accounts-folders ListFolders" [
-  AwsAccountId: string
+export def "accounts-folders list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4110,19 +4110,19 @@ export def "accounts-folders ListFolders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, FolderSummaryList: record, NextToken: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/folders" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/folders") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4133,10 +4133,10 @@ export def "accounts-folders ListFolders" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/groups/{GroupName}/members
 # operationId: ListGroupMemberships
-export def "accounts-namespaces-groups-members ListGroupMemberships" [
-  GroupName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-groups-members list-group-memberships" [
+  aws_account_id: string
+  namespace: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4147,19 +4147,19 @@ export def "accounts-namespaces-groups-members ListGroupMemberships" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A pagination token that can be used in a subsequent request.
   --max-results: int # The maximum number of results to return from this request.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<GroupMemberList: record, NextToken: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/groups/($GroupName)/members" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, group_name: $group_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups/{group_name}/members") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4170,9 +4170,9 @@ export def "accounts-namespaces-groups-members ListGroupMemberships" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/iam-policy-assignments
 # operationId: ListIAMPolicyAssignments
-export def "accounts-namespaces-iam-policy-assignments ListIAMPolicyAssignments" [
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-iam-policy-assignments list" [
+  aws_account_id: string
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4183,23 +4183,23 @@ export def "accounts-namespaces-iam-policy-assignments ListIAMPolicyAssignments"
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --AssignmentStatus: string@AssignmentStatus-completer # The status of the assignments.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --assignment-status: string@assignment-status-completer # The status of the assignments.
 ]: any -> record<IAMPolicyAssignments: record, NextToken: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/iam-policy-assignments" $qp)
-  let body = {AssignmentStatus: $AssignmentStatus} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/iam-policy-assignments") $qp)
+  let body = {"AssignmentStatus": $assignment_status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4210,10 +4210,10 @@ export def "accounts-namespaces-iam-policy-assignments ListIAMPolicyAssignments"
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/users/{UserName}/iam-policy-assignments
 # operationId: ListIAMPolicyAssignmentsForUser
-export def "accounts-namespaces-users-iam-policy-assignments ListIAMPolicyAssignmentsForUser" [
-  AwsAccountId: string
-  UserName: string
-  Namespace: string
+export def "accounts-namespaces-users-iam-policy-assignments list-iam-policy-assignments-for" [
+  aws_account_id: string
+  namespace: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4224,19 +4224,19 @@ export def "accounts-namespaces-users-iam-policy-assignments ListIAMPolicyAssign
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ActiveAssignments: record, RequestId: record, NextToken: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/users/($UserName)/iam-policy-assignments" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, user_name: $user_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}/iam-policy-assignments") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4247,9 +4247,9 @@ export def "accounts-namespaces-users-iam-policy-assignments ListIAMPolicyAssign
 #
 # GET /accounts/{AwsAccountId}/data-sets/{DataSetId}/ingestions
 # operationId: ListIngestions
-export def "accounts-data-sets-ingestions ListIngestions" [
-  DataSetId: string
-  AwsAccountId: string
+export def "accounts-data-sets-ingestions list" [
+  aws_account_id: string
+  data_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4260,21 +4260,21 @@ export def "accounts-data-sets-ingestions ListIngestions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Ingestions: record, NextToken: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/data-sets/($DataSetId)/ingestions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, data_set_id: $data_set_id} | format pattern "/accounts/{aws_account_id}/data-sets/{data_set_id}/ingestions") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4285,8 +4285,8 @@ export def "accounts-data-sets-ingestions ListIngestions" [
 #
 # GET /accounts/{AwsAccountId}/namespaces
 # operationId: ListNamespaces
-export def "accounts-namespaces ListNamespaces" [
-  AwsAccountId: string
+export def "accounts-namespaces list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4297,21 +4297,21 @@ export def "accounts-namespaces ListNamespaces" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A unique pagination token that can be used in a subsequent request. You will receive a pagination token in the response body of a previous <code>ListNameSpaces</code> API call if there is more data that can be returned. To receive the data, make another <code>ListNamespaces</code> API call with the returned token to retrieve the next page of data. Each token is valid for 24 hours. If you try to make a <code>ListNamespaces</code> API call with an expired token, you will receive a <code>HTTP 400 InvalidNextTokenException</code> error.
   --max-results: int # The maximum number of results to return.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Namespaces: record, NextToken: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/namespaces") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4322,8 +4322,8 @@ export def "accounts-namespaces ListNamespaces" [
 #
 # GET /resources/{ResourceArn}/tags
 # operationId: ListTagsForResource
-export def "resources-tags ListTagsForResource" [
-  ResourceArn: string
+export def "resources-tags list-tags-for" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4332,18 +4332,18 @@ export def "resources-tags ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Tags: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/($ResourceArn)/tags")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/resources/{resource_arn}/tags"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4355,8 +4355,8 @@ export def "resources-tags ListTagsForResource" [
 # POST /resources/{ResourceArn}/tags
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "resources-tags TagResource" [
-  ResourceArn: string
+export def "resources-tags tag" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4365,22 +4365,22 @@ export def "resources-tags TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the resource. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  tags: list # Contains a map of the key-value pairs for the resource tag or tags assigned to the resource. — item shape: {Key: any, Value: any}
 ]: any -> record<RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/resources/($ResourceArn)/tags")
-  let body = {Tags: $Tags} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/resources/{resource_arn}/tags"))
+  let body = {"Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4391,9 +4391,9 @@ export def "resources-tags TagResource" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}/aliases
 # operationId: ListTemplateAliases
-export def "accounts-templates-aliases ListTemplateAliases" [
-  AwsAccountId: string
-  TemplateId: string
+export def "accounts-templates-aliases list" [
+  aws_account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4404,21 +4404,21 @@ export def "accounts-templates-aliases ListTemplateAliases" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-result: int # The maximum number of results to be returned per request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<TemplateAliasList: record, Status: record, RequestId: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-result" $max_result "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)/aliases" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-result" $max_result "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/aliases") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4429,9 +4429,9 @@ export def "accounts-templates-aliases ListTemplateAliases" [
 #
 # GET /accounts/{AwsAccountId}/templates/{TemplateId}/versions
 # operationId: ListTemplateVersions
-export def "accounts-templates-versions ListTemplateVersions" [
-  AwsAccountId: string
-  TemplateId: string
+export def "accounts-templates-versions list" [
+  aws_account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4442,21 +4442,21 @@ export def "accounts-templates-versions ListTemplateVersions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<TemplateVersionSummaryList: record, NextToken: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates/($TemplateId)/versions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, template_id: $template_id} | format pattern "/accounts/{aws_account_id}/templates/{template_id}/versions") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4467,8 +4467,8 @@ export def "accounts-templates-versions ListTemplateVersions" [
 #
 # GET /accounts/{AwsAccountId}/templates
 # operationId: ListTemplates
-export def "accounts-templates ListTemplates" [
-  AwsAccountId: string
+export def "accounts-templates list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4479,21 +4479,21 @@ export def "accounts-templates ListTemplates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-result: int # The maximum number of results to be returned per request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<TemplateSummaryList: record, NextToken: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-result" $max_result "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/templates" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-result" $max_result "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/templates") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4504,9 +4504,9 @@ export def "accounts-templates ListTemplates" [
 #
 # GET /accounts/{AwsAccountId}/themes/{ThemeId}/aliases
 # operationId: ListThemeAliases
-export def "accounts-themes-aliases ListThemeAliases" [
-  AwsAccountId: string
-  ThemeId: string
+export def "accounts-themes-aliases list" [
+  aws_account_id: string
+  theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4517,19 +4517,19 @@ export def "accounts-themes-aliases ListThemeAliases" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-result: int # The maximum number of results to be returned per request.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ThemeAliasList: record, Status: record, RequestId: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-result" $max_result "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)/aliases" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/aliases") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4540,9 +4540,9 @@ export def "accounts-themes-aliases ListThemeAliases" [
 #
 # GET /accounts/{AwsAccountId}/themes/{ThemeId}/versions
 # operationId: ListThemeVersions
-export def "accounts-themes-versions ListThemeVersions" [
-  AwsAccountId: string
-  ThemeId: string
+export def "accounts-themes-versions list" [
+  aws_account_id: string
+  theme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4553,21 +4553,21 @@ export def "accounts-themes-versions ListThemeVersions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ThemeVersionSummaryList: record, NextToken: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes/($ThemeId)/versions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, theme_id: $theme_id} | format pattern "/accounts/{aws_account_id}/themes/{theme_id}/versions") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4578,8 +4578,8 @@ export def "accounts-themes-versions ListThemeVersions" [
 #
 # GET /accounts/{AwsAccountId}/themes
 # operationId: ListThemes
-export def "accounts-themes ListThemes" [
-  AwsAccountId: string
+export def "accounts-themes list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4590,22 +4590,22 @@ export def "accounts-themes ListThemes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The token for the next set of results, or null if there are no more results.
   --max-results: int # The maximum number of results to be returned per request.
-  --type: string@type-completer # <p>The type of themes that you want to list. Valid options include the following:</p> <ul> <li> <p> <code>ALL (default)</code>- Display all existing themes.</p> </li> <li> <p> <code>CUSTOM</code> - Display only the themes created by people using Amazon QuickSight.</p> </li> <li> <p> <code>QUICKSIGHT</code> - Display only the starting themes defined by Amazon QuickSight.</p> </li> </ul>
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --type: string@type-completer-1 # <p>The type of themes that you want to list. Valid options include the following:</p> <ul> <li> <p> <code>ALL (default)</code>- Display all existing themes.</p> </li> <li> <p> <code>CUSTOM</code> - Display only the themes created by people using Amazon QuickSight.</p> </li> <li> <p> <code>QUICKSIGHT</code> - Display only the starting themes defined by Amazon QuickSight.</p> </li> </ul>
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ThemeSummaryList: record, NextToken: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/themes" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/themes") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4616,10 +4616,10 @@ export def "accounts-themes ListThemes" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/users/{UserName}/groups
 # operationId: ListUserGroups
-export def "accounts-namespaces-users-groups ListUserGroups" [
-  UserName: string
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-users-groups list" [
+  aws_account_id: string
+  namespace: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4630,19 +4630,19 @@ export def "accounts-namespaces-users-groups ListUserGroups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A pagination token that can be used in a subsequent request.
   --max-results: int # The maximum number of results to return from this request.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<GroupList: record, NextToken: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/users/($UserName)/groups" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace, user_name: $user_name} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users/{user_name}/groups") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4653,9 +4653,9 @@ export def "accounts-namespaces-users-groups ListUserGroups" [
 #
 # GET /accounts/{AwsAccountId}/namespaces/{Namespace}/users
 # operationId: ListUsers
-export def "accounts-namespaces-users ListUsers" [
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-users list" [
+  aws_account_id: string
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4666,19 +4666,19 @@ export def "accounts-namespaces-users ListUsers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A pagination token that can be used in a subsequent request.
   --max-results: int # The maximum number of results to return from this request.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<UserList: record, NextToken: record, RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/users" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4689,9 +4689,9 @@ export def "accounts-namespaces-users ListUsers" [
 #
 # POST /accounts/{AwsAccountId}/namespaces/{Namespace}/users
 # operationId: RegisterUser
-export def "accounts-namespaces-users RegisterUser" [
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-users create" [
+  aws_account_id: string
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4700,31 +4700,31 @@ export def "accounts-namespaces-users RegisterUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  IdentityType: string@IdentityType-completer # <p>Amazon QuickSight supports several ways of managing the identity of users. This parameter accepts two values:</p> <ul> <li> <p> <code>IAM</code>: A user whose identity maps to an existing IAM user or role. </p> </li> <li> <p> <code>QUICKSIGHT</code>: A user whose identity is owned and managed internally by Amazon QuickSight. </p> </li> </ul>
-  Email: string # The email address of the user that you want to register.
-  UserRole: string@UserRole-completer # <p>The Amazon QuickSight role for the user. The user role can be one of the following:</p> <ul> <li> <p> <code>READER</code>: A user who has read-only access to dashboards.</p> </li> <li> <p> <code>AUTHOR</code>: A user who can create data sources, datasets, analyses, and dashboards.</p> </li> <li> <p> <code>ADMIN</code>: A user who is an author, who can also manage Amazon QuickSight settings.</p> </li> <li> <p> <code>RESTRICTED_READER</code>: This role isn't currently available for use.</p> </li> <li> <p> <code>RESTRICTED_AUTHOR</code>: This role isn't currently available for use.</p> </li> </ul>
-  --IamArn: string # The ARN of the IAM user or role that you are registering with Amazon QuickSight. 
-  --SessionName: string # You need to use this parameter only when you register one or more users using an assumed IAM role. You don't need to provide the session name for other scenarios, for example when you are registering an IAM user or an Amazon QuickSight user. You can register multiple users using the same IAM role if each user has a different session name. For more information on assuming IAM roles, see <a href="https://docs.aws.amazon.com/cli/latest/reference/sts/assume-role.html"> <code>assume-role</code> </a> in the <i>CLI Reference.</i> 
-  --UserName: string # The Amazon QuickSight user name that you want to create for the user you are registering.
-  --CustomPermissionsName: string # <p>(Enterprise edition only) The name of the custom permissions profile that you want to assign to this user. Customized permissions allows you to control a user's access by restricting access the following operations:</p> <ul> <li> <p>Create and update data sources</p> </li> <li> <p>Create and update datasets</p> </li> <li> <p>Create and update email reports</p> </li> <li> <p>Subscribe to email reports</p> </li> </ul> <p>To add custom permissions to an existing user, use <code> <a href="https://docs.aws.amazon.com/quicksight/latest/APIReference/API_UpdateUser.html">UpdateUser</a> </code> instead.</p> <p>A set of custom permissions includes any combination of these restrictions. Currently, you need to create the profile names for custom permission sets by using the Amazon QuickSight console. Then, you use the <code>RegisterUser</code> API operation to assign the named set of permissions to a Amazon QuickSight user. </p> <p>Amazon QuickSight custom permissions are applied through IAM policies. Therefore, they override the permissions typically granted by assigning Amazon QuickSight users to one of the default security cohorts in Amazon QuickSight (admin, author, reader).</p> <p>This feature is available only to Amazon QuickSight Enterprise edition subscriptions.</p>
-  --ExternalLoginFederationProviderType: string # <p>The type of supported external login provider that provides identity to let a user federate into Amazon QuickSight with an associated Identity and Access Management(IAM) role. The type of supported external login provider can be one of the following.</p> <ul> <li> <p> <code>COGNITO</code>: Amazon Cognito. The provider URL is cognito-identity.amazonaws.com. When choosing the <code>COGNITO</code> provider type, don’t use the "CustomFederationProviderUrl" parameter which is only needed when the external provider is custom.</p> </li> <li> <p> <code>CUSTOM_OIDC</code>: Custom OpenID Connect (OIDC) provider. When choosing <code>CUSTOM_OIDC</code> type, use the <code>CustomFederationProviderUrl</code> parameter to provide the custom OIDC provider URL.</p> </li> </ul>
-  --CustomFederationProviderUrl: string # The URL of the custom OpenID Connect (OIDC) provider that provides identity to let a user federate into Amazon QuickSight with an associated Identity and Access Management(IAM) role. This parameter should only be used when <code>ExternalLoginFederationProviderType</code> parameter is set to <code>CUSTOM_OIDC</code>.
-  --ExternalLoginId: string # The identity ID for a user in the external login provider.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  identity_type: string@identity-type-completer # <p>Amazon QuickSight supports several ways of managing the identity of users. This parameter accepts two values:</p> <ul> <li> <p> <code>IAM</code>: A user whose identity maps to an existing IAM user or role. </p> </li> <li> <p> <code>QUICKSIGHT</code>: A user whose identity is owned and managed internally by Amazon QuickSight. </p> </li> </ul>
+  email: string # The email address of the user that you want to register.
+  user_role: string@user-role-completer # <p>The Amazon QuickSight role for the user. The user role can be one of the following:</p> <ul> <li> <p> <code>READER</code>: A user who has read-only access to dashboards.</p> </li> <li> <p> <code>AUTHOR</code>: A user who can create data sources, datasets, analyses, and dashboards.</p> </li> <li> <p> <code>ADMIN</code>: A user who is an author, who can also manage Amazon QuickSight settings.</p> </li> <li> <p> <code>RESTRICTED_READER</code>: This role isn't currently available for use.</p> </li> <li> <p> <code>RESTRICTED_AUTHOR</code>: This role isn't currently available for use.</p> </li> </ul>
+  --iam-arn: string # The ARN of the IAM user or role that you are registering with Amazon QuickSight. 
+  --session-name: string # You need to use this parameter only when you register one or more users using an assumed IAM role. You don't need to provide the session name for other scenarios, for example when you are registering an IAM user or an Amazon QuickSight user. You can register multiple users using the same IAM role if each user has a different session name. For more information on assuming IAM roles, see <a href="https://docs.aws.amazon.com/cli/latest/reference/sts/assume-role.html"> <code>assume-role</code> </a> in the <i>CLI Reference.</i> 
+  --user-name: string # The Amazon QuickSight user name that you want to create for the user you are registering.
+  --custom-permissions-name: string # <p>(Enterprise edition only) The name of the custom permissions profile that you want to assign to this user. Customized permissions allows you to control a user's access by restricting access the following operations:</p> <ul> <li> <p>Create and update data sources</p> </li> <li> <p>Create and update datasets</p> </li> <li> <p>Create and update email reports</p> </li> <li> <p>Subscribe to email reports</p> </li> </ul> <p>To add custom permissions to an existing user, use <code> <a href="https://docs.aws.amazon.com/quicksight/latest/APIReference/API_UpdateUser.html">UpdateUser</a> </code> instead.</p> <p>A set of custom permissions includes any combination of these restrictions. Currently, you need to create the profile names for custom permission sets by using the Amazon QuickSight console. Then, you use the <code>RegisterUser</code> API operation to assign the named set of permissions to a Amazon QuickSight user. </p> <p>Amazon QuickSight custom permissions are applied through IAM policies. Therefore, they override the permissions typically granted by assigning Amazon QuickSight users to one of the default security cohorts in Amazon QuickSight (admin, author, reader).</p> <p>This feature is available only to Amazon QuickSight Enterprise edition subscriptions.</p>
+  --external-login-federation-provider-type: string # <p>The type of supported external login provider that provides identity to let a user federate into Amazon QuickSight with an associated Identity and Access Management(IAM) role. The type of supported external login provider can be one of the following.</p> <ul> <li> <p> <code>COGNITO</code>: Amazon Cognito. The provider URL is cognito-identity.amazonaws.com. When choosing the <code>COGNITO</code> provider type, don’t use the "CustomFederationProviderUrl" parameter which is only needed when the external provider is custom.</p> </li> <li> <p> <code>CUSTOM_OIDC</code>: Custom OpenID Connect (OIDC) provider. When choosing <code>CUSTOM_OIDC</code> type, use the <code>CustomFederationProviderUrl</code> parameter to provide the custom OIDC provider URL.</p> </li> </ul>
+  --custom-federation-provider-url: string # The URL of the custom OpenID Connect (OIDC) provider that provides identity to let a user federate into Amazon QuickSight with an associated Identity and Access Management(IAM) role. This parameter should only be used when <code>ExternalLoginFederationProviderType</code> parameter is set to <code>CUSTOM_OIDC</code>.
+  --external-login-id: string # The identity ID for a user in the external login provider.
 ]: any -> record<User: record<Arn: record, UserName: record, Email: record, Role: record, IdentityType: record, Active: record, PrincipalId: record, CustomPermissionsName: record, ExternalLoginFederationProviderType: record, ExternalLoginFederationProviderUrl: record, ExternalLoginId: record>, UserInvitationUrl: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/users")
-  let body = {IdentityType: $IdentityType, Email: $Email, UserRole: $UserRole, IamArn: $IamArn, SessionName: $SessionName, UserName: $UserName, CustomPermissionsName: $CustomPermissionsName, ExternalLoginFederationProviderType: $ExternalLoginFederationProviderType, CustomFederationProviderUrl: $CustomFederationProviderUrl, ExternalLoginId: $ExternalLoginId} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/users"))
+  let body = {"IdentityType": $identity_type, "Email": $email, "UserRole": $user_role, "IamArn": $iam_arn, "SessionName": $session_name, "UserName": $user_name, "CustomPermissionsName": $custom_permissions_name, "ExternalLoginFederationProviderType": $external_login_federation_provider_type, "CustomFederationProviderUrl": $custom_federation_provider_url, "ExternalLoginId": $external_login_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4735,9 +4735,9 @@ export def "accounts-namespaces-users RegisterUser" [
 #
 # POST /accounts/{AwsAccountId}/restore/analyses/{AnalysisId}
 # operationId: RestoreAnalysis
-export def "accounts-restore-analyses RestoreAnalysis" [
-  AwsAccountId: string
-  AnalysisId: string
+export def "accounts-restore-analyses post" [
+  aws_account_id: string
+  analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4746,18 +4746,18 @@ export def "accounts-restore-analyses RestoreAnalysis" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Status: record, Arn: record, AnalysisId: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/restore/analyses/($AnalysisId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, analysis_id: $analysis_id} | format pattern "/accounts/{aws_account_id}/restore/analyses/{analysis_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4769,8 +4769,8 @@ export def "accounts-restore-analyses RestoreAnalysis" [
 # POST /accounts/{AwsAccountId}/search/analyses
 # operationId: SearchAnalyses
 # --Filters item shape: {Operator?: any, Name?: any, Value?: any}
-export def "accounts-search-analyses SearchAnalyses" [
-  AwsAccountId: string
+export def "accounts-search-analyses list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4779,27 +4779,27 @@ export def "accounts-search-analyses SearchAnalyses" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Filters: list # The structure for the search filters that you want to apply to your search.  — item shape: {Operator?: any, Name?: any, Value?: any}
-  --NextToken: string # A pagination token that can be used in a subsequent request.
-  --MaxResults: int # The maximum number of results to return.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  filters: list # The structure for the search filters that you want to apply to your search.  — item shape: {Operator?: any, Name?: any, Value?: any}
+  --next-token: string # A pagination token that can be used in a subsequent request.
+  --max-results: int # The maximum number of results to return.
 ]: any -> record<AnalysisSummaryList: record, NextToken: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/search/analyses" $qp)
-  let body = {Filters: $Filters, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/search/analyses") $qp)
+  let body = {"Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4811,8 +4811,8 @@ export def "accounts-search-analyses SearchAnalyses" [
 # POST /accounts/{AwsAccountId}/search/dashboards
 # operationId: SearchDashboards
 # --Filters item shape: {Operator: any, Name?: any, Value?: any}
-export def "accounts-search-dashboards SearchDashboards" [
-  AwsAccountId: string
+export def "accounts-search-dashboards list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4821,27 +4821,27 @@ export def "accounts-search-dashboards SearchDashboards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Filters: list # The filters to apply to the search. Currently, you can search only by user name, for example, <code>"Filters": [ { "Name": "QUICKSIGHT_USER", "Operator": "StringEquals", "Value": "arn:aws:quicksight:us-east-1:1:user/default/UserName1" } ]</code>  — item shape: {Operator: any, Name?: any, Value?: any}
-  --NextToken: string # The token for the next set of results, or null if there are no more results.
-  --MaxResults: int # The maximum number of results to be returned per request.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  filters: list # The filters to apply to the search. Currently, you can search only by user name, for example, <code>"Filters": [ { "Name": "QUICKSIGHT_USER", "Operator": "StringEquals", "Value": "arn:aws:quicksight:us-east-1:1:user/default/UserName1" } ]</code>  — item shape: {Operator: any, Name?: any, Value?: any}
+  --next-token: string # The token for the next set of results, or null if there are no more results.
+  --max-results: int # The maximum number of results to be returned per request.
 ]: any -> record<DashboardSummaryList: record, NextToken: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/search/dashboards" $qp)
-  let body = {Filters: $Filters, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/search/dashboards") $qp)
+  let body = {"Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4853,8 +4853,8 @@ export def "accounts-search-dashboards SearchDashboards" [
 # POST /accounts/{AwsAccountId}/search/data-sets
 # operationId: SearchDataSets
 # --Filters item shape: {Operator: any, Name: any, Value: any}
-export def "accounts-search-data-sets SearchDataSets" [
-  AwsAccountId: string
+export def "accounts-search-data-sets list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4863,27 +4863,27 @@ export def "accounts-search-data-sets SearchDataSets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Filters: list # The filters to apply to the search. — item shape: {Operator: any, Name: any, Value: any}
-  --NextToken: string # A pagination token that can be used in a subsequent request.
-  --MaxResults: int # The maximum number of results to be returned per request.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  filters: list # The filters to apply to the search. — item shape: {Operator: any, Name: any, Value: any}
+  --next-token: string # A pagination token that can be used in a subsequent request.
+  --max-results: int # The maximum number of results to be returned per request.
 ]: any -> record<DataSetSummaries: record, NextToken: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/search/data-sets" $qp)
-  let body = {Filters: $Filters, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/search/data-sets") $qp)
+  let body = {"Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4895,8 +4895,8 @@ export def "accounts-search-data-sets SearchDataSets" [
 # POST /accounts/{AwsAccountId}/search/data-sources
 # operationId: SearchDataSources
 # --Filters item shape: {Operator: any, Name: any, Value: any}
-export def "accounts-search-data-sources SearchDataSources" [
-  AwsAccountId: string
+export def "accounts-search-data-sources list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4905,27 +4905,27 @@ export def "accounts-search-data-sources SearchDataSources" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Filters: list # The filters to apply to the search. — item shape: {Operator: any, Name: any, Value: any}
-  --NextToken: string # A pagination token that can be used in a subsequent request.
-  --MaxResults: int # The maximum number of results to be returned per request.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  filters: list # The filters to apply to the search. — item shape: {Operator: any, Name: any, Value: any}
+  --next-token: string # A pagination token that can be used in a subsequent request.
+  --max-results: int # The maximum number of results to be returned per request.
 ]: any -> record<DataSourceSummaries: record, NextToken: record, Status: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/search/data-sources" $qp)
-  let body = {Filters: $Filters, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/search/data-sources") $qp)
+  let body = {"Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4937,8 +4937,8 @@ export def "accounts-search-data-sources SearchDataSources" [
 # POST /accounts/{AwsAccountId}/search/folders
 # operationId: SearchFolders
 # --Filters item shape: {Operator?: any, Name?: any, Value?: any}
-export def "accounts-search-folders SearchFolders" [
-  AwsAccountId: string
+export def "accounts-search-folders list" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4947,24 +4947,24 @@ export def "accounts-search-folders SearchFolders" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Filters: list # The filters to apply to the search. Currently, you can search only by the parent folder ARN. For example, <code>"Filters": [ { "Name": "PARENT_FOLDER_ARN", "Operator": "StringEquals", "Value": "arn:aws:quicksight:us-east-1:1:folder/folderId" } ]</code>. — item shape: {Operator?: any, Name?: any, Value?: any}
-  --NextToken: string # The token for the next set of results, or null if there are no more results.
-  --MaxResults: int # The maximum number of results to be returned per request.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  filters: list # The filters to apply to the search. Currently, you can search only by the parent folder ARN. For example, <code>"Filters": [ { "Name": "PARENT_FOLDER_ARN", "Operator": "StringEquals", "Value": "arn:aws:quicksight:us-east-1:1:folder/folderId" } ]</code>. — item shape: {Operator?: any, Name?: any, Value?: any}
+  --next-token: string # The token for the next set of results, or null if there are no more results.
+  --max-results: int # The maximum number of results to be returned per request.
 ]: any -> record<Status: record, FolderSummaryList: record, NextToken: record, RequestId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/search/folders")
-  let body = {Filters: $Filters, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/search/folders"))
+  let body = {"Filters": $filters, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4976,9 +4976,9 @@ export def "accounts-search-folders SearchFolders" [
 # POST /accounts/{AwsAccountId}/namespaces/{Namespace}/groups-search
 # operationId: SearchGroups
 # --Filters item shape: {Operator: any, Name: any, Value: any}
-export def "accounts-namespaces-groups-search SearchGroups" [
-  AwsAccountId: string
-  Namespace: string
+export def "accounts-namespaces-groups-search list" [
+  aws_account_id: string
+  namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4989,23 +4989,23 @@ export def "accounts-namespaces-groups-search SearchGroups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # A pagination token that can be used in a subsequent request.
   --max-results: int # The maximum number of results to return from this request.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  Filters: list # The structure for the search filters that you want to apply to your search. — item shape: {Operator: any, Name: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  filters: list # The structure for the search filters that you want to apply to your search. — item shape: {Operator: any, Name: any, Value: any}
 ]: any -> record<GroupList: record, NextToken: record, RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/namespaces/($Namespace)/groups-search" $qp)
-  let body = {Filters: $Filters} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, namespace: $namespace} | format pattern "/accounts/{aws_account_id}/namespaces/{namespace}/groups-search") $qp)
+  let body = {"Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5016,8 +5016,8 @@ export def "accounts-namespaces-groups-search SearchGroups" [
 #
 # DELETE /resources/{ResourceArn}/tags#keys
 # operationId: UntagResource
-export def "resources-tagskeys UntagResource" [
-  ResourceArn: string
+export def "resources-tagskeys untag" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5027,19 +5027,19 @@ export def "resources-tagskeys UntagResource" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --keys: list # The keys of the key-value pairs for the resource tag or tags assigned to the resource.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RequestId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keys" $keys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/resources/($ResourceArn)/tags#keys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/resources/{resource_arn}/tags#keys") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5050,10 +5050,10 @@ export def "resources-tagskeys UntagResource" [
 #
 # PUT /accounts/{AwsAccountId}/dashboards/{DashboardId}/versions/{VersionNumber}
 # operationId: UpdateDashboardPublishedVersion
-export def "accounts-dashboards-versions UpdateDashboardPublishedVersion" [
-  AwsAccountId: string
-  DashboardId: string
-  VersionNumber: int
+export def "accounts-dashboards-versions update-dashboard-published" [
+  aws_account_id: string
+  dashboard_id: string
+  version_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5062,18 +5062,18 @@ export def "accounts-dashboards-versions UpdateDashboardPublishedVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<DashboardId: record, DashboardArn: record, Status: record, RequestId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/dashboards/($DashboardId)/versions/($VersionNumber)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id, dashboard_id: $dashboard_id, version_number: $version_number} | format pattern "/accounts/{aws_account_id}/dashboards/{dashboard_id}/versions/{version_number}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5084,8 +5084,8 @@ export def "accounts-dashboards-versions UpdateDashboardPublishedVersion" [
 #
 # PUT /accounts/{AwsAccountId}/public-sharing-settings
 # operationId: UpdatePublicSharingSettings
-export def "accounts-public-sharing-settings UpdatePublicSharingSettings" [
-  AwsAccountId: string
+export def "accounts-public-sharing-settings update" [
+  aws_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5094,22 +5094,22 @@ export def "accounts-public-sharing-settings UpdatePublicSharingSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --PublicSharingEnabled: oneof<nothing, bool> # A Boolean value that indicates whether public sharing is turned on for an Amazon QuickSight account.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --public-sharing-enabled: oneof<nothing, bool> # A Boolean value that indicates whether public sharing is turned on for an Amazon QuickSight account.
 ]: any -> record<RequestId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($AwsAccountId)/public-sharing-settings")
-  let body = {PublicSharingEnabled: $PublicSharingEnabled} | compact
+  let full_url = (build-url $base ({aws_account_id: $aws_account_id} | format pattern "/accounts/{aws_account_id}/public-sharing-settings"))
+  let body = {"PublicSharingEnabled": $public_sharing_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

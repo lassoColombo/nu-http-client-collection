@@ -103,15 +103,15 @@ export def "request-subject-erasure post-requestSubjectErasure" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --forceErasure: oneof<nothing, bool> # Set this to **true** if you want to delete shopper-related data, even if the shopper has an existing recurring transaction. This only deletes the shopper-related data for the specific payment, but does not cancel the existing recurring transaction.
-  --merchantAccount: string # Your merchant account
-  --pspReference: string # The PSP reference of the payment. We will delete all shopper-related data for this payment.
+  --force-erasure: oneof<nothing, bool> # Set this to **true** if you want to delete shopper-related data, even if the shopper has an existing recurring transaction. This only deletes the shopper-related data for the specific payment, but does not cancel the existing recurring transaction.
+  --merchant-account: string # Your merchant account
+  --psp-reference: string # The PSP reference of the payment. We will delete all shopper-related data for this payment.
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/requestSubjectErasure")
-  let body = {forceErasure: $forceErasure, merchantAccount: $merchantAccount, pspReference: $pspReference} | compact
+  let body = {"forceErasure": $force_erasure, "merchantAccount": $merchant_account, "pspReference": $psp_reference} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -101,13 +101,13 @@ export def "api-public-alerts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<ackAuthor: string, ackMsg: string, entityDisplayName: string, entityId: string, messageType: string, monitoringTool: string, raw: string, stateMessage: string, stateStartTime: float, timestamp: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/alerts/($uuid)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/api-public/v1/alerts/{uuid}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -126,13 +126,13 @@ export def "api-public-incidents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<incidents: table<alertCount: float, currentPhase: string, entityId: string, host: string, incidentNumber: string, lastAlertId: string, lastAlertTime: string, pagedPolicies: list, pagedTeams: list, pagedUsers: list, service: string, startTime: string, transitions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/incidents")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,13 +151,13 @@ export def "api-public-incidents post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<error: string, incidentNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/incidents")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -176,13 +176,13 @@ export def "api-public-incidents-ack patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/incidents/ack")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -201,13 +201,13 @@ export def "api-public-incidents-by-user-ack patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/incidents/byUser/ack")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -226,13 +226,13 @@ export def "api-public-incidents-by-user-resolve patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/incidents/byUser/resolve")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -251,13 +251,13 @@ export def "api-public-incidents-reroute post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<statuses: table<incidentNumber: string, message: string, success: bool, targetStatus: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/incidents/reroute")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -276,13 +276,13 @@ export def "api-public-incidents-resolve patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<results: table<cmdAccepted: bool, entityId: string, incidentNumber: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/incidents/resolve")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -301,13 +301,13 @@ export def "api-public-maintenancemode get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/maintenancemode")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -326,13 +326,13 @@ export def "api-public-maintenancemode-start post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/maintenancemode/start")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -352,13 +352,13 @@ export def "api-public-maintenancemode-end put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<activeInstances: table<instanceId: string, isGlobal: bool, startedAt: float, startedBy: string, targets: list>, companyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/maintenancemode/($maintenancemodeid)/end")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({maintenancemodeid: $maintenancemodeid} | format pattern "/api-public/v1/maintenancemode/{maintenancemodeid}/end"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -377,13 +377,13 @@ export def "api-public-oncall-current get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<teamsOnCall: table<onCallNow: list, team: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/oncall/current")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -402,13 +402,13 @@ export def "api-public-org-routing-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, routingKeys: table<isDefault: bool, routingKey: string, targets: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/org/routing-keys")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -427,13 +427,13 @@ export def "api-public-overrides list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, overrides: table<assignments: list, end: string, publicId: string, start: string, timezone: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/overrides")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -452,13 +452,13 @@ export def "api-public-overrides post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, schedule: record<assignments: list<record>, end: string, publicId: string, start: string, timezone: string, user: record<firstName: string, lastName: string, username: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/overrides")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -469,7 +469,7 @@ export def "api-public-overrides post" [
 #
 # DELETE /api-public/v1/overrides/{publicId}
 export def "api-public-overrides delete" [
-  publicId: string
+  public_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,13 +478,13 @@ export def "api-public-overrides delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/overrides/($publicId)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({public_id: $public_id} | format pattern "/api-public/v1/overrides/{public_id}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -495,7 +495,7 @@ export def "api-public-overrides delete" [
 #
 # GET /api-public/v1/overrides/{publicId}
 export def "api-public-overrides get" [
-  publicId: string
+  public_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,13 +504,13 @@ export def "api-public-overrides get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, override: record<assignments: list<record>, end: string, publicId: string, start: string, timezone: string, user: record<firstName: string, lastName: string, username: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/overrides/($publicId)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({public_id: $public_id} | format pattern "/api-public/v1/overrides/{public_id}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -521,7 +521,7 @@ export def "api-public-overrides get" [
 #
 # GET /api-public/v1/overrides/{publicId}/assignments
 export def "api-public-overrides-assignments list" [
-  publicId: string
+  public_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,13 +530,13 @@ export def "api-public-overrides-assignments list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> table<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/overrides/($publicId)/assignments")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({public_id: $public_id} | format pattern "/api-public/v1/overrides/{public_id}/assignments"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -547,8 +547,8 @@ export def "api-public-overrides-assignments list" [
 #
 # DELETE /api-public/v1/overrides/{publicId}/assignments/{policySlug}
 export def "api-public-overrides-assignments delete" [
-  publicId: string
-  policySlug: string
+  public_id: string
+  policy_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,13 +557,13 @@ export def "api-public-overrides-assignments delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/overrides/($publicId)/assignments/($policySlug)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({public_id: $public_id, policy_slug: $policy_slug} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -574,8 +574,8 @@ export def "api-public-overrides-assignments delete" [
 #
 # GET /api-public/v1/overrides/{publicId}/assignments/{policySlug}
 export def "api-public-overrides-assignments get" [
-  publicId: string
-  policySlug: string
+  public_id: string
+  policy_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,13 +584,13 @@ export def "api-public-overrides-assignments get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/overrides/($publicId)/assignments/($policySlug)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({public_id: $public_id, policy_slug: $policy_slug} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -601,8 +601,8 @@ export def "api-public-overrides-assignments get" [
 #
 # PUT /api-public/v1/overrides/{publicId}/assignments/{policySlug}
 export def "api-public-overrides-assignments put" [
-  publicId: string
-  policySlug: string
+  public_id: string
+  policy_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,13 +611,13 @@ export def "api-public-overrides-assignments put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, assigned: bool, policy: string, team: string, user: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/overrides/($publicId)/assignments/($policySlug)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({public_id: $public_id, policy_slug: $policy_slug} | format pattern "/api-public/v1/overrides/{public_id}/assignments/{policy_slug}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -636,13 +636,13 @@ export def "api-public-policies get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<policies: table<policy: record, team: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/policies")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -661,13 +661,13 @@ export def "api-public-policies-types-contacts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, contactTypes: table<description: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/policies/types/contacts")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -686,13 +686,13 @@ export def "api-public-policies-types-notifications get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, notificationTypes: table<description: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/policies/types/notifications")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -711,13 +711,13 @@ export def "api-public-policies-types-timeouts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, timeoutTypes: table<description: string, type: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/policies/types/timeouts")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -737,13 +737,13 @@ export def "api-public-policies-oncall-user patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<result: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/policies/($policy)/oncall/user")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({policy: $policy} | format pattern "/api-public/v1/policies/{policy}/oncall/user"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -763,13 +763,13 @@ export def "api-public-profile-policies get-by-username" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, steps: table<index: float, rules: list, timeout: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/profile/($username)/policies")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/api-public/v1/profile/{username}/policies"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -789,13 +789,13 @@ export def "api-public-profile-policies post-by-username" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/profile/($username)/policies")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/api-public/v1/profile/{username}/policies"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -816,13 +816,13 @@ export def "api-public-profile-policies get-by-username-step" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/profile/($username)/policies/($step)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({username: $username, step: $step} | format pattern "/api-public/v1/profile/{username}/policies/{step}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -843,13 +843,13 @@ export def "api-public-profile-policies post-by-username-step" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/profile/($username)/policies/($step)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({username: $username, step: $step} | format pattern "/api-public/v1/profile/{username}/policies/{step}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -870,13 +870,13 @@ export def "api-public-profile-policies put-by-username-step" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, step: record<index: float, rules: list<record>, timeout: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/profile/($username)/policies/($step)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({username: $username, step: $step} | format pattern "/api-public/v1/profile/{username}/policies/{step}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -898,13 +898,13 @@ export def "api-public-profile-policies delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/profile/($username)/policies/($step)/($rule)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({username: $username, step: $step, rule: $rule} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -926,13 +926,13 @@ export def "api-public-profile-policies get-by-username-step-rule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/profile/($username)/policies/($step)/($rule)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({username: $username, step: $step, rule: $rule} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -954,13 +954,13 @@ export def "api-public-profile-policies put-by-username-step-rule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, stepRule: record<contact: record<id: float, type: string>, index: float, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/profile/($username)/policies/($step)/($rule)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({username: $username, step: $step, rule: $rule} | format pattern "/api-public/v1/profile/{username}/policies/{step}/{rule}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -979,13 +979,13 @@ export def "api-public-team list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> table<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/team")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1004,13 +1004,13 @@ export def "api-public-team post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/team")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1030,13 +1030,13 @@ export def "api-public-team delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/team/($team)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-public/v1/team/{team}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1056,13 +1056,13 @@ export def "api-public-team get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/team/($team)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-public/v1/team/{team}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1082,13 +1082,13 @@ export def "api-public-team put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, isDefaultTeam: bool, memberCount: float, name: string, slug: string, version: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/team/($team)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-public/v1/team/{team}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1108,13 +1108,13 @@ export def "api-public-team-admins get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<teamAdmins: table<_selfUrl: string, firstName: string, lastName: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/team/($team)/admins")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-public/v1/team/{team}/admins"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1134,13 +1134,13 @@ export def "api-public-team-members get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, _teamUrl: string, members: table<firstName: string, lastName: string, username: string, verified: string, version: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/team/($team)/members")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-public/v1/team/{team}/members"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1160,13 +1160,13 @@ export def "api-public-team-members post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, _teamUrl: string, members: table<firstName: string, lastName: string, username: string, verified: string, version: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/team/($team)/members")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-public/v1/team/{team}/members"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1187,13 +1187,13 @@ export def "api-public-team-members delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/team/($team)/members/($user)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({team: $team, user: $user} | format pattern "/api-public/v1/team/{team}/members/{user}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1215,17 +1215,17 @@ export def "api-public-team-oncall-schedule get-by-team" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --daysForward: float # Days to include in returned schedule (30 max) (default: 14)
-  --daysSkip: float # Days to skip before computing schedule to return (90 max) (default: 0)
+  --days-forward: float # Days to include in returned schedule (30 max) (default: 14)
+  --days-skip: float # Days to skip before computing schedule to return (90 max) (default: 0)
   --step: float # Step of escalation policy (3 max) (default: 0)
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<overrides: table<end: float, orig: string, over: string, start: float>, schedule: table<oncall: string, overrideoncall: string, policyType: string, rolls: list, rotationName: string, shiftName: string, shiftRoll: float>, team: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "daysForward" $daysForward "scalar") (serialize-qp "daysSkip" $daysSkip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api-public/v1/team/($team)/oncall/schedule" $qp)
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-public/v1/team/{team}/oncall/schedule") $qp)
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1247,13 +1247,13 @@ export def "api-public-team-oncall-user patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<result: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/team/($team)/oncall/user")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-public/v1/team/{team}/oncall/user"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1273,13 +1273,13 @@ export def "api-public-team-policies get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<policies: table<name: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/team/($team)/policies")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-public/v1/team/{team}/policies"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1298,13 +1298,13 @@ export def "api-public-user list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, users: table<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/user")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1323,13 +1323,13 @@ export def "api-public-user post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-public/v1/user")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1349,13 +1349,13 @@ export def "api-public-user delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1375,13 +1375,13 @@ export def "api-public-user get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1401,13 +1401,13 @@ export def "api-public-user put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, createdAt: string, email: string, firstName: string, lastName: string, passwordLastUpdated: string, username: string, verified: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1427,13 +1427,13 @@ export def "api-public-user-contact-methods get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<devices: table<_selfUrl: string, deviceType: string, extId: string, label: string>, emails: table<_selfUrl: string, deviceType: string, extId: string, label: string>, phones: table<_selfUrl: string, deviceType: string, extId: string, label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}/contact-methods"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1453,13 +1453,13 @@ export def "api-public-user-contact-methods-devices list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/devices")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}/contact-methods/devices"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1471,7 +1471,7 @@ export def "api-public-user-contact-methods-devices list" [
 # DELETE /api-public/v1/user/{user}/contact-methods/devices/{contactId}
 export def "api-public-user-contact-methods-devices delete" [
   user: string
-  contactId: string
+  contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1480,13 +1480,13 @@ export def "api-public-user-contact-methods-devices delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/devices/($contactId)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user, contact_id: $contact_id} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1498,7 +1498,7 @@ export def "api-public-user-contact-methods-devices delete" [
 # GET /api-public/v1/user/{user}/contact-methods/devices/{contactId}
 export def "api-public-user-contact-methods-devices get" [
   user: string
-  contactId: string
+  contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1507,13 +1507,13 @@ export def "api-public-user-contact-methods-devices get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/devices/($contactId)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user, contact_id: $contact_id} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1525,7 +1525,7 @@ export def "api-public-user-contact-methods-devices get" [
 # PUT /api-public/v1/user/{user}/contact-methods/devices/{contactId}
 export def "api-public-user-contact-methods-devices put" [
   user: string
-  contactId: string
+  contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1534,13 +1534,13 @@ export def "api-public-user-contact-methods-devices put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/devices/($contactId)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user, contact_id: $contact_id} | format pattern "/api-public/v1/user/{user}/contact-methods/devices/{contact_id}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1560,13 +1560,13 @@ export def "api-public-user-contact-methods-emails list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/emails")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}/contact-methods/emails"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1586,13 +1586,13 @@ export def "api-public-user-contact-methods-emails post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/emails")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}/contact-methods/emails"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1604,7 +1604,7 @@ export def "api-public-user-contact-methods-emails post" [
 # DELETE /api-public/v1/user/{user}/contact-methods/emails/{contactId}
 export def "api-public-user-contact-methods-emails delete" [
   user: string
-  contactId: string
+  contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1613,13 +1613,13 @@ export def "api-public-user-contact-methods-emails delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/emails/($contactId)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user, contact_id: $contact_id} | format pattern "/api-public/v1/user/{user}/contact-methods/emails/{contact_id}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1631,7 +1631,7 @@ export def "api-public-user-contact-methods-emails delete" [
 # GET /api-public/v1/user/{user}/contact-methods/emails/{contactId}
 export def "api-public-user-contact-methods-emails get" [
   user: string
-  contactId: string
+  contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1640,13 +1640,13 @@ export def "api-public-user-contact-methods-emails get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/emails/($contactId)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user, contact_id: $contact_id} | format pattern "/api-public/v1/user/{user}/contact-methods/emails/{contact_id}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1666,13 +1666,13 @@ export def "api-public-user-contact-methods-phones list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/phones")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}/contact-methods/phones"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1692,13 +1692,13 @@ export def "api-public-user-contact-methods-phones post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/phones")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}/contact-methods/phones"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1710,7 +1710,7 @@ export def "api-public-user-contact-methods-phones post" [
 # DELETE /api-public/v1/user/{user}/contact-methods/phones/{contactId}
 export def "api-public-user-contact-methods-phones delete" [
   user: string
-  contactId: string
+  contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1719,13 +1719,13 @@ export def "api-public-user-contact-methods-phones delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/phones/($contactId)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user, contact_id: $contact_id} | format pattern "/api-public/v1/user/{user}/contact-methods/phones/{contact_id}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1737,7 +1737,7 @@ export def "api-public-user-contact-methods-phones delete" [
 # GET /api-public/v1/user/{user}/contact-methods/phones/{contactId}
 export def "api-public-user-contact-methods-phones get" [
   user: string
-  contactId: string
+  contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1746,13 +1746,13 @@ export def "api-public-user-contact-methods-phones get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> table<_selfUrl: string, deviceType: string, extId: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/contact-methods/phones/($contactId)")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user, contact_id: $contact_id} | format pattern "/api-public/v1/user/{user}/contact-methods/phones/{contact_id}"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1774,17 +1774,17 @@ export def "api-public-user-oncall-schedule get-by-user" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --daysForward: float # Days to include in returned schedule (30 max) (default: 14)
-  --daysSkip: float # Days to skip before computing schedule to return (90 max) (default: 0)
+  --days-forward: float # Days to include in returned schedule (30 max) (default: 14)
+  --days-skip: float # Days to skip before computing schedule to return (90 max) (default: 0)
   --step: float # Step of escalation policy (3 max) (default: 0)
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> table<overrides: list<record>, schedule: list<record>, team: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "daysForward" $daysForward "scalar") (serialize-qp "daysSkip" $daysSkip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/oncall/schedule" $qp)
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}/oncall/schedule") $qp)
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1804,13 +1804,13 @@ export def "api-public-user-policies get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<policies: table<contactType: string, extId: string, order: int, timeout: int>, userId: int, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/policies")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}/policies"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1830,13 +1830,13 @@ export def "api-public-user-teams get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<teams: table<_adminsUrl: string, _membersUrl: string, _policiesUrl: string, _selfUrl: string, name: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api-public/v1/user/($user)/teams")
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v1/user/{user}/teams"))
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1856,17 +1856,17 @@ export def "api-public-team-oncall-schedule get-by-team-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --daysForward: float # Days to include in returned schedule (30 max) (default: 14)
-  --daysSkip: float # Days to skip before computing schedule to return (90 max) (default: 0)
+  --days-forward: float # Days to include in returned schedule (30 max) (default: 14)
+  --days-skip: float # Days to skip before computing schedule to return (90 max) (default: 0)
   --step: float # Step of escalation policy (3 max) (default: 0)
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<schedules: table<overrides: list, policy: record, schedule: list>, team: record<name: string, slug: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "daysForward" $daysForward "scalar") (serialize-qp "daysSkip" $daysSkip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api-public/v2/team/($team)/oncall/schedule" $qp)
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-public/v2/team/{team}/oncall/schedule") $qp)
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1886,17 +1886,17 @@ export def "api-public-user-oncall-schedule get-by-user-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --daysForward: float # Days to include in returned schedule (30 max) (default: 14)
-  --daysSkip: float # Days to skip before computing schedule to return (90 max) (default: 0)
+  --days-forward: float # Days to include in returned schedule (30 max) (default: 14)
+  --days-skip: float # Days to skip before computing schedule to return (90 max) (default: 0)
   --step: float # Step of escalation policy (3 max) (default: 0)
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<teamSchedules: table<schedules: list, team: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "daysForward" $daysForward "scalar") (serialize-qp "daysSkip" $daysSkip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api-public/v2/user/($user)/oncall/schedule" $qp)
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let qp = [(serialize-qp "daysForward" $days_forward "scalar") (serialize-qp "daysSkip" $days_skip "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({user: $user} | format pattern "/api-public/v2/user/{user}/oncall/schedule") $qp)
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1919,21 +1919,21 @@ export def "api-reporting-incidents get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # The offset within the set of matching incidents (default: 0)
   --limit: float # The maximum number of matching incidents to return (100 max) (default: 20)
-  --entityId: string # The entity ID involved  This is the unique identifier for the entity causing the incident.
-  --incidentNumber: string # The incident number as shown in VictorOps Multiple values and ranges are allowed: 4,5,20:50
-  --startedAfter: string # Return incidents started after this timestamp Specify the timestamp in ISO8601 format
-  --startedBefore: string # Find incidents started before this timestamp  Specify the timestamp in ISO8601 format
+  --entity-id: string # The entity ID involved  This is the unique identifier for the entity causing the incident.
+  --incident-number: string # The incident number as shown in VictorOps Multiple values and ranges are allowed: 4,5,20:50
+  --started-after: string # Return incidents started after this timestamp Specify the timestamp in ISO8601 format
+  --started-before: string # Find incidents started before this timestamp  Specify the timestamp in ISO8601 format
   --host: string # The host involved in the incident Multiple values can be separated with commas.
   --service: string # The service involved in the incident (if any) Multiple values can be separated with commas.
-  --currentPhase: string # The current phase of the incident "resolved", "triggered" or "acknowledged". Multiple values can be separated with commas.
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --current-phase: string # The current phase of the incident "resolved", "triggered" or "acknowledged". Multiple values can be separated with commas.
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> table<incidents: list<record>, limit: float, offset: float, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entityId" $entityId "scalar") (serialize-qp "incidentNumber" $incidentNumber "scalar") (serialize-qp "startedAfter" $startedAfter "scalar") (serialize-qp "startedBefore" $startedBefore "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "currentPhase" $currentPhase "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "incidentNumber" $incident_number "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "currentPhase" $current_phase "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api-reporting/v1/incidents" $qp)
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1955,15 +1955,15 @@ export def "api-reporting-team-oncall-log get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Return shift changes occurring after this timestamp. The default is the start of the day at midnight. Specify the timestamp in ISO8601 format (format: date-time)
   --end: string # Return shift changes occurring before this timestamp. The default is the end of the day at 11:59:59. Specify the timestamp in ISO8601 format (format: date-time)
-  --userName: string # The VictorOps user ID. Return shift changes occurring during the interval specified for this user. Without this parameter, all relevant users (with respect to the specified interval) are returned
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --user-name: string # The VictorOps user ID. Return shift changes occurring during the interval specified for this user. Without this parameter, all relevant users (with respect to the specified interval) are returned
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<end: string, start: string, teamSlug: string, userLogs: table<adjustedTotal: record, log: list, total: record, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api-reporting/v1/team/($team)/oncall/log" $qp)
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({team: $team} | format pattern "/api-reporting/v1/team/{team}/oncall/log") $qp)
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1984,22 +1984,22 @@ export def "api-reporting-incidents get-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: float # The offset within the set of matching incidents (default: 0)
   --limit: float # The maximum number of matching incidents to return (100 max) (default: 20)
-  --entityId: string # The entity ID involved  This is the unique identifier for the entity causing the incident.
-  --incidentNumber: string # The incident number as shown in VictorOps Multiple values and ranges are allowed: 4,5,20:50
-  --startedAfter: string # Return incidents started after this timestamp Specify the timestamp in ISO8601 format
-  --startedBefore: string # Find incidents started before this timestamp  Specify the timestamp in ISO8601 format
+  --entity-id: string # The entity ID involved  This is the unique identifier for the entity causing the incident.
+  --incident-number: string # The incident number as shown in VictorOps Multiple values and ranges are allowed: 4,5,20:50
+  --started-after: string # Return incidents started after this timestamp Specify the timestamp in ISO8601 format
+  --started-before: string # Find incidents started before this timestamp  Specify the timestamp in ISO8601 format
   --host: string # The host involved in the incident Multiple values can be separated with commas.
   --service: string # The service involved in the incident (if any) Multiple values can be separated with commas.
-  --currentPhase: string # The current phase of the incident "resolved", "triggered" or "acknowledged". Multiple values can be separated with commas. By default, response contains only "resolved" incidents
-  --routingKey: string # The original routing of the incident
-  --X-VO-Api-Id: string # Your API ID
-  --X-VO-Api-Key: string # Your API Key
+  --current-phase: string # The current phase of the incident "resolved", "triggered" or "acknowledged". Multiple values can be separated with commas. By default, response contains only "resolved" incidents
+  --routing-key: string # The original routing of the incident
+  --x-vo-api-id: string # Your API ID
+  --x-vo-api-key: string # Your API Key
 ]: nothing -> record<incidents: table<alertCount: float, currentPhase: string, entityId: string, host: string, incidentNumber: string, lastAlertId: string, lastAlertTime: string, pagedPolicies: list, pagedTeams: list, pagedUsers: list, service: string, startTime: string, transitions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entityId" $entityId "scalar") (serialize-qp "incidentNumber" $incidentNumber "scalar") (serialize-qp "startedAfter" $startedAfter "scalar") (serialize-qp "startedBefore" $startedBefore "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "currentPhase" $currentPhase "scalar") (serialize-qp "routingKey" $routingKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "entityId" $entity_id "scalar") (serialize-qp "incidentNumber" $incident_number "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "host" $host "scalar") (serialize-qp "service" $service "scalar") (serialize-qp "currentPhase" $current_phase "scalar") (serialize-qp "routingKey" $routing_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api-reporting/v2/incidents" $qp)
-  let extra_headers = {"X-VO-Api-Id": $X_VO_Api_Id, "X-VO-Api-Key": $X_VO_Api_Key} | compact
+  let extra_headers = {"X-VO-Api-Id": $x_vo_api_id, "X-VO-Api-Key": $x_vo_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

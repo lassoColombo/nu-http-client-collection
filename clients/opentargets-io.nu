@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "platform-docs get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "platform-docs get-api" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /platform/docs
 # operationId: getApiDocs
-export def "platform-docs get" [
+export def "platform-docs get-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +114,7 @@ export def "platform-docs get" [
 #
 # GET /platform/docs/swagger-ui
 # operationId: getApiSwaggerUI
-export def "platform-docs-swagger-ui get" [
+export def "platform-docs-swagger-ui get-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "platform-private-autocomplete get" [
 #
 # POST /platform/private/besthitsearch
 # operationId: postBestHitSearch
-export def "platform-private-besthitsearch post" [
+export def "platform-private-besthitsearch create-best-hit-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "platform-private-besthitsearch post" [
 #
 # POST /platform/private/disease
 # operationId: postDiseaseById
-export def "platform-private-disease post" [
+export def "platform-private-disease create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "platform-private-disease get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/platform/private/disease/($disease)")
+  let full_url = (build-url $base ({disease: $disease} | format pattern "/platform/private/disease/{disease}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -235,7 +235,7 @@ export def "platform-private-disease get" [
 # GET /platform/private/drug/{DRUG_ID}
 # operationId: getDrugByID
 export def "platform-private-drug get" [
-  DRUG_ID: string
+  drug_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "platform-private-drug get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "drug_id" $drug_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/platform/private/drug/($DRUG_ID)" $qp)
+  let full_url = (build-url $base ({drug_id: $drug_id} | format pattern "/platform/private/drug/{drug_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,8 +259,8 @@ export def "platform-private-drug get" [
 #
 # GET /platform/private/eco/{ECO_ID}
 # operationId: getECObyID
-export def "platform-private-eco get" [
-  ECO_ID: string
+export def "platform-private-eco get-ec-oby" [
+  eco_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "platform-private-eco get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/platform/private/eco/($ECO_ID)")
+  let full_url = (build-url $base ({eco_id: $eco_id} | format pattern "/platform/private/eco/{eco_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -282,7 +282,7 @@ export def "platform-private-eco get" [
 #
 # POST /platform/private/enrichment/targets
 # operationId: postEnrichmentTarget
-export def "platform-private-enrichment-targets post" [
+export def "platform-private-enrichment-targets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "platform-private-quicksearch get" [
 #
 # POST /platform/private/relation
 # operationId: postRelation
-export def "platform-private-relation post" [
+export def "platform-private-relation create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "platform-private-relation-disease get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/platform/private/relation/disease/($disease)")
+  let full_url = (build-url $base ({disease: $disease} | format pattern "/platform/private/relation/disease/{disease}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -393,7 +393,7 @@ export def "platform-private-relation-target get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/platform/private/relation/target/($target)")
+  let full_url = (build-url $base ({target: $target} | format pattern "/platform/private/relation/target/{target}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,7 +403,7 @@ export def "platform-private-relation-target get" [
 #
 # POST /platform/private/target
 # operationId: postTargetByENSGID
-export def "platform-private-target post" [
+export def "platform-private-target create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "platform-private-target-expression get" [
 #
 # POST /platform/private/target/expression
 # operationId: postTargetExpressionByENSGID
-export def "platform-private-target-expression post" [
+export def "platform-private-target-expression create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "platform-private-target get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/platform/private/target/($target)")
+  let full_url = (build-url $base ({target: $target} | format pattern "/platform/private/target/{target}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -567,7 +567,7 @@ export def "platform-public-association-filter get" [
 #
 # POST /platform/public/association/filter
 # operationId: postAssociationFilter
-export def "platform-public-association-filter post" [
+export def "platform-public-association-filter create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "platform-public-evidence get" [
 #
 # POST /platform/public/evidence
 # operationId: postEvidenceById
-export def "platform-public-evidence post" [
+export def "platform-public-evidence create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,7 +652,7 @@ export def "platform-public-evidence-filter get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --target: string # A target identifier listed as target.id.
   --disease: string # An EFO code listed as disease.id.
-  --data source: string # Data source to consider.
+  --data-source: string # Data source to consider.
   --datatype: string # Data type to consider.
   --pathway: string # A pathway identifier (meaning all the targets linked to that pathway).
   --uniprotkw: string # A UniProt keyword (meaning all the targets linked to that keyword).
@@ -667,7 +667,7 @@ export def "platform-public-evidence-filter get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "disease" $disease "scalar") (serialize-qp "data source" $data source "scalar") (serialize-qp "datatype" $datatype "scalar") (serialize-qp "pathway" $pathway "scalar") (serialize-qp "uniprotkw" $uniprotkw "scalar") (serialize-qp "datastructure" $datastructure "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "scorevalue_min" $scorevalue_min "scalar") (serialize-qp "scorevalue_max" $scorevalue_max "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "target" $target "scalar") (serialize-qp "disease" $disease "scalar") (serialize-qp "data source" $data_source "scalar") (serialize-qp "datatype" $datatype "scalar") (serialize-qp "pathway" $pathway "scalar") (serialize-qp "uniprotkw" $uniprotkw "scalar") (serialize-qp "datastructure" $datastructure "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "scorevalue_min" $scorevalue_min "scalar") (serialize-qp "scorevalue_max" $scorevalue_max "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/platform/public/evidence/filter" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -678,7 +678,7 @@ export def "platform-public-evidence-filter get" [
 #
 # POST /platform/public/evidence/filter
 # operationId: postEvidenceFilter
-export def "platform-public-evidence-filter post" [
+export def "platform-public-evidence-filter create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,7 +730,7 @@ export def "platform-public-search get" [
 #
 # GET /platform/public/utils/metrics
 # operationId: getDataMetrics
-export def "platform-public-utils-metrics get" [
+export def "platform-public-utils-metrics get-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +774,7 @@ export def "platform-public-utils-ping get" [
 #
 # GET /platform/public/utils/stats
 # operationId: getDataStats
-export def "platform-public-utils-stats get" [
+export def "platform-public-utils-stats get-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

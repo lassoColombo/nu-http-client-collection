@@ -101,12 +101,12 @@ export def "2-application-properties get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # a String containing the property key
-  --permissionLevel: string # when fetching a list specifies the permission level of all items in the list                         see {@link com.atlassian.jira.bc.admin.ApplicationPropertiesService.EditPermissionLevel}
-  --keyFilter: string # when fetching a list allows the list to be filtered by the property's start of key                         e.g. "jira.lf.*" whould fetch only those permissions that are editable and whose keys start with                         "jira.lf.". This is a regex.
+  --permission-level: string # when fetching a list specifies the permission level of all items in the list                         see {@link com.atlassian.jira.bc.admin.ApplicationPropertiesService.EditPermissionLevel}
+  --key-filter: string # when fetching a list allows the list to be filtered by the property's start of key                         e.g. "jira.lf.*" whould fetch only those permissions that are editable and whose keys start with                         "jira.lf.". This is a regex.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "permissionLevel" $permissionLevel "scalar") (serialize-qp "keyFilter" $keyFilter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "permissionLevel" $permission_level "scalar") (serialize-qp "keyFilter" $key_filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/application-properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -152,7 +152,7 @@ export def "2-application-properties setPropertyViaRestfulTable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/application-properties/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/application-properties/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -162,7 +162,7 @@ export def "2-application-properties setPropertyViaRestfulTable" [
 #
 # GET /api/2/applicationrole
 # operationId: getAll
-export def "2-applicationrole list" [
+export def "2-applicationrole get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "2-applicationrole list" [
 #
 # PUT /api/2/applicationrole
 # operationId: putBulk
-export def "2-applicationrole put" [
+export def "2-applicationrole update-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,12 +193,12 @@ export def "2-applicationrole put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string
+  --if-match: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/2/applicationrole")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -222,7 +222,7 @@ export def "2-applicationrole get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/applicationrole/($key)")
+  let full_url = (build-url $base ({key: $key} | format pattern "/api/2/applicationrole/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,7 +232,7 @@ export def "2-applicationrole get" [
 #
 # PUT /api/2/applicationrole/{key}
 # operationId: put
-export def "2-applicationrole put-by-key" [
+export def "2-applicationrole put" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,12 +242,12 @@ export def "2-applicationrole put-by-key" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # the hash of the version to update. Optional Param
+  --if-match: string # the hash of the version to update. Optional Param
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/applicationrole/($key)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({key: $key} | format pattern "/api/2/applicationrole/{key}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -280,7 +280,7 @@ export def "2-attachment-meta get" [
 #
 # DELETE /api/2/attachment/{id}
 # operationId: removeAttachment
-export def "2-attachment removeAttachment" [
+export def "2-attachment delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "2-attachment removeAttachment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/attachment/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/attachment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,7 +316,7 @@ export def "2-attachment get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/attachment/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/attachment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -339,7 +339,7 @@ export def "2-attachment-expand-human expandForHumans" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/attachment/($id)/expand/human")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/attachment/{id}/expand/human"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,7 +362,7 @@ export def "2-attachment-expand-raw expandForMachines" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/attachment/($id)/expand/raw")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/attachment/{id}/expand/raw"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -386,12 +386,12 @@ export def "2-auditing-record get" [
   --filter: string # - text query; each record that will be returned must contain the provided text in one of its fields
   --qp-from: string # - timestamp in past; 'from' must be less or equal 'to', otherwise the result set will be empty                only records that where created in the same moment or after the 'from' timestamp will be provided in response
   --qp-to: string # - timestamp in past; 'from' must be less or equal 'to', otherwise the result set will be empty                only records that where created in the same moment or earlier than the 'to' timestamp will be provided in response
-  --projectIds: string # - list of project ids to look for
-  --userIds: string # - list of user ids to look for
+  --project-ids: string # - list of project ids to look for
+  --user-ids: string # - list of user ids to look for
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "projectIds" $projectIds "scalar") (serialize-qp "userIds" $userIds "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "projectIds" $project_ids "scalar") (serialize-qp "userIds" $user_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/auditing/record" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -402,7 +402,7 @@ export def "2-auditing-record get" [
 #
 # POST /api/2/auditing/record
 # operationId: addRecord
-export def "2-auditing-record addRecord" [
+export def "2-auditing-record create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "2-auditing-record addRecord" [
 #
 # GET /api/2/avatar/{type}/system
 # operationId: getAllSystemAvatars
-export def "2-avatar-system get" [
+export def "2-avatar-system get-all" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "2-avatar-system get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/avatar/($type)/system")
+  let full_url = (build-url $base ({type: $type} | format pattern "/api/2/avatar/{type}/system"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,7 +463,7 @@ export def "2-avatar-temporary storeTemporaryAvatar" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filename" $filename "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/avatar/($type)/temporary" $qp)
+  let full_url = (build-url $base ({type: $type} | format pattern "/api/2/avatar/{type}/temporary") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -485,7 +485,7 @@ export def "2-avatar-temporary-crop post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/avatar/($type)/temporaryCrop")
+  let full_url = (build-url $base ({type: $type} | format pattern "/api/2/avatar/{type}/temporaryCrop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,7 +494,7 @@ export def "2-avatar-temporary-crop post" [
 # POST /api/2/cluster/zdu/approve
 #
 # operationId: approveUpgrade
-export def "2-cluster-zdu-approve approveUpgrade" [
+export def "2-cluster-zdu-approve approve-upgrade" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,7 +515,7 @@ export def "2-cluster-zdu-approve approveUpgrade" [
 # POST /api/2/cluster/zdu/cancel
 #
 # operationId: cancelUpgrade
-export def "2-cluster-zdu-cancel cancelUpgrade" [
+export def "2-cluster-zdu-cancel cancel-upgrade" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "2-cluster-zdu-state get" [
 #
 # GET /api/2/comment/{commentId}/properties
 export def "2-comment-properties list" [
-  commentId: string
+  comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,7 +612,7 @@ export def "2-comment-properties list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/comment/($commentId)/properties")
+  let full_url = (build-url $base ({comment_id: $comment_id} | format pattern "/api/2/comment/{comment_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -622,8 +622,8 @@ export def "2-comment-properties list" [
 #
 # DELETE /api/2/comment/{commentId}/properties/{propertyKey}
 export def "2-comment-properties delete" [
-  commentId: string
-  propertyKey: string
+  comment_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -635,7 +635,7 @@ export def "2-comment-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/comment/($commentId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({comment_id: $comment_id, property_key: $property_key} | format pattern "/api/2/comment/{comment_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -645,8 +645,8 @@ export def "2-comment-properties delete" [
 #
 # GET /api/2/comment/{commentId}/properties/{propertyKey}
 export def "2-comment-properties get" [
-  commentId: string
-  propertyKey: string
+  comment_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "2-comment-properties get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/comment/($commentId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({comment_id: $comment_id, property_key: $property_key} | format pattern "/api/2/comment/{comment_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -668,8 +668,8 @@ export def "2-comment-properties get" [
 #
 # PUT /api/2/comment/{commentId}/properties/{propertyKey}
 export def "2-comment-properties put" [
-  commentId: string
-  propertyKey: string
+  comment_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "2-comment-properties put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/comment/($commentId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({comment_id: $comment_id, property_key: $property_key} | format pattern "/api/2/comment/{comment_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -691,7 +691,7 @@ export def "2-comment-properties put" [
 #
 # POST /api/2/component
 # operationId: createComponent
-export def "2-component createComponent" [
+export def "2-component create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,12 +722,12 @@ export def "2-component delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --moveIssuesTo: string # The new component applied to issues whose 'id' component will be deleted.                      If this value is null, then the 'id' component is simply removed from the related isues.
+  --move-issues-to: string # The new component applied to issues whose 'id' component will be deleted.                      If this value is null, then the 'id' component is simply removed from the related isues.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "moveIssuesTo" $moveIssuesTo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/component/($id)" $qp)
+  let qp = [(serialize-qp "moveIssuesTo" $move_issues_to "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/component/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -750,7 +750,7 @@ export def "2-component get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/component/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/component/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -760,7 +760,7 @@ export def "2-component get" [
 #
 # PUT /api/2/component/{id}
 # operationId: updateComponent
-export def "2-component updateComponent" [
+export def "2-component update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -773,7 +773,7 @@ export def "2-component updateComponent" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/component/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/component/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -796,7 +796,7 @@ export def "2-component-related-issue-counts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/component/($id)/relatedIssueCounts")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/component/{id}/relatedIssueCounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -841,7 +841,7 @@ export def "2-custom-field-option get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/customFieldOption/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/customFieldOption/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -861,12 +861,12 @@ export def "2-dashboard list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # an optional filter that is applied to the list of dashboards. Valid values include                         <code>"favourite"</code> for returning only favourite dashboards, and <code>"my"</code> for returning                         dashboards that are owned by the calling user.
-  --startAt: int # the index of the first dashboard to return (0-based). must be 0 or a multiple of                         <code>maxResults</code> (format: int32)
-  --maxResults: int # a hint as to the the maximum number of dashboards to return in each call. Note that the                         JIRA server reserves the right to impose a <code>maxResults</code> limit that is lower than the value that a                         client provides, dues to lack or resources or any other condition. When this happens, your results will be                         truncated. Callers should always check the returned <code>maxResults</code> to determine the value that is                         effectively being used. (format: int32)
+  --start-at: int # the index of the first dashboard to return (0-based). must be 0 or a multiple of                         <code>maxResults</code> (format: int32)
+  --max-results: int # a hint as to the the maximum number of dashboards to return in each call. Note that the                         JIRA server reserves the right to impose a <code>maxResults</code> limit that is lower than the value that a                         client provides, dues to lack or resources or any other condition. When this happens, your results will be                         truncated. Callers should always check the returned <code>maxResults</code> to determine the value that is                         effectively being used. (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/dashboard" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -877,8 +877,8 @@ export def "2-dashboard list" [
 #
 # GET /api/2/dashboard/{dashboardId}/items/{itemId}/properties
 export def "2-dashboard-items-properties list" [
-  itemId: string
-  dashboardId: string
+  dashboard_id: string
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -890,7 +890,7 @@ export def "2-dashboard-items-properties list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/dashboard/($dashboardId)/items/($itemId)/properties")
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, item_id: $item_id} | format pattern "/api/2/dashboard/{dashboard_id}/items/{item_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -900,9 +900,9 @@ export def "2-dashboard-items-properties list" [
 #
 # DELETE /api/2/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
 export def "2-dashboard-items-properties delete" [
-  itemId: string
-  dashboardId: string
-  propertyKey: string
+  dashboard_id: string
+  item_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "2-dashboard-items-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/dashboard/($dashboardId)/items/($itemId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, item_id: $item_id, property_key: $property_key} | format pattern "/api/2/dashboard/{dashboard_id}/items/{item_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -924,9 +924,9 @@ export def "2-dashboard-items-properties delete" [
 #
 # GET /api/2/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
 export def "2-dashboard-items-properties get" [
-  itemId: string
-  dashboardId: string
-  propertyKey: string
+  dashboard_id: string
+  item_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -938,7 +938,7 @@ export def "2-dashboard-items-properties get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/dashboard/($dashboardId)/items/($itemId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, item_id: $item_id, property_key: $property_key} | format pattern "/api/2/dashboard/{dashboard_id}/items/{item_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -948,9 +948,9 @@ export def "2-dashboard-items-properties get" [
 #
 # PUT /api/2/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
 export def "2-dashboard-items-properties put" [
-  itemId: string
-  dashboardId: string
-  propertyKey: string
+  dashboard_id: string
+  item_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "2-dashboard-items-properties put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/dashboard/($dashboardId)/items/($itemId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, item_id: $item_id, property_key: $property_key} | format pattern "/api/2/dashboard/{dashboard_id}/items/{item_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -985,7 +985,7 @@ export def "2-dashboard get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/dashboard/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/dashboard/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1017,7 +1017,7 @@ export def "2-field get" [
 #
 # POST /api/2/field
 # operationId: createCustomField
-export def "2-field createCustomField" [
+export def "2-field create-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,7 +1039,7 @@ export def "2-field createCustomField" [
 #
 # POST /api/2/filter
 # operationId: createFilter
-export def "2-filter createFilter" [
+export def "2-filter create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1117,11 +1117,11 @@ export def "2-filter-favourite get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # the parameters to expand
-  --enableSharedUsers: oneof<nothing, bool> # enable calculating shared users collection (default: true)
+  --enable-shared-users: oneof<nothing, bool> # enable calculating shared users collection (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "enableSharedUsers" $enableSharedUsers "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "enableSharedUsers" $enable_shared_users "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/filter/favourite" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1145,7 +1145,7 @@ export def "2-filter delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/filter/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/filter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1166,12 +1166,12 @@ export def "2-filter get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # the parameters to expand
-  --enableSharedUsers: oneof<nothing, bool> # enable calculating shared users collection (default: true)
+  --enable-shared-users: oneof<nothing, bool> # enable calculating shared users collection (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "enableSharedUsers" $enableSharedUsers "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/filter/($id)" $qp)
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "enableSharedUsers" $enable_shared_users "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/filter/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1196,7 +1196,7 @@ export def "2-filter editFilter" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/filter/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/filter/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1218,7 +1218,7 @@ export def "2-filter-columns delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/filter/($id)/columns")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/filter/{id}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1240,7 +1240,7 @@ export def "2-filter-columns get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/filter/($id)/columns")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/filter/{id}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1262,7 +1262,7 @@ export def "2-filter-columns put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/filter/($id)/columns")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/filter/{id}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1285,7 +1285,7 @@ export def "2-filter-permission list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/filter/($id)/permission")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/filter/{id}/permission"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1295,7 +1295,7 @@ export def "2-filter-permission list" [
 #
 # POST /api/2/filter/{id}/permission
 # operationId: addSharePermission
-export def "2-filter-permission addSharePermission" [
+export def "2-filter-permission create-share" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1308,7 +1308,7 @@ export def "2-filter-permission addSharePermission" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/filter/($id)/permission")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/filter/{id}/permission"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1318,7 +1318,7 @@ export def "2-filter-permission addSharePermission" [
 #
 # DELETE /api/2/filter/{id}/permission/{permission-id}
 # operationId: deleteSharePermission
-export def "2-filter-permission delete" [
+export def "2-filter-permission delete-share" [
   id: int
   permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1332,7 +1332,7 @@ export def "2-filter-permission delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/filter/($id)/permission/($permission_id)")
+  let full_url = (build-url $base ({id: $id, permission_id: $permission_id} | format pattern "/api/2/filter/{id}/permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1342,9 +1342,9 @@ export def "2-filter-permission delete" [
 #
 # GET /api/2/filter/{id}/permission/{permissionId}
 # operationId: getSharePermission
-export def "2-filter-permission get" [
-  permissionId: int
+export def "2-filter-permission get-share" [
   id: int
+  permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1356,7 +1356,7 @@ export def "2-filter-permission get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/filter/($id)/permission/($permissionId)")
+  let full_url = (build-url $base ({id: $id, permission_id: $permission_id} | format pattern "/api/2/filter/{id}/permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1366,7 +1366,7 @@ export def "2-filter-permission get" [
 #
 # DELETE /api/2/group
 # operationId: removeGroup
-export def "2-group removeGroup" [
+export def "2-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,11 +1376,11 @@ export def "2-group removeGroup" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # (mandatory) The name of the group to delete.
-  --swapGroup: string # If you delete a group and content is restricted to that group, the content will be hidden from all users.   To prevent this, use this parameter to specify a different group to transfer the restrictions (comments and worklogs only) to.
+  --swap-group: string # If you delete a group and content is restricted to that group, the content will be hidden from all users.   To prevent this, use this parameter to specify a different group to transfer the restrictions (comments and worklogs only) to.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "swapGroup" $swapGroup "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "swapGroup" $swap_group "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1416,7 +1416,7 @@ export def "2-group get" [
 #
 # POST /api/2/group
 # operationId: createGroup
-export def "2-group createGroup" [
+export def "2-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1438,7 +1438,7 @@ export def "2-group createGroup" [
 #
 # GET /api/2/group/member
 # operationId: getUsersFromGroup
-export def "2-group-member get" [
+export def "2-group-member get-users-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1448,13 +1448,13 @@ export def "2-group-member get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # a name of the group for which members will be returned.
-  --includeInactiveUsers: oneof<nothing, bool> # inactive users will be included in the response if set to true. (default: false)
-  --startAt: int # the index of the first user in group to return (0 based). (format: int64, default: 0)
-  --maxResults: int # the maximum number of users to return (max 50). (format: int32, default: 50)
+  --include-inactive-users: oneof<nothing, bool> # inactive users will be included in the response if set to true. (default: false)
+  --start-at: int # the index of the first user in group to return (0 based). (format: int64, default: 0)
+  --max-results: int # the maximum number of users to return (max 50). (format: int32, default: 50)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "includeInactiveUsers" $includeInactiveUsers "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "includeInactiveUsers" $include_inactive_users "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/group/member" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1465,7 +1465,7 @@ export def "2-group-member get" [
 #
 # DELETE /api/2/group/user
 # operationId: removeUserFromGroup
-export def "2-group-user removeUserFromGroup" [
+export def "2-group-user delete-user-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1490,7 +1490,7 @@ export def "2-group-user removeUserFromGroup" [
 #
 # POST /api/2/group/user
 # operationId: addUserToGroup
-export def "2-group-user addUserToGroup" [
+export def "2-group-user create-user-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1525,12 +1525,12 @@ export def "2-groups-picker findGroups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # a String to match groups agains
   --exclude: string
-  --maxResults: int # format: int32
-  --userName: string
+  --max-results: int # format: int32
+  --user-name: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/groups/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1551,15 +1551,15 @@ export def "2-groupuserpicker findUsersAndGroups" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A string used to search username, Name or e-mail address
-  --maxResults: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000. If                     you specify a value that is higher than this number, your search results will be truncated. (format: int32)
-  --showAvatar: oneof<nothing, bool>
-  --fieldId: string # The custom field id, if this request comes from a custom field, such as a user picker. Optional.
-  --projectId: string # The list of project ids to further restrict the search                     This parameter can occur multiple times to pass in multiple project ids.                     Comma separated value is not supported.                     This parameter is only used when fieldId is present.
-  --issueTypeId: string # The list of issue type ids to further restrict the search.                     This parameter can occur multiple times to pass in multiple issue type ids.                     Comma separated value is not supported.                     Special values such as -1 (all standard issue types), -2 (all subtask issue types) are supported.                     This parameter is only used when fieldId is present.
+  --max-results: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000. If                     you specify a value that is higher than this number, your search results will be truncated. (format: int32)
+  --show-avatar: oneof<nothing, bool>
+  --field-id: string # The custom field id, if this request comes from a custom field, such as a user picker. Optional.
+  --project-id: string # The list of project ids to further restrict the search                     This parameter can occur multiple times to pass in multiple project ids.                     Comma separated value is not supported.                     This parameter is only used when fieldId is present.
+  --issue-type-id: string # The list of issue type ids to further restrict the search.                     This parameter can occur multiple times to pass in multiple issue type ids.                     Comma separated value is not supported.                     Special values such as -1 (all standard issue types), -2 (all subtask issue types) are supported.                     This parameter is only used when fieldId is present.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "fieldId" $fieldId "scalar") (serialize-qp "projectId" $projectId "scalar") (serialize-qp "issueTypeId" $issueTypeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "showAvatar" $show_avatar "scalar") (serialize-qp "fieldId" $field_id "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "issueTypeId" $issue_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/groupuserpicker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1592,7 +1592,7 @@ export def "2-index-summary get" [
 #
 # POST /api/2/issue
 # operationId: createIssue
-export def "2-issue createIssue" [
+export def "2-issue create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1614,7 +1614,7 @@ export def "2-issue createIssue" [
 #
 # POST /api/2/issue/bulk
 # operationId: createIssues
-export def "2-issue-bulk createIssues" [
+export def "2-issue-bulk create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1636,7 +1636,7 @@ export def "2-issue-bulk createIssues" [
 #
 # GET /api/2/issue/createmeta
 # operationId: getCreateIssueMeta
-export def "2-issue-createmeta get" [
+export def "2-issue-createmeta get-create-issue-meta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1645,14 +1645,14 @@ export def "2-issue-createmeta get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --projectIds: string # combined with the projectKeys param, lists the projects with which to filter the results. If absent, all projects are returned.                        This parameter can be specified multiple times, and/or be a comma-separated list.                        Specifiying a project that does not exist (or that you cannot create issues in) is not an error, but it will not be in the results.
-  --projectKeys: string # combined with the projectIds param, lists the projects with which to filter the results. If null, all projects are returned.                        This parameter can be specified multiple times, and/or be a comma-separated list.                        Specifiying a project that does not exist (or that you cannot create issues in) is not an error, but it will not be in the results.
-  --issuetypeIds: string # combinded with issuetypeNames, lists the issue types with which to filter the results. If null, all issue types are returned.                        This parameter can be specified multiple times, and/or be a comma-separated list.                        Specifiying an issue type that does not exist is not an error.
-  --issuetypeNames: string # combinded with issuetypeIds, lists the issue types with which to filter the results. If null, all issue types are returned.                        This parameter can be specified multiple times, but is NOT interpreted as a comma-separated list.                        Specifiying an issue type that does not exist is not an error.
+  --project-ids: string # combined with the projectKeys param, lists the projects with which to filter the results. If absent, all projects are returned.                        This parameter can be specified multiple times, and/or be a comma-separated list.                        Specifiying a project that does not exist (or that you cannot create issues in) is not an error, but it will not be in the results.
+  --project-keys: string # combined with the projectIds param, lists the projects with which to filter the results. If null, all projects are returned.                        This parameter can be specified multiple times, and/or be a comma-separated list.                        Specifiying a project that does not exist (or that you cannot create issues in) is not an error, but it will not be in the results.
+  --issuetype-ids: string # combinded with issuetypeNames, lists the issue types with which to filter the results. If null, all issue types are returned.                        This parameter can be specified multiple times, and/or be a comma-separated list.                        Specifiying an issue type that does not exist is not an error.
+  --issuetype-names: string # combinded with issuetypeIds, lists the issue types with which to filter the results. If null, all issue types are returned.                        This parameter can be specified multiple times, but is NOT interpreted as a comma-separated list.                        Specifiying an issue type that does not exist is not an error.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectIds" $projectIds "scalar") (serialize-qp "projectKeys" $projectKeys "scalar") (serialize-qp "issuetypeIds" $issuetypeIds "scalar") (serialize-qp "issuetypeNames" $issuetypeNames "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "projectIds" $project_ids "scalar") (serialize-qp "projectKeys" $project_keys "scalar") (serialize-qp "issuetypeIds" $issuetype_ids "scalar") (serialize-qp "issuetypeNames" $issuetype_names "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/issue/createmeta" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1663,7 +1663,7 @@ export def "2-issue-createmeta get" [
 #
 # GET /api/2/issue/picker
 # operationId: getIssuePickerResource
-export def "2-issue-picker get" [
+export def "2-issue-picker get-issue-picker-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1673,15 +1673,15 @@ export def "2-issue-picker get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # the query.
-  --currentJQL: string # the JQL in context of which the request is executed. Only issues which match this JQL query will be included in results.
-  --currentIssueKey: string # the key of the issue in context of which the request is executed. The issue which is in context will not be included in the auto-completion result, even if it matches the query.
-  --currentProjectId: string # the id of the project in context of which the request is executed. Suggested issues will be only from this project.
-  --showSubTasks: oneof<nothing, bool> # if set to false, subtasks will not be included in the list.
-  --showSubTaskParent: oneof<nothing, bool> # if set to false and request is executed in context of a subtask, the parent issue will not be included in the auto-completion result, even if it matches the query.
+  --current-jql: string # the JQL in context of which the request is executed. Only issues which match this JQL query will be included in results.
+  --current-issue-key: string # the key of the issue in context of which the request is executed. The issue which is in context will not be included in the auto-completion result, even if it matches the query.
+  --current-project-id: string # the id of the project in context of which the request is executed. Suggested issues will be only from this project.
+  --show-sub-tasks: oneof<nothing, bool> # if set to false, subtasks will not be included in the list.
+  --show-sub-task-parent: oneof<nothing, bool> # if set to false and request is executed in context of a subtask, the parent issue will not be included in the auto-completion result, even if it matches the query.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "currentJQL" $currentJQL "scalar") (serialize-qp "currentIssueKey" $currentIssueKey "scalar") (serialize-qp "currentProjectId" $currentProjectId "scalar") (serialize-qp "showSubTasks" $showSubTasks "scalar") (serialize-qp "showSubTaskParent" $showSubTaskParent "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "currentJQL" $current_jql "scalar") (serialize-qp "currentIssueKey" $current_issue_key "scalar") (serialize-qp "currentProjectId" $current_project_id "scalar") (serialize-qp "showSubTasks" $show_sub_tasks "scalar") (serialize-qp "showSubTaskParent" $show_sub_task_parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/issue/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1693,7 +1693,7 @@ export def "2-issue-picker get" [
 # DELETE /api/2/issue/{issueIdOrKey}
 # operationId: deleteIssue
 export def "2-issue delete" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1702,12 +1702,12 @@ export def "2-issue delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deleteSubtasks: string # a String of true or false indicating that any subtasks should also be deleted.  If the                        issue has no subtasks this parameter is ignored.  If the issue has subtasks and this parameter is missing or false,                        then the issue will not be deleted and an error will be returned.
+  --delete-subtasks: string # a String of true or false indicating that any subtasks should also be deleted.  If the                        issue has no subtasks this parameter is ignored.  If the issue has subtasks and this parameter is missing or false,                        then the issue will not be deleted and an error will be returned.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deleteSubtasks" $deleteSubtasks "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)" $qp)
+  let qp = [(serialize-qp "deleteSubtasks" $delete_subtasks "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1718,7 +1718,7 @@ export def "2-issue delete" [
 # GET /api/2/issue/{issueIdOrKey}
 # operationId: getIssue
 export def "2-issue get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1734,7 +1734,7 @@ export def "2-issue get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)" $qp)
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1745,7 +1745,7 @@ export def "2-issue get" [
 # PUT /api/2/issue/{issueIdOrKey}
 # operationId: editIssue
 export def "2-issue editIssue" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1754,12 +1754,12 @@ export def "2-issue editIssue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notifyUsers: oneof<nothing, bool> # send the email with notification that the issue was updated to users that watch it.                     Admin or project admin permissions are required to disable the notification. (default: true)
+  --notify-users: oneof<nothing, bool> # send the email with notification that the issue was updated to users that watch it.                     Admin or project admin permissions are required to disable the notification. (default: true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "notifyUsers" $notifyUsers "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)" $qp)
+  let qp = [(serialize-qp "notifyUsers" $notify_users "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1770,7 +1770,7 @@ export def "2-issue editIssue" [
 # PUT /api/2/issue/{issueIdOrKey}/assignee
 # operationId: assign
 export def "2-issue-assignee assign" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1782,7 +1782,7 @@ export def "2-issue-assignee assign" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/assignee")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/assignee"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1792,8 +1792,8 @@ export def "2-issue-assignee assign" [
 #
 # POST /api/2/issue/{issueIdOrKey}/attachments
 # operationId: addAttachment
-export def "2-issue-attachments addAttachment" [
-  issueIdOrKey: string
+export def "2-issue-attachments create" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1805,7 +1805,7 @@ export def "2-issue-attachments addAttachment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/attachments")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1816,7 +1816,7 @@ export def "2-issue-attachments addAttachment" [
 # GET /api/2/issue/{issueIdOrKey}/comment
 # operationId: getComments
 export def "2-issue-comment list" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1825,15 +1825,15 @@ export def "2-issue-comment list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # the page offset, if not specified then defaults to 0 (format: int64)
-  --maxResults: int # how many results on the page should be included. Defaults to 50. (format: int32)
-  --orderBy: string # ordering of the results.
+  --start-at: int # the page offset, if not specified then defaults to 0 (format: int64)
+  --max-results: int # how many results on the page should be included. Defaults to 50. (format: int32)
+  --order-by: string # ordering of the results.
   --expand: string # optional flags: renderedBody (provides body rendered in HTML)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/comment" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/comment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1843,8 +1843,8 @@ export def "2-issue-comment list" [
 #
 # POST /api/2/issue/{issueIdOrKey}/comment
 # operationId: addComment
-export def "2-issue-comment addComment" [
-  issueIdOrKey: string
+export def "2-issue-comment create" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1858,7 +1858,7 @@ export def "2-issue-comment addComment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/comment" $qp)
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/comment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1869,7 +1869,7 @@ export def "2-issue-comment addComment" [
 # DELETE /api/2/issue/{issueIdOrKey}/comment/{id}
 # operationId: deleteComment
 export def "2-issue-comment delete" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1882,7 +1882,7 @@ export def "2-issue-comment delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/comment/($id)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/api/2/issue/{issue_id_or_key}/comment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1893,7 +1893,7 @@ export def "2-issue-comment delete" [
 # GET /api/2/issue/{issueIdOrKey}/comment/{id}
 # operationId: getComment
 export def "2-issue-comment get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1908,7 +1908,7 @@ export def "2-issue-comment get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/comment/($id)" $qp)
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/api/2/issue/{issue_id_or_key}/comment/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1918,8 +1918,8 @@ export def "2-issue-comment get" [
 #
 # PUT /api/2/issue/{issueIdOrKey}/comment/{id}
 # operationId: updateComment
-export def "2-issue-comment updateComment" [
-  issueIdOrKey: string
+export def "2-issue-comment update" [
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1934,7 +1934,7 @@ export def "2-issue-comment updateComment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/comment/($id)" $qp)
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/api/2/issue/{issue_id_or_key}/comment/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1944,8 +1944,8 @@ export def "2-issue-comment updateComment" [
 #
 # GET /api/2/issue/{issueIdOrKey}/editmeta
 # operationId: getEditIssueMeta
-export def "2-issue-editmeta get" [
-  issueIdOrKey: string
+export def "2-issue-editmeta get-edit-issue-meta" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1957,7 +1957,7 @@ export def "2-issue-editmeta get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/editmeta")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/editmeta"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1968,7 +1968,7 @@ export def "2-issue-editmeta get" [
 # POST /api/2/issue/{issueIdOrKey}/notify
 # operationId: notify
 export def "2-issue-notify notify" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1980,7 +1980,7 @@ export def "2-issue-notify notify" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/notify")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/notify"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1990,7 +1990,7 @@ export def "2-issue-notify notify" [
 #
 # GET /api/2/issue/{issueIdOrKey}/properties
 export def "2-issue-properties list" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,7 +2002,7 @@ export def "2-issue-properties list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/properties")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2012,8 +2012,8 @@ export def "2-issue-properties list" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/properties/{propertyKey}
 export def "2-issue-properties delete" [
-  issueIdOrKey: string
-  propertyKey: string
+  issue_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2025,7 +2025,7 @@ export def "2-issue-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, property_key: $property_key} | format pattern "/api/2/issue/{issue_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2035,8 +2035,8 @@ export def "2-issue-properties delete" [
 #
 # GET /api/2/issue/{issueIdOrKey}/properties/{propertyKey}
 export def "2-issue-properties get" [
-  issueIdOrKey: string
-  propertyKey: string
+  issue_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2048,7 +2048,7 @@ export def "2-issue-properties get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, property_key: $property_key} | format pattern "/api/2/issue/{issue_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2058,8 +2058,8 @@ export def "2-issue-properties get" [
 #
 # PUT /api/2/issue/{issueIdOrKey}/properties/{propertyKey}
 export def "2-issue-properties put" [
-  issueIdOrKey: string
-  propertyKey: string
+  issue_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2071,7 +2071,7 @@ export def "2-issue-properties put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, property_key: $property_key} | format pattern "/api/2/issue/{issue_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2081,8 +2081,8 @@ export def "2-issue-properties put" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/remotelink
 # operationId: deleteRemoteIssueLinkByGlobalId
-export def "2-issue-remotelink delete-by-issueIdOrKey" [
-  issueIdOrKey: string
+export def "2-issue-remotelink delete-remote-issue-link-by-issueIdOrKey" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2091,12 +2091,12 @@ export def "2-issue-remotelink delete-by-issueIdOrKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --globalId: string # the global id of the remote issue link
+  --global-id: string # the global id of the remote issue link
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "globalId" $globalId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/remotelink" $qp)
+  let qp = [(serialize-qp "globalId" $global_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/remotelink") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2106,8 +2106,8 @@ export def "2-issue-remotelink delete-by-issueIdOrKey" [
 #
 # GET /api/2/issue/{issueIdOrKey}/remotelink
 # operationId: getRemoteIssueLinks
-export def "2-issue-remotelink list" [
-  issueIdOrKey: string
+export def "2-issue-remotelink get-remote-issue-links" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2116,12 +2116,12 @@ export def "2-issue-remotelink list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --globalId: string # The id of the remote issue link to be returned.  If null (not provided) all remote links for the                      issue are returned.                      <p>For a fullexplanation of Issue Link fields please refer to                      <a href="https://developer.atlassian.com/display/JIRADEV/Fields+in+Remote+Issue+Links">https://developer.atlassian.com/display/JIRADEV/Fields+in+Remote+Issue+Links</a></p>
+  --global-id: string # The id of the remote issue link to be returned.  If null (not provided) all remote links for the                      issue are returned.                      <p>For a fullexplanation of Issue Link fields please refer to                      <a href="https://developer.atlassian.com/display/JIRADEV/Fields+in+Remote+Issue+Links">https://developer.atlassian.com/display/JIRADEV/Fields+in+Remote+Issue+Links</a></p>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "globalId" $globalId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/remotelink" $qp)
+  let qp = [(serialize-qp "globalId" $global_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/remotelink") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2131,8 +2131,8 @@ export def "2-issue-remotelink list" [
 #
 # POST /api/2/issue/{issueIdOrKey}/remotelink
 # operationId: createOrUpdateRemoteIssueLink
-export def "2-issue-remotelink createOrUpdateRemoteIssueLink" [
-  issueIdOrKey: string
+export def "2-issue-remotelink create-or-update-remote-issue-link" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2144,7 +2144,7 @@ export def "2-issue-remotelink createOrUpdateRemoteIssueLink" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/remotelink")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/remotelink"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2154,9 +2154,9 @@ export def "2-issue-remotelink createOrUpdateRemoteIssueLink" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: deleteRemoteIssueLinkById
-export def "2-issue-remotelink delete-by-linkId-issueIdOrKey" [
-  linkId: string
-  issueIdOrKey: string
+export def "2-issue-remotelink delete-remote-issue-link-by-issueIdOrKey-linkId" [
+  issue_id_or_key: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2168,7 +2168,7 @@ export def "2-issue-remotelink delete-by-linkId-issueIdOrKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/remotelink/($linkId)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, link_id: $link_id} | format pattern "/api/2/issue/{issue_id_or_key}/remotelink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2178,9 +2178,9 @@ export def "2-issue-remotelink delete-by-linkId-issueIdOrKey" [
 #
 # GET /api/2/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: getRemoteIssueLinkById
-export def "2-issue-remotelink get" [
-  linkId: string
-  issueIdOrKey: string
+export def "2-issue-remotelink get-remote-issue-link" [
+  issue_id_or_key: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2192,7 +2192,7 @@ export def "2-issue-remotelink get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/remotelink/($linkId)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, link_id: $link_id} | format pattern "/api/2/issue/{issue_id_or_key}/remotelink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2202,9 +2202,9 @@ export def "2-issue-remotelink get" [
 #
 # PUT /api/2/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: updateRemoteIssueLink
-export def "2-issue-remotelink updateRemoteIssueLink" [
-  linkId: string
-  issueIdOrKey: string
+export def "2-issue-remotelink update-remote-issue-link" [
+  issue_id_or_key: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2216,7 +2216,7 @@ export def "2-issue-remotelink updateRemoteIssueLink" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/remotelink/($linkId)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, link_id: $link_id} | format pattern "/api/2/issue/{issue_id_or_key}/remotelink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2227,7 +2227,7 @@ export def "2-issue-remotelink updateRemoteIssueLink" [
 # GET /api/2/issue/{issueIdOrKey}/subtask
 # operationId: getSubTasks
 export def "2-issue-subtask get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2239,7 +2239,7 @@ export def "2-issue-subtask get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/subtask")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/subtask"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2249,7 +2249,7 @@ export def "2-issue-subtask get" [
 #
 # operationId: canMoveSubTask
 export def "2-issue-subtask-move canMoveSubTask" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2261,7 +2261,7 @@ export def "2-issue-subtask-move canMoveSubTask" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/subtask/move")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/subtask/move"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2271,8 +2271,8 @@ export def "2-issue-subtask-move canMoveSubTask" [
 #
 # POST /api/2/issue/{issueIdOrKey}/subtask/move
 # operationId: moveSubTasks
-export def "2-issue-subtask-move moveSubTasks" [
-  issueIdOrKey: string
+export def "2-issue-subtask-move move" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2284,7 +2284,7 @@ export def "2-issue-subtask-move moveSubTasks" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/subtask/move")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/subtask/move"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2295,7 +2295,7 @@ export def "2-issue-subtask-move moveSubTasks" [
 # GET /api/2/issue/{issueIdOrKey}/transitions
 # operationId: getTransitions
 export def "2-issue-transitions get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2304,12 +2304,12 @@ export def "2-issue-transitions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --transitionId: string
+  --transition-id: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "transitionId" $transitionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/transitions" $qp)
+  let qp = [(serialize-qp "transitionId" $transition_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/transitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2320,7 +2320,7 @@ export def "2-issue-transitions get" [
 # POST /api/2/issue/{issueIdOrKey}/transitions
 # operationId: doTransition
 export def "2-issue-transitions doTransition" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2332,7 +2332,7 @@ export def "2-issue-transitions doTransition" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/transitions")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/transitions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2342,8 +2342,8 @@ export def "2-issue-transitions doTransition" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/votes
 # operationId: removeVote
-export def "2-issue-votes removeVote" [
-  issueIdOrKey: string
+export def "2-issue-votes delete" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2355,7 +2355,7 @@ export def "2-issue-votes removeVote" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/votes")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/votes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2366,7 +2366,7 @@ export def "2-issue-votes removeVote" [
 # GET /api/2/issue/{issueIdOrKey}/votes
 # operationId: getVotes
 export def "2-issue-votes get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2378,7 +2378,7 @@ export def "2-issue-votes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/votes")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/votes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2388,8 +2388,8 @@ export def "2-issue-votes get" [
 #
 # POST /api/2/issue/{issueIdOrKey}/votes
 # operationId: addVote
-export def "2-issue-votes addVote" [
-  issueIdOrKey: string
+export def "2-issue-votes create" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2401,7 +2401,7 @@ export def "2-issue-votes addVote" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/votes")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/votes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2411,8 +2411,8 @@ export def "2-issue-votes addVote" [
 #
 # DELETE /api/2/issue/{issueIdOrKey}/watchers
 # operationId: removeWatcher
-export def "2-issue-watchers removeWatcher" [
-  issueIdOrKey: string
+export def "2-issue-watchers delete" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2426,7 +2426,7 @@ export def "2-issue-watchers removeWatcher" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/watchers" $qp)
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/watchers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2437,7 +2437,7 @@ export def "2-issue-watchers removeWatcher" [
 # GET /api/2/issue/{issueIdOrKey}/watchers
 # operationId: getIssueWatchers
 export def "2-issue-watchers get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2449,7 +2449,7 @@ export def "2-issue-watchers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/watchers")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/watchers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2459,8 +2459,8 @@ export def "2-issue-watchers get" [
 #
 # POST /api/2/issue/{issueIdOrKey}/watchers
 # operationId: addWatcher
-export def "2-issue-watchers addWatcher" [
-  issueIdOrKey: string
+export def "2-issue-watchers create" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2472,7 +2472,7 @@ export def "2-issue-watchers addWatcher" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/watchers")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/watchers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2483,7 +2483,7 @@ export def "2-issue-watchers addWatcher" [
 # GET /api/2/issue/{issueIdOrKey}/worklog
 # operationId: getIssueWorklog
 export def "2-issue-worklog list" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2495,7 +2495,7 @@ export def "2-issue-worklog list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/worklog")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/worklog"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2505,8 +2505,8 @@ export def "2-issue-worklog list" [
 #
 # POST /api/2/issue/{issueIdOrKey}/worklog
 # operationId: addWorklog
-export def "2-issue-worklog addWorklog" [
-  issueIdOrKey: string
+export def "2-issue-worklog create" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2515,14 +2515,14 @@ export def "2-issue-worklog addWorklog" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --adjustEstimate: string # (optional) allows you to provide specific instructions to update the remaining time estimate of the issue.  Valid values are                        <ul>                        <li>"new" - sets the estimate to a specific value</li>                        <li>"leave"- leaves the estimate as is</li>                        <li>"manual" - specify a specific amount to increase remaining estimate by</li>                        <li>"auto"- Default option.  Will automatically adjust the value based on the new timeSpent specified on the worklog</li> </ul>
-  --newEstimate: string # (required when "new" is selected for adjustEstimate) the new value for the remaining estimate field. e.g. "2d"
-  --reduceBy: string # (required when "manual" is selected for adjustEstimate) the amount to reduce the remaining estimate by e.g. "2d"
+  --adjust-estimate: string # (optional) allows you to provide specific instructions to update the remaining time estimate of the issue.  Valid values are                        <ul>                        <li>"new" - sets the estimate to a specific value</li>                        <li>"leave"- leaves the estimate as is</li>                        <li>"manual" - specify a specific amount to increase remaining estimate by</li>                        <li>"auto"- Default option.  Will automatically adjust the value based on the new timeSpent specified on the worklog</li> </ul>
+  --new-estimate: string # (required when "new" is selected for adjustEstimate) the new value for the remaining estimate field. e.g. "2d"
+  --reduce-by: string # (required when "manual" is selected for adjustEstimate) the amount to reduce the remaining estimate by e.g. "2d"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "adjustEstimate" $adjustEstimate "scalar") (serialize-qp "newEstimate" $newEstimate "scalar") (serialize-qp "reduceBy" $reduceBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/worklog" $qp)
+  let qp = [(serialize-qp "adjustEstimate" $adjust_estimate "scalar") (serialize-qp "newEstimate" $new_estimate "scalar") (serialize-qp "reduceBy" $reduce_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/api/2/issue/{issue_id_or_key}/worklog") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2533,7 +2533,7 @@ export def "2-issue-worklog addWorklog" [
 # DELETE /api/2/issue/{issueIdOrKey}/worklog/{id}
 # operationId: deleteWorklog
 export def "2-issue-worklog delete" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2543,14 +2543,14 @@ export def "2-issue-worklog delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --adjustEstimate: string # (optional) allows you to provide specific instructions to update the remaining time estimate of the issue.  Valid values are                        <ul>                        <li>"new" - sets the estimate to a specific value</li>                        <li>"leave"- leaves the estimate as is</li>                        <li>"manual" - specify a specific amount to increase remaining estimate by</li>                        <li>"auto"- Default option.  Will automatically adjust the value based on the new timeSpent specified on the worklog</li> </ul>
-  --newEstimate: string # (required when "new" is selected for adjustEstimate) the new value for the remaining estimate field. e.g. "2d"
-  --increaseBy: string # (required when "manual" is selected for adjustEstimate) the amount to increase the remaining estimate by e.g. "2d"
+  --adjust-estimate: string # (optional) allows you to provide specific instructions to update the remaining time estimate of the issue.  Valid values are                        <ul>                        <li>"new" - sets the estimate to a specific value</li>                        <li>"leave"- leaves the estimate as is</li>                        <li>"manual" - specify a specific amount to increase remaining estimate by</li>                        <li>"auto"- Default option.  Will automatically adjust the value based on the new timeSpent specified on the worklog</li> </ul>
+  --new-estimate: string # (required when "new" is selected for adjustEstimate) the new value for the remaining estimate field. e.g. "2d"
+  --increase-by: string # (required when "manual" is selected for adjustEstimate) the amount to increase the remaining estimate by e.g. "2d"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "adjustEstimate" $adjustEstimate "scalar") (serialize-qp "newEstimate" $newEstimate "scalar") (serialize-qp "increaseBy" $increaseBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/worklog/($id)" $qp)
+  let qp = [(serialize-qp "adjustEstimate" $adjust_estimate "scalar") (serialize-qp "newEstimate" $new_estimate "scalar") (serialize-qp "increaseBy" $increase_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/api/2/issue/{issue_id_or_key}/worklog/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2561,7 +2561,7 @@ export def "2-issue-worklog delete" [
 # GET /api/2/issue/{issueIdOrKey}/worklog/{id}
 # operationId: getWorklog
 export def "2-issue-worklog get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2574,7 +2574,7 @@ export def "2-issue-worklog get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/worklog/($id)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/api/2/issue/{issue_id_or_key}/worklog/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2584,8 +2584,8 @@ export def "2-issue-worklog get" [
 #
 # PUT /api/2/issue/{issueIdOrKey}/worklog/{id}
 # operationId: updateWorklog
-export def "2-issue-worklog updateWorklog" [
-  issueIdOrKey: string
+export def "2-issue-worklog update" [
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2595,13 +2595,13 @@ export def "2-issue-worklog updateWorklog" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --adjustEstimate: string # (optional) allows you to provide specific instructions to update the remaining time estimate of the issue.  Valid values are                        <ul>                        <li>"new" - sets the estimate to a specific value</li>                        <li>"leave"- leaves the estimate as is</li>                        <li>"auto"- Default option.  Will automatically adjust the value based on the new timeSpent specified on the worklog</li> </ul>
-  --newEstimate: string # (required when "new" is selected for adjustEstimate) the new value for the remaining estimate field.
+  --adjust-estimate: string # (optional) allows you to provide specific instructions to update the remaining time estimate of the issue.  Valid values are                        <ul>                        <li>"new" - sets the estimate to a specific value</li>                        <li>"leave"- leaves the estimate as is</li>                        <li>"auto"- Default option.  Will automatically adjust the value based on the new timeSpent specified on the worklog</li> </ul>
+  --new-estimate: string # (required when "new" is selected for adjustEstimate) the new value for the remaining estimate field.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "adjustEstimate" $adjustEstimate "scalar") (serialize-qp "newEstimate" $newEstimate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issue/($issueIdOrKey)/worklog/($id)" $qp)
+  let qp = [(serialize-qp "adjustEstimate" $adjust_estimate "scalar") (serialize-qp "newEstimate" $new_estimate "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/api/2/issue/{issue_id_or_key}/worklog/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2634,7 +2634,7 @@ export def "2-issue-link linkIssues" [
 # DELETE /api/2/issueLink/{linkId}
 # operationId: deleteIssueLink
 export def "2-issue-link delete" [
-  linkId: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2646,7 +2646,7 @@ export def "2-issue-link delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issueLink/($linkId)")
+  let full_url = (build-url $base ({link_id: $link_id} | format pattern "/api/2/issueLink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2657,7 +2657,7 @@ export def "2-issue-link delete" [
 # GET /api/2/issueLink/{linkId}
 # operationId: getIssueLink
 export def "2-issue-link get" [
-  linkId: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2669,7 +2669,7 @@ export def "2-issue-link get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issueLink/($linkId)")
+  let full_url = (build-url $base ({link_id: $link_id} | format pattern "/api/2/issueLink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2701,7 +2701,7 @@ export def "2-issue-link-type list" [
 #
 # POST /api/2/issueLinkType
 # operationId: createIssueLinkType
-export def "2-issue-link-type createIssueLinkType" [
+export def "2-issue-link-type create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2724,7 +2724,7 @@ export def "2-issue-link-type createIssueLinkType" [
 # DELETE /api/2/issueLinkType/{issueLinkTypeId}
 # operationId: deleteIssueLinkType
 export def "2-issue-link-type delete" [
-  issueLinkTypeId: string
+  issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2736,7 +2736,7 @@ export def "2-issue-link-type delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issueLinkType/($issueLinkTypeId)")
+  let full_url = (build-url $base ({issue_link_type_id: $issue_link_type_id} | format pattern "/api/2/issueLinkType/{issue_link_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2747,7 +2747,7 @@ export def "2-issue-link-type delete" [
 # GET /api/2/issueLinkType/{issueLinkTypeId}
 # operationId: getIssueLinkType
 export def "2-issue-link-type get" [
-  issueLinkTypeId: string
+  issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2759,7 +2759,7 @@ export def "2-issue-link-type get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issueLinkType/($issueLinkTypeId)")
+  let full_url = (build-url $base ({issue_link_type_id: $issue_link_type_id} | format pattern "/api/2/issueLinkType/{issue_link_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2769,8 +2769,8 @@ export def "2-issue-link-type get" [
 #
 # PUT /api/2/issueLinkType/{issueLinkTypeId}
 # operationId: updateIssueLinkType
-export def "2-issue-link-type updateIssueLinkType" [
-  issueLinkTypeId: string
+export def "2-issue-link-type update" [
+  issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2782,7 +2782,7 @@ export def "2-issue-link-type updateIssueLinkType" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issueLinkType/($issueLinkTypeId)")
+  let full_url = (build-url $base ({issue_link_type_id: $issue_link_type_id} | format pattern "/api/2/issueLinkType/{issue_link_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2792,7 +2792,7 @@ export def "2-issue-link-type updateIssueLinkType" [
 #
 # GET /api/2/issuesecurityschemes
 # operationId: getIssueSecuritySchemes
-export def "2-issuesecurityschemes list" [
+export def "2-issuesecurityschemes get-issue-security-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2826,7 +2826,7 @@ export def "2-issuesecurityschemes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issuesecurityschemes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/issuesecurityschemes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2836,7 +2836,7 @@ export def "2-issuesecurityschemes get" [
 #
 # GET /api/2/issuetype
 # operationId: getIssueAllTypes
-export def "2-issuetype list" [
+export def "2-issuetype get-issue-all-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2858,7 +2858,7 @@ export def "2-issuetype list" [
 #
 # POST /api/2/issuetype
 # operationId: createIssueType
-export def "2-issuetype createIssueType" [
+export def "2-issuetype create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2889,12 +2889,12 @@ export def "2-issuetype delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternativeIssueTypeId: string # the id of an issue type to which issues associated with the removed issue type will be migrated.
+  --alternative-issue-type-id: string # the id of an issue type to which issues associated with the removed issue type will be migrated.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alternativeIssueTypeId" $alternativeIssueTypeId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/issuetype/($id)" $qp)
+  let qp = [(serialize-qp "alternativeIssueTypeId" $alternative_issue_type_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/issuetype/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2916,7 +2916,7 @@ export def "2-issuetype get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issuetype/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/issuetype/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2926,7 +2926,7 @@ export def "2-issuetype get" [
 #
 # PUT /api/2/issuetype/{id}
 # operationId: updateIssueType
-export def "2-issuetype updateIssueType" [
+export def "2-issuetype update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2939,7 +2939,7 @@ export def "2-issuetype updateIssueType" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issuetype/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/issuetype/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2962,7 +2962,7 @@ export def "2-issuetype-alternatives get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issuetype/($id)/alternatives")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/issuetype/{id}/alternatives"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2984,7 +2984,7 @@ export def "2-issuetype-avatar post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issuetype/($id)/avatar")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/issuetype/{id}/avatar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3006,7 +3006,7 @@ export def "2-issuetype-avatar-temporary post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issuetype/($id)/avatar/temporary")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/issuetype/{id}/avatar/temporary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3016,8 +3016,8 @@ export def "2-issuetype-avatar-temporary post" [
 #
 # GET /api/2/issuetype/{issueTypeId}/properties
 # operationId: getPropertyKeys
-export def "2-issuetype-properties list" [
-  issueTypeId: string
+export def "2-issuetype-properties get-property-keys" [
+  issue_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3029,7 +3029,7 @@ export def "2-issuetype-properties list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issuetype/($issueTypeId)/properties")
+  let full_url = (build-url $base ({issue_type_id: $issue_type_id} | format pattern "/api/2/issuetype/{issue_type_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3039,8 +3039,8 @@ export def "2-issuetype-properties list" [
 #
 # DELETE /api/2/issuetype/{issueTypeId}/properties/{propertyKey}
 export def "2-issuetype-properties delete" [
-  issueTypeId: string
-  propertyKey: string
+  issue_type_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3052,7 +3052,7 @@ export def "2-issuetype-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issuetype/($issueTypeId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_type_id: $issue_type_id, property_key: $property_key} | format pattern "/api/2/issuetype/{issue_type_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3062,8 +3062,8 @@ export def "2-issuetype-properties delete" [
 #
 # GET /api/2/issuetype/{issueTypeId}/properties/{propertyKey}
 export def "2-issuetype-properties get" [
-  issueTypeId: string
-  propertyKey: string
+  issue_type_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3075,7 +3075,7 @@ export def "2-issuetype-properties get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issuetype/($issueTypeId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_type_id: $issue_type_id, property_key: $property_key} | format pattern "/api/2/issuetype/{issue_type_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3085,8 +3085,8 @@ export def "2-issuetype-properties get" [
 #
 # PUT /api/2/issuetype/{issueTypeId}/properties/{propertyKey}
 export def "2-issuetype-properties put" [
-  issueTypeId: string
-  propertyKey: string
+  issue_type_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3098,7 +3098,7 @@ export def "2-issuetype-properties put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/issuetype/($issueTypeId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_type_id: $issue_type_id, property_key: $property_key} | format pattern "/api/2/issuetype/{issue_type_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3108,7 +3108,7 @@ export def "2-issuetype-properties put" [
 #
 # GET /api/2/jql/autocompletedata
 # operationId: getAutoComplete
-export def "2-jql-autocompletedata get" [
+export def "2-jql-autocompletedata get-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3130,7 +3130,7 @@ export def "2-jql-autocompletedata get" [
 #
 # GET /api/2/jql/autocompletedata/suggestions
 # operationId: getFieldAutoCompleteForQueryString
-export def "2-jql-autocompletedata-suggestions get" [
+export def "2-jql-autocompletedata-suggestions get-field-auto-complete-for-query-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3139,14 +3139,14 @@ export def "2-jql-autocompletedata-suggestions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldName: string # the field name for which the suggestions are generated.
-  --fieldValue: string # the portion of the field value that has already been provided by the user.
-  --predicateName: string # the predicate for which the suggestions are generated. Suggestions are generated only for: "by", "from" and "to".
-  --predicateValue: string # the portion of the predicate value that has already been provided by the user.
+  --field-name: string # the field name for which the suggestions are generated.
+  --field-value: string # the portion of the field value that has already been provided by the user.
+  --predicate-name: string # the predicate for which the suggestions are generated. Suggestions are generated only for: "by", "from" and "to".
+  --predicate-value: string # the portion of the predicate value that has already been provided by the user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldName" $fieldName "scalar") (serialize-qp "fieldValue" $fieldValue "scalar") (serialize-qp "predicateName" $predicateName "scalar") (serialize-qp "predicateValue" $predicateValue "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fieldName" $field_name "scalar") (serialize-qp "fieldValue" $field_value "scalar") (serialize-qp "predicateName" $predicate_name "scalar") (serialize-qp "predicateValue" $predicate_value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/jql/autocompletedata/suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3262,7 +3262,7 @@ export def "2-monitoring-jmx-stop-exposing stop" [
 #
 # GET /api/2/mypermissions
 # operationId: getPermissions
-export def "2-mypermissions get" [
+export def "2-mypermissions get-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3271,14 +3271,14 @@ export def "2-mypermissions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --projectKey: string # - key of project to scope returned permissions for.
-  --projectId: string # - id of project to scope returned permissions for.
-  --issueKey: string # - key of the issue to scope returned permissions for.
-  --issueId: string # - id of the issue to scope returned permissions for.
+  --project-key: string # - key of project to scope returned permissions for.
+  --project-id: string # - id of project to scope returned permissions for.
+  --issue-key: string # - key of the issue to scope returned permissions for.
+  --issue-id: string # - id of the issue to scope returned permissions for.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectKey" $projectKey "scalar") (serialize-qp "projectId" $projectId "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "issueId" $issueId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "projectKey" $project_key "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "issueKey" $issue_key "scalar") (serialize-qp "issueId" $issue_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/mypermissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3289,7 +3289,7 @@ export def "2-mypermissions get" [
 #
 # DELETE /api/2/mypreferences
 # operationId: removePreference
-export def "2-mypreferences removePreference" [
+export def "2-mypreferences delete-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3313,7 +3313,7 @@ export def "2-mypreferences removePreference" [
 #
 # GET /api/2/mypreferences
 # operationId: getPreference
-export def "2-mypreferences get" [
+export def "2-mypreferences get-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3434,13 +3434,13 @@ export def "2-notificationscheme list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # the index of the first notification scheme to return (0 based). (format: int64)
-  --maxResults: int # the maximum number of notification schemes to return (max 50). (format: int32)
+  --start-at: int # the index of the first notification scheme to return (0 based). (format: int64)
+  --max-results: int # the maximum number of notification schemes to return (max 50). (format: int32)
   --expand: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/notificationscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3465,7 +3465,7 @@ export def "2-notificationscheme get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/notificationscheme/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/notificationscheme/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3484,11 +3484,11 @@ export def "2-password-policy get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hasOldPassword: oneof<nothing, bool> # whether or not the user will be required to enter their current password.  Use                        {@code false} (the default) if this is a new user or if an administrator is forcibly changing                        another user's password. (default: false)
+  --has-old-password: oneof<nothing, bool> # whether or not the user will be required to enter their current password.  Use                        {@code false} (the default) if this is a new user or if an administrator is forcibly changing                        another user's password. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hasOldPassword" $hasOldPassword "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hasOldPassword" $has_old_password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/password/policy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3543,7 +3543,7 @@ export def "2-password-policy-update-user policyCheckUpdateUser" [
 #
 # GET /api/2/permissions
 # operationId: getAllPermissions
-export def "2-permissions get" [
+export def "2-permissions get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3589,7 +3589,7 @@ export def "2-permissionscheme list" [
 #
 # POST /api/2/permissionscheme
 # operationId: createPermissionScheme
-export def "2-permissionscheme createPermissionScheme" [
+export def "2-permissionscheme create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3612,9 +3612,9 @@ export def "2-permissionscheme createPermissionScheme" [
 # GET /api/2/permissionscheme/{permissionSchemeId}/attribute/{attributeKey}
 #
 # operationId: getSchemeAttribute
-export def "2-permissionscheme-attribute get" [
-  permissionSchemeId: int
-  attributeKey: string
+export def "2-permissionscheme-attribute get-scheme" [
+  permission_scheme_id: int
+  attribute_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3626,7 +3626,7 @@ export def "2-permissionscheme-attribute get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/permissionscheme/($permissionSchemeId)/attribute/($attributeKey)")
+  let full_url = (build-url $base ({permission_scheme_id: $permission_scheme_id, attribute_key: $attribute_key} | format pattern "/api/2/permissionscheme/{permission_scheme_id}/attribute/{attribute_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3637,7 +3637,7 @@ export def "2-permissionscheme-attribute get" [
 # PUT /api/2/permissionscheme/{permissionSchemeId}/attribute/{key}
 # operationId: setSchemeAttribute
 export def "2-permissionscheme-attribute setSchemeAttribute" [
-  permissionSchemeId: int
+  permission_scheme_id: int
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3650,7 +3650,7 @@ export def "2-permissionscheme-attribute setSchemeAttribute" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/permissionscheme/($permissionSchemeId)/attribute/($key)")
+  let full_url = (build-url $base ({permission_scheme_id: $permission_scheme_id, key: $key} | format pattern "/api/2/permissionscheme/{permission_scheme_id}/attribute/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3661,7 +3661,7 @@ export def "2-permissionscheme-attribute setSchemeAttribute" [
 # DELETE /api/2/permissionscheme/{schemeId}
 # operationId: deletePermissionScheme
 export def "2-permissionscheme delete" [
-  schemeId: int
+  scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3673,7 +3673,7 @@ export def "2-permissionscheme delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/permissionscheme/($schemeId)")
+  let full_url = (build-url $base ({scheme_id: $scheme_id} | format pattern "/api/2/permissionscheme/{scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3684,7 +3684,7 @@ export def "2-permissionscheme delete" [
 # GET /api/2/permissionscheme/{schemeId}
 # operationId: getPermissionScheme
 export def "2-permissionscheme get" [
-  schemeId: int
+  scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3698,7 +3698,7 @@ export def "2-permissionscheme get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/permissionscheme/($schemeId)" $qp)
+  let full_url = (build-url $base ({scheme_id: $scheme_id} | format pattern "/api/2/permissionscheme/{scheme_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3708,8 +3708,8 @@ export def "2-permissionscheme get" [
 #
 # PUT /api/2/permissionscheme/{schemeId}
 # operationId: updatePermissionScheme
-export def "2-permissionscheme updatePermissionScheme" [
-  schemeId: int
+export def "2-permissionscheme update" [
+  scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3723,7 +3723,7 @@ export def "2-permissionscheme updatePermissionScheme" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/permissionscheme/($schemeId)" $qp)
+  let full_url = (build-url $base ({scheme_id: $scheme_id} | format pattern "/api/2/permissionscheme/{scheme_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3733,8 +3733,8 @@ export def "2-permissionscheme updatePermissionScheme" [
 #
 # GET /api/2/permissionscheme/{schemeId}/permission
 # operationId: getPermissionSchemeGrants
-export def "2-permissionscheme-permission list" [
-  schemeId: int
+export def "2-permissionscheme-permission get-permission-scheme-grants" [
+  scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3748,7 +3748,7 @@ export def "2-permissionscheme-permission list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/permissionscheme/($schemeId)/permission" $qp)
+  let full_url = (build-url $base ({scheme_id: $scheme_id} | format pattern "/api/2/permissionscheme/{scheme_id}/permission") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3758,8 +3758,8 @@ export def "2-permissionscheme-permission list" [
 #
 # POST /api/2/permissionscheme/{schemeId}/permission
 # operationId: createPermissionGrant
-export def "2-permissionscheme-permission createPermissionGrant" [
-  schemeId: int
+export def "2-permissionscheme-permission create-permission-grant" [
+  scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3773,7 +3773,7 @@ export def "2-permissionscheme-permission createPermissionGrant" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/permissionscheme/($schemeId)/permission" $qp)
+  let full_url = (build-url $base ({scheme_id: $scheme_id} | format pattern "/api/2/permissionscheme/{scheme_id}/permission") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3783,9 +3783,9 @@ export def "2-permissionscheme-permission createPermissionGrant" [
 #
 # DELETE /api/2/permissionscheme/{schemeId}/permission/{permissionId}
 # operationId: deletePermissionSchemeEntity
-export def "2-permissionscheme-permission delete" [
-  permissionId: int
-  schemeId: int
+export def "2-permissionscheme-permission delete-permission-scheme-entity" [
+  scheme_id: int
+  permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3797,7 +3797,7 @@ export def "2-permissionscheme-permission delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/permissionscheme/($schemeId)/permission/($permissionId)")
+  let full_url = (build-url $base ({scheme_id: $scheme_id, permission_id: $permission_id} | format pattern "/api/2/permissionscheme/{scheme_id}/permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3807,9 +3807,9 @@ export def "2-permissionscheme-permission delete" [
 #
 # GET /api/2/permissionscheme/{schemeId}/permission/{permissionId}
 # operationId: getPermissionSchemeGrant
-export def "2-permissionscheme-permission get" [
-  permissionId: int
-  schemeId: int
+export def "2-permissionscheme-permission get-permission-scheme-grant" [
+  scheme_id: int
+  permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3823,7 +3823,7 @@ export def "2-permissionscheme-permission get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/permissionscheme/($schemeId)/permission/($permissionId)" $qp)
+  let full_url = (build-url $base ({scheme_id: $scheme_id, permission_id: $permission_id} | format pattern "/api/2/permissionscheme/{scheme_id}/permission/{permission_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3833,7 +3833,7 @@ export def "2-permissionscheme-permission get" [
 #
 # GET /api/2/priority
 # operationId: getPriorities
-export def "2-priority list" [
+export def "2-priority get-priorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3868,7 +3868,7 @@ export def "2-priority get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/priority/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/priority/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3878,7 +3878,7 @@ export def "2-priority get" [
 #
 # GET /api/2/project
 # operationId: getAllProjects
-export def "2-project list" [
+export def "2-project get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3903,7 +3903,7 @@ export def "2-project list" [
 #
 # POST /api/2/project
 # operationId: createProject
-export def "2-project createProject" [
+export def "2-project create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3925,7 +3925,7 @@ export def "2-project createProject" [
 #
 # GET /api/2/project/type
 # operationId: getAllProjectTypes
-export def "2-project-type list" [
+export def "2-project-type get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3948,7 +3948,7 @@ export def "2-project-type list" [
 # GET /api/2/project/type/{projectTypeKey}
 # operationId: getProjectTypeByKey
 export def "2-project-type get" [
-  projectTypeKey: string
+  project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3960,7 +3960,7 @@ export def "2-project-type get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/type/($projectTypeKey)")
+  let full_url = (build-url $base ({project_type_key: $project_type_key} | format pattern "/api/2/project/type/{project_type_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3971,7 +3971,7 @@ export def "2-project-type get" [
 # GET /api/2/project/type/{projectTypeKey}/accessible
 # operationId: getAccessibleProjectTypeByKey
 export def "2-project-type-accessible get" [
-  projectTypeKey: string
+  project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3983,7 +3983,7 @@ export def "2-project-type-accessible get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/type/($projectTypeKey)/accessible")
+  let full_url = (build-url $base ({project_type_key: $project_type_key} | format pattern "/api/2/project/type/{project_type_key}/accessible"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3994,7 +3994,7 @@ export def "2-project-type-accessible get" [
 # DELETE /api/2/project/{projectIdOrKey}
 # operationId: deleteProject
 export def "2-project delete" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4006,7 +4006,7 @@ export def "2-project delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4016,7 +4016,7 @@ export def "2-project delete" [
 #
 # GET /api/2/project/{projectIdOrKey}
 export def "2-project get" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4030,7 +4030,7 @@ export def "2-project get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)" $qp)
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4040,8 +4040,8 @@ export def "2-project get" [
 #
 # PUT /api/2/project/{projectIdOrKey}
 # operationId: updateProject
-export def "2-project updateProject" [
-  projectIdOrKey: string
+export def "2-project update" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4055,7 +4055,7 @@ export def "2-project updateProject" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)" $qp)
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4065,7 +4065,7 @@ export def "2-project updateProject" [
 #
 # POST /api/2/project/{projectIdOrKey}/avatar
 export def "2-project-avatar post" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4077,7 +4077,7 @@ export def "2-project-avatar post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/avatar")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}/avatar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4085,7 +4085,7 @@ export def "2-project-avatar post" [
 
 # PUT /api/2/project/{projectIdOrKey}/avatar
 export def "2-project-avatar put" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4097,7 +4097,7 @@ export def "2-project-avatar put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/avatar")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}/avatar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4107,7 +4107,7 @@ export def "2-project-avatar put" [
 #
 # POST /api/2/project/{projectIdOrKey}/avatar/temporary
 export def "2-project-avatar-temporary post" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4119,7 +4119,7 @@ export def "2-project-avatar-temporary post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/avatar/temporary")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}/avatar/temporary"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4129,7 +4129,7 @@ export def "2-project-avatar-temporary post" [
 #
 # DELETE /api/2/project/{projectIdOrKey}/avatar/{id}
 export def "2-project-avatar delete" [
-  projectIdOrKey: string
+  project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4142,7 +4142,7 @@ export def "2-project-avatar delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/avatar/($id)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, id: $id} | format pattern "/api/2/project/{project_id_or_key}/avatar/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4152,7 +4152,7 @@ export def "2-project-avatar delete" [
 #
 # GET /api/2/project/{projectIdOrKey}/avatars
 export def "2-project-avatars get" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4164,7 +4164,7 @@ export def "2-project-avatars get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/avatars")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}/avatars"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4175,7 +4175,7 @@ export def "2-project-avatars get" [
 # GET /api/2/project/{projectIdOrKey}/components
 # operationId: getProjectComponents
 export def "2-project-components get" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4187,7 +4187,7 @@ export def "2-project-components get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/components")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}/components"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4197,7 +4197,7 @@ export def "2-project-components get" [
 #
 # GET /api/2/project/{projectIdOrKey}/properties
 export def "2-project-properties list" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4209,7 +4209,7 @@ export def "2-project-properties list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/properties")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4219,8 +4219,8 @@ export def "2-project-properties list" [
 #
 # DELETE /api/2/project/{projectIdOrKey}/properties/{propertyKey}
 export def "2-project-properties delete" [
-  projectIdOrKey: string
-  propertyKey: string
+  project_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4232,7 +4232,7 @@ export def "2-project-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, property_key: $property_key} | format pattern "/api/2/project/{project_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4242,8 +4242,8 @@ export def "2-project-properties delete" [
 #
 # GET /api/2/project/{projectIdOrKey}/properties/{propertyKey}
 export def "2-project-properties get" [
-  projectIdOrKey: string
-  propertyKey: string
+  project_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4255,7 +4255,7 @@ export def "2-project-properties get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, property_key: $property_key} | format pattern "/api/2/project/{project_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4265,8 +4265,8 @@ export def "2-project-properties get" [
 #
 # PUT /api/2/project/{projectIdOrKey}/properties/{propertyKey}
 export def "2-project-properties put" [
-  projectIdOrKey: string
-  propertyKey: string
+  project_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4278,7 +4278,7 @@ export def "2-project-properties put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, property_key: $property_key} | format pattern "/api/2/project/{project_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4288,7 +4288,7 @@ export def "2-project-properties put" [
 #
 # GET /api/2/project/{projectIdOrKey}/role
 export def "2-project-role list" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4300,7 +4300,7 @@ export def "2-project-role list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/role")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}/role"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4310,8 +4310,8 @@ export def "2-project-role list" [
 #
 # DELETE /api/2/project/{projectIdOrKey}/role/{id}
 # operationId: deleteActor
-export def "2-project-role delete" [
-  projectIdOrKey: string
+export def "2-project-role delete-actor" [
+  project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4327,7 +4327,7 @@ export def "2-project-role delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/role/($id)" $qp)
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, id: $id} | format pattern "/api/2/project/{project_id_or_key}/role/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4338,7 +4338,7 @@ export def "2-project-role delete" [
 # GET /api/2/project/{projectIdOrKey}/role/{id}
 # operationId: getProjectRole
 export def "2-project-role get" [
-  projectIdOrKey: string
+  project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4351,7 +4351,7 @@ export def "2-project-role get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/role/($id)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, id: $id} | format pattern "/api/2/project/{project_id_or_key}/role/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4361,8 +4361,8 @@ export def "2-project-role get" [
 #
 # POST /api/2/project/{projectIdOrKey}/role/{id}
 # operationId: addActorUsers
-export def "2-project-role addActorUsers" [
-  projectIdOrKey: string
+export def "2-project-role create-actor-users" [
+  project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4375,7 +4375,7 @@ export def "2-project-role addActorUsers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/role/($id)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, id: $id} | format pattern "/api/2/project/{project_id_or_key}/role/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4386,7 +4386,7 @@ export def "2-project-role addActorUsers" [
 # PUT /api/2/project/{projectIdOrKey}/role/{id}
 # operationId: setActors
 export def "2-project-role setActors" [
-  projectIdOrKey: string
+  project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4399,7 +4399,7 @@ export def "2-project-role setActors" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/role/($id)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, id: $id} | format pattern "/api/2/project/{project_id_or_key}/role/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4409,8 +4409,8 @@ export def "2-project-role setActors" [
 #
 # GET /api/2/project/{projectIdOrKey}/statuses
 # operationId: getAllStatuses
-export def "2-project-statuses get" [
-  projectIdOrKey: string
+export def "2-project-statuses get-all" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4422,7 +4422,7 @@ export def "2-project-statuses get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/statuses")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}/statuses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4432,9 +4432,9 @@ export def "2-project-statuses get" [
 #
 # PUT /api/2/project/{projectIdOrKey}/type/{newProjectTypeKey}
 # operationId: updateProjectType
-export def "2-project-type updateProjectType" [
-  projectIdOrKey: string
-  newProjectTypeKey: string
+export def "2-project-type update" [
+  project_id_or_key: string
+  new_project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4446,7 +4446,7 @@ export def "2-project-type updateProjectType" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/type/($newProjectTypeKey)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, new_project_type_key: $new_project_type_key} | format pattern "/api/2/project/{project_id_or_key}/type/{new_project_type_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4456,8 +4456,8 @@ export def "2-project-type updateProjectType" [
 #
 # GET /api/2/project/{projectIdOrKey}/version
 # operationId: getProjectVersionsPaginated
-export def "2-project-version get" [
-  projectIdOrKey: string
+export def "2-project-version get-project-versions-paginated" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4466,15 +4466,15 @@ export def "2-project-version get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # the page offset, if not specified then defaults to 0 (format: int64)
-  --maxResults: int # how many results on the page should be included. Defaults to 50. (format: int32)
-  --orderBy: string # ordering of the results.
+  --start-at: int # the page offset, if not specified then defaults to 0 (format: int64)
+  --max-results: int # how many results on the page should be included. Defaults to 50. (format: int32)
+  --order-by: string # ordering of the results.
   --expand: string # the parameters to expand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/version" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}/version") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4485,7 +4485,7 @@ export def "2-project-version get" [
 # GET /api/2/project/{projectIdOrKey}/versions
 # operationId: getProjectVersions
 export def "2-project-versions get" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4499,7 +4499,7 @@ export def "2-project-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/project/($projectIdOrKey)/versions" $qp)
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/api/2/project/{project_id_or_key}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4509,7 +4509,7 @@ export def "2-project-versions get" [
 #
 # GET /api/2/project/{projectKeyOrId}/issuesecuritylevelscheme
 export def "2-project-issuesecuritylevelscheme get" [
-  projectKeyOrId: string
+  project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4521,7 +4521,7 @@ export def "2-project-issuesecuritylevelscheme get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectKeyOrId)/issuesecuritylevelscheme")
+  let full_url = (build-url $base ({project_key_or_id: $project_key_or_id} | format pattern "/api/2/project/{project_key_or_id}/issuesecuritylevelscheme"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4531,7 +4531,7 @@ export def "2-project-issuesecuritylevelscheme get" [
 #
 # GET /api/2/project/{projectKeyOrId}/notificationscheme
 export def "2-project-notificationscheme get" [
-  projectKeyOrId: string
+  project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4545,7 +4545,7 @@ export def "2-project-notificationscheme get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/project/($projectKeyOrId)/notificationscheme" $qp)
+  let full_url = (build-url $base ({project_key_or_id: $project_key_or_id} | format pattern "/api/2/project/{project_key_or_id}/notificationscheme") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4555,8 +4555,8 @@ export def "2-project-notificationscheme get" [
 #
 # GET /api/2/project/{projectKeyOrId}/permissionscheme
 # operationId: getAssignedPermissionScheme
-export def "2-project-permissionscheme get" [
-  projectKeyOrId: string
+export def "2-project-permissionscheme get-assigned" [
+  project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4570,7 +4570,7 @@ export def "2-project-permissionscheme get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/project/($projectKeyOrId)/permissionscheme" $qp)
+  let full_url = (build-url $base ({project_key_or_id: $project_key_or_id} | format pattern "/api/2/project/{project_key_or_id}/permissionscheme") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4581,7 +4581,7 @@ export def "2-project-permissionscheme get" [
 # PUT /api/2/project/{projectKeyOrId}/permissionscheme
 # operationId: assignPermissionScheme
 export def "2-project-permissionscheme assignPermissionScheme" [
-  projectKeyOrId: string
+  project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4595,7 +4595,7 @@ export def "2-project-permissionscheme assignPermissionScheme" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/project/($projectKeyOrId)/permissionscheme" $qp)
+  let full_url = (build-url $base ({project_key_or_id: $project_key_or_id} | format pattern "/api/2/project/{project_key_or_id}/permissionscheme") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4605,8 +4605,8 @@ export def "2-project-permissionscheme assignPermissionScheme" [
 #
 # GET /api/2/project/{projectKeyOrId}/securitylevel
 # operationId: getSecurityLevelsForProject
-export def "2-project-securitylevel get" [
-  projectKeyOrId: string
+export def "2-project-securitylevel get-security-levels-for" [
+  project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4618,7 +4618,7 @@ export def "2-project-securitylevel get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/project/($projectKeyOrId)/securitylevel")
+  let full_url = (build-url $base ({project_key_or_id: $project_key_or_id} | format pattern "/api/2/project/{project_key_or_id}/securitylevel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4628,7 +4628,7 @@ export def "2-project-securitylevel get" [
 #
 # GET /api/2/projectCategory
 # operationId: getAllProjectCategories
-export def "2-project-category list" [
+export def "2-project-category get-all-project-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4650,7 +4650,7 @@ export def "2-project-category list" [
 #
 # POST /api/2/projectCategory
 # operationId: createProjectCategory
-export def "2-project-category createProjectCategory" [
+export def "2-project-category create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4672,7 +4672,7 @@ export def "2-project-category createProjectCategory" [
 #
 # DELETE /api/2/projectCategory/{id}
 # operationId: removeProjectCategory
-export def "2-project-category removeProjectCategory" [
+export def "2-project-category delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4685,7 +4685,7 @@ export def "2-project-category removeProjectCategory" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/projectCategory/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/projectCategory/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4708,7 +4708,7 @@ export def "2-project-category get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/projectCategory/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/projectCategory/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4718,7 +4718,7 @@ export def "2-project-category get" [
 #
 # PUT /api/2/projectCategory/{id}
 # operationId: updateProjectCategory
-export def "2-project-category updateProjectCategory" [
+export def "2-project-category update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4731,7 +4731,7 @@ export def "2-project-category updateProjectCategory" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/projectCategory/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/projectCategory/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4764,7 +4764,7 @@ export def "2-projectvalidate-key get" [
 #
 # GET /api/2/reindex
 # operationId: getReindexInfo
-export def "2-reindex get" [
+export def "2-reindex get-reindex-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4773,11 +4773,11 @@ export def "2-reindex get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --taskId: int # the id of an indexing task you wish to obtain details on.  If omitted, then defaults to the standard behaviour and                returns information on the active reindex task, or the last task to run if no reindex is taking place. .  If there is no                reindexing task with that id then a 404 is returned. (format: int64)
+  --task-id: int # the id of an indexing task you wish to obtain details on.  If omitted, then defaults to the standard behaviour and                returns information on the active reindex task, or the last task to run if no reindex is taking place. .  If there is no                reindexing task with that id then a 404 is returned. (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "taskId" $taskId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "taskId" $task_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/reindex" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4798,13 +4798,13 @@ export def "2-reindex reindex" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # Case insensitive String indicating type of reindex.  If omitted, then defaults to BACKGROUND_PREFERRED.
-  --indexComments: oneof<nothing, bool> # Indicates that comments should also be reindexed. Not relevant for foreground reindex, where comments are always reindexed. (default: false)
-  --indexChangeHistory: oneof<nothing, bool> # Indicates that changeHistory should also be reindexed. Not relevant for foreground reindex, where changeHistory is always reindexed. (default: false)
-  --indexWorklogs: oneof<nothing, bool> # Indicates that changeHistory should also be reindexed. Not relevant for foreground reindex, where changeHistory is always reindexed. (default: false)
+  --index-comments: oneof<nothing, bool> # Indicates that comments should also be reindexed. Not relevant for foreground reindex, where comments are always reindexed. (default: false)
+  --index-change-history: oneof<nothing, bool> # Indicates that changeHistory should also be reindexed. Not relevant for foreground reindex, where changeHistory is always reindexed. (default: false)
+  --index-worklogs: oneof<nothing, bool> # Indicates that changeHistory should also be reindexed. Not relevant for foreground reindex, where changeHistory is always reindexed. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "indexComments" $indexComments "scalar") (serialize-qp "indexChangeHistory" $indexChangeHistory "scalar") (serialize-qp "indexWorklogs" $indexWorklogs "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "indexComments" $index_comments "scalar") (serialize-qp "indexChangeHistory" $index_change_history "scalar") (serialize-qp "indexWorklogs" $index_worklogs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/reindex" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4824,14 +4824,14 @@ export def "2-reindex-issue reindexIssues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --issueId: string # the IDs or keys of one or more issues to reindex.
-  --indexComments: oneof<nothing, bool> # Indicates that comments should also be reindexed. (default: false)
-  --indexChangeHistory: oneof<nothing, bool> # Indicates that changeHistory should also be reindexed. (default: false)
-  --indexWorklogs: oneof<nothing, bool> # Indicates that changeHistory should also be reindexed. (default: false)
+  --issue-id: string # the IDs or keys of one or more issues to reindex.
+  --index-comments: oneof<nothing, bool> # Indicates that comments should also be reindexed. (default: false)
+  --index-change-history: oneof<nothing, bool> # Indicates that changeHistory should also be reindexed. (default: false)
+  --index-worklogs: oneof<nothing, bool> # Indicates that changeHistory should also be reindexed. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "issueId" $issueId "scalar") (serialize-qp "indexComments" $indexComments "scalar") (serialize-qp "indexChangeHistory" $indexChangeHistory "scalar") (serialize-qp "indexWorklogs" $indexWorklogs "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "issueId" $issue_id "scalar") (serialize-qp "indexComments" $index_comments "scalar") (serialize-qp "indexChangeHistory" $index_change_history "scalar") (serialize-qp "indexWorklogs" $index_worklogs "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/reindex/issue" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4851,11 +4851,11 @@ export def "2-reindex-progress get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --taskId: int # the id of an indexing task you wish to obtain details on.  If omitted, then defaults to the standard behaviour and                returns information on the active reindex task, or the last task to run if no reindex is taking place. .  If there is no                reindexing task with that id then a 404 is returned. (format: int64)
+  --task-id: int # the id of an indexing task you wish to obtain details on.  If omitted, then defaults to the standard behaviour and                returns information on the active reindex task, or the last task to run if no reindex is taking place. .  If there is no                reindexing task with that id then a 404 is returned. (format: int64)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "taskId" $taskId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "taskId" $task_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/reindex/progress" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4888,7 +4888,7 @@ export def "2-reindex-request processRequests" [
 #
 # GET /api/2/reindex/request/bulk
 # operationId: getProgressBulk
-export def "2-reindex-request-bulk get" [
+export def "2-reindex-request-bulk get-progress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4897,11 +4897,11 @@ export def "2-reindex-request-bulk get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --requestId: string # the reindex request IDs.
+  --request-id: string # the reindex request IDs.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "requestId" $requestId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/reindex/request/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4912,8 +4912,8 @@ export def "2-reindex-request-bulk get" [
 #
 # GET /api/2/reindex/request/{requestId}
 # operationId: getProgress
-export def "2-reindex-request get" [
-  requestId: int
+export def "2-reindex-request get-progress" [
+  request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4925,7 +4925,7 @@ export def "2-reindex-request get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/reindex/request/($requestId)")
+  let full_url = (build-url $base ({request_id: $request_id} | format pattern "/api/2/reindex/request/{request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4970,7 +4970,7 @@ export def "2-resolution get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/resolution/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/resolution/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4979,7 +4979,7 @@ export def "2-resolution get" [
 # Get all the ProjectRoles available in JIRA. Currently this list is global.
 #
 # GET /api/2/role
-export def "2-role list" [
+export def "2-role get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5001,7 +5001,7 @@ export def "2-role list" [
 #
 # POST /api/2/role
 # operationId: createProjectRole
-export def "2-role createProjectRole" [
+export def "2-role create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5023,7 +5023,7 @@ export def "2-role createProjectRole" [
 #
 # DELETE /api/2/role/{id}
 # operationId: deleteProjectRole
-export def "2-role delete" [
+export def "2-role delete-project" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5038,7 +5038,7 @@ export def "2-role delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "swap" $swap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/role/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/role/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5048,7 +5048,7 @@ export def "2-role delete" [
 #
 # GET /api/2/role/{id}
 # operationId: getProjectRolesById
-export def "2-role get" [
+export def "2-role get-project" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5061,7 +5061,7 @@ export def "2-role get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/role/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/role/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5084,7 +5084,7 @@ export def "2-role partialUpdateProjectRole" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/role/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/role/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5107,7 +5107,7 @@ export def "2-role fullyUpdateProjectRole" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/role/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/role/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5117,7 +5117,7 @@ export def "2-role fullyUpdateProjectRole" [
 #
 # DELETE /api/2/role/{id}/actors
 # operationId: deleteProjectRoleActorsFromRole
-export def "2-role-actors delete" [
+export def "2-role-actors delete-project-role-actors-from" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5133,7 +5133,7 @@ export def "2-role-actors delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/role/($id)/actors" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/role/{id}/actors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5143,7 +5143,7 @@ export def "2-role-actors delete" [
 #
 # GET /api/2/role/{id}/actors
 # operationId: getProjectRoleActorsForRole
-export def "2-role-actors get" [
+export def "2-role-actors get-project-role-actors-for" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5156,7 +5156,7 @@ export def "2-role-actors get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/role/($id)/actors")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/role/{id}/actors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5166,7 +5166,7 @@ export def "2-role-actors get" [
 #
 # POST /api/2/role/{id}/actors
 # operationId: addProjectRoleActorsToRole
-export def "2-role-actors addProjectRoleActorsToRole" [
+export def "2-role-actors create-project-role-actors-to" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5179,7 +5179,7 @@ export def "2-role-actors addProjectRoleActorsToRole" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/role/($id)/actors")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/role/{id}/actors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5189,8 +5189,8 @@ export def "2-role-actors addProjectRoleActorsToRole" [
 #
 # POST /api/2/screens/addToDefault/{fieldId}
 # operationId: addFieldToDefaultScreen
-export def "2-screens-add-to-default addFieldToDefaultScreen" [
-  fieldId: string
+export def "2-screens-add-to-default create-field" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5202,7 +5202,7 @@ export def "2-screens-add-to-default addFieldToDefaultScreen" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/screens/addToDefault/($fieldId)")
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/api/2/screens/addToDefault/{field_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5212,8 +5212,8 @@ export def "2-screens-add-to-default addFieldToDefaultScreen" [
 #
 # GET /api/2/screens/{screenId}/availableFields
 # operationId: getFieldsToAdd
-export def "2-screens-available-fields get" [
-  screenId: int
+export def "2-screens-available-fields get-fields-to-add" [
+  screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5225,7 +5225,7 @@ export def "2-screens-available-fields get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/screens/($screenId)/availableFields")
+  let full_url = (build-url $base ({screen_id: $screen_id} | format pattern "/api/2/screens/{screen_id}/availableFields"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5235,8 +5235,8 @@ export def "2-screens-available-fields get" [
 #
 # GET /api/2/screens/{screenId}/tabs
 # operationId: getAllTabs
-export def "2-screens-tabs get" [
-  screenId: int
+export def "2-screens-tabs get-all" [
+  screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5245,12 +5245,12 @@ export def "2-screens-tabs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --projectKey: string # the key of the project; this parameter is optional
+  --project-key: string # the key of the project; this parameter is optional
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectKey" $projectKey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/screens/($screenId)/tabs" $qp)
+  let qp = [(serialize-qp "projectKey" $project_key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({screen_id: $screen_id} | format pattern "/api/2/screens/{screen_id}/tabs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5260,8 +5260,8 @@ export def "2-screens-tabs get" [
 #
 # POST /api/2/screens/{screenId}/tabs
 # operationId: addTab
-export def "2-screens-tabs addTab" [
-  screenId: int
+export def "2-screens-tabs create" [
+  screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5273,7 +5273,7 @@ export def "2-screens-tabs addTab" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/screens/($screenId)/tabs")
+  let full_url = (build-url $base ({screen_id: $screen_id} | format pattern "/api/2/screens/{screen_id}/tabs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5284,8 +5284,8 @@ export def "2-screens-tabs addTab" [
 # DELETE /api/2/screens/{screenId}/tabs/{tabId}
 # operationId: deleteTab
 export def "2-screens-tabs delete" [
-  screenId: int
-  tabId: int
+  screen_id: int
+  tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5297,7 +5297,7 @@ export def "2-screens-tabs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/screens/($screenId)/tabs/($tabId)")
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id} | format pattern "/api/2/screens/{screen_id}/tabs/{tab_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5307,9 +5307,9 @@ export def "2-screens-tabs delete" [
 #
 # PUT /api/2/screens/{screenId}/tabs/{tabId}
 # operationId: renameTab
-export def "2-screens-tabs renameTab" [
-  screenId: int
-  tabId: int
+export def "2-screens-tabs rename" [
+  screen_id: int
+  tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5321,7 +5321,7 @@ export def "2-screens-tabs renameTab" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/screens/($screenId)/tabs/($tabId)")
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id} | format pattern "/api/2/screens/{screen_id}/tabs/{tab_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5331,9 +5331,9 @@ export def "2-screens-tabs renameTab" [
 #
 # GET /api/2/screens/{screenId}/tabs/{tabId}/fields
 # operationId: getAllFields
-export def "2-screens-tabs-fields get" [
-  screenId: int
-  tabId: int
+export def "2-screens-tabs-fields get-all" [
+  screen_id: int
+  tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5342,12 +5342,12 @@ export def "2-screens-tabs-fields get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --projectKey: string # the key of the project; this parameter is optional
+  --project-key: string # the key of the project; this parameter is optional
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectKey" $projectKey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/screens/($screenId)/tabs/($tabId)/fields" $qp)
+  let qp = [(serialize-qp "projectKey" $project_key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id} | format pattern "/api/2/screens/{screen_id}/tabs/{tab_id}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5357,9 +5357,9 @@ export def "2-screens-tabs-fields get" [
 #
 # POST /api/2/screens/{screenId}/tabs/{tabId}/fields
 # operationId: addField
-export def "2-screens-tabs-fields addField" [
-  screenId: int
-  tabId: int
+export def "2-screens-tabs-fields create" [
+  screen_id: int
+  tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5371,7 +5371,7 @@ export def "2-screens-tabs-fields addField" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/screens/($screenId)/tabs/($tabId)/fields")
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id} | format pattern "/api/2/screens/{screen_id}/tabs/{tab_id}/fields"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5381,9 +5381,9 @@ export def "2-screens-tabs-fields addField" [
 #
 # DELETE /api/2/screens/{screenId}/tabs/{tabId}/fields/{id}
 # operationId: removeField
-export def "2-screens-tabs-fields removeField" [
-  screenId: int
-  tabId: int
+export def "2-screens-tabs-fields delete" [
+  screen_id: int
+  tab_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5396,7 +5396,7 @@ export def "2-screens-tabs-fields removeField" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/screens/($screenId)/tabs/($tabId)/fields/($id)")
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id, id: $id} | format pattern "/api/2/screens/{screen_id}/tabs/{tab_id}/fields/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5406,9 +5406,9 @@ export def "2-screens-tabs-fields removeField" [
 #
 # POST /api/2/screens/{screenId}/tabs/{tabId}/fields/{id}/move
 # operationId: moveField
-export def "2-screens-tabs-fields-move moveField" [
-  screenId: int
-  tabId: int
+export def "2-screens-tabs-fields-move move" [
+  screen_id: int
+  tab_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5421,7 +5421,7 @@ export def "2-screens-tabs-fields-move moveField" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/screens/($screenId)/tabs/($tabId)/fields/($id)/move")
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id, id: $id} | format pattern "/api/2/screens/{screen_id}/tabs/{tab_id}/fields/{id}/move"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5431,9 +5431,9 @@ export def "2-screens-tabs-fields-move moveField" [
 #
 # POST /api/2/screens/{screenId}/tabs/{tabId}/move/{pos}
 # operationId: moveTab
-export def "2-screens-tabs-move moveTab" [
-  screenId: int
-  tabId: int
+export def "2-screens-tabs-move move" [
+  screen_id: int
+  tab_id: int
   pos: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5446,7 +5446,7 @@ export def "2-screens-tabs-move moveTab" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/screens/($screenId)/tabs/($tabId)/move/($pos)")
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id, pos: $pos} | format pattern "/api/2/screens/{screen_id}/tabs/{tab_id}/move/{pos}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5466,15 +5466,15 @@ export def "2-search search" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jql: string # a JQL query string
-  --startAt: int # the index of the first issue to return (0-based) (format: int32)
-  --maxResults: int # the maximum number of issues to return (defaults to 50). The maximum allowable value is                       dictated by the JIRA property 'jira.search.views.default.max'. If you specify a value that is higher than this                       number, your search results will be truncated. (format: int32)
-  --validateQuery: oneof<nothing, bool> # whether to validate the JQL query (default: true)
+  --start-at: int # the index of the first issue to return (0-based) (format: int32)
+  --max-results: int # the maximum number of issues to return (defaults to 50). The maximum allowable value is                       dictated by the JIRA property 'jira.search.views.default.max'. If you specify a value that is higher than this                       number, your search results will be truncated. (format: int32)
+  --validate-query: oneof<nothing, bool> # whether to validate the JQL query (default: true)
   --fields: string # the list of fields to return for each issue. By default, all navigable fields are returned.
   --expand: string # A comma-separated list of the parameters to expand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jql" $jql "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "validateQuery" $validateQuery "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jql" $jql "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "validateQuery" $validate_query "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5485,7 +5485,7 @@ export def "2-search search" [
 #
 # POST /api/2/search
 # operationId: searchUsingSearchRequest
-export def "2-search searchUsingSearchRequest" [
+export def "2-search list-using-search-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5507,7 +5507,7 @@ export def "2-search searchUsingSearchRequest" [
 #
 # GET /api/2/securitylevel/{id}
 # operationId: getIssuesecuritylevel
-export def "2-securitylevel get" [
+export def "2-securitylevel get-issuesecuritylevel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5520,7 +5520,7 @@ export def "2-securitylevel get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/securitylevel/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/securitylevel/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5539,11 +5539,11 @@ export def "2-server-info get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --doHealthCheck: oneof<nothing, bool>
+  --do-health-check: oneof<nothing, bool>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "doHealthCheck" $doHealthCheck "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "doHealthCheck" $do_health_check "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/serverInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5576,7 +5576,7 @@ export def "2-settings-base-url setBaseURL" [
 #
 # GET /api/2/settings/columns
 # operationId: getIssueNavigatorDefaultColumns
-export def "2-settings-columns get" [
+export def "2-settings-columns get-issue-navigator-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5620,7 +5620,7 @@ export def "2-settings-columns setIssueNavigatorDefaultColumns" [
 #
 # GET /api/2/status
 # operationId: getStatuses
-export def "2-status list" [
+export def "2-status get-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5643,7 +5643,7 @@ export def "2-status list" [
 # GET /api/2/status/{idOrName}
 # operationId: getStatus
 export def "2-status get" [
-  idOrName: string
+  id_or_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5655,7 +5655,7 @@ export def "2-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/status/($idOrName)")
+  let full_url = (build-url $base ({id_or_name: $id_or_name} | format pattern "/api/2/status/{id_or_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5665,7 +5665,7 @@ export def "2-status get" [
 #
 # GET /api/2/statuscategory
 # operationId: getStatusCategories
-export def "2-statuscategory list" [
+export def "2-statuscategory get-status-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5687,8 +5687,8 @@ export def "2-statuscategory list" [
 #
 # GET /api/2/statuscategory/{idOrKey}
 # operationId: getStatusCategory
-export def "2-statuscategory get" [
-  idOrKey: string
+export def "2-statuscategory get-status-category" [
+  id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5700,7 +5700,7 @@ export def "2-statuscategory get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/statuscategory/($idOrKey)")
+  let full_url = (build-url $base ({id_or_key: $id_or_key} | format pattern "/api/2/statuscategory/{id_or_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5711,7 +5711,7 @@ export def "2-statuscategory get" [
 # operationId: getAvatars
 export def "2-universal-avatar-type-owner get" [
   type: string
-  owningObjectId: string
+  owning_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5723,7 +5723,7 @@ export def "2-universal-avatar-type-owner get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/universal_avatar/type/($type)/owner/($owningObjectId)")
+  let full_url = (build-url $base ({type: $type, owning_object_id: $owning_object_id} | format pattern "/api/2/universal_avatar/type/{type}/owner/{owning_object_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5732,7 +5732,7 @@ export def "2-universal-avatar-type-owner get" [
 # POST /api/2/universal_avatar/type/{type}/owner/{owningObjectId}/avatar
 export def "2-universal-avatar-type-owner-avatar post" [
   type: string
-  owningObjectId: string
+  owning_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5744,7 +5744,7 @@ export def "2-universal-avatar-type-owner-avatar post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/universal_avatar/type/($type)/owner/($owningObjectId)/avatar")
+  let full_url = (build-url $base ({type: $type, owning_object_id: $owning_object_id} | format pattern "/api/2/universal_avatar/type/{type}/owner/{owning_object_id}/avatar"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5754,9 +5754,9 @@ export def "2-universal-avatar-type-owner-avatar post" [
 #
 # DELETE /api/2/universal_avatar/type/{type}/owner/{owningObjectId}/avatar/{id}
 export def "2-universal-avatar-type-owner-avatar delete" [
-  id: int
   type: string
-  owningObjectId: string
+  owning_object_id: string
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5768,7 +5768,7 @@ export def "2-universal-avatar-type-owner-avatar delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/universal_avatar/type/($type)/owner/($owningObjectId)/avatar/($id)")
+  let full_url = (build-url $base ({type: $type, owning_object_id: $owning_object_id, id: $id} | format pattern "/api/2/universal_avatar/type/{type}/owner/{owning_object_id}/avatar/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5777,7 +5777,7 @@ export def "2-universal-avatar-type-owner-avatar delete" [
 # POST /api/2/universal_avatar/type/{type}/owner/{owningObjectId}/temp
 export def "2-universal-avatar-type-owner-temp post" [
   type: string
-  owningObjectId: string
+  owning_object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5789,7 +5789,7 @@ export def "2-universal-avatar-type-owner-temp post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/universal_avatar/type/($type)/owner/($owningObjectId)/temp")
+  let full_url = (build-url $base ({type: $type, owning_object_id: $owning_object_id} | format pattern "/api/2/universal_avatar/type/{type}/owner/{owning_object_id}/temp"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5799,7 +5799,7 @@ export def "2-universal-avatar-type-owner-temp post" [
 #
 # GET /api/2/upgrade
 # operationId: getUpgradeResult
-export def "2-upgrade get" [
+export def "2-upgrade get-upgrade-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5843,7 +5843,7 @@ export def "2-upgrade runUpgradesNow" [
 #
 # DELETE /api/2/user
 # operationId: removeUser
-export def "2-user removeUser" [
+export def "2-user delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5892,7 +5892,7 @@ export def "2-user get" [
 #
 # POST /api/2/user
 # operationId: createUser
-export def "2-user createUser" [
+export def "2-user create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5938,7 +5938,7 @@ export def "2-user put" [
 #
 # DELETE /api/2/user/application
 # operationId: removeUserFromApplication
-export def "2-user-application removeUserFromApplication" [
+export def "2-user-application delete-user-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5948,11 +5948,11 @@ export def "2-user-application removeUserFromApplication" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # username
-  --applicationKey: string # application key
+  --application-key: string # application key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "applicationKey" $applicationKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "applicationKey" $application_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/user/application" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5963,7 +5963,7 @@ export def "2-user-application removeUserFromApplication" [
 #
 # POST /api/2/user/application
 # operationId: addUserToApplication
-export def "2-user-application addUserToApplication" [
+export def "2-user-application create-user-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5973,11 +5973,11 @@ export def "2-user-application addUserToApplication" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # username
-  --applicationKey: string # application key
+  --application-key: string # application key
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "applicationKey" $applicationKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "applicationKey" $application_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/user/application" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5998,13 +5998,13 @@ export def "2-user-assignable-multi-project-search findBulkAssignableUsers" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # the username
-  --projectKeys: string # the keys of the projects we are finding assignable users for, comma-separated
-  --startAt: int # the index of the first user to return (0-based) (format: int32)
-  --maxResults: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                        If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
+  --project-keys: string # the keys of the projects we are finding assignable users for, comma-separated
+  --start-at: int # the index of the first user to return (0-based) (format: int32)
+  --max-results: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                        If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "projectKeys" $projectKeys "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "projectKeys" $project_keys "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/user/assignable/multiProjectSearch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6026,14 +6026,14 @@ export def "2-user-assignable-search findAssignableUsers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # the username
   --project: string # the key of the project we are finding assignable users for
-  --issueKey: string # the issue key for the issue being edited we need to find assignable users for.
-  --startAt: int # the index of the first user to return (0-based) (format: int32)
-  --maxResults: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                    If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
-  --actionDescriptorId: int # format: int32
+  --issue-key: string # the issue key for the issue being edited we need to find assignable users for.
+  --start-at: int # the index of the first user to return (0-based) (format: int32)
+  --max-results: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                    If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
+  --action-descriptor-id: int # format: int32
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "actionDescriptorId" $actionDescriptorId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "issueKey" $issue_key "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "actionDescriptorId" $action_descriptor_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/user/assignable/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6125,7 +6125,7 @@ export def "2-user-avatar delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/user/avatar/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/user/avatar/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6261,14 +6261,14 @@ export def "2-user-permission-search findUsersWithAllPermissions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # the username filter, list includes all users if unspecified
   --permissions: string # comma separated list of permissions for project or issue returned users must have, see                     <a href="https://developer.atlassian.com/static/javadoc/jira/6.0/reference/com/atlassian/jira/security/Permissions.Permission.html">Permissions</a>                     JavaDoc for the list of all possible permissions.
-  --issueKey: string # the issue key for the issue for which returned users have specified permissions.
-  --projectKey: string # the optional project key to search for users with if no issueKey is supplied.
-  --startAt: int # the index of the first user to return (0-based) (format: int32)
-  --maxResults: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                     If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
+  --issue-key: string # the issue key for the issue for which returned users have specified permissions.
+  --project-key: string # the optional project key to search for users with if no issueKey is supplied.
+  --start-at: int # the index of the first user to return (0-based) (format: int32)
+  --max-results: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                     If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "permissions" $permissions "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "projectKey" $projectKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "permissions" $permissions "scalar") (serialize-qp "issueKey" $issue_key "scalar") (serialize-qp "projectKey" $project_key "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/user/permission/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6289,13 +6289,13 @@ export def "2-user-picker findUsersForPicker" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A string used to search username, Name or e-mail address
-  --maxResults: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                    If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
-  --showAvatar: oneof<nothing, bool>
+  --max-results: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                    If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
+  --show-avatar: oneof<nothing, bool>
   --exclude: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "showAvatar" $show_avatar "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/user/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6314,12 +6314,12 @@ export def "2-user-properties list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userKey: string # key of the user whose properties are to be returned
+  --user-key: string # key of the user whose properties are to be returned
   --username: string # username of the user whose properties are to be returned
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userKey" $userKey "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/user/properties/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6330,7 +6330,7 @@ export def "2-user-properties list" [
 #
 # DELETE /api/2/user/properties/{propertyKey}
 export def "2-user-properties delete" [
-  propertyKey: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6339,13 +6339,13 @@ export def "2-user-properties delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userKey: string # key of the user whose property is to be removed
+  --user-key: string # key of the user whose property is to be removed
   --username: string # username of the user whose property is to be removed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userKey" $userKey "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/user/properties/($propertyKey)" $qp)
+  let qp = [(serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({property_key: $property_key} | format pattern "/api/2/user/properties/{property_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6355,7 +6355,7 @@ export def "2-user-properties delete" [
 #
 # GET /api/2/user/properties/{propertyKey}
 export def "2-user-properties get" [
-  propertyKey: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6364,13 +6364,13 @@ export def "2-user-properties get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userKey: string # key of the user whose property is to be returned
+  --user-key: string # key of the user whose property is to be returned
   --username: string # username of the user whose property is to be returned
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userKey" $userKey "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/user/properties/($propertyKey)" $qp)
+  let qp = [(serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({property_key: $property_key} | format pattern "/api/2/user/properties/{property_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6380,7 +6380,7 @@ export def "2-user-properties get" [
 #
 # PUT /api/2/user/properties/{propertyKey}
 export def "2-user-properties put" [
-  propertyKey: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6389,13 +6389,13 @@ export def "2-user-properties put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userKey: string # key of the user whose property is to be set
+  --user-key: string # key of the user whose property is to be set
   --username: string # username of the user whose property is to be set
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userKey" $userKey "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/user/properties/($propertyKey)" $qp)
+  let qp = [(serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({property_key: $property_key} | format pattern "/api/2/user/properties/{property_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6415,14 +6415,14 @@ export def "2-user-search findUsers" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # A query string used to search username, name or e-mail address
-  --startAt: int # the index of the first user to return (0-based) (format: int32)
-  --maxResults: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                         If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
-  --includeActive: oneof<nothing, bool> # If true, then active users are included in the results (default true)
-  --includeInactive: oneof<nothing, bool> # If true, then inactive users are included in the results (default false)
+  --start-at: int # the index of the first user to return (0-based) (format: int32)
+  --max-results: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                         If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
+  --include-active: oneof<nothing, bool> # If true, then active users are included in the results (default true)
+  --include-inactive: oneof<nothing, bool> # If true, then inactive users are included in the results (default false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "includeActive" $includeActive "scalar") (serialize-qp "includeInactive" $includeInactive "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "includeActive" $include_active "scalar") (serialize-qp "includeInactive" $include_inactive "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/user/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6443,14 +6443,14 @@ export def "2-user-viewissue-search findUsersWithBrowsePermission" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # the username filter, no users returned if left blank
-  --issueKey: string # the issue key for the issue being edited we need to find viewable users for.
-  --projectKey: string # the optional project key to search for users with if no issueKey is supplied.
-  --startAt: int # the index of the first user to return (0-based) (format: int32)
-  --maxResults: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                    If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
+  --issue-key: string # the issue key for the issue being edited we need to find viewable users for.
+  --project-key: string # the optional project key to search for users with if no issueKey is supplied.
+  --start-at: int # the index of the first user to return (0-based) (format: int32)
+  --max-results: int # the maximum number of users to return (defaults to 50). The maximum allowed value is 1000.                    If you specify a value that is higher than this number, your search results will be truncated. (format: int32)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "projectKey" $projectKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "issueKey" $issue_key "scalar") (serialize-qp "projectKey" $project_key "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/user/viewissue/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6461,7 +6461,7 @@ export def "2-user-viewissue-search findUsersWithBrowsePermission" [
 #
 # POST /api/2/version
 # operationId: createVersion
-export def "2-version createVersion" [
+export def "2-version create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6483,7 +6483,7 @@ export def "2-version createVersion" [
 #
 # GET /api/2/version/remotelink
 # operationId: getRemoteVersionLinks
-export def "2-version-remotelink get" [
+export def "2-version-remotelink list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6492,11 +6492,11 @@ export def "2-version-remotelink get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --globalId: string # the global ID of the remote resource that is linked to the versions
+  --global-id: string # the global ID of the remote resource that is linked to the versions
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "globalId" $globalId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "globalId" $global_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/version/remotelink" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6516,13 +6516,13 @@ export def "2-version delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --moveFixIssuesTo: string # The version to set fixVersion to on issues where the deleted version is the fix version,                              If null then the fixVersion is removed.
-  --moveAffectedIssuesTo: string # The version to set affectedVersion to on issues where the deleted version is the affected version,                              If null then the affectedVersion is removed.
+  --move-fix-issues-to: string # The version to set fixVersion to on issues where the deleted version is the fix version,                              If null then the fixVersion is removed.
+  --move-affected-issues-to: string # The version to set affectedVersion to on issues where the deleted version is the affected version,                              If null then the affectedVersion is removed.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "moveFixIssuesTo" $moveFixIssuesTo "scalar") (serialize-qp "moveAffectedIssuesTo" $moveAffectedIssuesTo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/version/($id)" $qp)
+  let qp = [(serialize-qp "moveFixIssuesTo" $move_fix_issues_to "scalar") (serialize-qp "moveAffectedIssuesTo" $move_affected_issues_to "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/version/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6547,7 +6547,7 @@ export def "2-version get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/version/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/version/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6557,7 +6557,7 @@ export def "2-version get" [
 #
 # PUT /api/2/version/{id}
 # operationId: updateVersion
-export def "2-version updateVersion" [
+export def "2-version update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6570,7 +6570,7 @@ export def "2-version updateVersion" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/version/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6581,8 +6581,8 @@ export def "2-version updateVersion" [
 # PUT /api/2/version/{id}/mergeto/{moveIssuesTo}
 # operationId: merge
 export def "2-version-mergeto merge" [
-  moveIssuesTo: string
   id: string
+  move_issues_to: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6594,7 +6594,7 @@ export def "2-version-mergeto merge" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($id)/mergeto/($moveIssuesTo)")
+  let full_url = (build-url $base ({id: $id, move_issues_to: $move_issues_to} | format pattern "/api/2/version/{id}/mergeto/{move_issues_to}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6604,7 +6604,7 @@ export def "2-version-mergeto merge" [
 #
 # POST /api/2/version/{id}/move
 # operationId: moveVersion
-export def "2-version-move moveVersion" [
+export def "2-version-move move" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6617,7 +6617,7 @@ export def "2-version-move moveVersion" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($id)/move")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/version/{id}/move"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6640,7 +6640,7 @@ export def "2-version-related-issue-counts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($id)/relatedIssueCounts")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/version/{id}/relatedIssueCounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6662,7 +6662,7 @@ export def "2-version-remove-and-swap post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($id)/removeAndSwap")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/version/{id}/removeAndSwap"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6685,7 +6685,7 @@ export def "2-version-unresolved-issue-count get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($id)/unresolvedIssueCount")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/version/{id}/unresolvedIssueCount"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6695,8 +6695,8 @@ export def "2-version-unresolved-issue-count get" [
 #
 # DELETE /api/2/version/{versionId}/remotelink
 # operationId: deleteRemoteVersionLinksByVersionId
-export def "2-version-remotelink delete-by-versionId" [
-  versionId: string
+export def "2-version-remotelink delete-remote-version-links" [
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6708,7 +6708,7 @@ export def "2-version-remotelink delete-by-versionId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($versionId)/remotelink")
+  let full_url = (build-url $base ({version_id: $version_id} | format pattern "/api/2/version/{version_id}/remotelink"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6718,8 +6718,8 @@ export def "2-version-remotelink delete-by-versionId" [
 #
 # GET /api/2/version/{versionId}/remotelink
 # operationId: getRemoteVersionLinksByVersionId
-export def "2-version-remotelink get-by-versionId" [
-  versionId: string
+export def "2-version-remotelink get-remote-version-links" [
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6731,7 +6731,7 @@ export def "2-version-remotelink get-by-versionId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($versionId)/remotelink")
+  let full_url = (build-url $base ({version_id: $version_id} | format pattern "/api/2/version/{version_id}/remotelink"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6741,7 +6741,7 @@ export def "2-version-remotelink get-by-versionId" [
 #
 # POST /api/2/version/{versionId}/remotelink
 export def "2-version-remotelink post-by-versionId" [
-  versionId: string
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6753,7 +6753,7 @@ export def "2-version-remotelink post-by-versionId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($versionId)/remotelink")
+  let full_url = (build-url $base ({version_id: $version_id} | format pattern "/api/2/version/{version_id}/remotelink"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6763,9 +6763,9 @@ export def "2-version-remotelink post-by-versionId" [
 #
 # DELETE /api/2/version/{versionId}/remotelink/{globalId}
 # operationId: deleteRemoteVersionLink
-export def "2-version-remotelink delete-by-versionId-globalId" [
-  versionId: string
-  globalId: string
+export def "2-version-remotelink delete-remote-version-link" [
+  version_id: string
+  global_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6777,7 +6777,7 @@ export def "2-version-remotelink delete-by-versionId-globalId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($versionId)/remotelink/($globalId)")
+  let full_url = (build-url $base ({version_id: $version_id, global_id: $global_id} | format pattern "/api/2/version/{version_id}/remotelink/{global_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6787,9 +6787,9 @@ export def "2-version-remotelink delete-by-versionId-globalId" [
 #
 # GET /api/2/version/{versionId}/remotelink/{globalId}
 # operationId: getRemoteVersionLink
-export def "2-version-remotelink get-by-versionId-globalId" [
-  versionId: string
-  globalId: string
+export def "2-version-remotelink get-remote-version-link" [
+  version_id: string
+  global_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6801,7 +6801,7 @@ export def "2-version-remotelink get-by-versionId-globalId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($versionId)/remotelink/($globalId)")
+  let full_url = (build-url $base ({version_id: $version_id, global_id: $global_id} | format pattern "/api/2/version/{version_id}/remotelink/{global_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6811,8 +6811,8 @@ export def "2-version-remotelink get-by-versionId-globalId" [
 #
 # POST /api/2/version/{versionId}/remotelink/{globalId}
 export def "2-version-remotelink post-by-versionId-globalId" [
-  versionId: string
-  globalId: string
+  version_id: string
+  global_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6824,7 +6824,7 @@ export def "2-version-remotelink post-by-versionId-globalId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/version/($versionId)/remotelink/($globalId)")
+  let full_url = (build-url $base ({version_id: $version_id, global_id: $global_id} | format pattern "/api/2/version/{version_id}/remotelink/{global_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6834,7 +6834,7 @@ export def "2-version-remotelink post-by-versionId-globalId" [
 #
 # GET /api/2/workflow
 # operationId: getAllWorkflows
-export def "2-workflow get" [
+export def "2-workflow get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6843,11 +6843,11 @@ export def "2-workflow get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string
+  --workflow-name: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/2/workflow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6868,13 +6868,13 @@ export def "2-workflow-2-transitions-properties delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # the name of the property to add.
-  --workflowName: string # the name of the workflow to use.
-  --workflowMode: string # the type of workflow to use. Can either be "live" or "draft".
+  --workflow-name: string # the name of the workflow to use.
+  --workflow-mode: string # the type of workflow to use. Can either be "live" or "draft".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "workflowMode" $workflowMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflow/api/2/transitions/($id)/properties" $qp)
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflow/api/2/transitions/{id}/properties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6894,15 +6894,15 @@ export def "2-workflow-2-transitions-properties get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeReservedKeys: oneof<nothing, bool> # some keys under the "jira." prefix are editable, some are not. Set this to true                             in order to include the non-editable keys in the response.
+  --include-reserved-keys: oneof<nothing, bool> # some keys under the "jira." prefix are editable, some are not. Set this to true                             in order to include the non-editable keys in the response.
   --key: string # the name of the property key to query. Can be left off the query to return all properties.
-  --workflowName: string # the name of the workflow to use.
-  --workflowMode: string # the type of workflow to use. Can either be "live" or "draft".
+  --workflow-name: string # the name of the workflow to use.
+  --workflow-mode: string # the type of workflow to use. Can either be "live" or "draft".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeReservedKeys" $includeReservedKeys "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "workflowMode" $workflowMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflow/api/2/transitions/($id)/properties" $qp)
+  let qp = [(serialize-qp "includeReservedKeys" $include_reserved_keys "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflow/api/2/transitions/{id}/properties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6912,7 +6912,7 @@ export def "2-workflow-2-transitions-properties get" [
 #
 # POST /api/2/workflow/api/2/transitions/{id}/properties
 # operationId: createProperty
-export def "2-workflow-2-transitions-properties createProperty" [
+export def "2-workflow-2-transitions-properties create-property" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6923,13 +6923,13 @@ export def "2-workflow-2-transitions-properties createProperty" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # the name of the property to add.
-  --workflowName: string # the name of the workflow to use.
-  --workflowMode: string # the type of workflow to use. Can either be "live" or "draft".
+  --workflow-name: string # the name of the workflow to use.
+  --workflow-mode: string # the type of workflow to use. Can either be "live" or "draft".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "workflowMode" $workflowMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflow/api/2/transitions/($id)/properties" $qp)
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflow/api/2/transitions/{id}/properties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6939,7 +6939,7 @@ export def "2-workflow-2-transitions-properties createProperty" [
 #
 # PUT /api/2/workflow/api/2/transitions/{id}/properties
 # operationId: updateProperty
-export def "2-workflow-2-transitions-properties updateProperty" [
+export def "2-workflow-2-transitions-properties update-property" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6950,13 +6950,13 @@ export def "2-workflow-2-transitions-properties updateProperty" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # the name of the property to add.
-  --workflowName: string # the name of the workflow to use.
-  --workflowMode: string # the type of workflow to use. Can either be "live" or "draft".
+  --workflow-name: string # the name of the workflow to use.
+  --workflow-mode: string # the type of workflow to use. Can either be "live" or "draft".
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "workflowMode" $workflowMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflow/api/2/transitions/($id)/properties" $qp)
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflow/api/2/transitions/{id}/properties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6966,7 +6966,7 @@ export def "2-workflow-2-transitions-properties updateProperty" [
 #
 # POST /api/2/workflowscheme
 # operationId: createScheme
-export def "2-workflowscheme createScheme" [
+export def "2-workflowscheme create-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6988,7 +6988,7 @@ export def "2-workflowscheme createScheme" [
 #
 # DELETE /api/2/workflowscheme/{id}
 # operationId: deleteScheme
-export def "2-workflowscheme delete" [
+export def "2-workflowscheme delete-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7001,7 +7001,7 @@ export def "2-workflowscheme delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7011,7 +7011,7 @@ export def "2-workflowscheme delete" [
 #
 # GET /api/2/workflowscheme/{id}
 # operationId: getById
-export def "2-workflowscheme get" [
+export def "2-workflowscheme get-by" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7021,12 +7021,12 @@ export def "2-workflowscheme get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnDraftIfExists: oneof<nothing, bool> # when true indicates that a scheme's draft, if it exists, should be queried instead of                             the scheme itself. (default: false)
+  --return-draft-if-exists: oneof<nothing, bool> # when true indicates that a scheme's draft, if it exists, should be queried instead of                             the scheme itself. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnDraftIfExists" $returnDraftIfExists "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)" $qp)
+  let qp = [(serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7049,7 +7049,7 @@ export def "2-workflowscheme update" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7059,7 +7059,7 @@ export def "2-workflowscheme update" [
 #
 # POST /api/2/workflowscheme/{id}/createdraft
 # operationId: createDraftForParent
-export def "2-workflowscheme-createdraft createDraftForParent" [
+export def "2-workflowscheme-createdraft create-draft-for-parent" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7072,7 +7072,7 @@ export def "2-workflowscheme-createdraft createDraftForParent" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/createdraft")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/createdraft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7092,12 +7092,12 @@ export def "2-workflowscheme-default delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateDraftIfNeeded: oneof<nothing, bool> # when true will create and return a draft when the workflow scheme cannot be edited                             (e.g. when it is being used by a project).
+  --update-draft-if-needed: oneof<nothing, bool> # when true will create and return a draft when the workflow scheme cannot be edited                             (e.g. when it is being used by a project).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateDraftIfNeeded" $updateDraftIfNeeded "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/default" $qp)
+  let qp = [(serialize-qp "updateDraftIfNeeded" $update_draft_if_needed "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7117,12 +7117,12 @@ export def "2-workflowscheme-default get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnDraftIfExists: oneof<nothing, bool> # when true indicates that a scheme's draft, if it exists, should be queried instead of                             the scheme itself. (default: false)
+  --return-draft-if-exists: oneof<nothing, bool> # when true indicates that a scheme's draft, if it exists, should be queried instead of                             the scheme itself. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnDraftIfExists" $returnDraftIfExists "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/default" $qp)
+  let qp = [(serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7132,7 +7132,7 @@ export def "2-workflowscheme-default get" [
 #
 # PUT /api/2/workflowscheme/{id}/default
 # operationId: updateDefault
-export def "2-workflowscheme-default updateDefault" [
+export def "2-workflowscheme-default update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7145,7 +7145,7 @@ export def "2-workflowscheme-default updateDefault" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/default")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7168,7 +7168,7 @@ export def "2-workflowscheme-draft delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/draft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7191,7 +7191,7 @@ export def "2-workflowscheme-draft get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/draft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7201,7 +7201,7 @@ export def "2-workflowscheme-draft get" [
 #
 # PUT /api/2/workflowscheme/{id}/draft
 # operationId: updateDraft
-export def "2-workflowscheme-draft updateDraft" [
+export def "2-workflowscheme-draft update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7214,7 +7214,7 @@ export def "2-workflowscheme-draft updateDraft" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/draft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7237,7 +7237,7 @@ export def "2-workflowscheme-draft-default delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft/default")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/draft/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7260,7 +7260,7 @@ export def "2-workflowscheme-draft-default get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft/default")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/draft/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7270,7 +7270,7 @@ export def "2-workflowscheme-draft-default get" [
 #
 # PUT /api/2/workflowscheme/{id}/draft/default
 # operationId: updateDraftDefault
-export def "2-workflowscheme-draft-default updateDraftDefault" [
+export def "2-workflowscheme-draft-default update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7283,7 +7283,7 @@ export def "2-workflowscheme-draft-default updateDraftDefault" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft/default")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/draft/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7294,8 +7294,8 @@ export def "2-workflowscheme-draft-default updateDraftDefault" [
 # DELETE /api/2/workflowscheme/{id}/draft/issuetype/{issueType}
 # operationId: deleteDraftIssueType
 export def "2-workflowscheme-draft-issuetype delete" [
-  issueType: string
   id: int
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7307,7 +7307,7 @@ export def "2-workflowscheme-draft-issuetype delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft/issuetype/($issueType)")
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/api/2/workflowscheme/{id}/draft/issuetype/{issue_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7318,8 +7318,8 @@ export def "2-workflowscheme-draft-issuetype delete" [
 # GET /api/2/workflowscheme/{id}/draft/issuetype/{issueType}
 # operationId: getDraftIssueType
 export def "2-workflowscheme-draft-issuetype get" [
-  issueType: string
   id: int
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7331,7 +7331,7 @@ export def "2-workflowscheme-draft-issuetype get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft/issuetype/($issueType)")
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/api/2/workflowscheme/{id}/draft/issuetype/{issue_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7342,8 +7342,8 @@ export def "2-workflowscheme-draft-issuetype get" [
 # PUT /api/2/workflowscheme/{id}/draft/issuetype/{issueType}
 # operationId: setDraftIssueType
 export def "2-workflowscheme-draft-issuetype setDraftIssueType" [
-  issueType: string
   id: int
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7355,7 +7355,7 @@ export def "2-workflowscheme-draft-issuetype setDraftIssueType" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft/issuetype/($issueType)")
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/api/2/workflowscheme/{id}/draft/issuetype/{issue_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7365,7 +7365,7 @@ export def "2-workflowscheme-draft-issuetype setDraftIssueType" [
 #
 # DELETE /api/2/workflowscheme/{id}/draft/workflow
 # operationId: deleteDraftWorkflowMapping
-export def "2-workflowscheme-draft-workflow delete" [
+export def "2-workflowscheme-draft-workflow delete-draft-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7375,12 +7375,12 @@ export def "2-workflowscheme-draft-workflow delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # the name of the workflow to delete.
+  --workflow-name: string # the name of the workflow to delete.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft/workflow" $qp)
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/draft/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7400,12 +7400,12 @@ export def "2-workflowscheme-draft-workflow get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # the workflow mapping to return. Null can be passed to return all mappings. Must be a valid workflow name.
+  --workflow-name: string # the workflow mapping to return. Null can be passed to return all mappings. Must be a valid workflow name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft/workflow" $qp)
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/draft/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7415,7 +7415,7 @@ export def "2-workflowscheme-draft-workflow get" [
 #
 # PUT /api/2/workflowscheme/{id}/draft/workflow
 # operationId: updateDraftWorkflowMapping
-export def "2-workflowscheme-draft-workflow updateDraftWorkflowMapping" [
+export def "2-workflowscheme-draft-workflow update-draft-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7425,12 +7425,12 @@ export def "2-workflowscheme-draft-workflow updateDraftWorkflowMapping" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # the name of the workflow mapping to update.
+  --workflow-name: string # the name of the workflow mapping to update.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/draft/workflow" $qp)
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/draft/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7440,8 +7440,8 @@ export def "2-workflowscheme-draft-workflow updateDraftWorkflowMapping" [
 #
 # DELETE /api/2/workflowscheme/{id}/issuetype/{issueType}
 export def "2-workflowscheme-issuetype delete" [
-  issueType: string
   id: int
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7450,12 +7450,12 @@ export def "2-workflowscheme-issuetype delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateDraftIfNeeded: oneof<nothing, bool> # when true will create and return a draft when the workflow scheme cannot be edited                             (e.g. when it is being used by a project).
+  --update-draft-if-needed: oneof<nothing, bool> # when true will create and return a draft when the workflow scheme cannot be edited                             (e.g. when it is being used by a project).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateDraftIfNeeded" $updateDraftIfNeeded "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/issuetype/($issueType)" $qp)
+  let qp = [(serialize-qp "updateDraftIfNeeded" $update_draft_if_needed "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/api/2/workflowscheme/{id}/issuetype/{issue_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7465,8 +7465,8 @@ export def "2-workflowscheme-issuetype delete" [
 #
 # GET /api/2/workflowscheme/{id}/issuetype/{issueType}
 export def "2-workflowscheme-issuetype get" [
-  issueType: string
   id: int
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7475,12 +7475,12 @@ export def "2-workflowscheme-issuetype get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnDraftIfExists: oneof<nothing, bool> # when true indicates that a scheme's draft, if it exists, should be queried instead of                             the scheme itself. (default: false)
+  --return-draft-if-exists: oneof<nothing, bool> # when true indicates that a scheme's draft, if it exists, should be queried instead of                             the scheme itself. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnDraftIfExists" $returnDraftIfExists "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/issuetype/($issueType)" $qp)
+  let qp = [(serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/api/2/workflowscheme/{id}/issuetype/{issue_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7491,8 +7491,8 @@ export def "2-workflowscheme-issuetype get" [
 # PUT /api/2/workflowscheme/{id}/issuetype/{issueType}
 # operationId: setIssueType
 export def "2-workflowscheme-issuetype setIssueType" [
-  issueType: string
   id: int
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7504,7 +7504,7 @@ export def "2-workflowscheme-issuetype setIssueType" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/issuetype/($issueType)")
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/api/2/workflowscheme/{id}/issuetype/{issue_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7514,7 +7514,7 @@ export def "2-workflowscheme-issuetype setIssueType" [
 #
 # DELETE /api/2/workflowscheme/{id}/workflow
 # operationId: deleteWorkflowMapping
-export def "2-workflowscheme-workflow delete" [
+export def "2-workflowscheme-workflow delete-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7524,13 +7524,13 @@ export def "2-workflowscheme-workflow delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # the name of the workflow to delete.
-  --updateDraftIfNeeded: oneof<nothing, bool> # flag to indicate if a draft should be created if necessary to delete the workflow                             from the scheme.
+  --workflow-name: string # the name of the workflow to delete.
+  --update-draft-if-needed: oneof<nothing, bool> # flag to indicate if a draft should be created if necessary to delete the workflow                             from the scheme.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "updateDraftIfNeeded" $updateDraftIfNeeded "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/workflow" $qp)
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "updateDraftIfNeeded" $update_draft_if_needed "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7550,13 +7550,13 @@ export def "2-workflowscheme-workflow get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # the workflow mapping to return. Null can be passed to return all mappings. Must be a valid workflow name.
-  --returnDraftIfExists: oneof<nothing, bool> # when true indicates that a scheme's draft, if it exists, should be queried instead of                             the scheme itself. (default: false)
+  --workflow-name: string # the workflow mapping to return. Null can be passed to return all mappings. Must be a valid workflow name.
+  --return-draft-if-exists: oneof<nothing, bool> # when true indicates that a scheme's draft, if it exists, should be queried instead of                             the scheme itself. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "returnDraftIfExists" $returnDraftIfExists "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/workflow" $qp)
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7566,7 +7566,7 @@ export def "2-workflowscheme-workflow get" [
 #
 # PUT /api/2/workflowscheme/{id}/workflow
 # operationId: updateWorkflowMapping
-export def "2-workflowscheme-workflow updateWorkflowMapping" [
+export def "2-workflowscheme-workflow update-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7576,12 +7576,12 @@ export def "2-workflowscheme-workflow updateWorkflowMapping" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # the name of the workflow mapping to update.
+  --workflow-name: string # the name of the workflow mapping to update.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/2/workflowscheme/($id)/workflow" $qp)
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/2/workflowscheme/{id}/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7591,7 +7591,7 @@ export def "2-workflowscheme-workflow updateWorkflowMapping" [
 #
 # GET /api/2/worklog/deleted
 # operationId: getIdsOfWorklogsDeletedSince
-export def "2-worklog-deleted get" [
+export def "2-worklog-deleted get-of-worklogs-deleted-since" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7615,7 +7615,7 @@ export def "2-worklog-deleted get" [
 #
 # POST /api/2/worklog/list
 # operationId: getWorklogsForIds
-export def "2-worklog-list post" [
+export def "2-worklog-list get-worklogs-for" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7637,7 +7637,7 @@ export def "2-worklog-list post" [
 #
 # GET /api/2/worklog/updated
 # operationId: getIdsOfWorklogsModifiedSince
-export def "2-worklog-updated get" [
+export def "2-worklog-updated get-of-worklogs-modified-since" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

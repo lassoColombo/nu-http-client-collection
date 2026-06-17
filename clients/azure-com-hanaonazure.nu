@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-hana-on-azure-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-hana-on-azure-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.HanaOnAzure/operations
 # operationId: Operations_List
-export def "providers-microsoft-hana-on-azure-operations List" [
+export def "providers-microsoft-hana-on-azure-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-hana-on-azure-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.HanaOnAzure/hanaInstances
 # operationId: HanaInstances_List
-export def "subscriptions-providers-microsoft-hana-on-azure-hana-instances List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-hana-on-azure-hana-instances list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "subscriptions-providers-microsoft-hana-on-azure-hana-instances List"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.HanaOnAzure/hanaInstances" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.HanaOnAzure/hanaInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,8 +142,8 @@ export def "subscriptions-providers-microsoft-hana-on-azure-hana-instances List"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.HanaOnAzure/sapMonitors
 # operationId: SapMonitors_List
-export def "subscriptions-providers-microsoft-hana-on-azure-sap-monitors List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-hana-on-azure-sap-monitors list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "subscriptions-providers-microsoft-hana-on-azure-sap-monitors List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.HanaOnAzure/sapMonitors" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.HanaOnAzure/sapMonitors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,9 +167,9 @@ export def "subscriptions-providers-microsoft-hana-on-azure-sap-monitors List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances
 # operationId: HanaInstances_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/hanaInstances" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,10 +193,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}
 # operationId: HanaInstances_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  hanaInstanceName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances delete" [
+  subscription_id: string
+  resource_group_name: string
+  hana_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/hanaInstances/($hanaInstanceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hana_instance_name: $hana_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,10 +220,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}
 # operationId: HanaInstances_Get
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  hanaInstanceName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances get" [
+  subscription_id: string
+  resource_group_name: string
+  hana_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/hanaInstances/($hanaInstanceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hana_instance_name: $hana_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,10 +247,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}
 # operationId: HanaInstances_Update
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  hanaInstanceName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances update" [
+  subscription_id: string
+  resource_group_name: string
+  hana_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/hanaInstances/($hanaInstanceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hana_instance_name: $hana_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,10 +274,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}
 # operationId: HanaInstances_Create
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  hanaInstanceName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances create" [
+  subscription_id: string
+  resource_group_name: string
+  hana_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/hanaInstances/($hanaInstanceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hana_instance_name: $hana_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -301,10 +301,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}/restart
 # operationId: HanaInstances_Restart
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances-restart Restart" [
-  subscriptionId: string
-  resourceGroupName: string
-  hanaInstanceName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances-restart restart" [
+  subscription_id: string
+  resource_group_name: string
+  hana_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/hanaInstances/($hanaInstanceName)/restart" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hana_instance_name: $hana_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}/restart") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,10 +328,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}/shutdown
 # operationId: HanaInstances_Shutdown
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances-shutdown Shutdown" [
-  subscriptionId: string
-  resourceGroupName: string
-  hanaInstanceName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances-shutdown post" [
+  subscription_id: string
+  resource_group_name: string
+  hana_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/hanaInstances/($hanaInstanceName)/shutdown" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hana_instance_name: $hana_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}/shutdown") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -355,10 +355,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/hanaInstances/{hanaInstanceName}/start
 # operationId: HanaInstances_Start
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances-start Start" [
-  subscriptionId: string
-  resourceGroupName: string
-  hanaInstanceName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana-instances-start start" [
+  subscription_id: string
+  resource_group_name: string
+  hana_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/hanaInstances/($hanaInstanceName)/start" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, hana_instance_name: $hana_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/hanaInstances/{hana_instance_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -382,10 +382,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-hana
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/sapMonitors/{sapMonitorName}
 # operationId: SapMonitors_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  sapMonitorName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors delete" [
+  subscription_id: string
+  resource_group_name: string
+  sap_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/sapMonitors/($sapMonitorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sap_monitor_name: $sap_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/sapMonitors/{sap_monitor_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -409,10 +409,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/sapMonitors/{sapMonitorName}
 # operationId: SapMonitors_Get
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  sapMonitorName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors get" [
+  subscription_id: string
+  resource_group_name: string
+  sap_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/sapMonitors/($sapMonitorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sap_monitor_name: $sap_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/sapMonitors/{sap_monitor_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -436,10 +436,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/sapMonitors/{sapMonitorName}
 # operationId: SapMonitors_Update
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  sapMonitorName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors update" [
+  subscription_id: string
+  resource_group_name: string
+  sap_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/sapMonitors/($sapMonitorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sap_monitor_name: $sap_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/sapMonitors/{sap_monitor_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,10 +463,10 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HanaOnAzure/sapMonitors/{sapMonitorName}
 # operationId: SapMonitors_Create
-export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  sapMonitorName: string
+export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-monitors create" [
+  subscription_id: string
+  resource_group_name: string
+  sap_monitor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hana-on-azure-sap-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.HanaOnAzure/sapMonitors/($sapMonitorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, sap_monitor_name: $sap_monitor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.HanaOnAzure/sapMonitors/{sap_monitor_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-machine-learning-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-machine-learning-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.MachineLearning/operations
 # operationId: Operations_List
-export def "providers-microsoft-machine-learning-operations List" [
+export def "providers-microsoft-machine-learning-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-machine-learning-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearning/commitmentPlans
 # operationId: CommitmentPlans_List
-export def "subscriptions-providers-microsoft-machine-learning-commitment-plans List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-machine-learning-commitment-plans list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,13 +127,13 @@ export def "subscriptions-providers-microsoft-machine-learning-commitment-plans 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skipToken: string # Continuation token for pagination.
+  --skip-token: string # Continuation token for pagination.
   --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$skipToken" $skipToken "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.MachineLearning/commitmentPlans" $qp)
+  let qp = [(serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearning/commitmentPlans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,8 +143,8 @@ export def "subscriptions-providers-microsoft-machine-learning-commitment-plans 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearning/skus
 # operationId: Skus_List
-export def "subscriptions-providers-microsoft-machine-learning-skus List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-machine-learning-skus list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "subscriptions-providers-microsoft-machine-learning-skus List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.MachineLearning/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.MachineLearning/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,9 +168,9 @@ export def "subscriptions-providers-microsoft-machine-learning-skus List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans
 # operationId: CommitmentPlans_ListInResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans ListInResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans list-in" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,13 +179,13 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skipToken: string # Continuation token for pagination.
+  --skip-token: string # Continuation token for pagination.
   --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$skipToken" $skipToken "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearning/commitmentPlans" $qp)
+  let qp = [(serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,10 +195,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}
 # operationId: CommitmentPlans_Remove
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans Remove" [
-  subscriptionId: string
-  resourceGroupName: string
-  commitmentPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans delete" [
+  subscription_id: string
+  resource_group_name: string
+  commitment_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearning/commitmentPlans/($commitmentPlanName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, commitment_plan_name: $commitment_plan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,10 +222,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}
 # operationId: CommitmentPlans_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  commitmentPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans get" [
+  subscription_id: string
+  resource_group_name: string
+  commitment_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearning/commitmentPlans/($commitmentPlanName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, commitment_plan_name: $commitment_plan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,10 +250,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}
 # operationId: CommitmentPlans_Patch
 # --sku shape: {capacity?: int, name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans Patch" [
-  subscriptionId: string
-  resourceGroupName: string
-  commitmentPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans update" [
+  subscription_id: string
+  resource_group_name: string
+  commitment_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,8 +270,8 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearning/commitmentPlans/($commitmentPlanName)" $qp)
-  let body = {sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, commitment_plan_name: $commitment_plan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}") $qp)
+  let body = {"sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,10 +283,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}
 # operationId: CommitmentPlans_CreateOrUpdate
 # --sku shape: {capacity?: int, name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  commitmentPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  commitment_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,8 +306,8 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearning/commitmentPlans/($commitmentPlanName)" $qp)
-  let body = {etag: $etag, properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, commitment_plan_name: $commitment_plan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}") $qp)
+  let body = {"etag": $etag, "properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -318,10 +318,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}/commitmentAssociations
 # operationId: CommitmentAssociations_List
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-commitment-associations List" [
-  subscriptionId: string
-  resourceGroupName: string
-  commitmentPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-commitment-associations list" [
+  subscription_id: string
+  resource_group_name: string
+  commitment_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,13 +330,13 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skipToken: string # Continuation token for pagination.
+  --skip-token: string # Continuation token for pagination.
   --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
 ]: nothing -> record<nextLink: string, value: table<etag: string, properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$skipToken" $skipToken "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearning/commitmentPlans/($commitmentPlanName)/commitmentAssociations" $qp)
+  let qp = [(serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, commitment_plan_name: $commitment_plan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}/commitmentAssociations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -346,11 +346,11 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}/commitmentAssociations/{commitmentAssociationName}
 # operationId: CommitmentAssociations_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-commitment-associations Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  commitmentPlanName: string
-  commitmentAssociationName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-commitment-associations get" [
+  subscription_id: string
+  resource_group_name: string
+  commitment_plan_name: string
+  commitment_association_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearning/commitmentPlans/($commitmentPlanName)/commitmentAssociations/($commitmentAssociationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, commitment_plan_name: $commitment_plan_name, commitment_association_name: $commitment_association_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}/commitmentAssociations/{commitment_association_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,11 +374,11 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}/commitmentAssociations/{commitmentAssociationName}/move
 # operationId: CommitmentAssociations_Move
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-commitment-associations-move Move" [
-  subscriptionId: string
-  resourceGroupName: string
-  commitmentPlanName: string
-  commitmentAssociationName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-commitment-associations-move move" [
+  subscription_id: string
+  resource_group_name: string
+  commitment_plan_name: string
+  commitment_association_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,14 +388,14 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
-  --destinationPlanId: string # The ARM ID of the commitment plan to re-parent the commitment association to.
+  --destination-plan-id: string # The ARM ID of the commitment plan to re-parent the commitment association to.
 ]: any -> record<etag: string, properties: record<associatedResourceId: string, commitmentPlanId: string, creationDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearning/commitmentPlans/($commitmentPlanName)/commitmentAssociations/($commitmentAssociationName)/move" $qp)
-  let body = {destinationPlanId: $destinationPlanId} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, commitment_plan_name: $commitment_plan_name, commitment_association_name: $commitment_association_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}/commitmentAssociations/{commitment_association_name}/move") $qp)
+  let body = {"destinationPlanId": $destination_plan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -406,10 +406,10 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearning/commitmentPlans/{commitmentPlanName}/usageHistory
 # operationId: UsageHistory_List
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-usage-history List" [
-  subscriptionId: string
-  resourceGroupName: string
-  commitmentPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-commitment-plans-usage-history list" [
+  subscription_id: string
+  resource_group_name: string
+  commitment_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,13 +418,13 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skipToken: string # Continuation token for pagination.
+  --skip-token: string # Continuation token for pagination.
   --api-version: string # The version of the Microsoft.MachineLearning resource provider API to use.
 ]: nothing -> record<nextLink: string, value: table<planDeletionOverage: record, planMigrationOverage: record, planQuantitiesAfterUsage: record, planQuantitiesBeforeUsage: record, planUsageOverage: record, usage: record, usageDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$skipToken" $skipToken "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.MachineLearning/commitmentPlans/($commitmentPlanName)/usageHistory" $qp)
+  let qp = [(serialize-qp "$skipToken" $skip_token "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, commitment_plan_name: $commitment_plan_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.MachineLearning/commitmentPlans/{commitment_plan_name}/usageHistory") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

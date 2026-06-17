@@ -148,7 +148,7 @@ export def "rest-service-fecru-admin-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/groups/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,7 +170,7 @@ export def "rest-service-fecru-admin-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/groups/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,7 +192,7 @@ export def "rest-service-fecru-admin-groups put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/groups/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,7 +214,7 @@ export def "rest-service-fecru-admin-groups-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)/users")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/groups/{name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -224,7 +224,7 @@ export def "rest-service-fecru-admin-groups-users delete" [
 #
 # GET /rest-service-fecru/admin/groups/{name}/users
 # operationId: listGroupUsers
-export def "rest-service-fecru-admin-groups-users listGroupUsers" [
+export def "rest-service-fecru-admin-groups-users list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,7 +237,7 @@ export def "rest-service-fecru-admin-groups-users listGroupUsers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)/users")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/groups/{name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +259,7 @@ export def "rest-service-fecru-admin-groups-users put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/groups/($name)/users")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/groups/{name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,11 +300,11 @@ export def "rest-service-fecru-admin-permission-schemes post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --copyFrom: string # if set, the new permission scheme will be a copy of permissionSchemeName
+  --copy-from: string # if set, the new permission scheme will be a copy of permissionSchemeName
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "copyFrom" $copyFrom "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "copyFrom" $copy_from "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service-fecru/admin/permission-schemes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -327,7 +327,7 @@ export def "rest-service-fecru-admin-permission-schemes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,7 +349,7 @@ export def "rest-service-fecru-admin-permission-schemes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -371,7 +371,7 @@ export def "rest-service-fecru-admin-permission-schemes put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -394,7 +394,7 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users delete" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/anonymous-users")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/anonymous-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -404,7 +404,7 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users delete" 
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/anonymous-users
 # operationId: listAnonymousUsersPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-anonymous-users listAnonymousUsersPrincipalAssociation" [
+export def "rest-service-fecru-admin-permission-schemes-anonymous-users list-anonymous-users-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +419,7 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users listAnon
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/anonymous-users" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/anonymous-users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,7 +429,7 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users listAnon
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/anonymous-users
 # operationId: addPermissionSchemeAnonymousUsers
-export def "rest-service-fecru-admin-permission-schemes-anonymous-users addPermissionSchemeAnonymousUsers" [
+export def "rest-service-fecru-admin-permission-schemes-anonymous-users create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,7 +442,7 @@ export def "rest-service-fecru-admin-permission-schemes-anonymous-users addPermi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/anonymous-users")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/anonymous-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,7 +465,7 @@ export def "rest-service-fecru-admin-permission-schemes-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/groups")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,7 +475,7 @@ export def "rest-service-fecru-admin-permission-schemes-groups delete" [
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/groups
 # operationId: listGroupPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-groups listGroupPrincipalAssociation" [
+export def "rest-service-fecru-admin-permission-schemes-groups list-group-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "rest-service-fecru-admin-permission-schemes-groups listGroupPrincipa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/groups" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -501,7 +501,7 @@ export def "rest-service-fecru-admin-permission-schemes-groups listGroupPrincipa
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/groups
 # operationId: addPermissionSchemeGroup
-export def "rest-service-fecru-admin-permission-schemes-groups addPermissionSchemeGroup" [
+export def "rest-service-fecru-admin-permission-schemes-groups create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,7 +514,7 @@ export def "rest-service-fecru-admin-permission-schemes-groups addPermissionSche
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/groups")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -537,7 +537,7 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users delete" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/logged-in-users")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/logged-in-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,7 +547,7 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users delete" 
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/logged-in-users
 # operationId: listLoggedUsersPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-logged-in-users listLoggedUsersPrincipalAssociation" [
+export def "rest-service-fecru-admin-permission-schemes-logged-in-users list-logged-users-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,7 +562,7 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users listLogg
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/logged-in-users" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/logged-in-users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -572,7 +572,7 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users listLogg
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/logged-in-users
 # operationId: addPermissionSchemeLoggedUsers
-export def "rest-service-fecru-admin-permission-schemes-logged-in-users addPermissionSchemeLoggedUsers" [
+export def "rest-service-fecru-admin-permission-schemes-logged-in-users create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -585,7 +585,7 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users addPermi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/logged-in-users")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/logged-in-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -595,7 +595,7 @@ export def "rest-service-fecru-admin-permission-schemes-logged-in-users addPermi
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/projects
 # operationId: listProjects
-export def "rest-service-fecru-admin-permission-schemes-projects listProjects" [
+export def "rest-service-fecru-admin-permission-schemes-projects list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,7 +608,7 @@ export def "rest-service-fecru-admin-permission-schemes-projects listProjects" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/projects")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/projects"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -631,7 +631,7 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/review-roles")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/review-roles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -641,7 +641,7 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles delete" [
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/review-roles
 # operationId: listRolesPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-review-roles listRolesPrincipalAssociation" [
+export def "rest-service-fecru-admin-permission-schemes-review-roles list-roles-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -657,7 +657,7 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles listRolesPr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/review-roles" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/review-roles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -667,7 +667,7 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles listRolesPr
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/review-roles
 # operationId: addPermissionSchemeReviewRole
-export def "rest-service-fecru-admin-permission-schemes-review-roles addPermissionSchemeReviewRole" [
+export def "rest-service-fecru-admin-permission-schemes-review-roles create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "rest-service-fecru-admin-permission-schemes-review-roles addPermissi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/review-roles")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/review-roles"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -703,7 +703,7 @@ export def "rest-service-fecru-admin-permission-schemes-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/users")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -713,7 +713,7 @@ export def "rest-service-fecru-admin-permission-schemes-users delete" [
 #
 # GET /rest-service-fecru/admin/permission-schemes/{name}/users
 # operationId: listUserPrincipalAssociation
-export def "rest-service-fecru-admin-permission-schemes-users listUserPrincipalAssociation" [
+export def "rest-service-fecru-admin-permission-schemes-users list-user-principal-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -729,7 +729,7 @@ export def "rest-service-fecru-admin-permission-schemes-users listUserPrincipalA
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/users" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -739,7 +739,7 @@ export def "rest-service-fecru-admin-permission-schemes-users listUserPrincipalA
 #
 # PUT /rest-service-fecru/admin/permission-schemes/{name}/users
 # operationId: addPermissionSchemeUser
-export def "rest-service-fecru-admin-permission-schemes-users addPermissionSchemeUser" [
+export def "rest-service-fecru-admin-permission-schemes-users create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,7 +752,7 @@ export def "rest-service-fecru-admin-permission-schemes-users addPermissionSchem
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/permission-schemes/($name)/users")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -772,12 +772,12 @@ export def "rest-service-fecru-admin-projects list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # project's name part filter, optional
   --key: string # project's key part filter, optional
-  --defaultRepositoryName: string # project's default repository key part filter, optional
-  --permissionSchemeName: string # project's permission scheme pare name filter, optional
+  --default-repository-name: string # project's default repository key part filter, optional
+  --permission-scheme-name: string # project's permission scheme pare name filter, optional
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "defaultRepositoryName" $defaultRepositoryName "scalar") (serialize-qp "permissionSchemeName" $permissionSchemeName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "defaultRepositoryName" $default_repository_name "scalar") (serialize-qp "permissionSchemeName" $permission_scheme_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest-service-fecru/admin/projects" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -818,12 +818,12 @@ export def "rest-service-fecru-admin-projects delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deleteProjectReviews: oneof<nothing, bool> # if true deletes reviews in project (default: false)
+  --delete-project-reviews: oneof<nothing, bool> # if true deletes reviews in project (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deleteProjectReviews" $deleteProjectReviews "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)" $qp)
+  let qp = [(serialize-qp "deleteProjectReviews" $delete_project_reviews "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -845,7 +845,7 @@ export def "rest-service-fecru-admin-projects get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -867,7 +867,7 @@ export def "rest-service-fecru-admin-projects put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -890,7 +890,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-groups")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -913,7 +913,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-groups allowedRev
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-groups")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -923,7 +923,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-groups allowedRev
 #
 # PUT /rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups
 # operationId: addAllowedReviewerGroup
-export def "rest-service-fecru-admin-projects-allowed-reviewer-groups addAllowedReviewerGroup" [
+export def "rest-service-fecru-admin-projects-allowed-reviewer-groups create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -936,7 +936,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-groups addAllowed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-groups")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -959,7 +959,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-users")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -982,7 +982,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-users allowedRevi
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-users")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -992,7 +992,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-users allowedRevi
 #
 # PUT /rest-service-fecru/admin/projects/{key}/allowed-reviewer-users
 # operationId: addAllowedReviewerUser
-export def "rest-service-fecru-admin-projects-allowed-reviewer-users addAllowedReviewerUser" [
+export def "rest-service-fecru-admin-projects-allowed-reviewer-users create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1005,7 +1005,7 @@ export def "rest-service-fecru-admin-projects-allowed-reviewer-users addAllowedR
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/allowed-reviewer-users")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/allowed-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1028,7 +1028,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-groups")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1051,7 +1051,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-groups defaultRev
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-groups")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1061,7 +1061,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-groups defaultRev
 #
 # PUT /rest-service-fecru/admin/projects/{key}/default-reviewer-groups
 # operationId: addDefaultReviewerGroup
-export def "rest-service-fecru-admin-projects-default-reviewer-groups addDefaultReviewerGroup" [
+export def "rest-service-fecru-admin-projects-default-reviewer-groups create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1074,7 +1074,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-groups addDefault
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-groups")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1097,7 +1097,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-users")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1107,7 +1107,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users delete" [
 #
 # GET /rest-service-fecru/admin/projects/{key}/default-reviewer-users
 # operationId: listDefaultReviewerUsers
-export def "rest-service-fecru-admin-projects-default-reviewer-users listDefaultReviewerUsers" [
+export def "rest-service-fecru-admin-projects-default-reviewer-users list" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1120,7 +1120,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users listDefault
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-users")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1130,7 +1130,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users listDefault
 #
 # PUT /rest-service-fecru/admin/projects/{key}/default-reviewer-users
 # operationId: addDefaultReviewerUser
-export def "rest-service-fecru-admin-projects-default-reviewer-users addDefaultReviewerUser" [
+export def "rest-service-fecru-admin-projects-default-reviewer-users create" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,7 +1143,7 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users addDefaultR
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($key)/default-reviewer-users")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest-service-fecru/admin/projects/{key}/default-reviewer-users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1153,9 +1153,9 @@ export def "rest-service-fecru-admin-projects-default-reviewer-users addDefaultR
 #
 # PUT /rest-service-fecru/admin/projects/{sourceProjectKey}/move-reviews/{destinationProjectKey}
 # operationId: moveAllReviews
-export def "rest-service-fecru-admin-projects-move-reviews moveAllReviews" [
-  sourceProjectKey: string
-  destinationProjectKey: string
+export def "rest-service-fecru-admin-projects-move-reviews move-all" [
+  source_project_key: string
+  destination_project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,7 +1167,7 @@ export def "rest-service-fecru-admin-projects-move-reviews moveAllReviews" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/projects/($sourceProjectKey)/move-reviews/($destinationProjectKey)")
+  let full_url = (build-url $base ({source_project_key: $source_project_key, destination_project_key: $destination_project_key} | format pattern "/rest-service-fecru/admin/projects/{source_project_key}/move-reviews/{destination_project_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1223,7 +1223,7 @@ export def "rest-service-fecru-admin-repositories post" [
 #
 # POST /rest-service-fecru/admin/repositories-v1
 # operationId: addRepository
-export def "rest-service-fecru-admin-repositories-v1 addRepository" [
+export def "rest-service-fecru-admin-repositories-v1 create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,7 +1257,7 @@ export def "rest-service-fecru-admin-repositories-v1 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1280,7 +1280,7 @@ export def "rest-service-fecru-admin-repositories-v1 delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1290,7 +1290,7 @@ export def "rest-service-fecru-admin-repositories-v1 delete" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/disable
 # operationId: disableRepository
-export def "rest-service-fecru-admin-repositories-v1-disable disableRepository" [
+export def "rest-service-fecru-admin-repositories-v1-disable disable" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1303,7 @@ export def "rest-service-fecru-admin-repositories-v1-disable disableRepository" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/disable")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1313,7 +1313,7 @@ export def "rest-service-fecru-admin-repositories-v1-disable disableRepository" 
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/enable
 # operationId: enableRepository
-export def "rest-service-fecru-admin-repositories-v1-enable enableRepository" [
+export def "rest-service-fecru-admin-repositories-v1-enable enable" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1326,7 +1326,7 @@ export def "rest-service-fecru-admin-repositories-v1-enable enableRepository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/enable")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1349,7 +1349,7 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-discussions reindex
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/reindex-discussions")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-discussions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1371,7 +1371,7 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-linecount post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/reindex-linecount")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-linecount"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1396,7 +1396,7 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-reviews doReviewRev
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "synchronous" $synchronous "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/reindex-reviews" $qp)
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-reviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1419,7 +1419,7 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-search rebuildSearc
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/reindex-search")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-search"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1443,7 +1443,7 @@ export def "rest-service-fecru-admin-repositories-v1-reindex-source post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clone" $clone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/reindex-source" $qp)
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/reindex-source") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1468,7 +1468,7 @@ export def "rest-service-fecru-admin-repositories-v1-rescan-metadata post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/rescan-metadata" $qp)
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/rescan-metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1493,7 +1493,7 @@ export def "rest-service-fecru-admin-repositories-v1-scan scan" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "synchronous" $synchronous "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/scan" $qp)
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/scan") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1516,7 +1516,7 @@ export def "rest-service-fecru-admin-repositories-v1-scan-cvs scanCvs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/scan-cvs")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/scan-cvs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1526,7 +1526,7 @@ export def "rest-service-fecru-admin-repositories-v1-scan-cvs scanCvs" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/start
 # operationId: startRepository
-export def "rest-service-fecru-admin-repositories-v1-start startRepository" [
+export def "rest-service-fecru-admin-repositories-v1-start start" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1539,7 +1539,7 @@ export def "rest-service-fecru-admin-repositories-v1-start startRepository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/start")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1549,7 +1549,7 @@ export def "rest-service-fecru-admin-repositories-v1-start startRepository" [
 #
 # POST /rest-service-fecru/admin/repositories-v1/{repository}/stop
 # operationId: stopRepository
-export def "rest-service-fecru-admin-repositories-v1-stop stopRepository" [
+export def "rest-service-fecru-admin-repositories-v1-stop stop" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1562,7 @@ export def "rest-service-fecru-admin-repositories-v1-stop stopRepository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories-v1/($repository)/stop")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories-v1/{repository}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1584,7 +1584,7 @@ export def "rest-service-fecru-admin-repositories delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1606,7 +1606,7 @@ export def "rest-service-fecru-admin-repositories get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1628,7 +1628,7 @@ export def "rest-service-fecru-admin-repositories put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1651,7 +1651,7 @@ export def "rest-service-fecru-admin-repositories-full-incremental-index fullInc
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/full-incremental-index")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/full-incremental-index"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1676,7 +1676,7 @@ export def "rest-service-fecru-admin-repositories-incremental-index incrementalI
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "wait" $wait "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/incremental-index" $qp)
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/incremental-index") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1699,7 +1699,7 @@ export def "rest-service-fecru-admin-repositories-permissions permissions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/permissions")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1709,7 +1709,7 @@ export def "rest-service-fecru-admin-repositories-permissions permissions" [
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/permissions
 # operationId: updatePermissions
-export def "rest-service-fecru-admin-repositories-permissions updatePermissions" [
+export def "rest-service-fecru-admin-repositories-permissions update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1722,7 +1722,7 @@ export def "rest-service-fecru-admin-repositories-permissions updatePermissions"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/permissions")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1732,7 +1732,7 @@ export def "rest-service-fecru-admin-repositories-permissions updatePermissions"
 #
 # DELETE /rest-service-fecru/admin/repositories/{repository}/permissions/groups
 # operationId: removeGroupToPermissions
-export def "rest-service-fecru-admin-repositories-permissions-groups removeGroupToPermissions" [
+export def "rest-service-fecru-admin-repositories-permissions-groups delete-group-to" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1745,7 +1745,7 @@ export def "rest-service-fecru-admin-repositories-permissions-groups removeGroup
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/permissions/groups")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1768,7 +1768,7 @@ export def "rest-service-fecru-admin-repositories-permissions-groups permissions
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/permissions/groups")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1778,7 +1778,7 @@ export def "rest-service-fecru-admin-repositories-permissions-groups permissions
 #
 # PUT /rest-service-fecru/admin/repositories/{repository}/permissions/groups
 # operationId: addGroupToPermissions
-export def "rest-service-fecru-admin-repositories-permissions-groups addGroupToPermissions" [
+export def "rest-service-fecru-admin-repositories-permissions-groups create-group-to" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1791,7 +1791,7 @@ export def "rest-service-fecru-admin-repositories-permissions-groups addGroupToP
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/permissions/groups")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/permissions/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1814,7 +1814,7 @@ export def "rest-service-fecru-admin-repositories-reindex-changeset-discussion r
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/reindex-changeset-discussion")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-changeset-discussion"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1836,7 +1836,7 @@ export def "rest-service-fecru-admin-repositories-reindex-linecount put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/reindex-linecount")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-linecount"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1859,7 +1859,7 @@ export def "rest-service-fecru-admin-repositories-reindex-reviews reindexReviews
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/reindex-reviews")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-reviews"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1882,7 +1882,7 @@ export def "rest-service-fecru-admin-repositories-reindex-search reindexSearch" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/reindex-search")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-search"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1906,7 +1906,7 @@ export def "rest-service-fecru-admin-repositories-reindex-source put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clone" $clone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/reindex-source" $qp)
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/reindex-source") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1931,7 +1931,7 @@ export def "rest-service-fecru-admin-repositories-rescan-metadata put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/rescan-metadata" $qp)
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/rescan-metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1954,7 +1954,7 @@ export def "rest-service-fecru-admin-repositories-start start" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/start")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1977,7 +1977,7 @@ export def "rest-service-fecru-admin-repositories-stop stop" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/stop")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2000,7 +2000,7 @@ export def "rest-service-fecru-admin-repositories-updates repositoryUpdates" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/updates")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/updates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2009,7 +2009,7 @@ export def "rest-service-fecru-admin-repositories-updates repositoryUpdates" [
 # PUT /rest-service-fecru/admin/repositories/{repository}/updates
 #
 # operationId: updateRepositoryUpdates
-export def "rest-service-fecru-admin-repositories-updates updateRepositoryUpdates" [
+export def "rest-service-fecru-admin-repositories-updates update" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2022,7 +2022,7 @@ export def "rest-service-fecru-admin-repositories-updates updateRepositoryUpdate
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/repositories/($repository)/updates")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/admin/repositories/{repository}/updates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2054,7 +2054,7 @@ export def "rest-service-fecru-admin-repositories-defaults-permissions defaultPe
 #
 # PUT /rest-service-fecru/admin/repositories/~defaults/permissions
 # operationId: updateDefaultPermissions
-export def "rest-service-fecru-admin-repositories-defaults-permissions updateDefaultPermissions" [
+export def "rest-service-fecru-admin-repositories-defaults-permissions update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2130,7 +2130,7 @@ export def "rest-service-fecru-admin-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/users/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2152,7 +2152,7 @@ export def "rest-service-fecru-admin-users get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/users/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2174,7 +2174,7 @@ export def "rest-service-fecru-admin-users put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/users/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2196,7 +2196,7 @@ export def "rest-service-fecru-admin-users-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)/groups")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/users/{name}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2206,7 +2206,7 @@ export def "rest-service-fecru-admin-users-groups delete" [
 #
 # GET /rest-service-fecru/admin/users/{name}/groups
 # operationId: listUserGroups
-export def "rest-service-fecru-admin-users-groups listUserGroups" [
+export def "rest-service-fecru-admin-users-groups list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2219,7 +2219,7 @@ export def "rest-service-fecru-admin-users-groups listUserGroups" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)/groups")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/users/{name}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2241,7 +2241,7 @@ export def "rest-service-fecru-admin-users-groups put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/admin/users/($name)/groups")
+  let full_url = (build-url $base ({name: $name} | format pattern "/rest-service-fecru/admin/users/{name}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2285,7 +2285,7 @@ export def "rest-service-fecru-indexing-status-v1-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/indexing-status-v1/status/($repository)")
+  let full_url = (build-url $base ({repository: $repository} | format pattern "/rest-service-fecru/indexing-status-v1/status/{repository}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2295,7 +2295,7 @@ export def "rest-service-fecru-indexing-status-v1-status get" [
 #
 # GET /rest-service-fecru/recently-visited-v1
 # operationId: getRecent
-export def "rest-service-fecru-recently-visited-v1 get" [
+export def "rest-service-fecru-recently-visited-v1 get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2317,7 +2317,7 @@ export def "rest-service-fecru-recently-visited-v1 get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/detailed
 # operationId: getRecentDetailed
-export def "rest-service-fecru-recently-visited-v1-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2339,7 +2339,7 @@ export def "rest-service-fecru-recently-visited-v1-detailed get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/projects
 # operationId: getRecentProjects
-export def "rest-service-fecru-recently-visited-v1-projects get" [
+export def "rest-service-fecru-recently-visited-v1-projects get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2361,7 +2361,7 @@ export def "rest-service-fecru-recently-visited-v1-projects get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/projects/detailed
 # operationId: getRecentProjectsDetailed
-export def "rest-service-fecru-recently-visited-v1-projects-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-projects-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2383,7 +2383,7 @@ export def "rest-service-fecru-recently-visited-v1-projects-detailed get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/repositories
 # operationId: getRecentRepositories
-export def "rest-service-fecru-recently-visited-v1-repositories get" [
+export def "rest-service-fecru-recently-visited-v1-repositories get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2405,7 +2405,7 @@ export def "rest-service-fecru-recently-visited-v1-repositories get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/repositories/detailed
 # operationId: getRecentRepositoriesDetailed
-export def "rest-service-fecru-recently-visited-v1-repositories-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-repositories-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2427,7 +2427,7 @@ export def "rest-service-fecru-recently-visited-v1-repositories-detailed get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/reviews
 # operationId: getRecentReviews
-export def "rest-service-fecru-recently-visited-v1-reviews get" [
+export def "rest-service-fecru-recently-visited-v1-reviews get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2449,7 +2449,7 @@ export def "rest-service-fecru-recently-visited-v1-reviews get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/reviews/detailed
 # operationId: getRecentReviewsDetailed
-export def "rest-service-fecru-recently-visited-v1-reviews-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-reviews-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2471,7 +2471,7 @@ export def "rest-service-fecru-recently-visited-v1-reviews-detailed get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/snippets
 # operationId: getRecentSnippets
-export def "rest-service-fecru-recently-visited-v1-snippets get" [
+export def "rest-service-fecru-recently-visited-v1-snippets get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2493,7 +2493,7 @@ export def "rest-service-fecru-recently-visited-v1-snippets get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/snippets/detailed
 # operationId: getRecentSnippetsDetailed
-export def "rest-service-fecru-recently-visited-v1-snippets-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-snippets-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2515,7 +2515,7 @@ export def "rest-service-fecru-recently-visited-v1-snippets-detailed get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/users
 # operationId: getRecentUsers
-export def "rest-service-fecru-recently-visited-v1-users get" [
+export def "rest-service-fecru-recently-visited-v1-users get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2537,7 +2537,7 @@ export def "rest-service-fecru-recently-visited-v1-users get" [
 #
 # GET /rest-service-fecru/recently-visited-v1/users/detailed
 # operationId: getRecentUsersDetailed
-export def "rest-service-fecru-recently-visited-v1-users-detailed get" [
+export def "rest-service-fecru-recently-visited-v1-users-detailed get-recent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2559,7 +2559,7 @@ export def "rest-service-fecru-recently-visited-v1-users-detailed get" [
 #
 # GET /rest-service-fecru/server-v1
 # operationId: getInfo
-export def "rest-service-fecru-server-v1 get" [
+export def "rest-service-fecru-server-v1 get-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2624,7 +2624,7 @@ export def "rest-service-fecru-user-prefs-v1 setPref" [
 #
 # GET /rest-service-fecru/user-prefs-v1/{property}
 # operationId: getGlobalPref
-export def "rest-service-fecru-user-prefs-v1 list" [
+export def "rest-service-fecru-user-prefs-v1 get-global" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2637,7 +2637,7 @@ export def "rest-service-fecru-user-prefs-v1 list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/user-prefs-v1/($property)")
+  let full_url = (build-url $base ({property: $property} | format pattern "/rest-service-fecru/user-prefs-v1/{property}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2647,9 +2647,9 @@ export def "rest-service-fecru-user-prefs-v1 list" [
 #
 # GET /rest-service-fecru/user-prefs-v1/{repository}/{property}
 # operationId: getRepoPref
-export def "rest-service-fecru-user-prefs-v1 get" [
-  property: string
+export def "rest-service-fecru-user-prefs-v1 get-repo" [
   repository: string
+  property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2661,7 +2661,7 @@ export def "rest-service-fecru-user-prefs-v1 get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest-service-fecru/user-prefs-v1/($repository)/($property)")
+  let full_url = (build-url $base ({repository: $repository, property: $property} | format pattern "/rest-service-fecru/user-prefs-v1/{repository}/{property}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

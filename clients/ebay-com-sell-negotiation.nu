@@ -104,13 +104,13 @@ export def "find-eligible-items findEligibleItems" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # This query parameter specifies the maximum number of items to return from the result set on a page in the paginated response. Minimum: 1 &nbsp; &nbsp;Maximum: 200 Default: 10
   --offset: string # This query parameter specifies the number of results to skip in the result set before returning the first result in the paginated response. Combine offset with the limit query parameter to control the items returned in the response. For example, if you supply an offset of 0 and a limit of 10, the first page of the response contains the first 10 results from the complete list of items retrieved by the call. If offset is 10 and limit is 20, the first page of the response contains items 11-30 from the complete result set. Default: 0
-  --X-EBAY-C-MARKETPLACE-ID: string # The eBay marketplace on which you want to search for eligible listings. For a complete list of supported marketplaces, see Negotiation API requirements and restrictions.
+  --x-ebay-c-marketplace-id: string # The eBay marketplace on which you want to search for eligible listings. For a complete list of supported marketplaces, see Negotiation API requirements and restrictions.
 ]: nothing -> record<eligibleItems: table<listingId: string>, href: string, limit: int, next: string, offset: int, prev: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/find_eligible_items" $qp)
-  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $X_EBAY_C_MARKETPLACE_ID} | compact
+  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -123,7 +123,7 @@ export def "find-eligible-items findEligibleItems" [
 # operationId: sendOfferToInterestedBuyers
 # --offerDuration shape: {unit?: string, value?: int}
 # --offeredItems item shape: {discountPercentage?: string, listingId?: string, price?: record, quantity?: int}
-export def "send-offer-to-interested-buyers sendOfferToInterestedBuyers" [
+export def "send-offer-to-interested-buyers send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,19 +132,19 @@ export def "send-offer-to-interested-buyers sendOfferToInterestedBuyers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-EBAY-C-MARKETPLACE-ID: string # The eBay marketplace on which your listings with &quot;eligible&quot; buyers appear. For a complete list of supported marketplaces, see Negotiation API requirements and restrictions.
-  --allowCounterOffer: oneof<nothing, bool> # If set to true, the buyer is allowed to make a counter-offer to the seller's offer. Note: Currently, you must set this field to false; counter-offers are not supported in this release. Default: false
+  --x-ebay-c-marketplace-id: string # The eBay marketplace on which your listings with &quot;eligible&quot; buyers appear. For a complete list of supported marketplaces, see Negotiation API requirements and restrictions.
+  --allow-counter-offer: oneof<nothing, bool> # If set to true, the buyer is allowed to make a counter-offer to the seller's offer. Note: Currently, you must set this field to false; counter-offers are not supported in this release. Default: false
   --message: string # A seller-defined message related to the offer being made. This message is sent to the list of &quot;interested&quot; buyers. To increase the conversion rate of the offers a seller makes to buyers, eBay recommends you always add a customized message to your offers. Maximum length: 2,000 characters
-  --offerDuration: record # A complex type that specifies a period of time using a specified time-measurement unit. — shape: {unit?: string, value?: int}
-  --offeredItems: list # An array of objects where each object contains the details of an offer and the ID of the listing on which the offer is being made. Note that the service does not currently support the creation of multiple offers with a single call to sendOfferToInterestedBuyer. With this, each request can target only one listing at a time and you must populate this array with a single element that contains the details of one offer. — item shape: {discountPercentage?: string, listingId?: string, price?: record, quantity?: int}
+  --offer-duration: record # A complex type that specifies a period of time using a specified time-measurement unit. — shape: {unit?: string, value?: int}
+  --offered-items: list # An array of objects where each object contains the details of an offer and the ID of the listing on which the offer is being made. Note that the service does not currently support the creation of multiple offers with a single call to sendOfferToInterestedBuyer. With this, each request can target only one listing at a time and you must populate this array with a single element that contains the details of one offer. — item shape: {discountPercentage?: string, listingId?: string, price?: record, quantity?: int}
 ]: any -> record<offers: table<allowCounterOffer: bool, buyer: record, creationDate: string, initiatedBy: string, lastModifiedDate: string, message: string, offerDuration: record, offerId: string, offerStatus: string, offerType: string, offeredItems: list, revision: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/send_offer_to_interested_buyers")
-  let body = {allowCounterOffer: $allowCounterOffer, message: $message, offerDuration: $offerDuration, offeredItems: $offeredItems} | compact
+  let body = {"allowCounterOffer": $allow_counter_offer, "message": $message, "offerDuration": $offer_duration, "offeredItems": $offered_items} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $X_EBAY_C_MARKETPLACE_ID} | compact
+  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

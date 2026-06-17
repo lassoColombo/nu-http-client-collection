@@ -68,9 +68,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def exportToSecurityCommandCenter-completer [] { ["DISABLED" "ENABLED" "EXPORT_TO_SECURITY_COMMAND_CENTER_UNSPECIFIED"] }
-def riskLevel-completer [] { ["LOW" "NORMAL" "RISK_LEVEL_UNSPECIFIED"] }
-def userAgent-completer [] { ["CHROME_ANDROID" "CHROME_LINUX" "SAFARI_IPHONE" "USER_AGENT_UNSPECIFIED"] }
+def export-to-security-command-center-completer [] { ["DISABLED" "ENABLED" "EXPORT_TO_SECURITY_COMMAND_CENTER_UNSPECIFIED"] }
+def risk-level-completer [] { ["LOW" "NORMAL" "RISK_LEVEL_UNSPECIFIED"] }
+def user-agent-completer [] { ["CHROME_ANDROID" "CHROME_LINUX" "SAFARI_IPHONE" "USER_AGENT_UNSPECIFIED"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -116,15 +116,15 @@ export def "v1beta websecurityscannerprojectsscanConfigsdelete" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,15 +151,15 @@ export def "v1beta websecurityscannerprojectsscanConfigsscanRunsfindingsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<body: string, description: string, finalUrl: string, findingType: string, form: record<actionUri: string, fields: list<string>>, frameUrl: string, fuzzedUrl: string, httpMethod: string, name: string, outdatedLibrary: record<learnMoreUrls: list<string>, libraryName: string, version: string>, reproductionUrl: string, severity: string, trackingId: string, violatingResource: record<contentType: string, resourceUrl: string>, vulnerableHeaders: record<headers: list<record>, missingHeaders: list<record>>, vulnerableParameters: record<parameterNames: list<string>>, xss: record<errorMessage: string, stackTraces: list<string>>, xxe: record<payloadLocation: string, payloadValue: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($name)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,33 +189,33 @@ export def "v1beta websecurityscannerprojectsscanConfigspatch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # Required. The update mask applies to the resource. For the `FieldMask` definition, see https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#fieldmask
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # Required. The update mask applies to the resource. For the `FieldMask` definition, see https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#fieldmask
   --authentication: record # Scan authentication configuration. — shape: {customAccount?: record, googleAccount?: record, iapCredential?: record}
-  --blacklistPatterns: list # The excluded URL patterns as described in https://cloud.google.com/security-command-center/docs/how-to-use-web-security-scanner#excluding_urls
-  --displayName: string # Required. The user provided display name of the ScanConfig.
-  --exportToSecurityCommandCenter: string@exportToSecurityCommandCenter-completer # Controls export of scan configurations and results to Security Command Center.
-  --ignoreHttpStatusErrors: oneof<nothing, bool> # Whether to keep scanning even if most requests return HTTP error codes.
-  --latestRun: record # A ScanRun is a output-only resource representing an actual run of the scan. Next id: 12 — shape: {endTime?: string, errorTrace?: record, executionState?: "EXECUTION_STATE_UNSPECIFIED"|"QUEUED"|"SCANNING"|"FINISHED", hasVulnerabilities?: bool, name?: string, progressPercent?: int, resultState?: "RESULT_STATE_UNSPECIFIED"|"SUCCESS"|"ERROR"|"KILLED", startTime?: string, urlsCrawledCount?: string, urlsTestedCount?: string, warningTraces?: list}
-  --managedScan: oneof<nothing, bool> # Whether the scan config is managed by Web Security Scanner, output only.
-  --maxQps: int # The maximum QPS during scanning. A valid value ranges from 5 to 20 inclusively. If the field is unspecified or its value is set 0, server will default to 15. Other values outside of [5, 20] range will be rejected with INVALID_ARGUMENT error. (format: int32)
+  --blacklist-patterns: list # The excluded URL patterns as described in https://cloud.google.com/security-command-center/docs/how-to-use-web-security-scanner#excluding_urls
+  --display-name: string # Required. The user provided display name of the ScanConfig.
+  --export-to-security-command-center: string@export-to-security-command-center-completer # Controls export of scan configurations and results to Security Command Center.
+  --ignore-http-status-errors: oneof<nothing, bool> # Whether to keep scanning even if most requests return HTTP error codes.
+  --latest-run: record # A ScanRun is a output-only resource representing an actual run of the scan. Next id: 12 — shape: {endTime?: string, errorTrace?: record, executionState?: "EXECUTION_STATE_UNSPECIFIED"|"QUEUED"|"SCANNING"|"FINISHED", hasVulnerabilities?: bool, name?: string, progressPercent?: int, resultState?: "RESULT_STATE_UNSPECIFIED"|"SUCCESS"|"ERROR"|"KILLED", startTime?: string, urlsCrawledCount?: string, urlsTestedCount?: string, warningTraces?: list}
+  --managed-scan: oneof<nothing, bool> # Whether the scan config is managed by Web Security Scanner, output only.
+  --max-qps: int # The maximum QPS during scanning. A valid value ranges from 5 to 20 inclusively. If the field is unspecified or its value is set 0, server will default to 15. Other values outside of [5, 20] range will be rejected with INVALID_ARGUMENT error. (format: int32)
   --body-name: string # The resource name of the ScanConfig. The name follows the format of 'projects/{projectId}/scanConfigs/{scanConfigId}'. The ScanConfig IDs are generated by the system.
-  --riskLevel: string@riskLevel-completer # The risk level selected for the scan
+  --risk-level: string@risk-level-completer # The risk level selected for the scan
   --schedule: record # Scan schedule configuration. — shape: {intervalDurationDays?: int, scheduleTime?: string}
-  --startingUrls: list # Required. The starting URLs from which the scanner finds site pages.
-  --staticIpScan: oneof<nothing, bool> # Whether the scan configuration has enabled static IP address scan feature. If enabled, the scanner will access applications from static IP addresses.
-  --targetPlatforms: list # Set of Google Cloud platforms targeted by the scan. If empty, APP_ENGINE will be used as a default.
-  --userAgent: string@userAgent-completer # The user agent used during scanning.
+  --starting-urls: list # Required. The starting URLs from which the scanner finds site pages.
+  --static-ip-scan: oneof<nothing, bool> # Whether the scan configuration has enabled static IP address scan feature. If enabled, the scanner will access applications from static IP addresses.
+  --target-platforms: list # Set of Google Cloud platforms targeted by the scan. If empty, APP_ENGINE will be used as a default.
+  --user-agent: string@user-agent-completer # The user agent used during scanning.
 ]: any -> record<authentication: record<customAccount: record<loginUrl: string, password: string, username: string>, googleAccount: record<password: string, username: string>, iapCredential: record<iapTestServiceAccountInfo: record>>, blacklistPatterns: list<string>, displayName: string, exportToSecurityCommandCenter: string, ignoreHttpStatusErrors: bool, latestRun: record<endTime: string, errorTrace: record<code: string, mostCommonHttpErrorCode: int, scanConfigError: record>, executionState: string, hasVulnerabilities: bool, name: string, progressPercent: int, resultState: string, startTime: string, urlsCrawledCount: string, urlsTestedCount: string, warningTraces: list<record>>, managedScan: bool, maxQps: int, name: string, riskLevel: string, schedule: record<intervalDurationDays: int, scheduleTime: string>, startingUrls: list<string>, staticIpScan: bool, targetPlatforms: list<string>, userAgent: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($name)" $qp)
-  let body = {authentication: $authentication, blacklistPatterns: $blacklistPatterns, displayName: $displayName, exportToSecurityCommandCenter: $exportToSecurityCommandCenter, ignoreHttpStatusErrors: $ignoreHttpStatusErrors, latestRun: $latestRun, managedScan: $managedScan, maxQps: $maxQps, name: $body_name, riskLevel: $riskLevel, schedule: $schedule, startingUrls: $startingUrls, staticIpScan: $staticIpScan, targetPlatforms: $targetPlatforms, userAgent: $userAgent} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}") $qp)
+  let body = {"authentication": $authentication, "blacklistPatterns": $blacklist_patterns, "displayName": $display_name, "exportToSecurityCommandCenter": $export_to_security_command_center, "ignoreHttpStatusErrors": $ignore_http_status_errors, "latestRun": $latest_run, "managedScan": $managed_scan, "maxQps": $max_qps, "name": $body_name, "riskLevel": $risk_level, "schedule": $schedule, "startingUrls": $starting_urls, "staticIpScan": $static_ip_scan, "targetPlatforms": $target_platforms, "userAgent": $user_agent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -243,17 +243,17 @@ export def "v1beta websecurityscannerprojectsscanConfigsstart" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record<endTime: string, errorTrace: record<code: string, mostCommonHttpErrorCode: int, scanConfigError: record<code: string, fieldName: string>>, executionState: string, hasVulnerabilities: bool, name: string, progressPercent: int, resultState: string, startTime: string, urlsCrawledCount: string, urlsTestedCount: string, warningTraces: table<code: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($name):start" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}:start") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,17 +281,17 @@ export def "v1beta websecurityscannerprojectsscanConfigsscanRunsstop" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
 ]: any -> record<endTime: string, errorTrace: record<code: string, mostCommonHttpErrorCode: int, scanConfigError: record<code: string, fieldName: string>>, executionState: string, hasVulnerabilities: bool, name: string, progressPercent: int, resultState: string, startTime: string, urlsCrawledCount: string, urlsTestedCount: string, warningTraces: table<code: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($name):stop" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v1beta/{name}:stop") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -319,17 +319,17 @@ export def "v1beta-crawled-urls websecurityscannerprojectsscanConfigsscanRunscra
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # The maximum number of CrawledUrls to return, can be limited by server. If not specified or not positive, the implementation will select a reasonable value.
-  --pageToken: string # A token identifying a page of results to be returned. This should be a `next_page_token` value returned from a previous List request. If unspecified, the first page of results is returned.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # The maximum number of CrawledUrls to return, can be limited by server. If not specified or not positive, the implementation will select a reasonable value.
+  --page-token: string # A token identifying a page of results to be returned. This should be a `next_page_token` value returned from a previous List request. If unspecified, the first page of results is returned.
 ]: nothing -> record<crawledUrls: table<body: string, httpMethod: string, url: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($parent)/crawledUrls" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/crawledUrls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -356,15 +356,15 @@ export def "v1beta-finding-type-stats websecurityscannerprojectsscanConfigsscanR
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<findingTypeStats: table<findingCount: int, findingType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($parent)/findingTypeStats" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/findingTypeStats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,18 +391,18 @@ export def "v1beta-findings websecurityscannerprojectsscanConfigsscanRunsfinding
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Required. The filter expression. The expression must be in the format: . Supported field: 'finding_type'. Supported operator: '='.
-  --pageSize: int # The maximum number of Findings to return, can be limited by server. If not specified or not positive, the implementation will select a reasonable value.
-  --pageToken: string # A token identifying a page of results to be returned. This should be a `next_page_token` value returned from a previous List request. If unspecified, the first page of results is returned.
+  --page-size: int # The maximum number of Findings to return, can be limited by server. If not specified or not positive, the implementation will select a reasonable value.
+  --page-token: string # A token identifying a page of results to be returned. This should be a `next_page_token` value returned from a previous List request. If unspecified, the first page of results is returned.
 ]: nothing -> record<findings: table<body: string, description: string, finalUrl: string, findingType: string, form: record, frameUrl: string, fuzzedUrl: string, httpMethod: string, name: string, outdatedLibrary: record, reproductionUrl: string, severity: string, trackingId: string, violatingResource: record, vulnerableHeaders: record, vulnerableParameters: record, xss: record, xxe: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($parent)/findings" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/findings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,17 +429,17 @@ export def "v1beta-scan-configs websecurityscannerprojectsscanConfigslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # The maximum number of ScanConfigs to return, can be limited by server. If not specified or not positive, the implementation will select a reasonable value.
-  --pageToken: string # A token identifying a page of results to be returned. This should be a `next_page_token` value returned from a previous List request. If unspecified, the first page of results is returned.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # The maximum number of ScanConfigs to return, can be limited by server. If not specified or not positive, the implementation will select a reasonable value.
+  --page-token: string # A token identifying a page of results to be returned. This should be a `next_page_token` value returned from a previous List request. If unspecified, the first page of results is returned.
 ]: nothing -> record<nextPageToken: string, scanConfigs: table<authentication: record, blacklistPatterns: list, displayName: string, exportToSecurityCommandCenter: string, ignoreHttpStatusErrors: bool, latestRun: record, managedScan: bool, maxQps: int, name: string, riskLevel: string, schedule: record, startingUrls: list, staticIpScan: bool, targetPlatforms: list, userAgent: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($parent)/scanConfigs" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/scanConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -469,32 +469,32 @@ export def "v1beta-scan-configs websecurityscannerprojectsscanConfigscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --authentication: record # Scan authentication configuration. — shape: {customAccount?: record, googleAccount?: record, iapCredential?: record}
-  --blacklistPatterns: list # The excluded URL patterns as described in https://cloud.google.com/security-command-center/docs/how-to-use-web-security-scanner#excluding_urls
-  --displayName: string # Required. The user provided display name of the ScanConfig.
-  --exportToSecurityCommandCenter: string@exportToSecurityCommandCenter-completer # Controls export of scan configurations and results to Security Command Center.
-  --ignoreHttpStatusErrors: oneof<nothing, bool> # Whether to keep scanning even if most requests return HTTP error codes.
-  --latestRun: record # A ScanRun is a output-only resource representing an actual run of the scan. Next id: 12 — shape: {endTime?: string, errorTrace?: record, executionState?: "EXECUTION_STATE_UNSPECIFIED"|"QUEUED"|"SCANNING"|"FINISHED", hasVulnerabilities?: bool, name?: string, progressPercent?: int, resultState?: "RESULT_STATE_UNSPECIFIED"|"SUCCESS"|"ERROR"|"KILLED", startTime?: string, urlsCrawledCount?: string, urlsTestedCount?: string, warningTraces?: list}
-  --managedScan: oneof<nothing, bool> # Whether the scan config is managed by Web Security Scanner, output only.
-  --maxQps: int # The maximum QPS during scanning. A valid value ranges from 5 to 20 inclusively. If the field is unspecified or its value is set 0, server will default to 15. Other values outside of [5, 20] range will be rejected with INVALID_ARGUMENT error. (format: int32)
+  --blacklist-patterns: list # The excluded URL patterns as described in https://cloud.google.com/security-command-center/docs/how-to-use-web-security-scanner#excluding_urls
+  --display-name: string # Required. The user provided display name of the ScanConfig.
+  --export-to-security-command-center: string@export-to-security-command-center-completer # Controls export of scan configurations and results to Security Command Center.
+  --ignore-http-status-errors: oneof<nothing, bool> # Whether to keep scanning even if most requests return HTTP error codes.
+  --latest-run: record # A ScanRun is a output-only resource representing an actual run of the scan. Next id: 12 — shape: {endTime?: string, errorTrace?: record, executionState?: "EXECUTION_STATE_UNSPECIFIED"|"QUEUED"|"SCANNING"|"FINISHED", hasVulnerabilities?: bool, name?: string, progressPercent?: int, resultState?: "RESULT_STATE_UNSPECIFIED"|"SUCCESS"|"ERROR"|"KILLED", startTime?: string, urlsCrawledCount?: string, urlsTestedCount?: string, warningTraces?: list}
+  --managed-scan: oneof<nothing, bool> # Whether the scan config is managed by Web Security Scanner, output only.
+  --max-qps: int # The maximum QPS during scanning. A valid value ranges from 5 to 20 inclusively. If the field is unspecified or its value is set 0, server will default to 15. Other values outside of [5, 20] range will be rejected with INVALID_ARGUMENT error. (format: int32)
   --name: string # The resource name of the ScanConfig. The name follows the format of 'projects/{projectId}/scanConfigs/{scanConfigId}'. The ScanConfig IDs are generated by the system.
-  --riskLevel: string@riskLevel-completer # The risk level selected for the scan
+  --risk-level: string@risk-level-completer # The risk level selected for the scan
   --schedule: record # Scan schedule configuration. — shape: {intervalDurationDays?: int, scheduleTime?: string}
-  --startingUrls: list # Required. The starting URLs from which the scanner finds site pages.
-  --staticIpScan: oneof<nothing, bool> # Whether the scan configuration has enabled static IP address scan feature. If enabled, the scanner will access applications from static IP addresses.
-  --targetPlatforms: list # Set of Google Cloud platforms targeted by the scan. If empty, APP_ENGINE will be used as a default.
-  --userAgent: string@userAgent-completer # The user agent used during scanning.
+  --starting-urls: list # Required. The starting URLs from which the scanner finds site pages.
+  --static-ip-scan: oneof<nothing, bool> # Whether the scan configuration has enabled static IP address scan feature. If enabled, the scanner will access applications from static IP addresses.
+  --target-platforms: list # Set of Google Cloud platforms targeted by the scan. If empty, APP_ENGINE will be used as a default.
+  --user-agent: string@user-agent-completer # The user agent used during scanning.
 ]: any -> record<authentication: record<customAccount: record<loginUrl: string, password: string, username: string>, googleAccount: record<password: string, username: string>, iapCredential: record<iapTestServiceAccountInfo: record>>, blacklistPatterns: list<string>, displayName: string, exportToSecurityCommandCenter: string, ignoreHttpStatusErrors: bool, latestRun: record<endTime: string, errorTrace: record<code: string, mostCommonHttpErrorCode: int, scanConfigError: record>, executionState: string, hasVulnerabilities: bool, name: string, progressPercent: int, resultState: string, startTime: string, urlsCrawledCount: string, urlsTestedCount: string, warningTraces: list<record>>, managedScan: bool, maxQps: int, name: string, riskLevel: string, schedule: record<intervalDurationDays: int, scheduleTime: string>, startingUrls: list<string>, staticIpScan: bool, targetPlatforms: list<string>, userAgent: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($parent)/scanConfigs" $qp)
-  let body = {authentication: $authentication, blacklistPatterns: $blacklistPatterns, displayName: $displayName, exportToSecurityCommandCenter: $exportToSecurityCommandCenter, ignoreHttpStatusErrors: $ignoreHttpStatusErrors, latestRun: $latestRun, managedScan: $managedScan, maxQps: $maxQps, name: $name, riskLevel: $riskLevel, schedule: $schedule, startingUrls: $startingUrls, staticIpScan: $staticIpScan, targetPlatforms: $targetPlatforms, userAgent: $userAgent} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/scanConfigs") $qp)
+  let body = {"authentication": $authentication, "blacklistPatterns": $blacklist_patterns, "displayName": $display_name, "exportToSecurityCommandCenter": $export_to_security_command_center, "ignoreHttpStatusErrors": $ignore_http_status_errors, "latestRun": $latest_run, "managedScan": $managed_scan, "maxQps": $max_qps, "name": $name, "riskLevel": $risk_level, "schedule": $schedule, "startingUrls": $starting_urls, "staticIpScan": $static_ip_scan, "targetPlatforms": $target_platforms, "userAgent": $user_agent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -522,17 +522,17 @@ export def "v1beta-scan-runs websecurityscannerprojectsscanConfigsscanRunslist" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # The maximum number of ScanRuns to return, can be limited by server. If not specified or not positive, the implementation will select a reasonable value.
-  --pageToken: string # A token identifying a page of results to be returned. This should be a `next_page_token` value returned from a previous List request. If unspecified, the first page of results is returned.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # The maximum number of ScanRuns to return, can be limited by server. If not specified or not positive, the implementation will select a reasonable value.
+  --page-token: string # A token identifying a page of results to be returned. This should be a `next_page_token` value returned from a previous List request. If unspecified, the first page of results is returned.
 ]: nothing -> record<nextPageToken: string, scanRuns: table<endTime: string, errorTrace: record, executionState: string, hasVulnerabilities: bool, name: string, progressPercent: int, resultState: string, startTime: string, urlsCrawledCount: string, urlsTestedCount: string, warningTraces: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1beta/($parent)/scanRuns" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1beta/{parent}/scanRuns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

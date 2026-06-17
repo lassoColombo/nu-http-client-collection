@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members ListBySyncGroup" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,12 +93,12 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers
 # operationId: SyncMembers_ListBySyncGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members ListBySyncGroup" [
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  syncGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  sync_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/syncGroups/($syncGroupName)/syncMembers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, sync_group_name: $sync_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/syncGroups/{sync_group_name}/syncMembers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,13 +122,13 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}
 # operationId: SyncMembers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members Delete" [
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  syncGroupName: string
-  syncMemberName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members delete" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  sync_group_name: string
+  sync_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,7 +142,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/syncGroups/($syncGroupName)/syncMembers/($syncMemberName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, sync_group_name: $sync_group_name, sync_member_name: $sync_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/syncGroups/{sync_group_name}/syncMembers/{sync_member_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -152,13 +152,13 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}
 # operationId: SyncMembers_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members Get" [
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  syncGroupName: string
-  syncMemberName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  sync_group_name: string
+  sync_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/syncGroups/($syncGroupName)/syncMembers/($syncMemberName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, sync_group_name: $sync_group_name, sync_member_name: $sync_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/syncGroups/{sync_group_name}/syncMembers/{sync_member_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,13 +183,13 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}
 # operationId: SyncMembers_Update
 # --properties shape: {databaseName?: string, databaseType?: "AzureSqlDatabase"|"SqlServerDatabase", password?: string, serverName?: string, sqlServerDatabaseId?: string, syncAgentId?: string, syncDirection?: "Bidirectional"|"OneWayMemberToHub"|"OneWayHubToMember", userName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members Update" [
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  syncGroupName: string
-  syncMemberName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  sync_group_name: string
+  sync_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,8 +205,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/syncGroups/($syncGroupName)/syncMembers/($syncMemberName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, sync_group_name: $sync_group_name, sync_member_name: $sync_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/syncGroups/{sync_group_name}/syncMembers/{sync_member_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -218,13 +218,13 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}
 # operationId: SyncMembers_CreateOrUpdate
 # --properties shape: {databaseName?: string, databaseType?: "AzureSqlDatabase"|"SqlServerDatabase", password?: string, serverName?: string, sqlServerDatabaseId?: string, syncAgentId?: string, syncDirection?: "Bidirectional"|"OneWayMemberToHub"|"OneWayHubToMember", userName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members CreateOrUpdate" [
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  syncGroupName: string
-  syncMemberName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  sync_group_name: string
+  sync_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,8 +240,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/syncGroups/($syncGroupName)/syncMembers/($syncMemberName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, sync_group_name: $sync_group_name, sync_member_name: $sync_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/syncGroups/{sync_group_name}/syncMembers/{sync_member_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -252,13 +252,13 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}/refreshSchema
 # operationId: SyncMembers_RefreshMemberSchema
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members-refresh-schema RefreshMemberSchema" [
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  syncGroupName: string
-  syncMemberName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members-refresh-schema refresh" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  sync_group_name: string
+  sync_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/syncGroups/($syncGroupName)/syncMembers/($syncMemberName)/refreshSchema" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, sync_group_name: $sync_group_name, sync_member_name: $sync_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/syncGroups/{sync_group_name}/syncMembers/{sync_member_name}/refreshSchema") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -282,13 +282,13 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}/schemas
 # operationId: SyncMembers_ListMemberSchemas
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members-schemas ListMemberSchemas" [
-  resourceGroupName: string
-  serverName: string
-  databaseName: string
-  syncGroupName: string
-  syncMemberName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members-schemas list" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  database_name: string
+  sync_group_name: string
+  sync_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/servers/($serverName)/databases/($databaseName)/syncGroups/($syncGroupName)/syncMembers/($syncMemberName)/schemas" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, database_name: $database_name, sync_group_name: $sync_group_name, sync_member_name: $sync_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/servers/{server_name}/databases/{database_name}/syncGroups/{sync_group_name}/syncMembers/{sync_member_name}/schemas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

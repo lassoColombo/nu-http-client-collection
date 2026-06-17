@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "endpoints-invocations InvokeEndpoint" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "endpoints-invocations post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # POST /endpoints/{EndpointName}/invocations
 # operationId: InvokeEndpoint
-export def "endpoints-invocations InvokeEndpoint" [
-  EndpointName: string
+export def "endpoints-invocations post" [
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,30 +103,30 @@ export def "endpoints-invocations InvokeEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --Content-Type: string # The MIME type of the input data in the request body.
-  --Accept: string # The desired MIME type of the inference in the response.
-  --X-Amzn-SageMaker-Custom-Attributes: string # <p>Provides additional information about a request for an inference submitted to a model hosted at an Amazon SageMaker endpoint. The information is an opaque value that is forwarded verbatim. You could use this value, for example, to provide an ID that you can use to track a request or to provide other metadata that a service endpoint was programmed to process. The value must consist of no more than 1024 visible US-ASCII characters as specified in <a href="https://tools.ietf.org/html/rfc7230#section-3.2.6">Section 3.3.6. Field Value Components</a> of the Hypertext Transfer Protocol (HTTP/1.1). </p> <p>The code in your model is responsible for setting or updating any custom attributes in the response. If your code does not set this value in the response, an empty value is returned. For example, if a custom attribute represents the trace ID, your model can prepend the custom attribute with <code>Trace ID:</code> in your post-processing function.</p> <p>This feature is currently supported in the Amazon Web Services SDKs but not in the Amazon SageMaker Python SDK.</p>
-  --X-Amzn-SageMaker-Target-Model: string # The model to request for inference when invoking a multi-model endpoint.
-  --X-Amzn-SageMaker-Target-Variant: string # <p>Specify the production variant to send the inference request to when invoking an endpoint that is running two or more variants. Note that this parameter overrides the default behavior for the endpoint, which is to distribute the invocation traffic based on the variant weights.</p> <p>For information about how to use variant targeting to perform a/b testing, see <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/model-ab-testing.html">Test models in production</a> </p>
-  --X-Amzn-SageMaker-Target-Container-Hostname: string # If the endpoint hosts multiple containers and is configured to use direct invocation, this parameter specifies the host name of the container to invoke.
-  --X-Amzn-SageMaker-Inference-Id: string # If you provide a value, it is added to the captured data when you enable data capture on the endpoint. For information about data capture, see <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/model-monitor-data-capture.html">Capture Data</a>.
-  --X-Amzn-SageMaker-Enable-Explanations: string # An optional JMESPath expression used to override the <code>EnableExplanations</code> parameter of the <code>ClarifyExplainerConfig</code> API. See the <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/clarify-online-explainability-create-endpoint.html#clarify-online-explainability-create-endpoint-enable">EnableExplanations</a> section in the developer guide for more information. 
-  Body: string # <p>Provides input data, in the format specified in the <code>ContentType</code> request header. Amazon SageMaker passes all of the data in the body to the model. </p> <p>For information about the format of the request body, see <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/cdf-inference.html">Common Data Formats-Inference</a>.</p> (format: password)
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --content-type: string # The MIME type of the input data in the request body.
+  --hdr-accept: string # The desired MIME type of the inference in the response.
+  --x-amzn-sage-maker-custom-attributes: string # <p>Provides additional information about a request for an inference submitted to a model hosted at an Amazon SageMaker endpoint. The information is an opaque value that is forwarded verbatim. You could use this value, for example, to provide an ID that you can use to track a request or to provide other metadata that a service endpoint was programmed to process. The value must consist of no more than 1024 visible US-ASCII characters as specified in <a href="https://tools.ietf.org/html/rfc7230#section-3.2.6">Section 3.3.6. Field Value Components</a> of the Hypertext Transfer Protocol (HTTP/1.1). </p> <p>The code in your model is responsible for setting or updating any custom attributes in the response. If your code does not set this value in the response, an empty value is returned. For example, if a custom attribute represents the trace ID, your model can prepend the custom attribute with <code>Trace ID:</code> in your post-processing function.</p> <p>This feature is currently supported in the Amazon Web Services SDKs but not in the Amazon SageMaker Python SDK.</p>
+  --x-amzn-sage-maker-target-model: string # The model to request for inference when invoking a multi-model endpoint.
+  --x-amzn-sage-maker-target-variant: string # <p>Specify the production variant to send the inference request to when invoking an endpoint that is running two or more variants. Note that this parameter overrides the default behavior for the endpoint, which is to distribute the invocation traffic based on the variant weights.</p> <p>For information about how to use variant targeting to perform a/b testing, see <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/model-ab-testing.html">Test models in production</a> </p>
+  --x-amzn-sage-maker-target-container-hostname: string # If the endpoint hosts multiple containers and is configured to use direct invocation, this parameter specifies the host name of the container to invoke.
+  --x-amzn-sage-maker-inference-id: string # If you provide a value, it is added to the captured data when you enable data capture on the endpoint. For information about data capture, see <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/model-monitor-data-capture.html">Capture Data</a>.
+  --x-amzn-sage-maker-enable-explanations: string # An optional JMESPath expression used to override the <code>EnableExplanations</code> parameter of the <code>ClarifyExplainerConfig</code> API. See the <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/clarify-online-explainability-create-endpoint.html#clarify-online-explainability-create-endpoint-enable">EnableExplanations</a> section in the developer guide for more information. 
+  --body-body: string # <p>Provides input data, in the format specified in the <code>ContentType</code> request header. Amazon SageMaker passes all of the data in the body to the model. </p> <p>For information about the format of the request body, see <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/cdf-inference.html">Common Data Formats-Inference</a>.</p> (format: password)
 ]: any -> record<Body: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/endpoints/($EndpointName)/invocations")
-  let body = {Body: $Body} | compact
+  let full_url = (build-url $base ({endpoint_name: $endpoint_name} | format pattern "/endpoints/{endpoint_name}/invocations"))
+  let body = {"Body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "Content-Type": $Content_Type, "Accept": $Accept, "X-Amzn-SageMaker-Custom-Attributes": $X_Amzn_SageMaker_Custom_Attributes, "X-Amzn-SageMaker-Target-Model": $X_Amzn_SageMaker_Target_Model, "X-Amzn-SageMaker-Target-Variant": $X_Amzn_SageMaker_Target_Variant, "X-Amzn-SageMaker-Target-Container-Hostname": $X_Amzn_SageMaker_Target_Container_Hostname, "X-Amzn-SageMaker-Inference-Id": $X_Amzn_SageMaker_Inference_Id, "X-Amzn-SageMaker-Enable-Explanations": $X_Amzn_SageMaker_Enable_Explanations} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Content-Type": $content_type, "Accept": $hdr_accept, "X-Amzn-SageMaker-Custom-Attributes": $x_amzn_sage_maker_custom_attributes, "X-Amzn-SageMaker-Target-Model": $x_amzn_sage_maker_target_model, "X-Amzn-SageMaker-Target-Variant": $x_amzn_sage_maker_target_variant, "X-Amzn-SageMaker-Target-Container-Hostname": $x_amzn_sage_maker_target_container_hostname, "X-Amzn-SageMaker-Inference-Id": $x_amzn_sage_maker_inference_id, "X-Amzn-SageMaker-Enable-Explanations": $x_amzn_sage_maker_enable_explanations} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -137,8 +137,8 @@ export def "endpoints-invocations InvokeEndpoint" [
 #
 # POST /endpoints/{EndpointName}/async-invocations#X-Amzn-SageMaker-InputLocation
 # operationId: InvokeEndpointAsync
-export def "endpoints-async-invocations-x-amzn-sage-maker-input-location InvokeEndpointAsync" [
-  EndpointName: string
+export def "endpoints-async-invocations-x-amzn-sage-maker-input-location post" [
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,25 +147,25 @@ export def "endpoints-async-invocations-x-amzn-sage-maker-input-location InvokeE
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amzn-SageMaker-Content-Type: string # The MIME type of the input data in the request body.
-  --X-Amzn-SageMaker-Accept: string # The desired MIME type of the inference in the response.
-  --X-Amzn-SageMaker-Custom-Attributes: string # <p>Provides additional information about a request for an inference submitted to a model hosted at an Amazon SageMaker endpoint. The information is an opaque value that is forwarded verbatim. You could use this value, for example, to provide an ID that you can use to track a request or to provide other metadata that a service endpoint was programmed to process. The value must consist of no more than 1024 visible US-ASCII characters as specified in <a href="https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6">Section 3.3.6. Field Value Components</a> of the Hypertext Transfer Protocol (HTTP/1.1). </p> <p>The code in your model is responsible for setting or updating any custom attributes in the response. If your code does not set this value in the response, an empty value is returned. For example, if a custom attribute represents the trace ID, your model can prepend the custom attribute with <code>Trace ID</code>: in your post-processing function. </p> <p>This feature is currently supported in the Amazon Web Services SDKs but not in the Amazon SageMaker Python SDK. </p>
-  --X-Amzn-SageMaker-Inference-Id: string # The identifier for the inference request. Amazon SageMaker will generate an identifier for you if none is specified. 
-  --X-Amzn-SageMaker-InputLocation: string # The Amazon S3 URI where the inference request payload is stored.
-  --X-Amzn-SageMaker-RequestTTLSeconds: int # Maximum age in seconds a request can be in the queue before it is marked as expired. The default is 6 hours, or 21,600 seconds.
-  --X-Amzn-SageMaker-InvocationTimeoutSeconds: int # Maximum amount of time in seconds a request can be processed before it is marked as expired. The default is 15 minutes, or 900 seconds.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amzn-sage-maker-content-type: string # The MIME type of the input data in the request body.
+  --x-amzn-sage-maker-accept: string # The desired MIME type of the inference in the response.
+  --x-amzn-sage-maker-custom-attributes: string # <p>Provides additional information about a request for an inference submitted to a model hosted at an Amazon SageMaker endpoint. The information is an opaque value that is forwarded verbatim. You could use this value, for example, to provide an ID that you can use to track a request or to provide other metadata that a service endpoint was programmed to process. The value must consist of no more than 1024 visible US-ASCII characters as specified in <a href="https://datatracker.ietf.org/doc/html/rfc7230#section-3.2.6">Section 3.3.6. Field Value Components</a> of the Hypertext Transfer Protocol (HTTP/1.1). </p> <p>The code in your model is responsible for setting or updating any custom attributes in the response. If your code does not set this value in the response, an empty value is returned. For example, if a custom attribute represents the trace ID, your model can prepend the custom attribute with <code>Trace ID</code>: in your post-processing function. </p> <p>This feature is currently supported in the Amazon Web Services SDKs but not in the Amazon SageMaker Python SDK. </p>
+  --x-amzn-sage-maker-inference-id: string # The identifier for the inference request. Amazon SageMaker will generate an identifier for you if none is specified. 
+  --x-amzn-sage-maker-input-location: string # The Amazon S3 URI where the inference request payload is stored.
+  --x-amzn-sage-maker-request-ttl-seconds: int # Maximum age in seconds a request can be in the queue before it is marked as expired. The default is 6 hours, or 21,600 seconds.
+  --x-amzn-sage-maker-invocation-timeout-seconds: int # Maximum amount of time in seconds a request can be processed before it is marked as expired. The default is 15 minutes, or 900 seconds.
 ]: nothing -> record<InferenceId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/endpoints/($EndpointName)/async-invocations#X-Amzn-SageMaker-InputLocation")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amzn-SageMaker-Content-Type": $X_Amzn_SageMaker_Content_Type, "X-Amzn-SageMaker-Accept": $X_Amzn_SageMaker_Accept, "X-Amzn-SageMaker-Custom-Attributes": $X_Amzn_SageMaker_Custom_Attributes, "X-Amzn-SageMaker-Inference-Id": $X_Amzn_SageMaker_Inference_Id, "X-Amzn-SageMaker-InputLocation": $X_Amzn_SageMaker_InputLocation, "X-Amzn-SageMaker-RequestTTLSeconds": $X_Amzn_SageMaker_RequestTTLSeconds, "X-Amzn-SageMaker-InvocationTimeoutSeconds": $X_Amzn_SageMaker_InvocationTimeoutSeconds} | compact
+  let full_url = (build-url $base ({endpoint_name: $endpoint_name} | format pattern "/endpoints/{endpoint_name}/async-invocations#X-Amzn-SageMaker-InputLocation"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amzn-SageMaker-Content-Type": $x_amzn_sage_maker_content_type, "X-Amzn-SageMaker-Accept": $x_amzn_sage_maker_accept, "X-Amzn-SageMaker-Custom-Attributes": $x_amzn_sage_maker_custom_attributes, "X-Amzn-SageMaker-Inference-Id": $x_amzn_sage_maker_inference_id, "X-Amzn-SageMaker-InputLocation": $x_amzn_sage_maker_input_location, "X-Amzn-SageMaker-RequestTTLSeconds": $x_amzn_sage_maker_request_ttl_seconds, "X-Amzn-SageMaker-InvocationTimeoutSeconds": $x_amzn_sage_maker_invocation_timeout_seconds} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

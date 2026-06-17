@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://events.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
-def SinkType-completer [] { ["kinesis" "segment" "webhook"] }
+def sink-type-completer [] { ["kinesis" "segment" "webhook"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "schemas FetchSchema" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "schemas get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,8 +95,8 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Schemas/{Id}
 # operationId: FetchSchema
-export def "schemas FetchSchema" [
-  Id: string
+export def "schemas get" [
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "schemas FetchSchema" [
 ]: nothing -> record<id: string, latest_version: int, latest_version_date_created: string, links: record, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Schemas/($Id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/Schemas/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,8 +118,8 @@ export def "schemas FetchSchema" [
 #
 # GET /v1/Schemas/{Id}/Versions
 # operationId: ListSchemaVersion
-export def "schemas-versions ListSchemaVersion" [
-  Id: string
+export def "schemas-versions list" [
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,14 +128,14 @@ export def "schemas-versions ListSchemaVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, schema_versions: table<date_created: string, id: string, raw: string, schema_version: int, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Schemas/($Id)/Versions" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/Schemas/{id}/Versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,9 +145,9 @@ export def "schemas-versions ListSchemaVersion" [
 #
 # GET /v1/Schemas/{Id}/Versions/{SchemaVersion}
 # operationId: FetchSchemaVersion
-export def "schemas-versions FetchSchemaVersion" [
-  Id: string
-  SchemaVersion: int
+export def "schemas-versions get" [
+  id: string
+  schema_version: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "schemas-versions FetchSchemaVersion" [
 ]: nothing -> record<date_created: string, id: string, raw: string, schema_version: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Schemas/($Id)/Versions/($SchemaVersion)")
+  let full_url = (build-url $base ({id: $id, schema_version: $schema_version} | format pattern "/v1/Schemas/{id}/Versions/{schema_version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,7 +169,7 @@ export def "schemas-versions FetchSchemaVersion" [
 #
 # GET /v1/Sinks
 # operationId: ListSink
-export def "sinks ListSink" [
+export def "sinks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,15 +178,15 @@ export def "sinks ListSink" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --InUse: oneof<nothing, bool> # A boolean query parameter filtering the results to return sinks used/not used by a subscription.
-  --Status: string # A String query parameter filtering the results by status `initialized`, `validating`, `active` or `failed`.
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --in-use: oneof<nothing, bool> # A boolean query parameter filtering the results to return sinks used/not used by a subscription.
+  --status: string # A String query parameter filtering the results by status `initialized`, `validating`, `active` or `failed`.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, sinks: table<date_created: string, date_updated: string, description: string, links: record, sid: string, sink_configuration: any, sink_type: string, status: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let qp = [(serialize-qp "InUse" $InUse "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "InUse" $in_use "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Sinks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,7 +197,7 @@ export def "sinks ListSink" [
 #
 # POST /v1/Sinks
 # operationId: CreateSink
-export def "sinks CreateSink" [
+export def "sinks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,15 +206,15 @@ export def "sinks CreateSink" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Description: string # A human readable description for the Sink **This value should not contain PII.**
-  SinkConfiguration: any # The information required for Twilio to connect to the provided Sink encoded as JSON.
-  SinkType: string@SinkType-completer
+  description: string # A human readable description for the Sink **This value should not contain PII.**
+  sink_configuration: any # The information required for Twilio to connect to the provided Sink encoded as JSON.
+  sink_type: string@sink-type-completer
 ]: any -> record<date_created: string, date_updated: string, description: string, links: record, sid: string, sink_configuration: any, sink_type: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
   let full_url = (build-url $base "/v1/Sinks")
-  let body = {Description: $Description, SinkConfiguration: $SinkConfiguration, SinkType: $SinkType} | compact
+  let body = {"Description": $description, "SinkConfiguration": $sink_configuration, "SinkType": $sink_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -225,8 +225,8 @@ export def "sinks CreateSink" [
 #
 # DELETE /v1/Sinks/{Sid}
 # operationId: DeleteSink
-export def "sinks DeleteSink" [
-  Sid: string
+export def "sinks delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "sinks DeleteSink" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Sinks/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sinks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,8 +248,8 @@ export def "sinks DeleteSink" [
 #
 # GET /v1/Sinks/{Sid}
 # operationId: FetchSink
-export def "sinks FetchSink" [
-  Sid: string
+export def "sinks get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "sinks FetchSink" [
 ]: nothing -> record<date_created: string, date_updated: string, description: string, links: record, sid: string, sink_configuration: any, sink_type: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Sinks/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sinks/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -271,8 +271,8 @@ export def "sinks FetchSink" [
 #
 # POST /v1/Sinks/{Sid}
 # operationId: UpdateSink
-export def "sinks UpdateSink" [
-  Sid: string
+export def "sinks update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,13 +281,13 @@ export def "sinks UpdateSink" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Description: string # A human readable description for the Sink **This value should not contain PII.**
+  description: string # A human readable description for the Sink **This value should not contain PII.**
 ]: any -> record<date_created: string, date_updated: string, description: string, links: record, sid: string, sink_configuration: any, sink_type: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Sinks/($Sid)")
-  let body = {Description: $Description} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sinks/{sid}"))
+  let body = {"Description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -298,8 +298,8 @@ export def "sinks UpdateSink" [
 #
 # POST /v1/Sinks/{Sid}/Test
 # operationId: CreateSinkTest
-export def "sinks-test CreateSinkTest" [
-  Sid: string
+export def "sinks-test create" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "sinks-test CreateSinkTest" [
 ]: nothing -> record<result: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Sinks/($Sid)/Test")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sinks/{sid}/Test"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,8 +321,8 @@ export def "sinks-test CreateSinkTest" [
 #
 # POST /v1/Sinks/{Sid}/Validate
 # operationId: CreateSinkValidate
-export def "sinks-validate CreateSinkValidate" [
-  Sid: string
+export def "sinks-validate create" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,13 +331,13 @@ export def "sinks-validate CreateSinkValidate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  TestId: string # A 34 character string that uniquely identifies the test event for a Sink being validated.
+  test_id: string # A 34 character string that uniquely identifies the test event for a Sink being validated.
 ]: any -> record<result: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Sinks/($Sid)/Validate")
-  let body = {TestId: $TestId} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Sinks/{sid}/Validate"))
+  let body = {"TestId": $test_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -348,7 +348,7 @@ export def "sinks-validate CreateSinkValidate" [
 #
 # GET /v1/Subscriptions
 # operationId: ListSubscription
-export def "subscriptions ListSubscription" [
+export def "subscriptions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,14 +357,14 @@ export def "subscriptions ListSubscription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --SinkSid: string # The SID of the sink that the list of Subscriptions should be filtered by.
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --sink-sid: string # The SID of the sink that the list of Subscriptions should be filtered by.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, subscriptions: table<account_sid: string, date_created: string, date_updated: string, description: string, links: record, sid: string, sink_sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let qp = [(serialize-qp "SinkSid" $SinkSid "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "SinkSid" $sink_sid "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Subscriptions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -375,7 +375,7 @@ export def "subscriptions ListSubscription" [
 #
 # POST /v1/Subscriptions
 # operationId: CreateSubscription
-export def "subscriptions CreateSubscription" [
+export def "subscriptions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,15 +384,15 @@ export def "subscriptions CreateSubscription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Description: string # A human readable description for the Subscription **This value should not contain PII.**
-  SinkSid: string # The SID of the sink that events selected by this subscription should be sent to. Sink must be active for the subscription to be created.
-  Types: list # An array of objects containing the subscribed Event Types
+  description: string # A human readable description for the Subscription **This value should not contain PII.**
+  sink_sid: string # The SID of the sink that events selected by this subscription should be sent to. Sink must be active for the subscription to be created.
+  types: list # An array of objects containing the subscribed Event Types
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, description: string, links: record, sid: string, sink_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
   let full_url = (build-url $base "/v1/Subscriptions")
-  let body = {Description: $Description, SinkSid: $SinkSid, Types: $Types} | compact
+  let body = {"Description": $description, "SinkSid": $sink_sid, "Types": $types} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -403,8 +403,8 @@ export def "subscriptions CreateSubscription" [
 #
 # DELETE /v1/Subscriptions/{Sid}
 # operationId: DeleteSubscription
-export def "subscriptions DeleteSubscription" [
-  Sid: string
+export def "subscriptions delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "subscriptions DeleteSubscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Subscriptions/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Subscriptions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -426,8 +426,8 @@ export def "subscriptions DeleteSubscription" [
 #
 # GET /v1/Subscriptions/{Sid}
 # operationId: FetchSubscription
-export def "subscriptions FetchSubscription" [
-  Sid: string
+export def "subscriptions get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "subscriptions FetchSubscription" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, description: string, links: record, sid: string, sink_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Subscriptions/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Subscriptions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -449,8 +449,8 @@ export def "subscriptions FetchSubscription" [
 #
 # POST /v1/Subscriptions/{Sid}
 # operationId: UpdateSubscription
-export def "subscriptions UpdateSubscription" [
-  Sid: string
+export def "subscriptions update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,14 +459,14 @@ export def "subscriptions UpdateSubscription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Description: string # A human readable description for the Subscription.
-  --SinkSid: string # The SID of the sink that events selected by this subscription should be sent to. Sink must be active for the subscription to be created.
+  --description: string # A human readable description for the Subscription.
+  --sink-sid: string # The SID of the sink that events selected by this subscription should be sent to. Sink must be active for the subscription to be created.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, description: string, links: record, sid: string, sink_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Subscriptions/($Sid)")
-  let body = {Description: $Description, SinkSid: $SinkSid} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Subscriptions/{sid}"))
+  let body = {"Description": $description, "SinkSid": $sink_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -477,8 +477,8 @@ export def "subscriptions UpdateSubscription" [
 #
 # GET /v1/Subscriptions/{SubscriptionSid}/SubscribedEvents
 # operationId: ListSubscribedEvent
-export def "subscriptions-subscribed-events ListSubscribedEvent" [
-  SubscriptionSid: string
+export def "subscriptions-subscribed-events list" [
+  subscription_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,14 +487,14 @@ export def "subscriptions-subscribed-events ListSubscribedEvent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, types: table<account_sid: string, schema_version: int, subscription_sid: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Subscriptions/($SubscriptionSid)/SubscribedEvents" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_sid: $subscription_sid} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -504,8 +504,8 @@ export def "subscriptions-subscribed-events ListSubscribedEvent" [
 #
 # POST /v1/Subscriptions/{SubscriptionSid}/SubscribedEvents
 # operationId: CreateSubscribedEvent
-export def "subscriptions-subscribed-events CreateSubscribedEvent" [
-  SubscriptionSid: string
+export def "subscriptions-subscribed-events create" [
+  subscription_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,14 +514,14 @@ export def "subscriptions-subscribed-events CreateSubscribedEvent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --SchemaVersion: int # The schema version that the subscription should use.
-  Type: string # Type of event being subscribed to.
+  --schema-version: int # The schema version that the subscription should use.
+  type: string # Type of event being subscribed to.
 ]: any -> record<account_sid: string, schema_version: int, subscription_sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Subscriptions/($SubscriptionSid)/SubscribedEvents")
-  let body = {SchemaVersion: $SchemaVersion, Type: $Type} | compact
+  let full_url = (build-url $base ({subscription_sid: $subscription_sid} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents"))
+  let body = {"SchemaVersion": $schema_version, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -532,9 +532,9 @@ export def "subscriptions-subscribed-events CreateSubscribedEvent" [
 #
 # DELETE /v1/Subscriptions/{SubscriptionSid}/SubscribedEvents/{Type}
 # operationId: DeleteSubscribedEvent
-export def "subscriptions-subscribed-events DeleteSubscribedEvent" [
-  SubscriptionSid: string
-  Type: string
+export def "subscriptions-subscribed-events delete" [
+  subscription_sid: string
+  type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "subscriptions-subscribed-events DeleteSubscribedEvent" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Subscriptions/($SubscriptionSid)/SubscribedEvents/($Type)")
+  let full_url = (build-url $base ({subscription_sid: $subscription_sid, type: $type} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -556,9 +556,9 @@ export def "subscriptions-subscribed-events DeleteSubscribedEvent" [
 #
 # GET /v1/Subscriptions/{SubscriptionSid}/SubscribedEvents/{Type}
 # operationId: FetchSubscribedEvent
-export def "subscriptions-subscribed-events FetchSubscribedEvent" [
-  SubscriptionSid: string
-  Type: string
+export def "subscriptions-subscribed-events get" [
+  subscription_sid: string
+  type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +570,7 @@ export def "subscriptions-subscribed-events FetchSubscribedEvent" [
 ]: nothing -> record<account_sid: string, schema_version: int, subscription_sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Subscriptions/($SubscriptionSid)/SubscribedEvents/($Type)")
+  let full_url = (build-url $base ({subscription_sid: $subscription_sid, type: $type} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -580,9 +580,9 @@ export def "subscriptions-subscribed-events FetchSubscribedEvent" [
 #
 # POST /v1/Subscriptions/{SubscriptionSid}/SubscribedEvents/{Type}
 # operationId: UpdateSubscribedEvent
-export def "subscriptions-subscribed-events UpdateSubscribedEvent" [
-  SubscriptionSid: string
-  Type: string
+export def "subscriptions-subscribed-events update" [
+  subscription_sid: string
+  type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -591,13 +591,13 @@ export def "subscriptions-subscribed-events UpdateSubscribedEvent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --SchemaVersion: int # The schema version that the subscription should use.
+  --schema-version: int # The schema version that the subscription should use.
 ]: any -> record<account_sid: string, schema_version: int, subscription_sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Subscriptions/($SubscriptionSid)/SubscribedEvents/($Type)")
-  let body = {SchemaVersion: $SchemaVersion} | compact
+  let full_url = (build-url $base ({subscription_sid: $subscription_sid, type: $type} | format pattern "/v1/Subscriptions/{subscription_sid}/SubscribedEvents/{type}"))
+  let body = {"SchemaVersion": $schema_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -608,7 +608,7 @@ export def "subscriptions-subscribed-events UpdateSubscribedEvent" [
 #
 # GET /v1/Types
 # operationId: ListEventType
-export def "types ListEventType" [
+export def "types list-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,14 +617,14 @@ export def "types ListEventType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --SchemaId: string # A string parameter filtering the results to return only the Event Types using a given schema.
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --schema-id: string # A string parameter filtering the results to return only the Event Types using a given schema.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, types: table<date_created: string, date_updated: string, description: string, links: record, schema_id: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let qp = [(serialize-qp "SchemaId" $SchemaId "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "SchemaId" $schema_id "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Types" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -635,8 +635,8 @@ export def "types ListEventType" [
 #
 # GET /v1/Types/{Type}
 # operationId: FetchEventType
-export def "types FetchEventType" [
-  Type: string
+export def "types get-event" [
+  type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,7 +648,7 @@ export def "types FetchEventType" [
 ]: nothing -> record<date_created: string, date_updated: string, description: string, links: record, schema_id: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://events.twilio.com")
-  let full_url = (build-url $base $"/v1/Types/($Type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/v1/Types/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -73,7 +73,7 @@ def setpoint-mode-completer [] { ["away" "hg" "manual" "max" "off" "program"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addwebhook addwebhook" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addwebhook create-webhook" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 #
 # GET /addwebhook
 # operationId: addwebhook
-export def "addwebhook addwebhook" [
+export def "addwebhook create-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +122,7 @@ export def "addwebhook addwebhook" [
 #
 # POST /createnewschedule
 # operationId: createnewschedule
-export def "createnewschedule createnewschedule" [
+export def "createnewschedule create-newschedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,7 +152,7 @@ export def "createnewschedule createnewschedule" [
 # DEPRECATED
 # operationId: devicelist
 @deprecated
-export def "devicelist devicelist" [
+export def "devicelist get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "devicelist devicelist" [
 #
 # GET /dropwebhook
 # operationId: dropwebhook
-export def "dropwebhook dropwebhook" [
+export def "dropwebhook get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "dropwebhook dropwebhook" [
 #
 # GET /getcamerapicture
 # operationId: getcamerapicture
-export def "getcamerapicture getcamerapicture" [
+export def "getcamerapicture get-camerapicture" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "getcamerapicture getcamerapicture" [
 #
 # GET /geteventsuntil
 # operationId: geteventsuntil
-export def "geteventsuntil geteventsuntil" [
+export def "geteventsuntil get-eventsuntil" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "geteventsuntil geteventsuntil" [
 #
 # GET /gethomecoachsdata
 # operationId: gethomecoachsdata
-export def "gethomecoachsdata gethomecoachsdata" [
+export def "gethomecoachsdata get-homecoachsdata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "gethomecoachsdata gethomecoachsdata" [
 #
 # GET /gethomedata
 # operationId: gethomedata
-export def "gethomedata gethomedata" [
+export def "gethomedata get-homedata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "gethomedata gethomedata" [
 #
 # GET /getlasteventof
 # operationId: getlasteventof
-export def "getlasteventof getlasteventof" [
+export def "getlasteventof get-lasteventof" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "getlasteventof getlasteventof" [
 #
 # GET /getmeasure
 # operationId: getmeasure
-export def "getmeasure getmeasure" [
+export def "getmeasure get-measure" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "getmeasure getmeasure" [
 #
 # GET /getnextevents
 # operationId: getnextevents
-export def "getnextevents getnextevents" [
+export def "getnextevents get-nextevents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,7 +385,7 @@ export def "getnextevents getnextevents" [
 #
 # GET /getpublicdata
 # operationId: getpublicdata
-export def "getpublicdata getpublicdata" [
+export def "getpublicdata get-publicdata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "getpublicdata getpublicdata" [
 #
 # GET /getstationsdata
 # operationId: getstationsdata
-export def "getstationsdata getstationsdata" [
+export def "getstationsdata get-stationsdata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "getstationsdata getstationsdata" [
 #
 # GET /getthermostatsdata
 # operationId: getthermostatsdata
-export def "getthermostatsdata getthermostatsdata" [
+export def "getthermostatsdata get-thermostatsdata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "getthermostatsdata getthermostatsdata" [
 # DEPRECATED
 # operationId: getthermstate
 @deprecated
-export def "getthermstate getthermstate" [
+export def "getthermstate get-thermstate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +492,7 @@ export def "getthermstate getthermstate" [
 # DEPRECATED
 # operationId: getuser
 @deprecated
-export def "getuser getuser" [
+export def "getuser get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "getuser getuser" [
 #
 # GET /partnerdevices
 # operationId: partnerdevices
-export def "partnerdevices partnerdevices" [
+export def "partnerdevices get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -536,7 +536,7 @@ export def "partnerdevices partnerdevices" [
 #
 # POST /setpersonsaway
 # operationId: setpersonsaway
-export def "setpersonsaway setpersonsaway" [
+export def "setpersonsaway post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +561,7 @@ export def "setpersonsaway setpersonsaway" [
 #
 # POST /setpersonshome
 # operationId: setpersonshome
-export def "setpersonshome setpersonshome" [
+export def "setpersonshome post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,7 +586,7 @@ export def "setpersonshome setpersonshome" [
 #
 # POST /setthermpoint
 # operationId: setthermpoint
-export def "setthermpoint setthermpoint" [
+export def "setthermpoint post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +614,7 @@ export def "setthermpoint setthermpoint" [
 #
 # POST /switchschedule
 # operationId: switchschedule
-export def "switchschedule switchschedule" [
+export def "switchschedule post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "switchschedule switchschedule" [
 #
 # POST /syncschedule
 # operationId: syncschedule
-export def "syncschedule syncschedule" [
+export def "syncschedule sync-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

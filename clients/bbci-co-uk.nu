@@ -78,7 +78,7 @@ def mixin-completer [] { ["live" "promotions"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "atoz-programmes " } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "atoz-programmes get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -102,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # GET /atoz/{letter}/programmes
 # operationId: Get_Programmes AtoZ search_
-export def "atoz-programmes " [
+export def "atoz-programmes get" [
   letter: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -123,7 +123,7 @@ export def "atoz-programmes " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/atoz/($letter)/programmes" $qp)
+  let full_url = (build-url $base ({letter: $letter} | format pattern "/atoz/{letter}/programmes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -157,7 +157,7 @@ export def "categories list" [
 #
 # GET /categories/{category}
 # operationId: Get_Sub-categories_
-export def "categories " [
+export def "categories get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "categories " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,7 +182,7 @@ export def "categories " [
 #
 # GET /categories/{category}/episodes
 # operationId: Get_Episodes by category_
-export def "categories-episodes " [
+export def "categories-episodes get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +202,7 @@ export def "categories-episodes " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/episodes" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/episodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -212,7 +212,7 @@ export def "categories-episodes " [
 #
 # GET /categories/{category}/highlights
 # operationId: Get_Highlights by category_
-export def "categories-highlights " [
+export def "categories-highlights get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,7 +230,7 @@ export def "categories-highlights " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/highlights" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/highlights") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,7 +240,7 @@ export def "categories-highlights " [
 #
 # GET /categories/{category}/programmes
 # operationId: Get_Programmes by category_
-export def "categories-programmes " [
+export def "categories-programmes get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -259,7 +259,7 @@ export def "categories-programmes " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($category)/programmes" $qp)
+  let full_url = (build-url $base ({category: $category} | format pattern "/categories/{category}/programmes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +269,7 @@ export def "categories-programmes " [
 #
 # GET /channels
 # operationId: Get_Channels_
-export def "channels " [
+export def "channels get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "channels " [
 #
 # GET /channels/{channel}/broadcasts
 # operationId: Get_Broadcasts by channel_
-export def "channels-broadcasts " [
+export def "channels-broadcasts get" [
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -314,7 +314,7 @@ export def "channels-broadcasts " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel)/broadcasts" $qp)
+  let full_url = (build-url $base ({channel: $channel} | format pattern "/channels/{channel}/broadcasts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,7 +324,7 @@ export def "channels-broadcasts " [
 #
 # GET /channels/{channel}/highlights
 # operationId: Get_Highlights by channel_
-export def "channels-highlights " [
+export def "channels-highlights get" [
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +343,7 @@ export def "channels-highlights " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "live" $live "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel)/highlights" $qp)
+  let full_url = (build-url $base ({channel: $channel} | format pattern "/channels/{channel}/highlights") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -353,7 +353,7 @@ export def "channels-highlights " [
 #
 # GET /channels/{channel}/programmes
 # operationId: Get_Programmes by channel_
-export def "channels-programmes " [
+export def "channels-programmes get" [
   channel: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -372,7 +372,7 @@ export def "channels-programmes " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel)/programmes" $qp)
+  let full_url = (build-url $base ({channel: $channel} | format pattern "/channels/{channel}/programmes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -382,7 +382,7 @@ export def "channels-programmes " [
 #
 # GET /channels/{channel}/schedule/{date}
 # operationId: Get_Schedule by channel_
-export def "channels-schedule " [
+export def "channels-schedule get" [
   channel: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -400,7 +400,7 @@ export def "channels-schedule " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channels/($channel)/schedule/($date)" $qp)
+  let full_url = (build-url $base ({channel: $channel, date: $date} | format pattern "/channels/{channel}/schedule/{date}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -410,7 +410,7 @@ export def "channels-schedule " [
 #
 # GET /clips/{pid}
 # operationId: Get_Clips_
-export def "clips " [
+export def "clips get" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +426,7 @@ export def "clips " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/clips/($pid)" $qp)
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/clips/{pid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -436,7 +436,7 @@ export def "clips " [
 #
 # GET /episodes/{pid}
 # operationId: Get_Programme by PID_
-export def "episodes " [
+export def "episodes get" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -453,7 +453,7 @@ export def "episodes " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/episodes/($pid)" $qp)
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/episodes/{pid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,7 +463,7 @@ export def "episodes " [
 #
 # GET /episodes/{pid}/next
 # operationId: Get_Onward_Journey
-export def "episodes-next Journey" [
+export def "episodes-next get" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -479,7 +479,7 @@ export def "episodes-next Journey" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/episodes/($pid)/next" $qp)
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/episodes/{pid}/next") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -505,7 +505,7 @@ export def "episodes-postrolls get" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/episodes/($pid)/postrolls" $qp)
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/episodes/{pid}/postrolls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -515,7 +515,7 @@ export def "episodes-postrolls get" [
 #
 # GET /episodes/{pid}/prerolls
 # operationId: Get_Trailers (pre-rolls)_
-export def "episodes-prerolls " [
+export def "episodes-prerolls get" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -531,7 +531,7 @@ export def "episodes-prerolls " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/episodes/($pid)/prerolls" $qp)
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/episodes/{pid}/prerolls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -541,7 +541,7 @@ export def "episodes-prerolls " [
 #
 # GET /episodes/{pid}/recommendations
 # operationId: Get_Programme recommendations_
-export def "episodes-recommendations " [
+export def "episodes-recommendations get" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "episodes-recommendations " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/episodes/($pid)/recommendations" $qp)
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/episodes/{pid}/recommendations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -569,7 +569,7 @@ export def "episodes-recommendations " [
 #
 # GET /groups/popular/episodes
 # operationId: Get_Programmes popular_
-export def "groups-popular-episodes " [
+export def "groups-popular-episodes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "groups-popular-episodes " [
 #
 # GET /groups/{pid}/episodes
 # operationId: Get_Episodes by group_
-export def "groups-episodes " [
+export def "groups-episodes get" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +622,7 @@ export def "groups-episodes " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/groups/($pid)/episodes" $qp)
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/groups/{pid}/episodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,7 +632,7 @@ export def "groups-episodes " [
 #
 # GET /home/highlights
 # operationId: Get_Programme highlights_
-export def "home-highlights " [
+export def "home-highlights get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +659,7 @@ export def "home-highlights " [
 #
 # GET /programmes/{pid}
 # operationId: Get_Programmes by parent PID_
-export def "programmes " [
+export def "programmes get" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,7 +676,7 @@ export def "programmes " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/programmes/($pid)" $qp)
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/programmes/{pid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -686,7 +686,7 @@ export def "programmes " [
 #
 # GET /programmes/{pid}/episodes
 # operationId: Get_Episodes by parent PID_
-export def "programmes-episodes " [
+export def "programmes-episodes get" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "programmes-episodes " [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/programmes/($pid)/episodes" $qp)
+  let full_url = (build-url $base ({pid: $pid} | format pattern "/programmes/{pid}/episodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -713,7 +713,7 @@ export def "programmes-episodes " [
 #
 # GET /regions
 # operationId: Get_Regions_
-export def "regions " [
+export def "regions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +737,7 @@ export def "regions " [
 #
 # GET /schema/ibl.json
 # operationId: Get_Schema_
-export def "schema-ibljson " [
+export def "schema-ibljson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +759,7 @@ export def "schema-ibljson " [
 #
 # GET /search
 # operationId: Search_
-export def "search " [
+export def "search get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -786,7 +786,7 @@ export def "search " [
 #
 # GET /search-suggest
 # operationId: Search-suggest_
-export def "search-suggest " [
+export def "search-suggest get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -813,7 +813,7 @@ export def "search-suggest " [
 #
 # GET /status
 # operationId: Get_Status_
-export def "status " [
+export def "status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,7 +835,7 @@ export def "status " [
 #
 # GET /user/purchases
 # operationId: Get_User store purchases_
-export def "user-purchases " [
+export def "user-purchases get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -859,7 +859,7 @@ export def "user-purchases " [
 #
 # GET /user/recommendations
 # operationId: Get_User store recommendations_
-export def "user-recommendations " [
+export def "user-recommendations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,7 +883,7 @@ export def "user-recommendations " [
 #
 # GET /user/watching
 # operationId: Get_User watching_
-export def "user-watching " [
+export def "user-watching get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

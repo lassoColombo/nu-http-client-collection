@@ -70,7 +70,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "10-artist GET" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "10-artist get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /1.0/artist/{mbid}
 # operationId: resource__1.0_artist__mbid__getArtist_GET
-export def "10-artist GET" [
+export def "10-artist get" [
   mbid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -108,7 +108,7 @@ export def "10-artist GET" [
 ]: nothing -> record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1.0/artist/($mbid)")
+  let full_url = (build-url $base ({mbid: $mbid} | format pattern "/1.0/artist/{mbid}"))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +118,7 @@ export def "10-artist GET" [
 #
 # GET /1.0/artist/{mbid}/setlists
 # operationId: resource__1.0_artist__mbid__setlists_getArtistSetlists_GET
-export def "10-artist-setlists GET" [
+export def "10-artist-setlists get" [
   mbid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -134,7 +134,7 @@ export def "10-artist-setlists GET" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/1.0/artist/($mbid)/setlists" $qp)
+  let full_url = (build-url $base ({mbid: $mbid} | format pattern "/1.0/artist/{mbid}/setlists") $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,8 +144,8 @@ export def "10-artist-setlists GET" [
 #
 # GET /1.0/city/{geoId}
 # operationId: resource__1.0_city__geoId__getCity_GET
-export def "10-city GET" [
-  geoId: string
+export def "10-city get" [
+  geo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "10-city GET" [
 ]: nothing -> record<coords: record<lat: float, long: float>, country: record<code: string, name: string>, id: string, name: string, state: string, stateCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1.0/city/($geoId)")
+  let full_url = (build-url $base ({geo_id: $geo_id} | format pattern "/1.0/city/{geo_id}"))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,7 +168,7 @@ export def "10-city GET" [
 #
 # GET /1.0/search/artists
 # operationId: resource__1.0_search_artists_getArtists_GET
-export def "10-search-artists GET" [
+export def "10-search-artists get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,15 +178,15 @@ export def "10-search-artists GET" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --artistMbid: string # the artist's Musicbrainz Identifier (mbid)
-  --artistName: string # the artist's name
-  --artistTmid: int # the artist's Ticketmaster Identifier (tmid)
+  --artist-mbid: string # the artist's Musicbrainz Identifier (mbid)
+  --artist-name: string # the artist's name
+  --artist-tmid: int # the artist's Ticketmaster Identifier (tmid)
   --p: int # the number of the result page you'd like to have (default: 1)
   --qp-sort: string # the sort of the result, either sortName (default) or relevance (default: sortName)
 ]: nothing -> record<artist: table<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, itemsPerPage: float, page: float, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "artistMbid" $artistMbid "scalar") (serialize-qp "artistName" $artistName "scalar") (serialize-qp "artistTmid" $artistTmid "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "artistMbid" $artist_mbid "scalar") (serialize-qp "artistName" $artist_name "scalar") (serialize-qp "artistTmid" $artist_tmid "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1.0/search/artists" $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,7 +197,7 @@ export def "10-search-artists GET" [
 #
 # GET /1.0/search/cities
 # operationId: resource__1.0_search_cities_getCities_GET
-export def "10-search-cities GET" [
+export def "10-search-cities get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,11 +211,11 @@ export def "10-search-cities GET" [
   --name: string # name of the city
   --p: int # the number of the result page you'd like to have (default: 1)
   --state: string # state the city lies in
-  --stateCode: string # state code the city lies in
+  --state-code: string # state code the city lies in
 ]: nothing -> record<cities: table<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, itemsPerPage: float, page: float, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $stateCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1.0/search/cities" $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -226,7 +226,7 @@ export def "10-search-cities GET" [
 #
 # GET /1.0/search/countries
 # operationId: resource__1.0_search_countries_getCountries_GET
-export def "10-search-countries GET" [
+export def "10-search-countries get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "10-search-countries GET" [
 #
 # GET /1.0/search/setlists
 # operationId: resource__1.0_search_setlists_getSetlists_GET
-export def "10-search-setlists GET" [
+export def "10-search-setlists get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,26 +259,26 @@ export def "10-search-setlists GET" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --artistMbid: string # the artist's Musicbrainz Identifier (mbid)
-  --artistName: string # the artist's name
-  --artistTmid: int # the artist's Ticketmaster Identifier (tmid)
-  --cityId: string # the city's geoId
-  --cityName: string # the name of the city
-  --countryCode: string # the country code
+  --artist-mbid: string # the artist's Musicbrainz Identifier (mbid)
+  --artist-name: string # the artist's name
+  --artist-tmid: int # the artist's Ticketmaster Identifier (tmid)
+  --city-id: string # the city's geoId
+  --city-name: string # the name of the city
+  --country-code: string # the country code
   --date: string # the date of the event (format dd-MM-yyyy)
-  --lastFm: int # the event's Last.fm Event ID (deprecated)
-  --lastUpdated: string # the date and time (UTC) when this setlist was last updated (format yyyyMMddHHmmss) - either edited or reverted. search will return setlists that were updated on or after this date
+  --last-fm: int # the event's Last.fm Event ID (deprecated)
+  --last-updated: string # the date and time (UTC) when this setlist was last updated (format yyyyMMddHHmmss) - either edited or reverted. search will return setlists that were updated on or after this date
   --p: int # the number of the result page (default: 1)
   --state: string # the state
-  --stateCode: string # the state code
-  --tourName: string
-  --venueId: string # the venue id
-  --venueName: string # the name of the venue
+  --state-code: string # the state code
+  --tour-name: string
+  --venue-id: string # the venue id
+  --venue-name: string # the name of the venue
   --year: string # the year of the event
 ]: nothing -> record<itemsPerPage: float, page: float, setlist: table<artist: record, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: list, tour: record, url: string, venue: record, versionId: string>, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "artistMbid" $artistMbid "scalar") (serialize-qp "artistName" $artistName "scalar") (serialize-qp "artistTmid" $artistTmid "scalar") (serialize-qp "cityId" $cityId "scalar") (serialize-qp "cityName" $cityName "scalar") (serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "lastFm" $lastFm "scalar") (serialize-qp "lastUpdated" $lastUpdated "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $stateCode "scalar") (serialize-qp "tourName" $tourName "scalar") (serialize-qp "venueId" $venueId "scalar") (serialize-qp "venueName" $venueName "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "artistMbid" $artist_mbid "scalar") (serialize-qp "artistName" $artist_name "scalar") (serialize-qp "artistTmid" $artist_tmid "scalar") (serialize-qp "cityId" $city_id "scalar") (serialize-qp "cityName" $city_name "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "lastFm" $last_fm "scalar") (serialize-qp "lastUpdated" $last_updated "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $state_code "scalar") (serialize-qp "tourName" $tour_name "scalar") (serialize-qp "venueId" $venue_id "scalar") (serialize-qp "venueName" $venue_name "scalar") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1.0/search/setlists" $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,7 +289,7 @@ export def "10-search-setlists GET" [
 #
 # GET /1.0/search/venues
 # operationId: resource__1.0_search_venues_getVenues_GET
-export def "10-search-venues GET" [
+export def "10-search-venues get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,17 +299,17 @@ export def "10-search-venues GET" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --cityId: string # the city's geoId
-  --cityName: string # name of the city where the venue is located
+  --city-id: string # the city's geoId
+  --city-name: string # name of the city where the venue is located
   --country: string # the city's country
   --name: string # name of the venue
   --p: int # the number of the result page you'd like to have (default: 1)
   --state: string # the city's state
-  --stateCode: string # the city's state code
+  --state-code: string # the city's state code
 ]: nothing -> record<itemsPerPage: float, page: float, total: float, venue: table<city: record, id: string, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cityId" $cityId "scalar") (serialize-qp "cityName" $cityName "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $stateCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cityId" $city_id "scalar") (serialize-qp "cityName" $city_name "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "p" $p "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1.0/search/venues" $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -320,8 +320,8 @@ export def "10-search-venues GET" [
 #
 # GET /1.0/setlist/version/{versionId}
 # operationId: resource__1.0_setlist_version__versionId__getSetlistVersion_GET
-export def "10-setlist-version GET" [
-  versionId: string
+export def "10-setlist-version get" [
+  version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "10-setlist-version GET" [
 ]: nothing -> record<artist: record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: table<encore: float, name: string, song: list>, tour: record<name: string>, url: string, venue: record<city: record<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>, versionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1.0/setlist/version/($versionId)")
+  let full_url = (build-url $base ({version_id: $version_id} | format pattern "/1.0/setlist/version/{version_id}"))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,8 +344,8 @@ export def "10-setlist-version GET" [
 #
 # GET /1.0/setlist/{setlistId}
 # operationId: resource__1.0_setlist__setlistId__getSetlist_GET
-export def "10-setlist GET" [
-  setlistId: string
+export def "10-setlist get" [
+  setlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "10-setlist GET" [
 ]: nothing -> record<artist: record<disambiguation: string, mbid: string, name: string, sortName: string, tmid: float, url: string>, eventDate: string, id: string, info: string, lastFmEventId: float, lastUpdated: string, set: table<encore: float, name: string, song: list>, tour: record<name: string>, url: string, venue: record<city: record<coords: record, country: record, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string>, versionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1.0/setlist/($setlistId)")
+  let full_url = (build-url $base ({setlist_id: $setlist_id} | format pattern "/1.0/setlist/{setlist_id}"))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -368,8 +368,8 @@ export def "10-setlist GET" [
 #
 # GET /1.0/user/{userId}
 # operationId: resource__1.0_user__userId__getUser_GET
-export def "10-user GET" [
-  userId: string
+export def "10-user get" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "10-user GET" [
 ]: nothing -> record<about: string, flickr: string, fullname: string, lastFm: string, mySpace: string, twitter: string, url: string, userId: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1.0/user/($userId)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/1.0/user/{user_id}"))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,8 +392,8 @@ export def "10-user GET" [
 #
 # GET /1.0/user/{userId}/attended
 # operationId: resource__1.0_user__userId__attended_getUserAttendedSetlists_GET
-export def "10-user-attended GET" [
-  userId: string
+export def "10-user-attended get" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "10-user-attended GET" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/1.0/user/($userId)/attended" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/1.0/user/{user_id}/attended") $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -418,8 +418,8 @@ export def "10-user-attended GET" [
 #
 # GET /1.0/user/{userId}/edited
 # operationId: resource__1.0_user__userId__edited_getUserEditedSetlists_GET
-export def "10-user-edited GET" [
-  userId: string
+export def "10-user-edited get" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "10-user-edited GET" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/1.0/user/($userId)/edited" $qp)
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/1.0/user/{user_id}/edited") $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -444,8 +444,8 @@ export def "10-user-edited GET" [
 #
 # GET /1.0/venue/{venueId}
 # operationId: resource__1.0_venue__venueId__getVenue_GET
-export def "10-venue GET" [
-  venueId: string
+export def "10-venue get" [
+  venue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "10-venue GET" [
 ]: nothing -> record<city: record<coords: record<lat: float, long: float>, country: record<code: string, name: string>, id: string, name: string, state: string, stateCode: string>, id: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1.0/venue/($venueId)")
+  let full_url = (build-url $base ({venue_id: $venue_id} | format pattern "/1.0/venue/{venue_id}"))
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -468,8 +468,8 @@ export def "10-venue GET" [
 #
 # GET /1.0/venue/{venueId}/setlists
 # operationId: resource__1.0_venue__venueId__setlists_getVenueSetlists_GET
-export def "10-venue-setlists GET" [
-  venueId: string
+export def "10-venue-setlists get" [
+  venue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "10-venue-setlists GET" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "p" $p "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/1.0/venue/($venueId)/setlists" $qp)
+  let full_url = (build-url $base ({venue_id: $venue_id} | format pattern "/1.0/venue/{venue_id}/setlists") $qp)
   let accept_val = ($accept | default "application/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

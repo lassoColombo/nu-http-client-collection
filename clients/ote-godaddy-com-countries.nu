@@ -71,7 +71,7 @@ def order-completer [] { ["ascending" "descending"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "countries list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "countries get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/countries
 # operationId: getCountries
-export def "countries list" [
+export def "countries get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,15 +104,15 @@ export def "countries list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketId: string # MarketId in which the request is being made, and for which responses should be localized (format: bcp-47)
-  --regionTypeId: int # Restrict countries to this region type; required if regionName is supplied
-  --regionName: string # Restrict countries to this region name; required if regionTypeId is supplied
+  --market-id: string # MarketId in which the request is being made, and for which responses should be localized (format: bcp-47)
+  --region-type-id: int # Restrict countries to this region type; required if regionName is supplied
+  --region-name: string # Restrict countries to this region name; required if regionTypeId is supplied
   --qp-sort: string@sort-completer # The term to sort the result countries by. (default: key)
   --order: string@order-completer # The direction to sort the result countries by. (default: ascending)
 ]: nothing -> table<callingCode: string, countryKey: string, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "marketId" $marketId "scalar") (serialize-qp "regionTypeId" $regionTypeId "scalar") (serialize-qp "regionName" $regionName "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "marketId" $market_id "scalar") (serialize-qp "regionTypeId" $region_type_id "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/countries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -123,8 +123,8 @@ export def "countries list" [
 #
 # GET /v1/countries/{countryKey}
 # operationId: getCountry
-export def "countries get" [
-  countryKey: string
+export def "countries get-country" [
+  country_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,14 +133,14 @@ export def "countries get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --marketId: string # MarketId in which the request is being made, and for which responses should be localized (format: bcp-47)
+  --market-id: string # MarketId in which the request is being made, and for which responses should be localized (format: bcp-47)
   --qp-sort: string@sort-completer # The term to sort the result country states by. (default: key)
   --order: string@order-completer # The direction to sort the result country states by. (default: ascending)
 ]: nothing -> table<callingCode: string, countryKey: string, label: string, states: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "marketId" $marketId "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/countries/($countryKey)" $qp)
+  let qp = [(serialize-qp "marketId" $market_id "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({country_key: $country_key} | format pattern "/v1/countries/{country_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

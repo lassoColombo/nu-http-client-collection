@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "trunking-countries ListTrunkingCountry" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "trunking-countries list-trunking-country" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 # GET /v2/Trunking/Countries
 #
 # operationId: ListTrunkingCountry
-export def "trunking-countries ListTrunkingCountry" [
+export def "trunking-countries list-trunking-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,13 +101,13 @@ export def "trunking-countries ListTrunkingCountry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<countries: table<country: string, iso_country: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://pricing.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/Trunking/Countries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -118,8 +118,8 @@ export def "trunking-countries ListTrunkingCountry" [
 #
 # GET /v2/Trunking/Countries/{IsoCountry}
 # operationId: FetchTrunkingCountry
-export def "trunking-countries FetchTrunkingCountry" [
-  IsoCountry: string
+export def "trunking-countries get-trunking-country" [
+  iso_country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,7 +131,7 @@ export def "trunking-countries FetchTrunkingCountry" [
 ]: nothing -> record<country: string, iso_country: string, originating_call_prices: table<base_price: float, current_price: float, number_type: string>, price_unit: string, terminating_prefix_prices: table<base_price: float, current_price: float, destination_prefixes: list, friendly_name: string, origination_prefixes: list>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://pricing.twilio.com")
-  let full_url = (build-url $base $"/v2/Trunking/Countries/($IsoCountry)")
+  let full_url = (build-url $base ({iso_country: $iso_country} | format pattern "/v2/Trunking/Countries/{iso_country}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -141,8 +141,8 @@ export def "trunking-countries FetchTrunkingCountry" [
 #
 # GET /v2/Trunking/Numbers/{DestinationNumber}
 # operationId: FetchTrunkingNumber
-export def "trunking-numbers FetchTrunkingNumber" [
-  DestinationNumber: string
+export def "trunking-numbers get" [
+  destination_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,12 +151,12 @@ export def "trunking-numbers FetchTrunkingNumber" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --OriginationNumber: string # The origination phone number, in [E.164](https://www.twilio.com/docs/glossary/what-e164) format, for which to fetch the origin-based voice pricing information. E.164 format consists of a + followed by the country code and subscriber number. (format: phone-number)
+  --origination-number: string # The origination phone number, in [E.164](https://www.twilio.com/docs/glossary/what-e164) format, for which to fetch the origin-based voice pricing information. E.164 format consists of a + followed by the country code and subscriber number. (format: phone-number)
 ]: nothing -> record<country: string, destination_number: string, iso_country: string, originating_call_price: record<base_price: float, current_price: float, number_type: string>, origination_number: string, price_unit: string, terminating_prefix_prices: table<base_price: float, current_price: float, destination_prefixes: list, friendly_name: string, origination_prefixes: list>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://pricing.twilio.com")
-  let qp = [(serialize-qp "OriginationNumber" $OriginationNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Trunking/Numbers/($DestinationNumber)" $qp)
+  let qp = [(serialize-qp "OriginationNumber" $origination_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({destination_number: $destination_number} | format pattern "/v2/Trunking/Numbers/{destination_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,7 +165,7 @@ export def "trunking-numbers FetchTrunkingNumber" [
 # GET /v2/Voice/Countries
 #
 # operationId: ListVoiceCountry
-export def "voice-countries ListVoiceCountry" [
+export def "voice-countries list-voice-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,13 +174,13 @@ export def "voice-countries ListVoiceCountry" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<countries: table<country: string, iso_country: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://pricing.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/Voice/Countries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,8 +191,8 @@ export def "voice-countries ListVoiceCountry" [
 #
 # GET /v2/Voice/Countries/{IsoCountry}
 # operationId: FetchVoiceCountry
-export def "voice-countries FetchVoiceCountry" [
-  IsoCountry: string
+export def "voice-countries get-voice-country" [
+  iso_country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "voice-countries FetchVoiceCountry" [
 ]: nothing -> record<country: string, inbound_call_prices: table<base_price: float, current_price: float, number_type: string>, iso_country: string, outbound_prefix_prices: table<base_price: float, current_price: float, destination_prefixes: list, friendly_name: string, origination_prefixes: list>, price_unit: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://pricing.twilio.com")
-  let full_url = (build-url $base $"/v2/Voice/Countries/($IsoCountry)")
+  let full_url = (build-url $base ({iso_country: $iso_country} | format pattern "/v2/Voice/Countries/{iso_country}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,8 +214,8 @@ export def "voice-countries FetchVoiceCountry" [
 #
 # GET /v2/Voice/Numbers/{DestinationNumber}
 # operationId: FetchVoiceNumber
-export def "voice-numbers FetchVoiceNumber" [
-  DestinationNumber: string
+export def "voice-numbers get" [
+  destination_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,12 +224,12 @@ export def "voice-numbers FetchVoiceNumber" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --OriginationNumber: string # The origination phone number, in [E.164](https://www.twilio.com/docs/glossary/what-e164) format, for which to fetch the origin-based voice pricing information. E.164 format consists of a + followed by the country code and subscriber number. (format: phone-number)
+  --origination-number: string # The origination phone number, in [E.164](https://www.twilio.com/docs/glossary/what-e164) format, for which to fetch the origin-based voice pricing information. E.164 format consists of a + followed by the country code and subscriber number. (format: phone-number)
 ]: nothing -> record<country: string, destination_number: string, inbound_call_price: record<base_price: float, current_price: float, number_type: string>, iso_country: string, origination_number: string, outbound_call_prices: table<base_price: float, current_price: float, origination_prefixes: list>, price_unit: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://pricing.twilio.com")
-  let qp = [(serialize-qp "OriginationNumber" $OriginationNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/Voice/Numbers/($DestinationNumber)" $qp)
+  let qp = [(serialize-qp "OriginationNumber" $origination_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({destination_number: $destination_number} | format pattern "/v2/Voice/Numbers/{destination_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -67,7 +67,7 @@ def base-url-completer [] { ["https://cal-test.adyen.com/cal/services/Fund/v6"] 
 def auth-scheme-completer [] { ["x-api-key" "basic"] }
 
 # Completers for enum parameters
-def payoutSpeed-completer [] { ["INSTANT" "SAME_DAY" "STANDARD"] }
+def payout-speed-completer [] { ["INSTANT" "SAME_DAY" "STANDARD"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -105,13 +105,13 @@ export def "account-holder-balance post-accountHolderBalance" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the Account Holder of which to retrieve the balance.
+  account_holder_code: string # The code of the Account Holder of which to retrieve the balance.
 ]: any -> record<balancePerAccount: table<accountCode: string, detailBalance: record>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string, totalBalance: record<balance: list<record>, onHoldBalance: list<record>, pendingBalance: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accountHolderBalance")
-  let body = {accountHolderCode: $accountHolderCode} | compact
+  let body = {"accountHolderCode": $account_holder_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,15 +132,15 @@ export def "account-holder-transaction-list post-accountHolderTransactionList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the account holder that owns the account(s) of which retrieve the transaction list.
-  --transactionListsPerAccount: list # A list of accounts to include in the transaction list. If left blank, the last fifty (50) transactions for all accounts of the account holder will be included. — item shape: {accountCode: string, page: int}
-  --transactionStatuses: list # A list of statuses to include in the transaction list. If left blank, all transactions will be included. >Permitted values: >* `PendingCredit` - a pending balance credit. >* `CreditFailed` - a pending credit failure; the balance will not be credited. >* `Credited` - a credited balance. >* `PendingDebit` - a pending balance debit (e.g., a refund). >* `CreditClosed` - a pending credit closed; the balance will not be credited. >* `CreditSuspended` - a pending credit closed; the balance will not be credited. >* `DebitFailed` - a pending debit failure; the balance will not be debited. >* `Debited` - a debited balance (e.g., a refund). >* `DebitReversedReceived` - a pending refund reversal. >* `DebitedReversed` - a reversed refund. >* `ChargebackReceived` - a received chargeback request. >* `Chargeback` - a processed chargeback. >* `ChargebackReversedReceived` - a pending chargeback reversal. >* `ChargebackReversed` - a reversed chargeback. >* `Converted` - converted. >* `ManualCorrected` - manual booking/adjustment by Adyen. >* `Payout` - a payout. >* `PayoutReversed` - a reversed payout. >* `PendingFundTransfer` - a pending transfer of funds from one account to another. >* `FundTransfer` - a transfer of funds from one account to another.
+  account_holder_code: string # The code of the account holder that owns the account(s) of which retrieve the transaction list.
+  --transaction-lists-per-account: list # A list of accounts to include in the transaction list. If left blank, the last fifty (50) transactions for all accounts of the account holder will be included. — item shape: {accountCode: string, page: int}
+  --transaction-statuses: list # A list of statuses to include in the transaction list. If left blank, all transactions will be included. >Permitted values: >* `PendingCredit` - a pending balance credit. >* `CreditFailed` - a pending credit failure; the balance will not be credited. >* `Credited` - a credited balance. >* `PendingDebit` - a pending balance debit (e.g., a refund). >* `CreditClosed` - a pending credit closed; the balance will not be credited. >* `CreditSuspended` - a pending credit closed; the balance will not be credited. >* `DebitFailed` - a pending debit failure; the balance will not be debited. >* `Debited` - a debited balance (e.g., a refund). >* `DebitReversedReceived` - a pending refund reversal. >* `DebitedReversed` - a reversed refund. >* `ChargebackReceived` - a received chargeback request. >* `Chargeback` - a processed chargeback. >* `ChargebackReversedReceived` - a pending chargeback reversal. >* `ChargebackReversed` - a reversed chargeback. >* `Converted` - converted. >* `ManualCorrected` - manual booking/adjustment by Adyen. >* `Payout` - a payout. >* `PayoutReversed` - a reversed payout. >* `PendingFundTransfer` - a pending transfer of funds from one account to another. >* `FundTransfer` - a transfer of funds from one account to another.
 ]: any -> record<accountTransactionLists: table<accountCode: string, hasNextPage: bool, transactions: list>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accountHolderTransactionList")
-  let body = {accountHolderCode: $accountHolderCode, transactionListsPerAccount: $transactionListsPerAccount, transactionStatuses: $transactionStatuses} | compact
+  let body = {"accountHolderCode": $account_holder_code, "transactionListsPerAccount": $transaction_lists_per_account, "transactionStatuses": $transaction_statuses} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,18 +162,18 @@ export def "debit-account-holder post-debitAccountHolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The code of the account holder.
+  account_holder_code: string # The code of the account holder.
   amount: record # shape: {currency: string, value: int}
-  bankAccountUUID: string # The Adyen-generated unique alphanumeric identifier (UUID) of the account holder's bank account.
+  bank_account_uuid: string # The Adyen-generated unique alphanumeric identifier (UUID) of the account holder's bank account.
   --description: string # A description of the direct debit. Maximum length: 35 characters.  Allowed characters: **a-z**, **A-Z**, **0-9**, and special characters **/?:().,'+ ";**.
-  merchantAccount: string # Your merchant account.
+  merchant_account: string # Your merchant account.
   splits: list # Contains instructions on how to split the funds between the accounts in your platform. The request must have at least one split item. — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 ]: any -> record<accountHolderCode: string, bankAccountUUID: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReferences: list<string>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/debitAccountHolder")
-  let body = {accountHolderCode: $accountHolderCode, amount: $amount, bankAccountUUID: $bankAccountUUID, description: $description, merchantAccount: $merchantAccount, splits: $splits} | compact
+  let body = {"accountHolderCode": $account_holder_code, "amount": $amount, "bankAccountUUID": $bank_account_uuid, "description": $description, "merchantAccount": $merchant_account, "splits": $splits} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -194,20 +194,20 @@ export def "payout-account-holder post-payoutAccountHolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountCode: string # The code of the account from which the payout is to be made.
-  accountHolderCode: string # The code of the Account Holder who owns the account from which the payout is to be made. The Account Holder is the party to which the payout will be made.
+  account_code: string # The code of the account from which the payout is to be made.
+  account_holder_code: string # The code of the Account Holder who owns the account from which the payout is to be made. The Account Holder is the party to which the payout will be made.
   --amount: record # shape: {currency: string, value: int}
-  --bankAccountUUID: string # The unique ID of the Bank Account held by the Account Holder to which the payout is to be made. If left blank, a bank account is automatically selected.
+  --bank-account-uuid: string # The unique ID of the Bank Account held by the Account Holder to which the payout is to be made. If left blank, a bank account is automatically selected.
   --description: string # A description of the payout. Maximum 200 characters. Allowed: **abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/?:().,'+ ";**
-  --merchantReference: string # A value that can be supplied at the discretion of the executing user in order to link multiple transactions to one another.
-  --payoutMethodCode: string # The unique ID of the payout method held by the Account Holder to which the payout is to be made. If left blank, a payout instrument is automatically selected.
-  --payoutSpeed: string@payoutSpeed-completer # Speed with which payouts for this account are processed. Permitted values: `STANDARD`, `SAME_DAY`. (default: STANDARD)
+  --merchant-reference: string # A value that can be supplied at the discretion of the executing user in order to link multiple transactions to one another.
+  --payout-method-code: string # The unique ID of the payout method held by the Account Holder to which the payout is to be made. If left blank, a payout instrument is automatically selected.
+  --payout-speed: string@payout-speed-completer # Speed with which payouts for this account are processed. Permitted values: `STANDARD`, `SAME_DAY`. (default: STANDARD)
 ]: any -> record<bankAccountUUID: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReference: string, payoutSpeed: string, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payoutAccountHolder")
-  let body = {accountCode: $accountCode, accountHolderCode: $accountHolderCode, amount: $amount, bankAccountUUID: $bankAccountUUID, description: $description, merchantReference: $merchantReference, payoutMethodCode: $payoutMethodCode, payoutSpeed: $payoutSpeed} | compact
+  let body = {"accountCode": $account_code, "accountHolderCode": $account_holder_code, "amount": $amount, "bankAccountUUID": $bank_account_uuid, "description": $description, "merchantReference": $merchant_reference, "payoutMethodCode": $payout_method_code, "payoutSpeed": $payout_speed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,14 +229,14 @@ export def "refund-funds-transfer post-refundFundsTransfer" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # shape: {currency: string, value: int}
-  --merchantReference: string # A value that can be supplied at the discretion of the executing user in order to link multiple transactions to one another.
-  originalReference: string # A PSP reference of the original fund transfer.
+  --merchant-reference: string # A value that can be supplied at the discretion of the executing user in order to link multiple transactions to one another.
+  original_reference: string # A PSP reference of the original fund transfer.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReference: string, message: string, originalReference: string, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/refundFundsTransfer")
-  let body = {amount: $amount, merchantReference: $merchantReference, originalReference: $originalReference} | compact
+  let body = {"amount": $amount, "merchantReference": $merchant_reference, "originalReference": $original_reference} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -256,14 +256,14 @@ export def "refund-not-paid-out-transfers post-refundNotPaidOutTransfers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountCode: string # The code of the account from which to perform the refund(s).
-  accountHolderCode: string # The code of the Account Holder which owns the account from which to perform the refund(s).
+  account_code: string # The code of the account from which to perform the refund(s).
+  account_holder_code: string # The code of the Account Holder which owns the account from which to perform the refund(s).
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/refundNotPaidOutTransfers")
-  let body = {accountCode: $accountCode, accountHolderCode: $accountHolderCode} | compact
+  let body = {"accountCode": $account_code, "accountHolderCode": $account_holder_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,15 +283,15 @@ export def "setup-beneficiary post-setupBeneficiary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  destinationAccountCode: string # The destination account code.
-  --merchantReference: string # A value that can be supplied at the discretion of the executing user.
-  sourceAccountCode: string # The benefactor account.
+  destination_account_code: string # The destination account code.
+  --merchant-reference: string # A value that can be supplied at the discretion of the executing user.
+  source_account_code: string # The benefactor account.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setupBeneficiary")
-  let body = {destinationAccountCode: $destinationAccountCode, merchantReference: $merchantReference, sourceAccountCode: $sourceAccountCode} | compact
+  let body = {"destinationAccountCode": $destination_account_code, "merchantReference": $merchant_reference, "sourceAccountCode": $source_account_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,16 +313,16 @@ export def "transfer-funds post-transferFunds" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   amount: record # shape: {currency: string, value: int}
-  destinationAccountCode: string # The code of the account to which the funds are to be credited. >The state of the Account Holder of this account must be Active.
-  --merchantReference: string # A value that can be supplied at the discretion of the executing user in order to link multiple transactions to one another.
-  sourceAccountCode: string # The code of the account from which the funds are to be debited. >The state of the Account Holder of this account must be Active and allow payouts.
-  transferCode: string # The code related to the type of transfer being performed. >The permitted codes differ for each platform account and are defined in their service level agreement.
+  destination_account_code: string # The code of the account to which the funds are to be credited. >The state of the Account Holder of this account must be Active.
+  --merchant-reference: string # A value that can be supplied at the discretion of the executing user in order to link multiple transactions to one another.
+  source_account_code: string # The code of the account from which the funds are to be debited. >The state of the Account Holder of this account must be Active and allow payouts.
+  transfer_code: string # The code related to the type of transfer being performed. >The permitted codes differ for each platform account and are defined in their service level agreement.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReference: string, pspReference: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transferFunds")
-  let body = {amount: $amount, destinationAccountCode: $destinationAccountCode, merchantReference: $merchantReference, sourceAccountCode: $sourceAccountCode, transferCode: $transferCode} | compact
+  let body = {"amount": $amount, "destinationAccountCode": $destination_account_code, "merchantReference": $merchant_reference, "sourceAccountCode": $source_account_code, "transferCode": $transfer_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

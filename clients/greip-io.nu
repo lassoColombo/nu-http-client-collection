@@ -130,14 +130,14 @@ export def "country get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (e.g. 2517bc4fc3f790e8f09bc808bb63b899)
-  --CountryCode: string # The Country Code of the country you want to fetch it's data. (e.g. PS)
+  --country-code: string # The Country Code of the country you want to fetch it's data. (e.g. PS)
   --params: string # The modules you want to use of the request. It's a CSV (Comma Separated Values) (e.g. language)
   --lang: string # Used to inform the API to retrieve the response in your native language. (e.g. AR)
   --format: string # Sets the format of the API response. JSON is the default format. (e.g. XML)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "CountryCode" $CountryCode "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "CountryCode" $country_code "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Country" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,13 +214,13 @@ export def "bad-words get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Your API Key. Each user has a unique API Key that can be used to access the API functions. If you don't have an account yet, please create new account first. (e.g. 2517bc4fc3f790e8f09bc808bb63b899)
   --text: string # The text you want to check. (e.g. This is a sample text without profanity!)
-  --listBadWords: string # Set to `yes` to list the bad-words as an Array. (e.g. no)
-  --scoreOnly: string # Set to `yes` to return only the score of the text and whether it's safe or not. (e.g. no)
+  --list-bad-words: string # Set to `yes` to list the bad-words as an Array. (e.g. no)
+  --score-only: string # Set to `yes` to return only the score of the text and whether it's safe or not. (e.g. no)
   --format: string # Sets the format of the API response. JSON is the default format. (e.g. JSON)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "listBadWords" $listBadWords "scalar") (serialize-qp "scoreOnly" $scoreOnly "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "listBadWords" $list_bad_words "scalar") (serialize-qp "scoreOnly" $score_only "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/badWords" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

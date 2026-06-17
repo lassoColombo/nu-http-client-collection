@@ -66,15 +66,15 @@ def base-url-completer [] { ["http://streams.dynamodb.us-east-1.amazonaws.com" "
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["DynamoDBStreams_20120810.DescribeStream"] }
-def X-Amz-Target-completer-1 [] { ["DynamoDBStreams_20120810.GetRecords"] }
-def X-Amz-Target-completer-2 [] { ["DynamoDBStreams_20120810.GetShardIterator"] }
-def X-Amz-Target-completer-3 [] { ["DynamoDBStreams_20120810.ListStreams"] }
+def x-amz-target-completer [] { ["DynamoDBStreams_20120810.DescribeStream"] }
+def x-amz-target-completer-1 [] { ["DynamoDBStreams_20120810.GetRecords"] }
+def x-amz-target-completer-2 [] { ["DynamoDBStreams_20120810.GetShardIterator"] }
+def x-amz-target-completer-3 [] { ["DynamoDBStreams_20120810.ListStreams"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-dynamo-db-streams-20120810describe-stream DescribeStream" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-dynamo-db-streams-20120810describe-stream post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +98,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=DynamoDBStreams_20120810.DescribeStream
 # operationId: DescribeStream
-export def "x-amz-target-dynamo-db-streams-20120810describe-stream DescribeStream" [
+export def "x-amz-target-dynamo-db-streams-20120810describe-stream post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,25 +107,25 @@ export def "x-amz-target-dynamo-db-streams-20120810describe-stream DescribeStrea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  StreamArn: any
-  --Limit: any
-  --ExclusiveStartShardId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  stream_arn: any
+  --limit: any
+  --exclusive-start-shard-id: any
 ]: any -> record<StreamDescription: record<StreamArn: record, StreamLabel: record, StreamStatus: record, StreamViewType: record, CreationRequestDateTime: record, TableName: record, KeySchema: record, Shards: record, LastEvaluatedShardId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDBStreams_20120810.DescribeStream")
-  let body = {StreamArn: $StreamArn, Limit: $Limit, ExclusiveStartShardId: $ExclusiveStartShardId} | compact
+  let body = {"StreamArn": $stream_arn, "Limit": $limit, "ExclusiveStartShardId": $exclusive_start_shard_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -136,7 +136,7 @@ export def "x-amz-target-dynamo-db-streams-20120810describe-stream DescribeStrea
 #
 # POST /#X-Amz-Target=DynamoDBStreams_20120810.GetRecords
 # operationId: GetRecords
-export def "x-amz-target-dynamo-db-streams-20120810get-records GetRecords" [
+export def "x-amz-target-dynamo-db-streams-20120810get-records get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,24 +145,24 @@ export def "x-amz-target-dynamo-db-streams-20120810get-records GetRecords" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ShardIterator: any
-  --Limit: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  shard_iterator: any
+  --limit: any
 ]: any -> record<Records: record, NextShardIterator: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDBStreams_20120810.GetRecords")
-  let body = {ShardIterator: $ShardIterator, Limit: $Limit} | compact
+  let body = {"ShardIterator": $shard_iterator, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -173,7 +173,7 @@ export def "x-amz-target-dynamo-db-streams-20120810get-records GetRecords" [
 #
 # POST /#X-Amz-Target=DynamoDBStreams_20120810.GetShardIterator
 # operationId: GetShardIterator
-export def "x-amz-target-dynamo-db-streams-20120810get-shard-iterator GetShardIterator" [
+export def "x-amz-target-dynamo-db-streams-20120810get-shard-iterator get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,26 +182,26 @@ export def "x-amz-target-dynamo-db-streams-20120810get-shard-iterator GetShardIt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  StreamArn: any
-  ShardId: any
-  ShardIteratorType: any
-  --SequenceNumber: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  stream_arn: any
+  shard_id: any
+  shard_iterator_type: any
+  --sequence-number: any
 ]: any -> record<ShardIterator: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDBStreams_20120810.GetShardIterator")
-  let body = {StreamArn: $StreamArn, ShardId: $ShardId, ShardIteratorType: $ShardIteratorType, SequenceNumber: $SequenceNumber} | compact
+  let body = {"StreamArn": $stream_arn, "ShardId": $shard_id, "ShardIteratorType": $shard_iterator_type, "SequenceNumber": $sequence_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,7 +212,7 @@ export def "x-amz-target-dynamo-db-streams-20120810get-shard-iterator GetShardIt
 #
 # POST /#X-Amz-Target=DynamoDBStreams_20120810.ListStreams
 # operationId: ListStreams
-export def "x-amz-target-dynamo-db-streams-20120810list-streams ListStreams" [
+export def "x-amz-target-dynamo-db-streams-20120810list-streams list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,25 +221,25 @@ export def "x-amz-target-dynamo-db-streams-20120810list-streams ListStreams" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  --TableName: any
-  --Limit: any
-  --ExclusiveStartStreamArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  --table-name: any
+  --limit: any
+  --exclusive-start-stream-arn: any
 ]: any -> record<Streams: record, LastEvaluatedStreamArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDBStreams_20120810.ListStreams")
-  let body = {TableName: $TableName, Limit: $Limit, ExclusiveStartStreamArn: $ExclusiveStartStreamArn} | compact
+  let body = {"TableName": $table_name, "Limit": $limit, "ExclusiveStartStreamArn": $exclusive_start_stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

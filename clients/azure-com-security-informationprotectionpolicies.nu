@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-information-protection-policies List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-information-protection-policies list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /{scope}/providers/Microsoft.Security/informationProtectionPolicies
 # operationId: InformationProtectionPolicies_List
-export def "providers-microsoft-security-information-protection-policies List" [
+export def "providers-microsoft-security-information-protection-policies list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -108,7 +108,7 @@ export def "providers-microsoft-security-information-protection-policies List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Security/informationProtectionPolicies" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.Security/informationProtectionPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,9 +118,9 @@ export def "providers-microsoft-security-information-protection-policies List" [
 #
 # GET /{scope}/providers/Microsoft.Security/informationProtectionPolicies/{informationProtectionPolicyName}
 # operationId: InformationProtectionPolicies_Get
-export def "providers-microsoft-security-information-protection-policies Get" [
+export def "providers-microsoft-security-information-protection-policies get" [
   scope: string
-  informationProtectionPolicyName: string
+  information_protection_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "providers-microsoft-security-information-protection-policies Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Security/informationProtectionPolicies/($informationProtectionPolicyName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, information_protection_policy_name: $information_protection_policy_name} | format pattern "/{scope}/providers/Microsoft.Security/informationProtectionPolicies/{information_protection_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,9 +144,9 @@ export def "providers-microsoft-security-information-protection-policies Get" [
 #
 # PUT /{scope}/providers/Microsoft.Security/informationProtectionPolicies/{informationProtectionPolicyName}
 # operationId: InformationProtectionPolicies_CreateOrUpdate
-export def "providers-microsoft-security-information-protection-policies CreateOrUpdate" [
+export def "providers-microsoft-security-information-protection-policies create-or-update" [
   scope: string
-  informationProtectionPolicyName: string
+  information_protection_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "providers-microsoft-security-information-protection-policies CreateO
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.Security/informationProtectionPolicies/($informationProtectionPolicyName)" $qp)
+  let full_url = (build-url $base ({scope: $scope, information_protection_policy_name: $information_protection_policy_name} | format pattern "/{scope}/providers/Microsoft.Security/informationProtectionPolicies/{information_protection_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

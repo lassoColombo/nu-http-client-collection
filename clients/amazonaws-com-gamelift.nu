@@ -66,115 +66,115 @@ def base-url-completer [] { ["http://gamelift.us-east-1.amazonaws.com" "http://g
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["GameLift.AcceptMatch"] }
-def X-Amz-Target-completer-1 [] { ["GameLift.ClaimGameServer"] }
-def X-Amz-Target-completer-2 [] { ["GameLift.CreateAlias"] }
-def X-Amz-Target-completer-3 [] { ["GameLift.CreateBuild"] }
-def X-Amz-Target-completer-4 [] { ["GameLift.CreateFleet"] }
-def X-Amz-Target-completer-5 [] { ["GameLift.CreateFleetLocations"] }
-def X-Amz-Target-completer-6 [] { ["GameLift.CreateGameServerGroup"] }
-def X-Amz-Target-completer-7 [] { ["GameLift.CreateGameSession"] }
-def X-Amz-Target-completer-8 [] { ["GameLift.CreateGameSessionQueue"] }
-def X-Amz-Target-completer-9 [] { ["GameLift.CreateLocation"] }
-def X-Amz-Target-completer-10 [] { ["GameLift.CreateMatchmakingConfiguration"] }
-def X-Amz-Target-completer-11 [] { ["GameLift.CreateMatchmakingRuleSet"] }
-def X-Amz-Target-completer-12 [] { ["GameLift.CreatePlayerSession"] }
-def X-Amz-Target-completer-13 [] { ["GameLift.CreatePlayerSessions"] }
-def X-Amz-Target-completer-14 [] { ["GameLift.CreateScript"] }
-def X-Amz-Target-completer-15 [] { ["GameLift.CreateVpcPeeringAuthorization"] }
-def X-Amz-Target-completer-16 [] { ["GameLift.CreateVpcPeeringConnection"] }
-def X-Amz-Target-completer-17 [] { ["GameLift.DeleteAlias"] }
-def X-Amz-Target-completer-18 [] { ["GameLift.DeleteBuild"] }
-def X-Amz-Target-completer-19 [] { ["GameLift.DeleteFleet"] }
-def X-Amz-Target-completer-20 [] { ["GameLift.DeleteFleetLocations"] }
-def X-Amz-Target-completer-21 [] { ["GameLift.DeleteGameServerGroup"] }
-def X-Amz-Target-completer-22 [] { ["GameLift.DeleteGameSessionQueue"] }
-def X-Amz-Target-completer-23 [] { ["GameLift.DeleteLocation"] }
-def X-Amz-Target-completer-24 [] { ["GameLift.DeleteMatchmakingConfiguration"] }
-def X-Amz-Target-completer-25 [] { ["GameLift.DeleteMatchmakingRuleSet"] }
-def X-Amz-Target-completer-26 [] { ["GameLift.DeleteScalingPolicy"] }
-def X-Amz-Target-completer-27 [] { ["GameLift.DeleteScript"] }
-def X-Amz-Target-completer-28 [] { ["GameLift.DeleteVpcPeeringAuthorization"] }
-def X-Amz-Target-completer-29 [] { ["GameLift.DeleteVpcPeeringConnection"] }
-def X-Amz-Target-completer-30 [] { ["GameLift.DeregisterCompute"] }
-def X-Amz-Target-completer-31 [] { ["GameLift.DeregisterGameServer"] }
-def X-Amz-Target-completer-32 [] { ["GameLift.DescribeAlias"] }
-def X-Amz-Target-completer-33 [] { ["GameLift.DescribeBuild"] }
-def X-Amz-Target-completer-34 [] { ["GameLift.DescribeCompute"] }
-def X-Amz-Target-completer-35 [] { ["GameLift.DescribeEC2InstanceLimits"] }
-def X-Amz-Target-completer-36 [] { ["GameLift.DescribeFleetAttributes"] }
-def X-Amz-Target-completer-37 [] { ["GameLift.DescribeFleetCapacity"] }
-def X-Amz-Target-completer-38 [] { ["GameLift.DescribeFleetEvents"] }
-def X-Amz-Target-completer-39 [] { ["GameLift.DescribeFleetLocationAttributes"] }
-def X-Amz-Target-completer-40 [] { ["GameLift.DescribeFleetLocationCapacity"] }
-def X-Amz-Target-completer-41 [] { ["GameLift.DescribeFleetLocationUtilization"] }
-def X-Amz-Target-completer-42 [] { ["GameLift.DescribeFleetPortSettings"] }
-def X-Amz-Target-completer-43 [] { ["GameLift.DescribeFleetUtilization"] }
-def X-Amz-Target-completer-44 [] { ["GameLift.DescribeGameServer"] }
-def X-Amz-Target-completer-45 [] { ["GameLift.DescribeGameServerGroup"] }
-def X-Amz-Target-completer-46 [] { ["GameLift.DescribeGameServerInstances"] }
-def X-Amz-Target-completer-47 [] { ["GameLift.DescribeGameSessionDetails"] }
-def X-Amz-Target-completer-48 [] { ["GameLift.DescribeGameSessionPlacement"] }
-def X-Amz-Target-completer-49 [] { ["GameLift.DescribeGameSessionQueues"] }
-def X-Amz-Target-completer-50 [] { ["GameLift.DescribeGameSessions"] }
-def X-Amz-Target-completer-51 [] { ["GameLift.DescribeInstances"] }
-def X-Amz-Target-completer-52 [] { ["GameLift.DescribeMatchmaking"] }
-def X-Amz-Target-completer-53 [] { ["GameLift.DescribeMatchmakingConfigurations"] }
-def X-Amz-Target-completer-54 [] { ["GameLift.DescribeMatchmakingRuleSets"] }
-def X-Amz-Target-completer-55 [] { ["GameLift.DescribePlayerSessions"] }
-def X-Amz-Target-completer-56 [] { ["GameLift.DescribeRuntimeConfiguration"] }
-def X-Amz-Target-completer-57 [] { ["GameLift.DescribeScalingPolicies"] }
-def X-Amz-Target-completer-58 [] { ["GameLift.DescribeScript"] }
-def X-Amz-Target-completer-59 [] { ["GameLift.DescribeVpcPeeringAuthorizations"] }
-def X-Amz-Target-completer-60 [] { ["GameLift.DescribeVpcPeeringConnections"] }
-def X-Amz-Target-completer-61 [] { ["GameLift.GetComputeAccess"] }
-def X-Amz-Target-completer-62 [] { ["GameLift.GetComputeAuthToken"] }
-def X-Amz-Target-completer-63 [] { ["GameLift.GetGameSessionLogUrl"] }
-def X-Amz-Target-completer-64 [] { ["GameLift.GetInstanceAccess"] }
-def X-Amz-Target-completer-65 [] { ["GameLift.ListAliases"] }
-def X-Amz-Target-completer-66 [] { ["GameLift.ListBuilds"] }
-def X-Amz-Target-completer-67 [] { ["GameLift.ListCompute"] }
-def X-Amz-Target-completer-68 [] { ["GameLift.ListFleets"] }
-def X-Amz-Target-completer-69 [] { ["GameLift.ListGameServerGroups"] }
-def X-Amz-Target-completer-70 [] { ["GameLift.ListGameServers"] }
-def X-Amz-Target-completer-71 [] { ["GameLift.ListLocations"] }
-def X-Amz-Target-completer-72 [] { ["GameLift.ListScripts"] }
-def X-Amz-Target-completer-73 [] { ["GameLift.ListTagsForResource"] }
-def X-Amz-Target-completer-74 [] { ["GameLift.PutScalingPolicy"] }
-def X-Amz-Target-completer-75 [] { ["GameLift.RegisterCompute"] }
-def X-Amz-Target-completer-76 [] { ["GameLift.RegisterGameServer"] }
-def X-Amz-Target-completer-77 [] { ["GameLift.RequestUploadCredentials"] }
-def X-Amz-Target-completer-78 [] { ["GameLift.ResolveAlias"] }
-def X-Amz-Target-completer-79 [] { ["GameLift.ResumeGameServerGroup"] }
-def X-Amz-Target-completer-80 [] { ["GameLift.SearchGameSessions"] }
-def X-Amz-Target-completer-81 [] { ["GameLift.StartFleetActions"] }
-def X-Amz-Target-completer-82 [] { ["GameLift.StartGameSessionPlacement"] }
-def X-Amz-Target-completer-83 [] { ["GameLift.StartMatchBackfill"] }
-def X-Amz-Target-completer-84 [] { ["GameLift.StartMatchmaking"] }
-def X-Amz-Target-completer-85 [] { ["GameLift.StopFleetActions"] }
-def X-Amz-Target-completer-86 [] { ["GameLift.StopGameSessionPlacement"] }
-def X-Amz-Target-completer-87 [] { ["GameLift.StopMatchmaking"] }
-def X-Amz-Target-completer-88 [] { ["GameLift.SuspendGameServerGroup"] }
-def X-Amz-Target-completer-89 [] { ["GameLift.TagResource"] }
-def X-Amz-Target-completer-90 [] { ["GameLift.UntagResource"] }
-def X-Amz-Target-completer-91 [] { ["GameLift.UpdateAlias"] }
-def X-Amz-Target-completer-92 [] { ["GameLift.UpdateBuild"] }
-def X-Amz-Target-completer-93 [] { ["GameLift.UpdateFleetAttributes"] }
-def X-Amz-Target-completer-94 [] { ["GameLift.UpdateFleetCapacity"] }
-def X-Amz-Target-completer-95 [] { ["GameLift.UpdateFleetPortSettings"] }
-def X-Amz-Target-completer-96 [] { ["GameLift.UpdateGameServer"] }
-def X-Amz-Target-completer-97 [] { ["GameLift.UpdateGameServerGroup"] }
-def X-Amz-Target-completer-98 [] { ["GameLift.UpdateGameSession"] }
-def X-Amz-Target-completer-99 [] { ["GameLift.UpdateGameSessionQueue"] }
-def X-Amz-Target-completer-100 [] { ["GameLift.UpdateMatchmakingConfiguration"] }
-def X-Amz-Target-completer-101 [] { ["GameLift.UpdateRuntimeConfiguration"] }
-def X-Amz-Target-completer-102 [] { ["GameLift.UpdateScript"] }
-def X-Amz-Target-completer-103 [] { ["GameLift.ValidateMatchmakingRuleSet"] }
+def x-amz-target-completer [] { ["GameLift.AcceptMatch"] }
+def x-amz-target-completer-1 [] { ["GameLift.ClaimGameServer"] }
+def x-amz-target-completer-2 [] { ["GameLift.CreateAlias"] }
+def x-amz-target-completer-3 [] { ["GameLift.CreateBuild"] }
+def x-amz-target-completer-4 [] { ["GameLift.CreateFleet"] }
+def x-amz-target-completer-5 [] { ["GameLift.CreateFleetLocations"] }
+def x-amz-target-completer-6 [] { ["GameLift.CreateGameServerGroup"] }
+def x-amz-target-completer-7 [] { ["GameLift.CreateGameSession"] }
+def x-amz-target-completer-8 [] { ["GameLift.CreateGameSessionQueue"] }
+def x-amz-target-completer-9 [] { ["GameLift.CreateLocation"] }
+def x-amz-target-completer-10 [] { ["GameLift.CreateMatchmakingConfiguration"] }
+def x-amz-target-completer-11 [] { ["GameLift.CreateMatchmakingRuleSet"] }
+def x-amz-target-completer-12 [] { ["GameLift.CreatePlayerSession"] }
+def x-amz-target-completer-13 [] { ["GameLift.CreatePlayerSessions"] }
+def x-amz-target-completer-14 [] { ["GameLift.CreateScript"] }
+def x-amz-target-completer-15 [] { ["GameLift.CreateVpcPeeringAuthorization"] }
+def x-amz-target-completer-16 [] { ["GameLift.CreateVpcPeeringConnection"] }
+def x-amz-target-completer-17 [] { ["GameLift.DeleteAlias"] }
+def x-amz-target-completer-18 [] { ["GameLift.DeleteBuild"] }
+def x-amz-target-completer-19 [] { ["GameLift.DeleteFleet"] }
+def x-amz-target-completer-20 [] { ["GameLift.DeleteFleetLocations"] }
+def x-amz-target-completer-21 [] { ["GameLift.DeleteGameServerGroup"] }
+def x-amz-target-completer-22 [] { ["GameLift.DeleteGameSessionQueue"] }
+def x-amz-target-completer-23 [] { ["GameLift.DeleteLocation"] }
+def x-amz-target-completer-24 [] { ["GameLift.DeleteMatchmakingConfiguration"] }
+def x-amz-target-completer-25 [] { ["GameLift.DeleteMatchmakingRuleSet"] }
+def x-amz-target-completer-26 [] { ["GameLift.DeleteScalingPolicy"] }
+def x-amz-target-completer-27 [] { ["GameLift.DeleteScript"] }
+def x-amz-target-completer-28 [] { ["GameLift.DeleteVpcPeeringAuthorization"] }
+def x-amz-target-completer-29 [] { ["GameLift.DeleteVpcPeeringConnection"] }
+def x-amz-target-completer-30 [] { ["GameLift.DeregisterCompute"] }
+def x-amz-target-completer-31 [] { ["GameLift.DeregisterGameServer"] }
+def x-amz-target-completer-32 [] { ["GameLift.DescribeAlias"] }
+def x-amz-target-completer-33 [] { ["GameLift.DescribeBuild"] }
+def x-amz-target-completer-34 [] { ["GameLift.DescribeCompute"] }
+def x-amz-target-completer-35 [] { ["GameLift.DescribeEC2InstanceLimits"] }
+def x-amz-target-completer-36 [] { ["GameLift.DescribeFleetAttributes"] }
+def x-amz-target-completer-37 [] { ["GameLift.DescribeFleetCapacity"] }
+def x-amz-target-completer-38 [] { ["GameLift.DescribeFleetEvents"] }
+def x-amz-target-completer-39 [] { ["GameLift.DescribeFleetLocationAttributes"] }
+def x-amz-target-completer-40 [] { ["GameLift.DescribeFleetLocationCapacity"] }
+def x-amz-target-completer-41 [] { ["GameLift.DescribeFleetLocationUtilization"] }
+def x-amz-target-completer-42 [] { ["GameLift.DescribeFleetPortSettings"] }
+def x-amz-target-completer-43 [] { ["GameLift.DescribeFleetUtilization"] }
+def x-amz-target-completer-44 [] { ["GameLift.DescribeGameServer"] }
+def x-amz-target-completer-45 [] { ["GameLift.DescribeGameServerGroup"] }
+def x-amz-target-completer-46 [] { ["GameLift.DescribeGameServerInstances"] }
+def x-amz-target-completer-47 [] { ["GameLift.DescribeGameSessionDetails"] }
+def x-amz-target-completer-48 [] { ["GameLift.DescribeGameSessionPlacement"] }
+def x-amz-target-completer-49 [] { ["GameLift.DescribeGameSessionQueues"] }
+def x-amz-target-completer-50 [] { ["GameLift.DescribeGameSessions"] }
+def x-amz-target-completer-51 [] { ["GameLift.DescribeInstances"] }
+def x-amz-target-completer-52 [] { ["GameLift.DescribeMatchmaking"] }
+def x-amz-target-completer-53 [] { ["GameLift.DescribeMatchmakingConfigurations"] }
+def x-amz-target-completer-54 [] { ["GameLift.DescribeMatchmakingRuleSets"] }
+def x-amz-target-completer-55 [] { ["GameLift.DescribePlayerSessions"] }
+def x-amz-target-completer-56 [] { ["GameLift.DescribeRuntimeConfiguration"] }
+def x-amz-target-completer-57 [] { ["GameLift.DescribeScalingPolicies"] }
+def x-amz-target-completer-58 [] { ["GameLift.DescribeScript"] }
+def x-amz-target-completer-59 [] { ["GameLift.DescribeVpcPeeringAuthorizations"] }
+def x-amz-target-completer-60 [] { ["GameLift.DescribeVpcPeeringConnections"] }
+def x-amz-target-completer-61 [] { ["GameLift.GetComputeAccess"] }
+def x-amz-target-completer-62 [] { ["GameLift.GetComputeAuthToken"] }
+def x-amz-target-completer-63 [] { ["GameLift.GetGameSessionLogUrl"] }
+def x-amz-target-completer-64 [] { ["GameLift.GetInstanceAccess"] }
+def x-amz-target-completer-65 [] { ["GameLift.ListAliases"] }
+def x-amz-target-completer-66 [] { ["GameLift.ListBuilds"] }
+def x-amz-target-completer-67 [] { ["GameLift.ListCompute"] }
+def x-amz-target-completer-68 [] { ["GameLift.ListFleets"] }
+def x-amz-target-completer-69 [] { ["GameLift.ListGameServerGroups"] }
+def x-amz-target-completer-70 [] { ["GameLift.ListGameServers"] }
+def x-amz-target-completer-71 [] { ["GameLift.ListLocations"] }
+def x-amz-target-completer-72 [] { ["GameLift.ListScripts"] }
+def x-amz-target-completer-73 [] { ["GameLift.ListTagsForResource"] }
+def x-amz-target-completer-74 [] { ["GameLift.PutScalingPolicy"] }
+def x-amz-target-completer-75 [] { ["GameLift.RegisterCompute"] }
+def x-amz-target-completer-76 [] { ["GameLift.RegisterGameServer"] }
+def x-amz-target-completer-77 [] { ["GameLift.RequestUploadCredentials"] }
+def x-amz-target-completer-78 [] { ["GameLift.ResolveAlias"] }
+def x-amz-target-completer-79 [] { ["GameLift.ResumeGameServerGroup"] }
+def x-amz-target-completer-80 [] { ["GameLift.SearchGameSessions"] }
+def x-amz-target-completer-81 [] { ["GameLift.StartFleetActions"] }
+def x-amz-target-completer-82 [] { ["GameLift.StartGameSessionPlacement"] }
+def x-amz-target-completer-83 [] { ["GameLift.StartMatchBackfill"] }
+def x-amz-target-completer-84 [] { ["GameLift.StartMatchmaking"] }
+def x-amz-target-completer-85 [] { ["GameLift.StopFleetActions"] }
+def x-amz-target-completer-86 [] { ["GameLift.StopGameSessionPlacement"] }
+def x-amz-target-completer-87 [] { ["GameLift.StopMatchmaking"] }
+def x-amz-target-completer-88 [] { ["GameLift.SuspendGameServerGroup"] }
+def x-amz-target-completer-89 [] { ["GameLift.TagResource"] }
+def x-amz-target-completer-90 [] { ["GameLift.UntagResource"] }
+def x-amz-target-completer-91 [] { ["GameLift.UpdateAlias"] }
+def x-amz-target-completer-92 [] { ["GameLift.UpdateBuild"] }
+def x-amz-target-completer-93 [] { ["GameLift.UpdateFleetAttributes"] }
+def x-amz-target-completer-94 [] { ["GameLift.UpdateFleetCapacity"] }
+def x-amz-target-completer-95 [] { ["GameLift.UpdateFleetPortSettings"] }
+def x-amz-target-completer-96 [] { ["GameLift.UpdateGameServer"] }
+def x-amz-target-completer-97 [] { ["GameLift.UpdateGameServerGroup"] }
+def x-amz-target-completer-98 [] { ["GameLift.UpdateGameSession"] }
+def x-amz-target-completer-99 [] { ["GameLift.UpdateGameSessionQueue"] }
+def x-amz-target-completer-100 [] { ["GameLift.UpdateMatchmakingConfiguration"] }
+def x-amz-target-completer-101 [] { ["GameLift.UpdateRuntimeConfiguration"] }
+def x-amz-target-completer-102 [] { ["GameLift.UpdateScript"] }
+def x-amz-target-completer-103 [] { ["GameLift.ValidateMatchmakingRuleSet"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-game-lift-accept-match AcceptMatch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-game-lift-accept-match post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -198,7 +198,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=GameLift.AcceptMatch
 # operationId: AcceptMatch
-export def "x-amz-target-game-lift-accept-match AcceptMatch" [
+export def "x-amz-target-game-lift-accept-match post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,25 +207,25 @@ export def "x-amz-target-game-lift-accept-match AcceptMatch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  TicketId: any
-  PlayerIds: any
-  AcceptanceType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  ticket_id: any
+  player_ids: any
+  acceptance_type: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.AcceptMatch")
-  let body = {TicketId: $TicketId, PlayerIds: $PlayerIds, AcceptanceType: $AcceptanceType} | compact
+  let body = {"TicketId": $ticket_id, "PlayerIds": $player_ids, "AcceptanceType": $acceptance_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -236,7 +236,7 @@ export def "x-amz-target-game-lift-accept-match AcceptMatch" [
 #
 # POST /#X-Amz-Target=GameLift.ClaimGameServer
 # operationId: ClaimGameServer
-export def "x-amz-target-game-lift-claim-game-server ClaimGameServer" [
+export def "x-amz-target-game-lift-claim-game-server post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,25 +245,25 @@ export def "x-amz-target-game-lift-claim-game-server ClaimGameServer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  GameServerGroupName: any
-  --GameServerId: any
-  --GameServerData: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  game_server_group_name: any
+  --game-server-id: any
+  --game-server-data: any
 ]: any -> record<GameServer: record<GameServerGroupName: record, GameServerGroupArn: record, GameServerId: record, InstanceId: record, ConnectionInfo: record, GameServerData: record, ClaimStatus: record, UtilizationStatus: record, RegistrationTime: record, LastClaimTime: record, LastHealthCheckTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ClaimGameServer")
-  let body = {GameServerGroupName: $GameServerGroupName, GameServerId: $GameServerId, GameServerData: $GameServerData} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "GameServerId": $game_server_id, "GameServerData": $game_server_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,7 +274,7 @@ export def "x-amz-target-game-lift-claim-game-server ClaimGameServer" [
 #
 # POST /#X-Amz-Target=GameLift.CreateAlias
 # operationId: CreateAlias
-export def "x-amz-target-game-lift-create-alias CreateAlias" [
+export def "x-amz-target-game-lift-create-alias create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,26 +283,26 @@ export def "x-amz-target-game-lift-create-alias CreateAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  Name: any
-  --Description: any
-  RoutingStrategy: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  name: any
+  --description: any
+  routing_strategy: any
+  --tags: any
 ]: any -> record<Alias: record<AliasId: record, Name: record, AliasArn: record, Description: record, RoutingStrategy: record<Type: record, FleetId: record, Message: record>, CreationTime: record, LastUpdatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateAlias")
-  let body = {Name: $Name, Description: $Description, RoutingStrategy: $RoutingStrategy, Tags: $Tags} | compact
+  let body = {"Name": $name, "Description": $description, "RoutingStrategy": $routing_strategy, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,7 +313,7 @@ export def "x-amz-target-game-lift-create-alias CreateAlias" [
 #
 # POST /#X-Amz-Target=GameLift.CreateBuild
 # operationId: CreateBuild
-export def "x-amz-target-game-lift-create-build CreateBuild" [
+export def "x-amz-target-game-lift-create-build create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -322,28 +322,28 @@ export def "x-amz-target-game-lift-create-build CreateBuild" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  --Name: any
-  --Version: any
-  --StorageLocation: any
-  --OperatingSystem: any
-  --Tags: any
-  --ServerSdkVersion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  --name: any
+  --version: any
+  --storage-location: any
+  --operating-system: any
+  --tags: any
+  --server-sdk-version: any
 ]: any -> record<Build: record<BuildId: record, BuildArn: record, Name: record, Version: record, Status: record, SizeOnDisk: record, OperatingSystem: record, CreationTime: record, ServerSdkVersion: record>, UploadCredentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record>, StorageLocation: record<Bucket: record, Key: record, RoleArn: record, ObjectVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateBuild")
-  let body = {Name: $Name, Version: $Version, StorageLocation: $StorageLocation, OperatingSystem: $OperatingSystem, Tags: $Tags, ServerSdkVersion: $ServerSdkVersion} | compact
+  let body = {"Name": $name, "Version": $version, "StorageLocation": $storage_location, "OperatingSystem": $operating_system, "Tags": $tags, "ServerSdkVersion": $server_sdk_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -354,7 +354,7 @@ export def "x-amz-target-game-lift-create-build CreateBuild" [
 #
 # POST /#X-Amz-Target=GameLift.CreateFleet
 # operationId: CreateFleet
-export def "x-amz-target-game-lift-create-fleet CreateFleet" [
+export def "x-amz-target-game-lift-create-fleet create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,44 +363,44 @@ export def "x-amz-target-game-lift-create-fleet CreateFleet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  Name: any
-  --Description: any
-  --BuildId: any
-  --ScriptId: any
-  --ServerLaunchPath: any
-  --ServerLaunchParameters: any
-  --LogPaths: any
-  --EC2InstanceType: any
-  --EC2InboundPermissions: any
-  --NewGameSessionProtectionPolicy: any
-  --RuntimeConfiguration: any
-  --ResourceCreationLimitPolicy: any
-  --MetricGroups: any
-  --PeerVpcAwsAccountId: any
-  --PeerVpcId: any
-  --FleetType: any
-  --InstanceRoleArn: any
-  --CertificateConfiguration: any
-  --Locations: any
-  --Tags: any
-  --ComputeType: any
-  --AnywhereConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  name: any
+  --description: any
+  --build-id: any
+  --script-id: any
+  --server-launch-path: any
+  --server-launch-parameters: any
+  --log-paths: any
+  --ec2-instance-type: any
+  --ec2-inbound-permissions: any
+  --new-game-session-protection-policy: any
+  --runtime-configuration: any
+  --resource-creation-limit-policy: any
+  --metric-groups: any
+  --peer-vpc-aws-account-id: any
+  --peer-vpc-id: any
+  --fleet-type: any
+  --instance-role-arn: any
+  --certificate-configuration: any
+  --locations: any
+  --tags: any
+  --compute-type: any
+  --anywhere-configuration: any
 ]: any -> record<FleetAttributes: record<FleetId: record, FleetArn: record, FleetType: record, InstanceType: record, Description: record, Name: record, CreationTime: record, TerminationTime: record, Status: record, BuildId: record, BuildArn: record, ScriptId: record, ScriptArn: record, ServerLaunchPath: record, ServerLaunchParameters: record, LogPaths: record, NewGameSessionProtectionPolicy: record, OperatingSystem: record, ResourceCreationLimitPolicy: record<NewGameSessionsPerCreator: record, PolicyPeriodInMinutes: record>, MetricGroups: record, StoppedActions: record, InstanceRoleArn: record, CertificateConfiguration: record<CertificateType: record>, ComputeType: record, AnywhereConfiguration: record<Cost: record>>, LocationStates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateFleet")
-  let body = {Name: $Name, Description: $Description, BuildId: $BuildId, ScriptId: $ScriptId, ServerLaunchPath: $ServerLaunchPath, ServerLaunchParameters: $ServerLaunchParameters, LogPaths: $LogPaths, EC2InstanceType: $EC2InstanceType, EC2InboundPermissions: $EC2InboundPermissions, NewGameSessionProtectionPolicy: $NewGameSessionProtectionPolicy, RuntimeConfiguration: $RuntimeConfiguration, ResourceCreationLimitPolicy: $ResourceCreationLimitPolicy, MetricGroups: $MetricGroups, PeerVpcAwsAccountId: $PeerVpcAwsAccountId, PeerVpcId: $PeerVpcId, FleetType: $FleetType, InstanceRoleArn: $InstanceRoleArn, CertificateConfiguration: $CertificateConfiguration, Locations: $Locations, Tags: $Tags, ComputeType: $ComputeType, AnywhereConfiguration: $AnywhereConfiguration} | compact
+  let body = {"Name": $name, "Description": $description, "BuildId": $build_id, "ScriptId": $script_id, "ServerLaunchPath": $server_launch_path, "ServerLaunchParameters": $server_launch_parameters, "LogPaths": $log_paths, "EC2InstanceType": $ec2_instance_type, "EC2InboundPermissions": $ec2_inbound_permissions, "NewGameSessionProtectionPolicy": $new_game_session_protection_policy, "RuntimeConfiguration": $runtime_configuration, "ResourceCreationLimitPolicy": $resource_creation_limit_policy, "MetricGroups": $metric_groups, "PeerVpcAwsAccountId": $peer_vpc_aws_account_id, "PeerVpcId": $peer_vpc_id, "FleetType": $fleet_type, "InstanceRoleArn": $instance_role_arn, "CertificateConfiguration": $certificate_configuration, "Locations": $locations, "Tags": $tags, "ComputeType": $compute_type, "AnywhereConfiguration": $anywhere_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -411,7 +411,7 @@ export def "x-amz-target-game-lift-create-fleet CreateFleet" [
 #
 # POST /#X-Amz-Target=GameLift.CreateFleetLocations
 # operationId: CreateFleetLocations
-export def "x-amz-target-game-lift-create-fleet-locations CreateFleetLocations" [
+export def "x-amz-target-game-lift-create-fleet-locations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,24 +420,24 @@ export def "x-amz-target-game-lift-create-fleet-locations CreateFleetLocations" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  FleetId: any
-  Locations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  fleet_id: any
+  locations: any
 ]: any -> record<FleetId: record, FleetArn: record, LocationStates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateFleetLocations")
-  let body = {FleetId: $FleetId, Locations: $Locations} | compact
+  let body = {"FleetId": $fleet_id, "Locations": $locations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -448,7 +448,7 @@ export def "x-amz-target-game-lift-create-fleet-locations CreateFleetLocations" 
 #
 # POST /#X-Amz-Target=GameLift.CreateGameServerGroup
 # operationId: CreateGameServerGroup
-export def "x-amz-target-game-lift-create-game-server-group CreateGameServerGroup" [
+export def "x-amz-target-game-lift-create-game-server-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,33 +457,33 @@ export def "x-amz-target-game-lift-create-game-server-group CreateGameServerGrou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  GameServerGroupName: any
-  RoleArn: any
-  MinSize: any
-  MaxSize: any
-  LaunchTemplate: any
-  InstanceDefinitions: any
-  --AutoScalingPolicy: any
-  --BalancingStrategy: any
-  --GameServerProtectionPolicy: any
-  --VpcSubnets: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  game_server_group_name: any
+  role_arn: any
+  min_size: any
+  max_size: any
+  launch_template: any
+  instance_definitions: any
+  --auto-scaling-policy: any
+  --balancing-strategy: any
+  --game-server-protection-policy: any
+  --vpc-subnets: any
+  --tags: any
 ]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateGameServerGroup")
-  let body = {GameServerGroupName: $GameServerGroupName, RoleArn: $RoleArn, MinSize: $MinSize, MaxSize: $MaxSize, LaunchTemplate: $LaunchTemplate, InstanceDefinitions: $InstanceDefinitions, AutoScalingPolicy: $AutoScalingPolicy, BalancingStrategy: $BalancingStrategy, GameServerProtectionPolicy: $GameServerProtectionPolicy, VpcSubnets: $VpcSubnets, Tags: $Tags} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "RoleArn": $role_arn, "MinSize": $min_size, "MaxSize": $max_size, "LaunchTemplate": $launch_template, "InstanceDefinitions": $instance_definitions, "AutoScalingPolicy": $auto_scaling_policy, "BalancingStrategy": $balancing_strategy, "GameServerProtectionPolicy": $game_server_protection_policy, "VpcSubnets": $vpc_subnets, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -494,7 +494,7 @@ export def "x-amz-target-game-lift-create-game-server-group CreateGameServerGrou
 #
 # POST /#X-Amz-Target=GameLift.CreateGameSession
 # operationId: CreateGameSession
-export def "x-amz-target-game-lift-create-game-session CreateGameSession" [
+export def "x-amz-target-game-lift-create-game-session create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,32 +503,32 @@ export def "x-amz-target-game-lift-create-game-session CreateGameSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  --FleetId: any
-  --AliasId: any
-  MaximumPlayerSessionCount: any
-  --Name: any
-  --GameProperties: any
-  --CreatorId: any
-  --GameSessionId: any
-  --IdempotencyToken: any
-  --GameSessionData: any
-  --Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  --fleet-id: any
+  --alias-id: any
+  maximum_player_session_count: any
+  --name: any
+  --game-properties: any
+  --creator-id: any
+  --game-session-id: any
+  --idempotency-token: any
+  --game-session-data: any
+  --location: any
 ]: any -> record<GameSession: record<GameSessionId: record, Name: record, FleetId: record, FleetArn: record, CreationTime: record, TerminationTime: record, CurrentPlayerSessionCount: record, MaximumPlayerSessionCount: record, Status: record, StatusReason: record, GameProperties: record, IpAddress: record, DnsName: record, Port: record, PlayerSessionCreationPolicy: record, CreatorId: record, GameSessionData: record, MatchmakerData: record, Location: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateGameSession")
-  let body = {FleetId: $FleetId, AliasId: $AliasId, MaximumPlayerSessionCount: $MaximumPlayerSessionCount, Name: $Name, GameProperties: $GameProperties, CreatorId: $CreatorId, GameSessionId: $GameSessionId, IdempotencyToken: $IdempotencyToken, GameSessionData: $GameSessionData, Location: $Location} | compact
+  let body = {"FleetId": $fleet_id, "AliasId": $alias_id, "MaximumPlayerSessionCount": $maximum_player_session_count, "Name": $name, "GameProperties": $game_properties, "CreatorId": $creator_id, "GameSessionId": $game_session_id, "IdempotencyToken": $idempotency_token, "GameSessionData": $game_session_data, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -539,7 +539,7 @@ export def "x-amz-target-game-lift-create-game-session CreateGameSession" [
 #
 # POST /#X-Amz-Target=GameLift.CreateGameSessionQueue
 # operationId: CreateGameSessionQueue
-export def "x-amz-target-game-lift-create-game-session-queue CreateGameSessionQueue" [
+export def "x-amz-target-game-lift-create-game-session-queue create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,31 +548,31 @@ export def "x-amz-target-game-lift-create-game-session-queue CreateGameSessionQu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  Name: any
-  --TimeoutInSeconds: any
-  --PlayerLatencyPolicies: any
-  --Destinations: any
-  --FilterConfiguration: any
-  --PriorityConfiguration: any
-  --CustomEventData: any
-  --NotificationTarget: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  name: any
+  --timeout-in-seconds: any
+  --player-latency-policies: any
+  --destinations: any
+  --filter-configuration: any
+  --priority-configuration: any
+  --custom-event-data: any
+  --notification-target: any
+  --tags: any
 ]: any -> record<GameSessionQueue: record<Name: record, GameSessionQueueArn: record, TimeoutInSeconds: record, PlayerLatencyPolicies: record, Destinations: record, FilterConfiguration: record<AllowedLocations: record>, PriorityConfiguration: record<PriorityOrder: record, LocationOrder: record>, CustomEventData: record, NotificationTarget: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateGameSessionQueue")
-  let body = {Name: $Name, TimeoutInSeconds: $TimeoutInSeconds, PlayerLatencyPolicies: $PlayerLatencyPolicies, Destinations: $Destinations, FilterConfiguration: $FilterConfiguration, PriorityConfiguration: $PriorityConfiguration, CustomEventData: $CustomEventData, NotificationTarget: $NotificationTarget, Tags: $Tags} | compact
+  let body = {"Name": $name, "TimeoutInSeconds": $timeout_in_seconds, "PlayerLatencyPolicies": $player_latency_policies, "Destinations": $destinations, "FilterConfiguration": $filter_configuration, "PriorityConfiguration": $priority_configuration, "CustomEventData": $custom_event_data, "NotificationTarget": $notification_target, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -583,7 +583,7 @@ export def "x-amz-target-game-lift-create-game-session-queue CreateGameSessionQu
 #
 # POST /#X-Amz-Target=GameLift.CreateLocation
 # operationId: CreateLocation
-export def "x-amz-target-game-lift-create-location CreateLocation" [
+export def "x-amz-target-game-lift-create-location create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,24 +592,24 @@ export def "x-amz-target-game-lift-create-location CreateLocation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  LocationName: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  location_name: any
+  --tags: any
 ]: any -> record<Location: record<LocationName: record, LocationArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateLocation")
-  let body = {LocationName: $LocationName, Tags: $Tags} | compact
+  let body = {"LocationName": $location_name, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -620,7 +620,7 @@ export def "x-amz-target-game-lift-create-location CreateLocation" [
 #
 # POST /#X-Amz-Target=GameLift.CreateMatchmakingConfiguration
 # operationId: CreateMatchmakingConfiguration
-export def "x-amz-target-game-lift-create-matchmaking-configuration CreateMatchmakingConfiguration" [
+export def "x-amz-target-game-lift-create-matchmaking-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,37 +629,37 @@ export def "x-amz-target-game-lift-create-matchmaking-configuration CreateMatchm
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  Name: any
-  --Description: any
-  --GameSessionQueueArns: any
-  RequestTimeoutSeconds: any
-  --AcceptanceTimeoutSeconds: any
-  AcceptanceRequired: any
-  RuleSetName: any
-  --NotificationTarget: any
-  --AdditionalPlayerCount: any
-  --CustomEventData: any
-  --GameProperties: any
-  --GameSessionData: any
-  --BackfillMode: any
-  --FlexMatchMode: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  name: any
+  --description: any
+  --game-session-queue-arns: any
+  request_timeout_seconds: any
+  --acceptance-timeout-seconds: any
+  acceptance_required: any
+  rule_set_name: any
+  --notification-target: any
+  --additional-player-count: any
+  --custom-event-data: any
+  --game-properties: any
+  --game-session-data: any
+  --backfill-mode: any
+  --flex-match-mode: any
+  --tags: any
 ]: any -> record<Configuration: record<Name: record, ConfigurationArn: record, Description: record, GameSessionQueueArns: record, RequestTimeoutSeconds: record, AcceptanceTimeoutSeconds: record, AcceptanceRequired: record, RuleSetName: record, RuleSetArn: record, NotificationTarget: record, AdditionalPlayerCount: record, CustomEventData: record, CreationTime: record, GameProperties: record, GameSessionData: record, BackfillMode: record, FlexMatchMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateMatchmakingConfiguration")
-  let body = {Name: $Name, Description: $Description, GameSessionQueueArns: $GameSessionQueueArns, RequestTimeoutSeconds: $RequestTimeoutSeconds, AcceptanceTimeoutSeconds: $AcceptanceTimeoutSeconds, AcceptanceRequired: $AcceptanceRequired, RuleSetName: $RuleSetName, NotificationTarget: $NotificationTarget, AdditionalPlayerCount: $AdditionalPlayerCount, CustomEventData: $CustomEventData, GameProperties: $GameProperties, GameSessionData: $GameSessionData, BackfillMode: $BackfillMode, FlexMatchMode: $FlexMatchMode, Tags: $Tags} | compact
+  let body = {"Name": $name, "Description": $description, "GameSessionQueueArns": $game_session_queue_arns, "RequestTimeoutSeconds": $request_timeout_seconds, "AcceptanceTimeoutSeconds": $acceptance_timeout_seconds, "AcceptanceRequired": $acceptance_required, "RuleSetName": $rule_set_name, "NotificationTarget": $notification_target, "AdditionalPlayerCount": $additional_player_count, "CustomEventData": $custom_event_data, "GameProperties": $game_properties, "GameSessionData": $game_session_data, "BackfillMode": $backfill_mode, "FlexMatchMode": $flex_match_mode, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -670,7 +670,7 @@ export def "x-amz-target-game-lift-create-matchmaking-configuration CreateMatchm
 #
 # POST /#X-Amz-Target=GameLift.CreateMatchmakingRuleSet
 # operationId: CreateMatchmakingRuleSet
-export def "x-amz-target-game-lift-create-matchmaking-rule-set CreateMatchmakingRuleSet" [
+export def "x-amz-target-game-lift-create-matchmaking-rule-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,25 +679,25 @@ export def "x-amz-target-game-lift-create-matchmaking-rule-set CreateMatchmaking
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  Name: any
-  RuleSetBody: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  name: any
+  rule_set_body: any
+  --tags: any
 ]: any -> record<RuleSet: record<RuleSetName: record, RuleSetArn: record, RuleSetBody: record, CreationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateMatchmakingRuleSet")
-  let body = {Name: $Name, RuleSetBody: $RuleSetBody, Tags: $Tags} | compact
+  let body = {"Name": $name, "RuleSetBody": $rule_set_body, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -708,7 +708,7 @@ export def "x-amz-target-game-lift-create-matchmaking-rule-set CreateMatchmaking
 #
 # POST /#X-Amz-Target=GameLift.CreatePlayerSession
 # operationId: CreatePlayerSession
-export def "x-amz-target-game-lift-create-player-session CreatePlayerSession" [
+export def "x-amz-target-game-lift-create-player-session create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,25 +717,25 @@ export def "x-amz-target-game-lift-create-player-session CreatePlayerSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  GameSessionId: any
-  PlayerId: any
-  --PlayerData: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  game_session_id: any
+  player_id: any
+  --player-data: any
 ]: any -> record<PlayerSession: record<PlayerSessionId: record, PlayerId: record, GameSessionId: record, FleetId: record, FleetArn: record, CreationTime: record, TerminationTime: record, Status: record, IpAddress: record, DnsName: record, Port: record, PlayerData: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreatePlayerSession")
-  let body = {GameSessionId: $GameSessionId, PlayerId: $PlayerId, PlayerData: $PlayerData} | compact
+  let body = {"GameSessionId": $game_session_id, "PlayerId": $player_id, "PlayerData": $player_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -746,7 +746,7 @@ export def "x-amz-target-game-lift-create-player-session CreatePlayerSession" [
 #
 # POST /#X-Amz-Target=GameLift.CreatePlayerSessions
 # operationId: CreatePlayerSessions
-export def "x-amz-target-game-lift-create-player-sessions CreatePlayerSessions" [
+export def "x-amz-target-game-lift-create-player-sessions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,25 +755,25 @@ export def "x-amz-target-game-lift-create-player-sessions CreatePlayerSessions" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  GameSessionId: any
-  PlayerIds: any
-  --PlayerDataMap: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  game_session_id: any
+  player_ids: any
+  --player-data-map: any
 ]: any -> record<PlayerSessions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreatePlayerSessions")
-  let body = {GameSessionId: $GameSessionId, PlayerIds: $PlayerIds, PlayerDataMap: $PlayerDataMap} | compact
+  let body = {"GameSessionId": $game_session_id, "PlayerIds": $player_ids, "PlayerDataMap": $player_data_map} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -784,7 +784,7 @@ export def "x-amz-target-game-lift-create-player-sessions CreatePlayerSessions" 
 #
 # POST /#X-Amz-Target=GameLift.CreateScript
 # operationId: CreateScript
-export def "x-amz-target-game-lift-create-script CreateScript" [
+export def "x-amz-target-game-lift-create-script create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -793,27 +793,27 @@ export def "x-amz-target-game-lift-create-script CreateScript" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  --Name: any
-  --Version: any
-  --StorageLocation: any
-  --ZipFile: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  --name: any
+  --version: any
+  --storage-location: any
+  --zip-file: any
+  --tags: any
 ]: any -> record<Script: record<ScriptId: record, ScriptArn: record, Name: record, Version: record, SizeOnDisk: record, CreationTime: record, StorageLocation: record<Bucket: record, Key: record, RoleArn: record, ObjectVersion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateScript")
-  let body = {Name: $Name, Version: $Version, StorageLocation: $StorageLocation, ZipFile: $ZipFile, Tags: $Tags} | compact
+  let body = {"Name": $name, "Version": $version, "StorageLocation": $storage_location, "ZipFile": $zip_file, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -824,7 +824,7 @@ export def "x-amz-target-game-lift-create-script CreateScript" [
 #
 # POST /#X-Amz-Target=GameLift.CreateVpcPeeringAuthorization
 # operationId: CreateVpcPeeringAuthorization
-export def "x-amz-target-game-lift-create-vpc-peering-authorization CreateVpcPeeringAuthorization" [
+export def "x-amz-target-game-lift-create-vpc-peering-authorization create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,24 +833,24 @@ export def "x-amz-target-game-lift-create-vpc-peering-authorization CreateVpcPee
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  GameLiftAwsAccountId: any
-  PeerVpcId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  game_lift_aws_account_id: any
+  peer_vpc_id: any
 ]: any -> record<VpcPeeringAuthorization: record<GameLiftAwsAccountId: record, PeerVpcAwsAccountId: record, PeerVpcId: record, CreationTime: record, ExpirationTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateVpcPeeringAuthorization")
-  let body = {GameLiftAwsAccountId: $GameLiftAwsAccountId, PeerVpcId: $PeerVpcId} | compact
+  let body = {"GameLiftAwsAccountId": $game_lift_aws_account_id, "PeerVpcId": $peer_vpc_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -861,7 +861,7 @@ export def "x-amz-target-game-lift-create-vpc-peering-authorization CreateVpcPee
 #
 # POST /#X-Amz-Target=GameLift.CreateVpcPeeringConnection
 # operationId: CreateVpcPeeringConnection
-export def "x-amz-target-game-lift-create-vpc-peering-connection CreateVpcPeeringConnection" [
+export def "x-amz-target-game-lift-create-vpc-peering-connection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -870,25 +870,25 @@ export def "x-amz-target-game-lift-create-vpc-peering-connection CreateVpcPeerin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  FleetId: any
-  PeerVpcAwsAccountId: any
-  PeerVpcId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  fleet_id: any
+  peer_vpc_aws_account_id: any
+  peer_vpc_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.CreateVpcPeeringConnection")
-  let body = {FleetId: $FleetId, PeerVpcAwsAccountId: $PeerVpcAwsAccountId, PeerVpcId: $PeerVpcId} | compact
+  let body = {"FleetId": $fleet_id, "PeerVpcAwsAccountId": $peer_vpc_aws_account_id, "PeerVpcId": $peer_vpc_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -899,7 +899,7 @@ export def "x-amz-target-game-lift-create-vpc-peering-connection CreateVpcPeerin
 #
 # POST /#X-Amz-Target=GameLift.DeleteAlias
 # operationId: DeleteAlias
-export def "x-amz-target-game-lift-delete-alias DeleteAlias" [
+export def "x-amz-target-game-lift-delete-alias delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -908,23 +908,23 @@ export def "x-amz-target-game-lift-delete-alias DeleteAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  AliasId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  alias_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteAlias")
-  let body = {AliasId: $AliasId} | compact
+  let body = {"AliasId": $alias_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -935,7 +935,7 @@ export def "x-amz-target-game-lift-delete-alias DeleteAlias" [
 #
 # POST /#X-Amz-Target=GameLift.DeleteBuild
 # operationId: DeleteBuild
-export def "x-amz-target-game-lift-delete-build DeleteBuild" [
+export def "x-amz-target-game-lift-delete-build delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -944,23 +944,23 @@ export def "x-amz-target-game-lift-delete-build DeleteBuild" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  BuildId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  build_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteBuild")
-  let body = {BuildId: $BuildId} | compact
+  let body = {"BuildId": $build_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -971,7 +971,7 @@ export def "x-amz-target-game-lift-delete-build DeleteBuild" [
 #
 # POST /#X-Amz-Target=GameLift.DeleteFleet
 # operationId: DeleteFleet
-export def "x-amz-target-game-lift-delete-fleet DeleteFleet" [
+export def "x-amz-target-game-lift-delete-fleet delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -980,23 +980,23 @@ export def "x-amz-target-game-lift-delete-fleet DeleteFleet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  FleetId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  fleet_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteFleet")
-  let body = {FleetId: $FleetId} | compact
+  let body = {"FleetId": $fleet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1007,7 +1007,7 @@ export def "x-amz-target-game-lift-delete-fleet DeleteFleet" [
 #
 # POST /#X-Amz-Target=GameLift.DeleteFleetLocations
 # operationId: DeleteFleetLocations
-export def "x-amz-target-game-lift-delete-fleet-locations DeleteFleetLocations" [
+export def "x-amz-target-game-lift-delete-fleet-locations delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1016,24 +1016,24 @@ export def "x-amz-target-game-lift-delete-fleet-locations DeleteFleetLocations" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  FleetId: any
-  Locations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  fleet_id: any
+  locations: any
 ]: any -> record<FleetId: record, FleetArn: record, LocationStates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteFleetLocations")
-  let body = {FleetId: $FleetId, Locations: $Locations} | compact
+  let body = {"FleetId": $fleet_id, "Locations": $locations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1044,7 +1044,7 @@ export def "x-amz-target-game-lift-delete-fleet-locations DeleteFleetLocations" 
 #
 # POST /#X-Amz-Target=GameLift.DeleteGameServerGroup
 # operationId: DeleteGameServerGroup
-export def "x-amz-target-game-lift-delete-game-server-group DeleteGameServerGroup" [
+export def "x-amz-target-game-lift-delete-game-server-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1053,24 +1053,24 @@ export def "x-amz-target-game-lift-delete-game-server-group DeleteGameServerGrou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  GameServerGroupName: any
-  --DeleteOption: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  game_server_group_name: any
+  --delete-option: any
 ]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteGameServerGroup")
-  let body = {GameServerGroupName: $GameServerGroupName, DeleteOption: $DeleteOption} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "DeleteOption": $delete_option} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1081,7 +1081,7 @@ export def "x-amz-target-game-lift-delete-game-server-group DeleteGameServerGrou
 #
 # POST /#X-Amz-Target=GameLift.DeleteGameSessionQueue
 # operationId: DeleteGameSessionQueue
-export def "x-amz-target-game-lift-delete-game-session-queue DeleteGameSessionQueue" [
+export def "x-amz-target-game-lift-delete-game-session-queue delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,23 +1090,23 @@ export def "x-amz-target-game-lift-delete-game-session-queue DeleteGameSessionQu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteGameSessionQueue")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1117,7 +1117,7 @@ export def "x-amz-target-game-lift-delete-game-session-queue DeleteGameSessionQu
 #
 # POST /#X-Amz-Target=GameLift.DeleteLocation
 # operationId: DeleteLocation
-export def "x-amz-target-game-lift-delete-location DeleteLocation" [
+export def "x-amz-target-game-lift-delete-location delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,23 +1126,23 @@ export def "x-amz-target-game-lift-delete-location DeleteLocation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  LocationName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  location_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteLocation")
-  let body = {LocationName: $LocationName} | compact
+  let body = {"LocationName": $location_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1153,7 +1153,7 @@ export def "x-amz-target-game-lift-delete-location DeleteLocation" [
 #
 # POST /#X-Amz-Target=GameLift.DeleteMatchmakingConfiguration
 # operationId: DeleteMatchmakingConfiguration
-export def "x-amz-target-game-lift-delete-matchmaking-configuration DeleteMatchmakingConfiguration" [
+export def "x-amz-target-game-lift-delete-matchmaking-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1162,23 +1162,23 @@ export def "x-amz-target-game-lift-delete-matchmaking-configuration DeleteMatchm
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteMatchmakingConfiguration")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1189,7 +1189,7 @@ export def "x-amz-target-game-lift-delete-matchmaking-configuration DeleteMatchm
 #
 # POST /#X-Amz-Target=GameLift.DeleteMatchmakingRuleSet
 # operationId: DeleteMatchmakingRuleSet
-export def "x-amz-target-game-lift-delete-matchmaking-rule-set DeleteMatchmakingRuleSet" [
+export def "x-amz-target-game-lift-delete-matchmaking-rule-set delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1198,23 +1198,23 @@ export def "x-amz-target-game-lift-delete-matchmaking-rule-set DeleteMatchmaking
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteMatchmakingRuleSet")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1225,7 +1225,7 @@ export def "x-amz-target-game-lift-delete-matchmaking-rule-set DeleteMatchmaking
 #
 # POST /#X-Amz-Target=GameLift.DeleteScalingPolicy
 # operationId: DeleteScalingPolicy
-export def "x-amz-target-game-lift-delete-scaling-policy DeleteScalingPolicy" [
+export def "x-amz-target-game-lift-delete-scaling-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1234,24 +1234,24 @@ export def "x-amz-target-game-lift-delete-scaling-policy DeleteScalingPolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  Name: any
-  FleetId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  name: any
+  fleet_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteScalingPolicy")
-  let body = {Name: $Name, FleetId: $FleetId} | compact
+  let body = {"Name": $name, "FleetId": $fleet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1262,7 +1262,7 @@ export def "x-amz-target-game-lift-delete-scaling-policy DeleteScalingPolicy" [
 #
 # POST /#X-Amz-Target=GameLift.DeleteScript
 # operationId: DeleteScript
-export def "x-amz-target-game-lift-delete-script DeleteScript" [
+export def "x-amz-target-game-lift-delete-script delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,23 +1271,23 @@ export def "x-amz-target-game-lift-delete-script DeleteScript" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  ScriptId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  script_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteScript")
-  let body = {ScriptId: $ScriptId} | compact
+  let body = {"ScriptId": $script_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1298,7 +1298,7 @@ export def "x-amz-target-game-lift-delete-script DeleteScript" [
 #
 # POST /#X-Amz-Target=GameLift.DeleteVpcPeeringAuthorization
 # operationId: DeleteVpcPeeringAuthorization
-export def "x-amz-target-game-lift-delete-vpc-peering-authorization DeleteVpcPeeringAuthorization" [
+export def "x-amz-target-game-lift-delete-vpc-peering-authorization delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1307,24 +1307,24 @@ export def "x-amz-target-game-lift-delete-vpc-peering-authorization DeleteVpcPee
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  GameLiftAwsAccountId: any
-  PeerVpcId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  game_lift_aws_account_id: any
+  peer_vpc_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteVpcPeeringAuthorization")
-  let body = {GameLiftAwsAccountId: $GameLiftAwsAccountId, PeerVpcId: $PeerVpcId} | compact
+  let body = {"GameLiftAwsAccountId": $game_lift_aws_account_id, "PeerVpcId": $peer_vpc_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1335,7 +1335,7 @@ export def "x-amz-target-game-lift-delete-vpc-peering-authorization DeleteVpcPee
 #
 # POST /#X-Amz-Target=GameLift.DeleteVpcPeeringConnection
 # operationId: DeleteVpcPeeringConnection
-export def "x-amz-target-game-lift-delete-vpc-peering-connection DeleteVpcPeeringConnection" [
+export def "x-amz-target-game-lift-delete-vpc-peering-connection delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1344,24 +1344,24 @@ export def "x-amz-target-game-lift-delete-vpc-peering-connection DeleteVpcPeerin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  FleetId: any
-  VpcPeeringConnectionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  fleet_id: any
+  vpc_peering_connection_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeleteVpcPeeringConnection")
-  let body = {FleetId: $FleetId, VpcPeeringConnectionId: $VpcPeeringConnectionId} | compact
+  let body = {"FleetId": $fleet_id, "VpcPeeringConnectionId": $vpc_peering_connection_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1372,7 +1372,7 @@ export def "x-amz-target-game-lift-delete-vpc-peering-connection DeleteVpcPeerin
 #
 # POST /#X-Amz-Target=GameLift.DeregisterCompute
 # operationId: DeregisterCompute
-export def "x-amz-target-game-lift-deregister-compute DeregisterCompute" [
+export def "x-amz-target-game-lift-deregister-compute post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,24 +1381,24 @@ export def "x-amz-target-game-lift-deregister-compute DeregisterCompute" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  FleetId: any
-  ComputeName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  fleet_id: any
+  compute_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeregisterCompute")
-  let body = {FleetId: $FleetId, ComputeName: $ComputeName} | compact
+  let body = {"FleetId": $fleet_id, "ComputeName": $compute_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1409,7 +1409,7 @@ export def "x-amz-target-game-lift-deregister-compute DeregisterCompute" [
 #
 # POST /#X-Amz-Target=GameLift.DeregisterGameServer
 # operationId: DeregisterGameServer
-export def "x-amz-target-game-lift-deregister-game-server DeregisterGameServer" [
+export def "x-amz-target-game-lift-deregister-game-server post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1418,24 +1418,24 @@ export def "x-amz-target-game-lift-deregister-game-server DeregisterGameServer" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  GameServerGroupName: any
-  GameServerId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  game_server_group_name: any
+  game_server_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DeregisterGameServer")
-  let body = {GameServerGroupName: $GameServerGroupName, GameServerId: $GameServerId} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "GameServerId": $game_server_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1446,7 +1446,7 @@ export def "x-amz-target-game-lift-deregister-game-server DeregisterGameServer" 
 #
 # POST /#X-Amz-Target=GameLift.DescribeAlias
 # operationId: DescribeAlias
-export def "x-amz-target-game-lift-describe-alias DescribeAlias" [
+export def "x-amz-target-game-lift-describe-alias post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1455,23 +1455,23 @@ export def "x-amz-target-game-lift-describe-alias DescribeAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  AliasId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  alias_id: any
 ]: any -> record<Alias: record<AliasId: record, Name: record, AliasArn: record, Description: record, RoutingStrategy: record<Type: record, FleetId: record, Message: record>, CreationTime: record, LastUpdatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeAlias")
-  let body = {AliasId: $AliasId} | compact
+  let body = {"AliasId": $alias_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1482,7 +1482,7 @@ export def "x-amz-target-game-lift-describe-alias DescribeAlias" [
 #
 # POST /#X-Amz-Target=GameLift.DescribeBuild
 # operationId: DescribeBuild
-export def "x-amz-target-game-lift-describe-build DescribeBuild" [
+export def "x-amz-target-game-lift-describe-build build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1491,23 +1491,23 @@ export def "x-amz-target-game-lift-describe-build DescribeBuild" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  BuildId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  build_id: any
 ]: any -> record<Build: record<BuildId: record, BuildArn: record, Name: record, Version: record, Status: record, SizeOnDisk: record, OperatingSystem: record, CreationTime: record, ServerSdkVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeBuild")
-  let body = {BuildId: $BuildId} | compact
+  let body = {"BuildId": $build_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1518,7 +1518,7 @@ export def "x-amz-target-game-lift-describe-build DescribeBuild" [
 #
 # POST /#X-Amz-Target=GameLift.DescribeCompute
 # operationId: DescribeCompute
-export def "x-amz-target-game-lift-describe-compute DescribeCompute" [
+export def "x-amz-target-game-lift-describe-compute post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1527,24 +1527,24 @@ export def "x-amz-target-game-lift-describe-compute DescribeCompute" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  FleetId: any
-  ComputeName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  fleet_id: any
+  compute_name: any
 ]: any -> record<Compute: record<FleetId: record, FleetArn: record, ComputeName: record, ComputeArn: record, IpAddress: record, DnsName: record, ComputeStatus: record, Location: record, CreationTime: record, OperatingSystem: record, Type: record, GameLiftServiceSdkEndpoint: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeCompute")
-  let body = {FleetId: $FleetId, ComputeName: $ComputeName} | compact
+  let body = {"FleetId": $fleet_id, "ComputeName": $compute_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1555,7 +1555,7 @@ export def "x-amz-target-game-lift-describe-compute DescribeCompute" [
 #
 # POST /#X-Amz-Target=GameLift.DescribeEC2InstanceLimits
 # operationId: DescribeEC2InstanceLimits
-export def "x-amz-target-game-lift-describe-ec2-instance-limits DescribeEC2InstanceLimits" [
+export def "x-amz-target-game-lift-describe-ec2-instance-limits post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1564,24 +1564,24 @@ export def "x-amz-target-game-lift-describe-ec2-instance-limits DescribeEC2Insta
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  --EC2InstanceType: any
-  --Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  --ec2-instance-type: any
+  --location: any
 ]: any -> record<EC2InstanceLimits: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeEC2InstanceLimits")
-  let body = {EC2InstanceType: $EC2InstanceType, Location: $Location} | compact
+  let body = {"EC2InstanceType": $ec2_instance_type, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1592,7 +1592,7 @@ export def "x-amz-target-game-lift-describe-ec2-instance-limits DescribeEC2Insta
 #
 # POST /#X-Amz-Target=GameLift.DescribeFleetAttributes
 # operationId: DescribeFleetAttributes
-export def "x-amz-target-game-lift-describe-fleet-attributes DescribeFleetAttributes" [
+export def "x-amz-target-game-lift-describe-fleet-attributes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1601,28 +1601,28 @@ export def "x-amz-target-game-lift-describe-fleet-attributes DescribeFleetAttrib
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  --FleetIds: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  --fleet-ids: any
+  --limit: any
+  --next-token: any
 ]: any -> record<FleetAttributes: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeFleetAttributes" $qp)
-  let body = {FleetIds: $FleetIds, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"FleetIds": $fleet_ids, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1633,7 +1633,7 @@ export def "x-amz-target-game-lift-describe-fleet-attributes DescribeFleetAttrib
 #
 # POST /#X-Amz-Target=GameLift.DescribeFleetCapacity
 # operationId: DescribeFleetCapacity
-export def "x-amz-target-game-lift-describe-fleet-capacity DescribeFleetCapacity" [
+export def "x-amz-target-game-lift-describe-fleet-capacity post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,28 +1642,28 @@ export def "x-amz-target-game-lift-describe-fleet-capacity DescribeFleetCapacity
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  --FleetIds: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  --fleet-ids: any
+  --limit: any
+  --next-token: any
 ]: any -> record<FleetCapacity: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeFleetCapacity" $qp)
-  let body = {FleetIds: $FleetIds, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"FleetIds": $fleet_ids, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1674,7 +1674,7 @@ export def "x-amz-target-game-lift-describe-fleet-capacity DescribeFleetCapacity
 #
 # POST /#X-Amz-Target=GameLift.DescribeFleetEvents
 # operationId: DescribeFleetEvents
-export def "x-amz-target-game-lift-describe-fleet-events DescribeFleetEvents" [
+export def "x-amz-target-game-lift-describe-fleet-events post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1683,30 +1683,30 @@ export def "x-amz-target-game-lift-describe-fleet-events DescribeFleetEvents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  FleetId: any
-  --StartTime: any
-  --EndTime: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  fleet_id: any
+  --start-time: any
+  --end-time: any
+  --limit: any
+  --next-token: any
 ]: any -> record<Events: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeFleetEvents" $qp)
-  let body = {FleetId: $FleetId, StartTime: $StartTime, EndTime: $EndTime, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"FleetId": $fleet_id, "StartTime": $start_time, "EndTime": $end_time, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1717,7 +1717,7 @@ export def "x-amz-target-game-lift-describe-fleet-events DescribeFleetEvents" [
 #
 # POST /#X-Amz-Target=GameLift.DescribeFleetLocationAttributes
 # operationId: DescribeFleetLocationAttributes
-export def "x-amz-target-game-lift-describe-fleet-location-attributes DescribeFleetLocationAttributes" [
+export def "x-amz-target-game-lift-describe-fleet-location-attributes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1726,29 +1726,29 @@ export def "x-amz-target-game-lift-describe-fleet-location-attributes DescribeFl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  FleetId: any
-  --Locations: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  fleet_id: any
+  --locations: any
+  --limit: any
+  --next-token: any
 ]: any -> record<FleetId: record, FleetArn: record, LocationAttributes: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeFleetLocationAttributes" $qp)
-  let body = {FleetId: $FleetId, Locations: $Locations, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"FleetId": $fleet_id, "Locations": $locations, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1759,7 +1759,7 @@ export def "x-amz-target-game-lift-describe-fleet-location-attributes DescribeFl
 #
 # POST /#X-Amz-Target=GameLift.DescribeFleetLocationCapacity
 # operationId: DescribeFleetLocationCapacity
-export def "x-amz-target-game-lift-describe-fleet-location-capacity DescribeFleetLocationCapacity" [
+export def "x-amz-target-game-lift-describe-fleet-location-capacity post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1768,24 +1768,24 @@ export def "x-amz-target-game-lift-describe-fleet-location-capacity DescribeFlee
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  FleetId: any
-  Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  fleet_id: any
+  location: any
 ]: any -> record<FleetCapacity: record<FleetId: record, FleetArn: record, InstanceType: record, InstanceCounts: record<DESIRED: record, MINIMUM: record, MAXIMUM: record, PENDING: record, ACTIVE: record, IDLE: record, TERMINATING: record>, Location: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeFleetLocationCapacity")
-  let body = {FleetId: $FleetId, Location: $Location} | compact
+  let body = {"FleetId": $fleet_id, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1796,7 +1796,7 @@ export def "x-amz-target-game-lift-describe-fleet-location-capacity DescribeFlee
 #
 # POST /#X-Amz-Target=GameLift.DescribeFleetLocationUtilization
 # operationId: DescribeFleetLocationUtilization
-export def "x-amz-target-game-lift-describe-fleet-location-utilization DescribeFleetLocationUtilization" [
+export def "x-amz-target-game-lift-describe-fleet-location-utilization post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1805,24 +1805,24 @@ export def "x-amz-target-game-lift-describe-fleet-location-utilization DescribeF
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  FleetId: any
-  Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  fleet_id: any
+  location: any
 ]: any -> record<FleetUtilization: record<FleetId: record, FleetArn: record, ActiveServerProcessCount: record, ActiveGameSessionCount: record, CurrentPlayerSessionCount: record, MaximumPlayerSessionCount: record, Location: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeFleetLocationUtilization")
-  let body = {FleetId: $FleetId, Location: $Location} | compact
+  let body = {"FleetId": $fleet_id, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1833,7 +1833,7 @@ export def "x-amz-target-game-lift-describe-fleet-location-utilization DescribeF
 #
 # POST /#X-Amz-Target=GameLift.DescribeFleetPortSettings
 # operationId: DescribeFleetPortSettings
-export def "x-amz-target-game-lift-describe-fleet-port-settings DescribeFleetPortSettings" [
+export def "x-amz-target-game-lift-describe-fleet-port-settings post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1842,24 +1842,24 @@ export def "x-amz-target-game-lift-describe-fleet-port-settings DescribeFleetPor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  FleetId: any
-  --Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  fleet_id: any
+  --location: any
 ]: any -> record<FleetId: record, FleetArn: record, InboundPermissions: record, UpdateStatus: record, Location: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeFleetPortSettings")
-  let body = {FleetId: $FleetId, Location: $Location} | compact
+  let body = {"FleetId": $fleet_id, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1870,7 +1870,7 @@ export def "x-amz-target-game-lift-describe-fleet-port-settings DescribeFleetPor
 #
 # POST /#X-Amz-Target=GameLift.DescribeFleetUtilization
 # operationId: DescribeFleetUtilization
-export def "x-amz-target-game-lift-describe-fleet-utilization DescribeFleetUtilization" [
+export def "x-amz-target-game-lift-describe-fleet-utilization post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1879,28 +1879,28 @@ export def "x-amz-target-game-lift-describe-fleet-utilization DescribeFleetUtili
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  --FleetIds: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  --fleet-ids: any
+  --limit: any
+  --next-token: any
 ]: any -> record<FleetUtilization: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeFleetUtilization" $qp)
-  let body = {FleetIds: $FleetIds, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"FleetIds": $fleet_ids, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1911,7 +1911,7 @@ export def "x-amz-target-game-lift-describe-fleet-utilization DescribeFleetUtili
 #
 # POST /#X-Amz-Target=GameLift.DescribeGameServer
 # operationId: DescribeGameServer
-export def "x-amz-target-game-lift-describe-game-server DescribeGameServer" [
+export def "x-amz-target-game-lift-describe-game-server post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1920,24 +1920,24 @@ export def "x-amz-target-game-lift-describe-game-server DescribeGameServer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  GameServerGroupName: any
-  GameServerId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  game_server_group_name: any
+  game_server_id: any
 ]: any -> record<GameServer: record<GameServerGroupName: record, GameServerGroupArn: record, GameServerId: record, InstanceId: record, ConnectionInfo: record, GameServerData: record, ClaimStatus: record, UtilizationStatus: record, RegistrationTime: record, LastClaimTime: record, LastHealthCheckTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeGameServer")
-  let body = {GameServerGroupName: $GameServerGroupName, GameServerId: $GameServerId} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "GameServerId": $game_server_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1948,7 +1948,7 @@ export def "x-amz-target-game-lift-describe-game-server DescribeGameServer" [
 #
 # POST /#X-Amz-Target=GameLift.DescribeGameServerGroup
 # operationId: DescribeGameServerGroup
-export def "x-amz-target-game-lift-describe-game-server-group DescribeGameServerGroup" [
+export def "x-amz-target-game-lift-describe-game-server-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1957,23 +1957,23 @@ export def "x-amz-target-game-lift-describe-game-server-group DescribeGameServer
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  GameServerGroupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  game_server_group_name: any
 ]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeGameServerGroup")
-  let body = {GameServerGroupName: $GameServerGroupName} | compact
+  let body = {"GameServerGroupName": $game_server_group_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1984,7 +1984,7 @@ export def "x-amz-target-game-lift-describe-game-server-group DescribeGameServer
 #
 # POST /#X-Amz-Target=GameLift.DescribeGameServerInstances
 # operationId: DescribeGameServerInstances
-export def "x-amz-target-game-lift-describe-game-server-instances DescribeGameServerInstances" [
+export def "x-amz-target-game-lift-describe-game-server-instances post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1993,29 +1993,29 @@ export def "x-amz-target-game-lift-describe-game-server-instances DescribeGameSe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  GameServerGroupName: any
-  --InstanceIds: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  game_server_group_name: any
+  --instance-ids: any
+  --limit: any
+  --next-token: any
 ]: any -> record<GameServerInstances: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeGameServerInstances" $qp)
-  let body = {GameServerGroupName: $GameServerGroupName, InstanceIds: $InstanceIds, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "InstanceIds": $instance_ids, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2026,7 +2026,7 @@ export def "x-amz-target-game-lift-describe-game-server-instances DescribeGameSe
 #
 # POST /#X-Amz-Target=GameLift.DescribeGameSessionDetails
 # operationId: DescribeGameSessionDetails
-export def "x-amz-target-game-lift-describe-game-session-details DescribeGameSessionDetails" [
+export def "x-amz-target-game-lift-describe-game-session-details post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2035,32 +2035,32 @@ export def "x-amz-target-game-lift-describe-game-session-details DescribeGameSes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  --FleetId: any
-  --GameSessionId: any
-  --AliasId: any
-  --Location: any
-  --StatusFilter: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  --fleet-id: any
+  --game-session-id: any
+  --alias-id: any
+  --location: any
+  --status-filter: any
+  --limit: any
+  --next-token: any
 ]: any -> record<GameSessionDetails: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeGameSessionDetails" $qp)
-  let body = {FleetId: $FleetId, GameSessionId: $GameSessionId, AliasId: $AliasId, Location: $Location, StatusFilter: $StatusFilter, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"FleetId": $fleet_id, "GameSessionId": $game_session_id, "AliasId": $alias_id, "Location": $location, "StatusFilter": $status_filter, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2071,7 +2071,7 @@ export def "x-amz-target-game-lift-describe-game-session-details DescribeGameSes
 #
 # POST /#X-Amz-Target=GameLift.DescribeGameSessionPlacement
 # operationId: DescribeGameSessionPlacement
-export def "x-amz-target-game-lift-describe-game-session-placement DescribeGameSessionPlacement" [
+export def "x-amz-target-game-lift-describe-game-session-placement post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2080,23 +2080,23 @@ export def "x-amz-target-game-lift-describe-game-session-placement DescribeGameS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  PlacementId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  placement_id: any
 ]: any -> record<GameSessionPlacement: record<PlacementId: record, GameSessionQueueName: record, Status: record, GameProperties: record, MaximumPlayerSessionCount: record, GameSessionName: record, GameSessionId: record, GameSessionArn: record, GameSessionRegion: record, PlayerLatencies: record, StartTime: record, EndTime: record, IpAddress: record, DnsName: record, Port: record, PlacedPlayerSessions: record, GameSessionData: record, MatchmakerData: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeGameSessionPlacement")
-  let body = {PlacementId: $PlacementId} | compact
+  let body = {"PlacementId": $placement_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2107,7 +2107,7 @@ export def "x-amz-target-game-lift-describe-game-session-placement DescribeGameS
 #
 # POST /#X-Amz-Target=GameLift.DescribeGameSessionQueues
 # operationId: DescribeGameSessionQueues
-export def "x-amz-target-game-lift-describe-game-session-queues DescribeGameSessionQueues" [
+export def "x-amz-target-game-lift-describe-game-session-queues post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2116,28 +2116,28 @@ export def "x-amz-target-game-lift-describe-game-session-queues DescribeGameSess
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  --Names: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  --names: any
+  --limit: any
+  --next-token: any
 ]: any -> record<GameSessionQueues: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeGameSessionQueues" $qp)
-  let body = {Names: $Names, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Names": $names, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2148,7 +2148,7 @@ export def "x-amz-target-game-lift-describe-game-session-queues DescribeGameSess
 #
 # POST /#X-Amz-Target=GameLift.DescribeGameSessions
 # operationId: DescribeGameSessions
-export def "x-amz-target-game-lift-describe-game-sessions DescribeGameSessions" [
+export def "x-amz-target-game-lift-describe-game-sessions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2157,32 +2157,32 @@ export def "x-amz-target-game-lift-describe-game-sessions DescribeGameSessions" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  --FleetId: any
-  --GameSessionId: any
-  --AliasId: any
-  --Location: any
-  --StatusFilter: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  --fleet-id: any
+  --game-session-id: any
+  --alias-id: any
+  --location: any
+  --status-filter: any
+  --limit: any
+  --next-token: any
 ]: any -> record<GameSessions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeGameSessions" $qp)
-  let body = {FleetId: $FleetId, GameSessionId: $GameSessionId, AliasId: $AliasId, Location: $Location, StatusFilter: $StatusFilter, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"FleetId": $fleet_id, "GameSessionId": $game_session_id, "AliasId": $alias_id, "Location": $location, "StatusFilter": $status_filter, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2193,7 +2193,7 @@ export def "x-amz-target-game-lift-describe-game-sessions DescribeGameSessions" 
 #
 # POST /#X-Amz-Target=GameLift.DescribeInstances
 # operationId: DescribeInstances
-export def "x-amz-target-game-lift-describe-instances DescribeInstances" [
+export def "x-amz-target-game-lift-describe-instances post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2202,30 +2202,30 @@ export def "x-amz-target-game-lift-describe-instances DescribeInstances" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  FleetId: any
-  --InstanceId: any
-  --Limit: any
-  --NextToken: any
-  --Location: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  fleet_id: any
+  --instance-id: any
+  --limit: any
+  --next-token: any
+  --location: any
 ]: any -> record<Instances: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeInstances" $qp)
-  let body = {FleetId: $FleetId, InstanceId: $InstanceId, Limit: $Limit, NextToken: $NextToken, Location: $Location} | compact
+  let body = {"FleetId": $fleet_id, "InstanceId": $instance_id, "Limit": $limit, "NextToken": $next_token, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2236,7 +2236,7 @@ export def "x-amz-target-game-lift-describe-instances DescribeInstances" [
 #
 # POST /#X-Amz-Target=GameLift.DescribeMatchmaking
 # operationId: DescribeMatchmaking
-export def "x-amz-target-game-lift-describe-matchmaking DescribeMatchmaking" [
+export def "x-amz-target-game-lift-describe-matchmaking post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2245,23 +2245,23 @@ export def "x-amz-target-game-lift-describe-matchmaking DescribeMatchmaking" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  TicketIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  ticket_ids: any
 ]: any -> record<TicketList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeMatchmaking")
-  let body = {TicketIds: $TicketIds} | compact
+  let body = {"TicketIds": $ticket_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2272,7 +2272,7 @@ export def "x-amz-target-game-lift-describe-matchmaking DescribeMatchmaking" [
 #
 # POST /#X-Amz-Target=GameLift.DescribeMatchmakingConfigurations
 # operationId: DescribeMatchmakingConfigurations
-export def "x-amz-target-game-lift-describe-matchmaking-configurations DescribeMatchmakingConfigurations" [
+export def "x-amz-target-game-lift-describe-matchmaking-configurations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2281,29 +2281,29 @@ export def "x-amz-target-game-lift-describe-matchmaking-configurations DescribeM
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  --Names: any
-  --RuleSetName: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  --names: any
+  --rule-set-name: any
+  --limit: any
+  --next-token: any
 ]: any -> record<Configurations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeMatchmakingConfigurations" $qp)
-  let body = {Names: $Names, RuleSetName: $RuleSetName, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Names": $names, "RuleSetName": $rule_set_name, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2314,7 +2314,7 @@ export def "x-amz-target-game-lift-describe-matchmaking-configurations DescribeM
 #
 # POST /#X-Amz-Target=GameLift.DescribeMatchmakingRuleSets
 # operationId: DescribeMatchmakingRuleSets
-export def "x-amz-target-game-lift-describe-matchmaking-rule-sets DescribeMatchmakingRuleSets" [
+export def "x-amz-target-game-lift-describe-matchmaking-rule-sets post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2323,28 +2323,28 @@ export def "x-amz-target-game-lift-describe-matchmaking-rule-sets DescribeMatchm
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  --Names: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  --names: any
+  --limit: any
+  --next-token: any
 ]: any -> record<RuleSets: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeMatchmakingRuleSets" $qp)
-  let body = {Names: $Names, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Names": $names, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2355,7 +2355,7 @@ export def "x-amz-target-game-lift-describe-matchmaking-rule-sets DescribeMatchm
 #
 # POST /#X-Amz-Target=GameLift.DescribePlayerSessions
 # operationId: DescribePlayerSessions
-export def "x-amz-target-game-lift-describe-player-sessions DescribePlayerSessions" [
+export def "x-amz-target-game-lift-describe-player-sessions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2364,31 +2364,31 @@ export def "x-amz-target-game-lift-describe-player-sessions DescribePlayerSessio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  --GameSessionId: any
-  --PlayerId: any
-  --PlayerSessionId: any
-  --PlayerSessionStatusFilter: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  --game-session-id: any
+  --player-id: any
+  --player-session-id: any
+  --player-session-status-filter: any
+  --limit: any
+  --next-token: any
 ]: any -> record<PlayerSessions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribePlayerSessions" $qp)
-  let body = {GameSessionId: $GameSessionId, PlayerId: $PlayerId, PlayerSessionId: $PlayerSessionId, PlayerSessionStatusFilter: $PlayerSessionStatusFilter, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"GameSessionId": $game_session_id, "PlayerId": $player_id, "PlayerSessionId": $player_session_id, "PlayerSessionStatusFilter": $player_session_status_filter, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2399,7 +2399,7 @@ export def "x-amz-target-game-lift-describe-player-sessions DescribePlayerSessio
 #
 # POST /#X-Amz-Target=GameLift.DescribeRuntimeConfiguration
 # operationId: DescribeRuntimeConfiguration
-export def "x-amz-target-game-lift-describe-runtime-configuration DescribeRuntimeConfiguration" [
+export def "x-amz-target-game-lift-describe-runtime-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2408,23 +2408,23 @@ export def "x-amz-target-game-lift-describe-runtime-configuration DescribeRuntim
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  FleetId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  fleet_id: any
 ]: any -> record<RuntimeConfiguration: record<ServerProcesses: record, MaxConcurrentGameSessionActivations: record, GameSessionActivationTimeoutSeconds: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeRuntimeConfiguration")
-  let body = {FleetId: $FleetId} | compact
+  let body = {"FleetId": $fleet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2435,7 +2435,7 @@ export def "x-amz-target-game-lift-describe-runtime-configuration DescribeRuntim
 #
 # POST /#X-Amz-Target=GameLift.DescribeScalingPolicies
 # operationId: DescribeScalingPolicies
-export def "x-amz-target-game-lift-describe-scaling-policies DescribeScalingPolicies" [
+export def "x-amz-target-game-lift-describe-scaling-policies post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2444,30 +2444,30 @@ export def "x-amz-target-game-lift-describe-scaling-policies DescribeScalingPoli
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  FleetId: any
-  --StatusFilter: any
-  --Limit: any
-  --NextToken: any
-  --Location: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  fleet_id: any
+  --status-filter: any
+  --limit: any
+  --next-token: any
+  --location: any
 ]: any -> record<ScalingPolicies: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeScalingPolicies" $qp)
-  let body = {FleetId: $FleetId, StatusFilter: $StatusFilter, Limit: $Limit, NextToken: $NextToken, Location: $Location} | compact
+  let body = {"FleetId": $fleet_id, "StatusFilter": $status_filter, "Limit": $limit, "NextToken": $next_token, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2478,7 +2478,7 @@ export def "x-amz-target-game-lift-describe-scaling-policies DescribeScalingPoli
 #
 # POST /#X-Amz-Target=GameLift.DescribeScript
 # operationId: DescribeScript
-export def "x-amz-target-game-lift-describe-script DescribeScript" [
+export def "x-amz-target-game-lift-describe-script post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2487,23 +2487,23 @@ export def "x-amz-target-game-lift-describe-script DescribeScript" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  ScriptId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  script_id: any
 ]: any -> record<Script: record<ScriptId: record, ScriptArn: record, Name: record, Version: record, SizeOnDisk: record, CreationTime: record, StorageLocation: record<Bucket: record, Key: record, RoleArn: record, ObjectVersion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeScript")
-  let body = {ScriptId: $ScriptId} | compact
+  let body = {"ScriptId": $script_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2514,7 +2514,7 @@ export def "x-amz-target-game-lift-describe-script DescribeScript" [
 #
 # POST /#X-Amz-Target=GameLift.DescribeVpcPeeringAuthorizations
 # operationId: DescribeVpcPeeringAuthorizations
-export def "x-amz-target-game-lift-describe-vpc-peering-authorizations DescribeVpcPeeringAuthorizations" [
+export def "x-amz-target-game-lift-describe-vpc-peering-authorizations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2523,14 +2523,14 @@ export def "x-amz-target-game-lift-describe-vpc-peering-authorizations DescribeV
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
   --body: record
 ]: any -> record<VpcPeeringAuthorizations: record> {
   let input = $in
@@ -2538,7 +2538,7 @@ export def "x-amz-target-game-lift-describe-vpc-peering-authorizations DescribeV
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeVpcPeeringAuthorizations")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2549,7 +2549,7 @@ export def "x-amz-target-game-lift-describe-vpc-peering-authorizations DescribeV
 #
 # POST /#X-Amz-Target=GameLift.DescribeVpcPeeringConnections
 # operationId: DescribeVpcPeeringConnections
-export def "x-amz-target-game-lift-describe-vpc-peering-connections DescribeVpcPeeringConnections" [
+export def "x-amz-target-game-lift-describe-vpc-peering-connections post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2558,23 +2558,23 @@ export def "x-amz-target-game-lift-describe-vpc-peering-connections DescribeVpcP
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  --FleetId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  --fleet-id: any
 ]: any -> record<VpcPeeringConnections: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.DescribeVpcPeeringConnections")
-  let body = {FleetId: $FleetId} | compact
+  let body = {"FleetId": $fleet_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2585,7 +2585,7 @@ export def "x-amz-target-game-lift-describe-vpc-peering-connections DescribeVpcP
 #
 # POST /#X-Amz-Target=GameLift.GetComputeAccess
 # operationId: GetComputeAccess
-export def "x-amz-target-game-lift-get-compute-access GetComputeAccess" [
+export def "x-amz-target-game-lift-get-compute-access get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2594,24 +2594,24 @@ export def "x-amz-target-game-lift-get-compute-access GetComputeAccess" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
-  FleetId: any
-  ComputeName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
+  fleet_id: any
+  compute_name: any
 ]: any -> record<FleetId: record, FleetArn: record, ComputeName: record, ComputeArn: record, Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.GetComputeAccess")
-  let body = {FleetId: $FleetId, ComputeName: $ComputeName} | compact
+  let body = {"FleetId": $fleet_id, "ComputeName": $compute_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2622,7 +2622,7 @@ export def "x-amz-target-game-lift-get-compute-access GetComputeAccess" [
 #
 # POST /#X-Amz-Target=GameLift.GetComputeAuthToken
 # operationId: GetComputeAuthToken
-export def "x-amz-target-game-lift-get-compute-auth-token GetComputeAuthToken" [
+export def "x-amz-target-game-lift-get-compute-auth-token get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2631,24 +2631,24 @@ export def "x-amz-target-game-lift-get-compute-auth-token GetComputeAuthToken" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  FleetId: any
-  ComputeName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  fleet_id: any
+  compute_name: any
 ]: any -> record<FleetId: record, FleetArn: record, ComputeName: record, ComputeArn: record, AuthToken: record, ExpirationTimestamp: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.GetComputeAuthToken")
-  let body = {FleetId: $FleetId, ComputeName: $ComputeName} | compact
+  let body = {"FleetId": $fleet_id, "ComputeName": $compute_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2659,7 +2659,7 @@ export def "x-amz-target-game-lift-get-compute-auth-token GetComputeAuthToken" [
 #
 # POST /#X-Amz-Target=GameLift.GetGameSessionLogUrl
 # operationId: GetGameSessionLogUrl
-export def "x-amz-target-game-lift-get-game-session-log-url GetGameSessionLogUrl" [
+export def "x-amz-target-game-lift-get-game-session-log-url get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2668,23 +2668,23 @@ export def "x-amz-target-game-lift-get-game-session-log-url GetGameSessionLogUrl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-63
-  GameSessionId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-63
+  game_session_id: any
 ]: any -> record<PreSignedUrl: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.GetGameSessionLogUrl")
-  let body = {GameSessionId: $GameSessionId} | compact
+  let body = {"GameSessionId": $game_session_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2695,7 +2695,7 @@ export def "x-amz-target-game-lift-get-game-session-log-url GetGameSessionLogUrl
 #
 # POST /#X-Amz-Target=GameLift.GetInstanceAccess
 # operationId: GetInstanceAccess
-export def "x-amz-target-game-lift-get-instance-access GetInstanceAccess" [
+export def "x-amz-target-game-lift-get-instance-access get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2704,24 +2704,24 @@ export def "x-amz-target-game-lift-get-instance-access GetInstanceAccess" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-64
-  FleetId: any
-  InstanceId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-64
+  fleet_id: any
+  instance_id: any
 ]: any -> record<InstanceAccess: record<FleetId: record, InstanceId: record, IpAddress: record, OperatingSystem: record, Credentials: record<UserName: record, Secret: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.GetInstanceAccess")
-  let body = {FleetId: $FleetId, InstanceId: $InstanceId} | compact
+  let body = {"FleetId": $fleet_id, "InstanceId": $instance_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2732,7 +2732,7 @@ export def "x-amz-target-game-lift-get-instance-access GetInstanceAccess" [
 #
 # POST /#X-Amz-Target=GameLift.ListAliases
 # operationId: ListAliases
-export def "x-amz-target-game-lift-list-aliases ListAliases" [
+export def "x-amz-target-game-lift-list-aliases list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2741,29 +2741,29 @@ export def "x-amz-target-game-lift-list-aliases ListAliases" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-65
-  --RoutingStrategyType: any
-  --Name: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-65
+  --routing-strategy-type: any
+  --name: any
+  --limit: any
+  --next-token: any
 ]: any -> record<Aliases: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ListAliases" $qp)
-  let body = {RoutingStrategyType: $RoutingStrategyType, Name: $Name, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"RoutingStrategyType": $routing_strategy_type, "Name": $name, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2774,7 +2774,7 @@ export def "x-amz-target-game-lift-list-aliases ListAliases" [
 #
 # POST /#X-Amz-Target=GameLift.ListBuilds
 # operationId: ListBuilds
-export def "x-amz-target-game-lift-list-builds ListBuilds" [
+export def "x-amz-target-game-lift-list-builds list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2783,28 +2783,28 @@ export def "x-amz-target-game-lift-list-builds ListBuilds" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-66
-  --Status: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-66
+  --status: any
+  --limit: any
+  --next-token: any
 ]: any -> record<Builds: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ListBuilds" $qp)
-  let body = {Status: $Status, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Status": $status, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2815,7 +2815,7 @@ export def "x-amz-target-game-lift-list-builds ListBuilds" [
 #
 # POST /#X-Amz-Target=GameLift.ListCompute
 # operationId: ListCompute
-export def "x-amz-target-game-lift-list-compute ListCompute" [
+export def "x-amz-target-game-lift-list-compute list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2824,29 +2824,29 @@ export def "x-amz-target-game-lift-list-compute ListCompute" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-67
-  FleetId: any
-  --Location: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-67
+  fleet_id: any
+  --location: any
+  --limit: any
+  --next-token: any
 ]: any -> record<ComputeList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ListCompute" $qp)
-  let body = {FleetId: $FleetId, Location: $Location, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"FleetId": $fleet_id, "Location": $location, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2857,7 +2857,7 @@ export def "x-amz-target-game-lift-list-compute ListCompute" [
 #
 # POST /#X-Amz-Target=GameLift.ListFleets
 # operationId: ListFleets
-export def "x-amz-target-game-lift-list-fleets ListFleets" [
+export def "x-amz-target-game-lift-list-fleets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2866,29 +2866,29 @@ export def "x-amz-target-game-lift-list-fleets ListFleets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-68
-  --BuildId: any
-  --ScriptId: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-68
+  --build-id: any
+  --script-id: any
+  --limit: any
+  --next-token: any
 ]: any -> record<FleetIds: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ListFleets" $qp)
-  let body = {BuildId: $BuildId, ScriptId: $ScriptId, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"BuildId": $build_id, "ScriptId": $script_id, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2899,7 +2899,7 @@ export def "x-amz-target-game-lift-list-fleets ListFleets" [
 #
 # POST /#X-Amz-Target=GameLift.ListGameServerGroups
 # operationId: ListGameServerGroups
-export def "x-amz-target-game-lift-list-game-server-groups ListGameServerGroups" [
+export def "x-amz-target-game-lift-list-game-server-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2908,27 +2908,27 @@ export def "x-amz-target-game-lift-list-game-server-groups ListGameServerGroups"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-69
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-69
+  --limit: any
+  --next-token: any
 ]: any -> record<GameServerGroups: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ListGameServerGroups" $qp)
-  let body = {Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2939,7 +2939,7 @@ export def "x-amz-target-game-lift-list-game-server-groups ListGameServerGroups"
 #
 # POST /#X-Amz-Target=GameLift.ListGameServers
 # operationId: ListGameServers
-export def "x-amz-target-game-lift-list-game-servers ListGameServers" [
+export def "x-amz-target-game-lift-list-game-servers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2948,29 +2948,29 @@ export def "x-amz-target-game-lift-list-game-servers ListGameServers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-70
-  GameServerGroupName: any
-  --SortOrder: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-70
+  game_server_group_name: any
+  --sort-order: any
+  --limit: any
+  --next-token: any
 ]: any -> record<GameServers: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ListGameServers" $qp)
-  let body = {GameServerGroupName: $GameServerGroupName, SortOrder: $SortOrder, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "SortOrder": $sort_order, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2981,7 +2981,7 @@ export def "x-amz-target-game-lift-list-game-servers ListGameServers" [
 #
 # POST /#X-Amz-Target=GameLift.ListLocations
 # operationId: ListLocations
-export def "x-amz-target-game-lift-list-locations ListLocations" [
+export def "x-amz-target-game-lift-list-locations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2990,28 +2990,28 @@ export def "x-amz-target-game-lift-list-locations ListLocations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-71
-  --Filters: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-71
+  --filters: any
+  --limit: any
+  --next-token: any
 ]: any -> record<Locations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ListLocations" $qp)
-  let body = {Filters: $Filters, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Filters": $filters, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3022,7 +3022,7 @@ export def "x-amz-target-game-lift-list-locations ListLocations" [
 #
 # POST /#X-Amz-Target=GameLift.ListScripts
 # operationId: ListScripts
-export def "x-amz-target-game-lift-list-scripts ListScripts" [
+export def "x-amz-target-game-lift-list-scripts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3031,27 +3031,27 @@ export def "x-amz-target-game-lift-list-scripts ListScripts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-72
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-72
+  --limit: any
+  --next-token: any
 ]: any -> record<Scripts: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ListScripts" $qp)
-  let body = {Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3062,7 +3062,7 @@ export def "x-amz-target-game-lift-list-scripts ListScripts" [
 #
 # POST /#X-Amz-Target=GameLift.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-game-lift-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-game-lift-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3071,23 +3071,23 @@ export def "x-amz-target-game-lift-list-tags-for-resource ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-73
-  ResourceARN: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-73
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ListTagsForResource")
-  let body = {ResourceARN: $ResourceARN} | compact
+  let body = {"ResourceARN": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3098,7 +3098,7 @@ export def "x-amz-target-game-lift-list-tags-for-resource ListTagsForResource" [
 #
 # POST /#X-Amz-Target=GameLift.PutScalingPolicy
 # operationId: PutScalingPolicy
-export def "x-amz-target-game-lift-put-scaling-policy PutScalingPolicy" [
+export def "x-amz-target-game-lift-put-scaling-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3107,32 +3107,32 @@ export def "x-amz-target-game-lift-put-scaling-policy PutScalingPolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-74
-  Name: any
-  FleetId: any
-  --ScalingAdjustment: any
-  --ScalingAdjustmentType: any
-  --Threshold: any
-  --ComparisonOperator: any
-  --EvaluationPeriods: any
-  MetricName: any
-  --PolicyType: any
-  --TargetConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-74
+  name: any
+  fleet_id: any
+  --scaling-adjustment: any
+  --scaling-adjustment-type: any
+  --threshold: any
+  --comparison-operator: any
+  --evaluation-periods: any
+  metric_name: any
+  --policy-type: any
+  --target-configuration: any
 ]: any -> record<Name: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.PutScalingPolicy")
-  let body = {Name: $Name, FleetId: $FleetId, ScalingAdjustment: $ScalingAdjustment, ScalingAdjustmentType: $ScalingAdjustmentType, Threshold: $Threshold, ComparisonOperator: $ComparisonOperator, EvaluationPeriods: $EvaluationPeriods, MetricName: $MetricName, PolicyType: $PolicyType, TargetConfiguration: $TargetConfiguration} | compact
+  let body = {"Name": $name, "FleetId": $fleet_id, "ScalingAdjustment": $scaling_adjustment, "ScalingAdjustmentType": $scaling_adjustment_type, "Threshold": $threshold, "ComparisonOperator": $comparison_operator, "EvaluationPeriods": $evaluation_periods, "MetricName": $metric_name, "PolicyType": $policy_type, "TargetConfiguration": $target_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3143,7 +3143,7 @@ export def "x-amz-target-game-lift-put-scaling-policy PutScalingPolicy" [
 #
 # POST /#X-Amz-Target=GameLift.RegisterCompute
 # operationId: RegisterCompute
-export def "x-amz-target-game-lift-register-compute RegisterCompute" [
+export def "x-amz-target-game-lift-register-compute create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3152,28 +3152,28 @@ export def "x-amz-target-game-lift-register-compute RegisterCompute" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-75
-  FleetId: any
-  ComputeName: any
-  --CertificatePath: any
-  --DnsName: any
-  --IpAddress: any
-  --Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-75
+  fleet_id: any
+  compute_name: any
+  --certificate-path: any
+  --dns-name: any
+  --ip-address: any
+  --location: any
 ]: any -> record<Compute: record<FleetId: record, FleetArn: record, ComputeName: record, ComputeArn: record, IpAddress: record, DnsName: record, ComputeStatus: record, Location: record, CreationTime: record, OperatingSystem: record, Type: record, GameLiftServiceSdkEndpoint: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.RegisterCompute")
-  let body = {FleetId: $FleetId, ComputeName: $ComputeName, CertificatePath: $CertificatePath, DnsName: $DnsName, IpAddress: $IpAddress, Location: $Location} | compact
+  let body = {"FleetId": $fleet_id, "ComputeName": $compute_name, "CertificatePath": $certificate_path, "DnsName": $dns_name, "IpAddress": $ip_address, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3184,7 +3184,7 @@ export def "x-amz-target-game-lift-register-compute RegisterCompute" [
 #
 # POST /#X-Amz-Target=GameLift.RegisterGameServer
 # operationId: RegisterGameServer
-export def "x-amz-target-game-lift-register-game-server RegisterGameServer" [
+export def "x-amz-target-game-lift-register-game-server create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3193,27 +3193,27 @@ export def "x-amz-target-game-lift-register-game-server RegisterGameServer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-76
-  GameServerGroupName: any
-  GameServerId: any
-  InstanceId: any
-  --ConnectionInfo: any
-  --GameServerData: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-76
+  game_server_group_name: any
+  game_server_id: any
+  instance_id: any
+  --connection-info: any
+  --game-server-data: any
 ]: any -> record<GameServer: record<GameServerGroupName: record, GameServerGroupArn: record, GameServerId: record, InstanceId: record, ConnectionInfo: record, GameServerData: record, ClaimStatus: record, UtilizationStatus: record, RegistrationTime: record, LastClaimTime: record, LastHealthCheckTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.RegisterGameServer")
-  let body = {GameServerGroupName: $GameServerGroupName, GameServerId: $GameServerId, InstanceId: $InstanceId, ConnectionInfo: $ConnectionInfo, GameServerData: $GameServerData} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "GameServerId": $game_server_id, "InstanceId": $instance_id, "ConnectionInfo": $connection_info, "GameServerData": $game_server_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3224,7 +3224,7 @@ export def "x-amz-target-game-lift-register-game-server RegisterGameServer" [
 #
 # POST /#X-Amz-Target=GameLift.RequestUploadCredentials
 # operationId: RequestUploadCredentials
-export def "x-amz-target-game-lift-request-upload-credentials RequestUploadCredentials" [
+export def "x-amz-target-game-lift-request-upload-credentials request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3233,23 +3233,23 @@ export def "x-amz-target-game-lift-request-upload-credentials RequestUploadCrede
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-77
-  BuildId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-77
+  build_id: any
 ]: any -> record<UploadCredentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record>, StorageLocation: record<Bucket: record, Key: record, RoleArn: record, ObjectVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.RequestUploadCredentials")
-  let body = {BuildId: $BuildId} | compact
+  let body = {"BuildId": $build_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3260,7 +3260,7 @@ export def "x-amz-target-game-lift-request-upload-credentials RequestUploadCrede
 #
 # POST /#X-Amz-Target=GameLift.ResolveAlias
 # operationId: ResolveAlias
-export def "x-amz-target-game-lift-resolve-alias ResolveAlias" [
+export def "x-amz-target-game-lift-resolve-alias post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3269,23 +3269,23 @@ export def "x-amz-target-game-lift-resolve-alias ResolveAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-78
-  AliasId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-78
+  alias_id: any
 ]: any -> record<FleetId: record, FleetArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ResolveAlias")
-  let body = {AliasId: $AliasId} | compact
+  let body = {"AliasId": $alias_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3296,7 +3296,7 @@ export def "x-amz-target-game-lift-resolve-alias ResolveAlias" [
 #
 # POST /#X-Amz-Target=GameLift.ResumeGameServerGroup
 # operationId: ResumeGameServerGroup
-export def "x-amz-target-game-lift-resume-game-server-group ResumeGameServerGroup" [
+export def "x-amz-target-game-lift-resume-game-server-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3305,24 +3305,24 @@ export def "x-amz-target-game-lift-resume-game-server-group ResumeGameServerGrou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-79
-  GameServerGroupName: any
-  ResumeActions: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-79
+  game_server_group_name: any
+  resume_actions: any
 ]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ResumeGameServerGroup")
-  let body = {GameServerGroupName: $GameServerGroupName, ResumeActions: $ResumeActions} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "ResumeActions": $resume_actions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3333,7 +3333,7 @@ export def "x-amz-target-game-lift-resume-game-server-group ResumeGameServerGrou
 #
 # POST /#X-Amz-Target=GameLift.SearchGameSessions
 # operationId: SearchGameSessions
-export def "x-amz-target-game-lift-search-game-sessions SearchGameSessions" [
+export def "x-amz-target-game-lift-search-game-sessions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3342,32 +3342,32 @@ export def "x-amz-target-game-lift-search-game-sessions SearchGameSessions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-80
-  --FleetId: any
-  --AliasId: any
-  --Location: any
-  --FilterExpression: any
-  --SortExpression: any
-  --Limit: any
-  --NextToken: any
+  --limit: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-80
+  --fleet-id: any
+  --alias-id: any
+  --location: any
+  --filter-expression: any
+  --sort-expression: any
+  --limit: any
+  --next-token: any
 ]: any -> record<GameSessions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.SearchGameSessions" $qp)
-  let body = {FleetId: $FleetId, AliasId: $AliasId, Location: $Location, FilterExpression: $FilterExpression, SortExpression: $SortExpression, Limit: $Limit, NextToken: $NextToken} | compact
+  let body = {"FleetId": $fleet_id, "AliasId": $alias_id, "Location": $location, "FilterExpression": $filter_expression, "SortExpression": $sort_expression, "Limit": $limit, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3378,7 +3378,7 @@ export def "x-amz-target-game-lift-search-game-sessions SearchGameSessions" [
 #
 # POST /#X-Amz-Target=GameLift.StartFleetActions
 # operationId: StartFleetActions
-export def "x-amz-target-game-lift-start-fleet-actions StartFleetActions" [
+export def "x-amz-target-game-lift-start-fleet-actions start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3387,25 +3387,25 @@ export def "x-amz-target-game-lift-start-fleet-actions StartFleetActions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-81
-  FleetId: any
-  Actions: any
-  --Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-81
+  fleet_id: any
+  actions: any
+  --location: any
 ]: any -> record<FleetId: record, FleetArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.StartFleetActions")
-  let body = {FleetId: $FleetId, Actions: $Actions, Location: $Location} | compact
+  let body = {"FleetId": $fleet_id, "Actions": $actions, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3416,7 +3416,7 @@ export def "x-amz-target-game-lift-start-fleet-actions StartFleetActions" [
 #
 # POST /#X-Amz-Target=GameLift.StartGameSessionPlacement
 # operationId: StartGameSessionPlacement
-export def "x-amz-target-game-lift-start-game-session-placement StartGameSessionPlacement" [
+export def "x-amz-target-game-lift-start-game-session-placement start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3425,30 +3425,30 @@ export def "x-amz-target-game-lift-start-game-session-placement StartGameSession
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-82
-  PlacementId: any
-  GameSessionQueueName: any
-  --GameProperties: any
-  MaximumPlayerSessionCount: any
-  --GameSessionName: any
-  --PlayerLatencies: any
-  --DesiredPlayerSessions: any
-  --GameSessionData: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-82
+  placement_id: any
+  game_session_queue_name: any
+  --game-properties: any
+  maximum_player_session_count: any
+  --game-session-name: any
+  --player-latencies: any
+  --desired-player-sessions: any
+  --game-session-data: any
 ]: any -> record<GameSessionPlacement: record<PlacementId: record, GameSessionQueueName: record, Status: record, GameProperties: record, MaximumPlayerSessionCount: record, GameSessionName: record, GameSessionId: record, GameSessionArn: record, GameSessionRegion: record, PlayerLatencies: record, StartTime: record, EndTime: record, IpAddress: record, DnsName: record, Port: record, PlacedPlayerSessions: record, GameSessionData: record, MatchmakerData: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.StartGameSessionPlacement")
-  let body = {PlacementId: $PlacementId, GameSessionQueueName: $GameSessionQueueName, GameProperties: $GameProperties, MaximumPlayerSessionCount: $MaximumPlayerSessionCount, GameSessionName: $GameSessionName, PlayerLatencies: $PlayerLatencies, DesiredPlayerSessions: $DesiredPlayerSessions, GameSessionData: $GameSessionData} | compact
+  let body = {"PlacementId": $placement_id, "GameSessionQueueName": $game_session_queue_name, "GameProperties": $game_properties, "MaximumPlayerSessionCount": $maximum_player_session_count, "GameSessionName": $game_session_name, "PlayerLatencies": $player_latencies, "DesiredPlayerSessions": $desired_player_sessions, "GameSessionData": $game_session_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3459,7 +3459,7 @@ export def "x-amz-target-game-lift-start-game-session-placement StartGameSession
 #
 # POST /#X-Amz-Target=GameLift.StartMatchBackfill
 # operationId: StartMatchBackfill
-export def "x-amz-target-game-lift-start-match-backfill StartMatchBackfill" [
+export def "x-amz-target-game-lift-start-match-backfill start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3468,26 +3468,26 @@ export def "x-amz-target-game-lift-start-match-backfill StartMatchBackfill" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-83
-  --TicketId: any
-  ConfigurationName: any
-  --GameSessionArn: any
-  Players: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-83
+  --ticket-id: any
+  configuration_name: any
+  --game-session-arn: any
+  players: any
 ]: any -> record<MatchmakingTicket: record<TicketId: record, ConfigurationName: record, ConfigurationArn: record, Status: record, StatusReason: record, StatusMessage: record, StartTime: record, EndTime: record, Players: record, GameSessionConnectionInfo: record<GameSessionArn: record, IpAddress: record, DnsName: record, Port: record, MatchedPlayerSessions: record>, EstimatedWaitTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.StartMatchBackfill")
-  let body = {TicketId: $TicketId, ConfigurationName: $ConfigurationName, GameSessionArn: $GameSessionArn, Players: $Players} | compact
+  let body = {"TicketId": $ticket_id, "ConfigurationName": $configuration_name, "GameSessionArn": $game_session_arn, "Players": $players} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3498,7 +3498,7 @@ export def "x-amz-target-game-lift-start-match-backfill StartMatchBackfill" [
 #
 # POST /#X-Amz-Target=GameLift.StartMatchmaking
 # operationId: StartMatchmaking
-export def "x-amz-target-game-lift-start-matchmaking StartMatchmaking" [
+export def "x-amz-target-game-lift-start-matchmaking start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3507,25 +3507,25 @@ export def "x-amz-target-game-lift-start-matchmaking StartMatchmaking" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-84
-  --TicketId: any
-  ConfigurationName: any
-  Players: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-84
+  --ticket-id: any
+  configuration_name: any
+  players: any
 ]: any -> record<MatchmakingTicket: record<TicketId: record, ConfigurationName: record, ConfigurationArn: record, Status: record, StatusReason: record, StatusMessage: record, StartTime: record, EndTime: record, Players: record, GameSessionConnectionInfo: record<GameSessionArn: record, IpAddress: record, DnsName: record, Port: record, MatchedPlayerSessions: record>, EstimatedWaitTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.StartMatchmaking")
-  let body = {TicketId: $TicketId, ConfigurationName: $ConfigurationName, Players: $Players} | compact
+  let body = {"TicketId": $ticket_id, "ConfigurationName": $configuration_name, "Players": $players} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3536,7 +3536,7 @@ export def "x-amz-target-game-lift-start-matchmaking StartMatchmaking" [
 #
 # POST /#X-Amz-Target=GameLift.StopFleetActions
 # operationId: StopFleetActions
-export def "x-amz-target-game-lift-stop-fleet-actions StopFleetActions" [
+export def "x-amz-target-game-lift-stop-fleet-actions stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3545,25 +3545,25 @@ export def "x-amz-target-game-lift-stop-fleet-actions StopFleetActions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-85
-  FleetId: any
-  Actions: any
-  --Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-85
+  fleet_id: any
+  actions: any
+  --location: any
 ]: any -> record<FleetId: record, FleetArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.StopFleetActions")
-  let body = {FleetId: $FleetId, Actions: $Actions, Location: $Location} | compact
+  let body = {"FleetId": $fleet_id, "Actions": $actions, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3574,7 +3574,7 @@ export def "x-amz-target-game-lift-stop-fleet-actions StopFleetActions" [
 #
 # POST /#X-Amz-Target=GameLift.StopGameSessionPlacement
 # operationId: StopGameSessionPlacement
-export def "x-amz-target-game-lift-stop-game-session-placement StopGameSessionPlacement" [
+export def "x-amz-target-game-lift-stop-game-session-placement stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3583,23 +3583,23 @@ export def "x-amz-target-game-lift-stop-game-session-placement StopGameSessionPl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-86
-  PlacementId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-86
+  placement_id: any
 ]: any -> record<GameSessionPlacement: record<PlacementId: record, GameSessionQueueName: record, Status: record, GameProperties: record, MaximumPlayerSessionCount: record, GameSessionName: record, GameSessionId: record, GameSessionArn: record, GameSessionRegion: record, PlayerLatencies: record, StartTime: record, EndTime: record, IpAddress: record, DnsName: record, Port: record, PlacedPlayerSessions: record, GameSessionData: record, MatchmakerData: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.StopGameSessionPlacement")
-  let body = {PlacementId: $PlacementId} | compact
+  let body = {"PlacementId": $placement_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3610,7 +3610,7 @@ export def "x-amz-target-game-lift-stop-game-session-placement StopGameSessionPl
 #
 # POST /#X-Amz-Target=GameLift.StopMatchmaking
 # operationId: StopMatchmaking
-export def "x-amz-target-game-lift-stop-matchmaking StopMatchmaking" [
+export def "x-amz-target-game-lift-stop-matchmaking stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3619,23 +3619,23 @@ export def "x-amz-target-game-lift-stop-matchmaking StopMatchmaking" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-87
-  TicketId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-87
+  ticket_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.StopMatchmaking")
-  let body = {TicketId: $TicketId} | compact
+  let body = {"TicketId": $ticket_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3646,7 +3646,7 @@ export def "x-amz-target-game-lift-stop-matchmaking StopMatchmaking" [
 #
 # POST /#X-Amz-Target=GameLift.SuspendGameServerGroup
 # operationId: SuspendGameServerGroup
-export def "x-amz-target-game-lift-suspend-game-server-group SuspendGameServerGroup" [
+export def "x-amz-target-game-lift-suspend-game-server-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3655,24 +3655,24 @@ export def "x-amz-target-game-lift-suspend-game-server-group SuspendGameServerGr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-88
-  GameServerGroupName: any
-  SuspendActions: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-88
+  game_server_group_name: any
+  suspend_actions: any
 ]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.SuspendGameServerGroup")
-  let body = {GameServerGroupName: $GameServerGroupName, SuspendActions: $SuspendActions} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "SuspendActions": $suspend_actions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3683,7 +3683,7 @@ export def "x-amz-target-game-lift-suspend-game-server-group SuspendGameServerGr
 #
 # POST /#X-Amz-Target=GameLift.TagResource
 # operationId: TagResource
-export def "x-amz-target-game-lift-tag-resource TagResource" [
+export def "x-amz-target-game-lift-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3692,24 +3692,24 @@ export def "x-amz-target-game-lift-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-89
-  ResourceARN: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-89
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.TagResource")
-  let body = {ResourceARN: $ResourceARN, Tags: $Tags} | compact
+  let body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3720,7 +3720,7 @@ export def "x-amz-target-game-lift-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=GameLift.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-game-lift-untag-resource UntagResource" [
+export def "x-amz-target-game-lift-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3729,24 +3729,24 @@ export def "x-amz-target-game-lift-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-90
-  ResourceARN: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-90
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UntagResource")
-  let body = {ResourceARN: $ResourceARN, TagKeys: $TagKeys} | compact
+  let body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3757,7 +3757,7 @@ export def "x-amz-target-game-lift-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=GameLift.UpdateAlias
 # operationId: UpdateAlias
-export def "x-amz-target-game-lift-update-alias UpdateAlias" [
+export def "x-amz-target-game-lift-update-alias update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3766,26 +3766,26 @@ export def "x-amz-target-game-lift-update-alias UpdateAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-91
-  AliasId: any
-  --Name: any
-  --Description: any
-  --RoutingStrategy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-91
+  alias_id: any
+  --name: any
+  --description: any
+  --routing-strategy: any
 ]: any -> record<Alias: record<AliasId: record, Name: record, AliasArn: record, Description: record, RoutingStrategy: record<Type: record, FleetId: record, Message: record>, CreationTime: record, LastUpdatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateAlias")
-  let body = {AliasId: $AliasId, Name: $Name, Description: $Description, RoutingStrategy: $RoutingStrategy} | compact
+  let body = {"AliasId": $alias_id, "Name": $name, "Description": $description, "RoutingStrategy": $routing_strategy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3796,7 +3796,7 @@ export def "x-amz-target-game-lift-update-alias UpdateAlias" [
 #
 # POST /#X-Amz-Target=GameLift.UpdateBuild
 # operationId: UpdateBuild
-export def "x-amz-target-game-lift-update-build UpdateBuild" [
+export def "x-amz-target-game-lift-update-build update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3805,25 +3805,25 @@ export def "x-amz-target-game-lift-update-build UpdateBuild" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-92
-  BuildId: any
-  --Name: any
-  --Version: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-92
+  build_id: any
+  --name: any
+  --version: any
 ]: any -> record<Build: record<BuildId: record, BuildArn: record, Name: record, Version: record, Status: record, SizeOnDisk: record, OperatingSystem: record, CreationTime: record, ServerSdkVersion: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateBuild")
-  let body = {BuildId: $BuildId, Name: $Name, Version: $Version} | compact
+  let body = {"BuildId": $build_id, "Name": $name, "Version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3834,7 +3834,7 @@ export def "x-amz-target-game-lift-update-build UpdateBuild" [
 #
 # POST /#X-Amz-Target=GameLift.UpdateFleetAttributes
 # operationId: UpdateFleetAttributes
-export def "x-amz-target-game-lift-update-fleet-attributes UpdateFleetAttributes" [
+export def "x-amz-target-game-lift-update-fleet-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3843,29 +3843,29 @@ export def "x-amz-target-game-lift-update-fleet-attributes UpdateFleetAttributes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-93
-  FleetId: any
-  --Name: any
-  --Description: any
-  --NewGameSessionProtectionPolicy: any
-  --ResourceCreationLimitPolicy: any
-  --MetricGroups: any
-  --AnywhereConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-93
+  fleet_id: any
+  --name: any
+  --description: any
+  --new-game-session-protection-policy: any
+  --resource-creation-limit-policy: any
+  --metric-groups: any
+  --anywhere-configuration: any
 ]: any -> record<FleetId: record, FleetArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateFleetAttributes")
-  let body = {FleetId: $FleetId, Name: $Name, Description: $Description, NewGameSessionProtectionPolicy: $NewGameSessionProtectionPolicy, ResourceCreationLimitPolicy: $ResourceCreationLimitPolicy, MetricGroups: $MetricGroups, AnywhereConfiguration: $AnywhereConfiguration} | compact
+  let body = {"FleetId": $fleet_id, "Name": $name, "Description": $description, "NewGameSessionProtectionPolicy": $new_game_session_protection_policy, "ResourceCreationLimitPolicy": $resource_creation_limit_policy, "MetricGroups": $metric_groups, "AnywhereConfiguration": $anywhere_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3876,7 +3876,7 @@ export def "x-amz-target-game-lift-update-fleet-attributes UpdateFleetAttributes
 #
 # POST /#X-Amz-Target=GameLift.UpdateFleetCapacity
 # operationId: UpdateFleetCapacity
-export def "x-amz-target-game-lift-update-fleet-capacity UpdateFleetCapacity" [
+export def "x-amz-target-game-lift-update-fleet-capacity update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3885,27 +3885,27 @@ export def "x-amz-target-game-lift-update-fleet-capacity UpdateFleetCapacity" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-94
-  FleetId: any
-  --DesiredInstances: any
-  --MinSize: any
-  --MaxSize: any
-  --Location: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-94
+  fleet_id: any
+  --desired-instances: any
+  --min-size: any
+  --max-size: any
+  --location: any
 ]: any -> record<FleetId: record, FleetArn: record, Location: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateFleetCapacity")
-  let body = {FleetId: $FleetId, DesiredInstances: $DesiredInstances, MinSize: $MinSize, MaxSize: $MaxSize, Location: $Location} | compact
+  let body = {"FleetId": $fleet_id, "DesiredInstances": $desired_instances, "MinSize": $min_size, "MaxSize": $max_size, "Location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3916,7 +3916,7 @@ export def "x-amz-target-game-lift-update-fleet-capacity UpdateFleetCapacity" [
 #
 # POST /#X-Amz-Target=GameLift.UpdateFleetPortSettings
 # operationId: UpdateFleetPortSettings
-export def "x-amz-target-game-lift-update-fleet-port-settings UpdateFleetPortSettings" [
+export def "x-amz-target-game-lift-update-fleet-port-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3925,25 +3925,25 @@ export def "x-amz-target-game-lift-update-fleet-port-settings UpdateFleetPortSet
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-95
-  FleetId: any
-  --InboundPermissionAuthorizations: any
-  --InboundPermissionRevocations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-95
+  fleet_id: any
+  --inbound-permission-authorizations: any
+  --inbound-permission-revocations: any
 ]: any -> record<FleetId: record, FleetArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateFleetPortSettings")
-  let body = {FleetId: $FleetId, InboundPermissionAuthorizations: $InboundPermissionAuthorizations, InboundPermissionRevocations: $InboundPermissionRevocations} | compact
+  let body = {"FleetId": $fleet_id, "InboundPermissionAuthorizations": $inbound_permission_authorizations, "InboundPermissionRevocations": $inbound_permission_revocations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3954,7 +3954,7 @@ export def "x-amz-target-game-lift-update-fleet-port-settings UpdateFleetPortSet
 #
 # POST /#X-Amz-Target=GameLift.UpdateGameServer
 # operationId: UpdateGameServer
-export def "x-amz-target-game-lift-update-game-server UpdateGameServer" [
+export def "x-amz-target-game-lift-update-game-server update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3963,27 +3963,27 @@ export def "x-amz-target-game-lift-update-game-server UpdateGameServer" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-96
-  GameServerGroupName: any
-  GameServerId: any
-  --GameServerData: any
-  --UtilizationStatus: any
-  --HealthCheck: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-96
+  game_server_group_name: any
+  game_server_id: any
+  --game-server-data: any
+  --utilization-status: any
+  --health-check: any
 ]: any -> record<GameServer: record<GameServerGroupName: record, GameServerGroupArn: record, GameServerId: record, InstanceId: record, ConnectionInfo: record, GameServerData: record, ClaimStatus: record, UtilizationStatus: record, RegistrationTime: record, LastClaimTime: record, LastHealthCheckTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateGameServer")
-  let body = {GameServerGroupName: $GameServerGroupName, GameServerId: $GameServerId, GameServerData: $GameServerData, UtilizationStatus: $UtilizationStatus, HealthCheck: $HealthCheck} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "GameServerId": $game_server_id, "GameServerData": $game_server_data, "UtilizationStatus": $utilization_status, "HealthCheck": $health_check} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3994,7 +3994,7 @@ export def "x-amz-target-game-lift-update-game-server UpdateGameServer" [
 #
 # POST /#X-Amz-Target=GameLift.UpdateGameServerGroup
 # operationId: UpdateGameServerGroup
-export def "x-amz-target-game-lift-update-game-server-group UpdateGameServerGroup" [
+export def "x-amz-target-game-lift-update-game-server-group update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4003,27 +4003,27 @@ export def "x-amz-target-game-lift-update-game-server-group UpdateGameServerGrou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-97
-  GameServerGroupName: any
-  --RoleArn: any
-  --InstanceDefinitions: any
-  --GameServerProtectionPolicy: any
-  --BalancingStrategy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-97
+  game_server_group_name: any
+  --role-arn: any
+  --instance-definitions: any
+  --game-server-protection-policy: any
+  --balancing-strategy: any
 ]: any -> record<GameServerGroup: record<GameServerGroupName: record, GameServerGroupArn: record, RoleArn: record, InstanceDefinitions: record, BalancingStrategy: record, GameServerProtectionPolicy: record, AutoScalingGroupArn: record, Status: record, StatusReason: record, SuspendedActions: record, CreationTime: record, LastUpdatedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateGameServerGroup")
-  let body = {GameServerGroupName: $GameServerGroupName, RoleArn: $RoleArn, InstanceDefinitions: $InstanceDefinitions, GameServerProtectionPolicy: $GameServerProtectionPolicy, BalancingStrategy: $BalancingStrategy} | compact
+  let body = {"GameServerGroupName": $game_server_group_name, "RoleArn": $role_arn, "InstanceDefinitions": $instance_definitions, "GameServerProtectionPolicy": $game_server_protection_policy, "BalancingStrategy": $balancing_strategy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4034,7 +4034,7 @@ export def "x-amz-target-game-lift-update-game-server-group UpdateGameServerGrou
 #
 # POST /#X-Amz-Target=GameLift.UpdateGameSession
 # operationId: UpdateGameSession
-export def "x-amz-target-game-lift-update-game-session UpdateGameSession" [
+export def "x-amz-target-game-lift-update-game-session update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4043,27 +4043,27 @@ export def "x-amz-target-game-lift-update-game-session UpdateGameSession" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-98
-  GameSessionId: any
-  --MaximumPlayerSessionCount: any
-  --Name: any
-  --PlayerSessionCreationPolicy: any
-  --ProtectionPolicy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-98
+  game_session_id: any
+  --maximum-player-session-count: any
+  --name: any
+  --player-session-creation-policy: any
+  --protection-policy: any
 ]: any -> record<GameSession: record<GameSessionId: record, Name: record, FleetId: record, FleetArn: record, CreationTime: record, TerminationTime: record, CurrentPlayerSessionCount: record, MaximumPlayerSessionCount: record, Status: record, StatusReason: record, GameProperties: record, IpAddress: record, DnsName: record, Port: record, PlayerSessionCreationPolicy: record, CreatorId: record, GameSessionData: record, MatchmakerData: record, Location: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateGameSession")
-  let body = {GameSessionId: $GameSessionId, MaximumPlayerSessionCount: $MaximumPlayerSessionCount, Name: $Name, PlayerSessionCreationPolicy: $PlayerSessionCreationPolicy, ProtectionPolicy: $ProtectionPolicy} | compact
+  let body = {"GameSessionId": $game_session_id, "MaximumPlayerSessionCount": $maximum_player_session_count, "Name": $name, "PlayerSessionCreationPolicy": $player_session_creation_policy, "ProtectionPolicy": $protection_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4074,7 +4074,7 @@ export def "x-amz-target-game-lift-update-game-session UpdateGameSession" [
 #
 # POST /#X-Amz-Target=GameLift.UpdateGameSessionQueue
 # operationId: UpdateGameSessionQueue
-export def "x-amz-target-game-lift-update-game-session-queue UpdateGameSessionQueue" [
+export def "x-amz-target-game-lift-update-game-session-queue update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4083,30 +4083,30 @@ export def "x-amz-target-game-lift-update-game-session-queue UpdateGameSessionQu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-99
-  Name: any
-  --TimeoutInSeconds: any
-  --PlayerLatencyPolicies: any
-  --Destinations: any
-  --FilterConfiguration: any
-  --PriorityConfiguration: any
-  --CustomEventData: any
-  --NotificationTarget: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-99
+  name: any
+  --timeout-in-seconds: any
+  --player-latency-policies: any
+  --destinations: any
+  --filter-configuration: any
+  --priority-configuration: any
+  --custom-event-data: any
+  --notification-target: any
 ]: any -> record<GameSessionQueue: record<Name: record, GameSessionQueueArn: record, TimeoutInSeconds: record, PlayerLatencyPolicies: record, Destinations: record, FilterConfiguration: record<AllowedLocations: record>, PriorityConfiguration: record<PriorityOrder: record, LocationOrder: record>, CustomEventData: record, NotificationTarget: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateGameSessionQueue")
-  let body = {Name: $Name, TimeoutInSeconds: $TimeoutInSeconds, PlayerLatencyPolicies: $PlayerLatencyPolicies, Destinations: $Destinations, FilterConfiguration: $FilterConfiguration, PriorityConfiguration: $PriorityConfiguration, CustomEventData: $CustomEventData, NotificationTarget: $NotificationTarget} | compact
+  let body = {"Name": $name, "TimeoutInSeconds": $timeout_in_seconds, "PlayerLatencyPolicies": $player_latency_policies, "Destinations": $destinations, "FilterConfiguration": $filter_configuration, "PriorityConfiguration": $priority_configuration, "CustomEventData": $custom_event_data, "NotificationTarget": $notification_target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4117,7 +4117,7 @@ export def "x-amz-target-game-lift-update-game-session-queue UpdateGameSessionQu
 #
 # POST /#X-Amz-Target=GameLift.UpdateMatchmakingConfiguration
 # operationId: UpdateMatchmakingConfiguration
-export def "x-amz-target-game-lift-update-matchmaking-configuration UpdateMatchmakingConfiguration" [
+export def "x-amz-target-game-lift-update-matchmaking-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4126,36 +4126,36 @@ export def "x-amz-target-game-lift-update-matchmaking-configuration UpdateMatchm
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-100
-  Name: any
-  --Description: any
-  --GameSessionQueueArns: any
-  --RequestTimeoutSeconds: any
-  --AcceptanceTimeoutSeconds: any
-  --AcceptanceRequired: any
-  --RuleSetName: any
-  --NotificationTarget: any
-  --AdditionalPlayerCount: any
-  --CustomEventData: any
-  --GameProperties: any
-  --GameSessionData: any
-  --BackfillMode: any
-  --FlexMatchMode: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-100
+  name: any
+  --description: any
+  --game-session-queue-arns: any
+  --request-timeout-seconds: any
+  --acceptance-timeout-seconds: any
+  --acceptance-required: any
+  --rule-set-name: any
+  --notification-target: any
+  --additional-player-count: any
+  --custom-event-data: any
+  --game-properties: any
+  --game-session-data: any
+  --backfill-mode: any
+  --flex-match-mode: any
 ]: any -> record<Configuration: record<Name: record, ConfigurationArn: record, Description: record, GameSessionQueueArns: record, RequestTimeoutSeconds: record, AcceptanceTimeoutSeconds: record, AcceptanceRequired: record, RuleSetName: record, RuleSetArn: record, NotificationTarget: record, AdditionalPlayerCount: record, CustomEventData: record, CreationTime: record, GameProperties: record, GameSessionData: record, BackfillMode: record, FlexMatchMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateMatchmakingConfiguration")
-  let body = {Name: $Name, Description: $Description, GameSessionQueueArns: $GameSessionQueueArns, RequestTimeoutSeconds: $RequestTimeoutSeconds, AcceptanceTimeoutSeconds: $AcceptanceTimeoutSeconds, AcceptanceRequired: $AcceptanceRequired, RuleSetName: $RuleSetName, NotificationTarget: $NotificationTarget, AdditionalPlayerCount: $AdditionalPlayerCount, CustomEventData: $CustomEventData, GameProperties: $GameProperties, GameSessionData: $GameSessionData, BackfillMode: $BackfillMode, FlexMatchMode: $FlexMatchMode} | compact
+  let body = {"Name": $name, "Description": $description, "GameSessionQueueArns": $game_session_queue_arns, "RequestTimeoutSeconds": $request_timeout_seconds, "AcceptanceTimeoutSeconds": $acceptance_timeout_seconds, "AcceptanceRequired": $acceptance_required, "RuleSetName": $rule_set_name, "NotificationTarget": $notification_target, "AdditionalPlayerCount": $additional_player_count, "CustomEventData": $custom_event_data, "GameProperties": $game_properties, "GameSessionData": $game_session_data, "BackfillMode": $backfill_mode, "FlexMatchMode": $flex_match_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4166,7 +4166,7 @@ export def "x-amz-target-game-lift-update-matchmaking-configuration UpdateMatchm
 #
 # POST /#X-Amz-Target=GameLift.UpdateRuntimeConfiguration
 # operationId: UpdateRuntimeConfiguration
-export def "x-amz-target-game-lift-update-runtime-configuration UpdateRuntimeConfiguration" [
+export def "x-amz-target-game-lift-update-runtime-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4175,24 +4175,24 @@ export def "x-amz-target-game-lift-update-runtime-configuration UpdateRuntimeCon
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-101
-  FleetId: any
-  RuntimeConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-101
+  fleet_id: any
+  runtime_configuration: any
 ]: any -> record<RuntimeConfiguration: record<ServerProcesses: record, MaxConcurrentGameSessionActivations: record, GameSessionActivationTimeoutSeconds: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateRuntimeConfiguration")
-  let body = {FleetId: $FleetId, RuntimeConfiguration: $RuntimeConfiguration} | compact
+  let body = {"FleetId": $fleet_id, "RuntimeConfiguration": $runtime_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4203,7 +4203,7 @@ export def "x-amz-target-game-lift-update-runtime-configuration UpdateRuntimeCon
 #
 # POST /#X-Amz-Target=GameLift.UpdateScript
 # operationId: UpdateScript
-export def "x-amz-target-game-lift-update-script UpdateScript" [
+export def "x-amz-target-game-lift-update-script update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4212,27 +4212,27 @@ export def "x-amz-target-game-lift-update-script UpdateScript" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-102
-  ScriptId: any
-  --Name: any
-  --Version: any
-  --StorageLocation: any
-  --ZipFile: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-102
+  script_id: any
+  --name: any
+  --version: any
+  --storage-location: any
+  --zip-file: any
 ]: any -> record<Script: record<ScriptId: record, ScriptArn: record, Name: record, Version: record, SizeOnDisk: record, CreationTime: record, StorageLocation: record<Bucket: record, Key: record, RoleArn: record, ObjectVersion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.UpdateScript")
-  let body = {ScriptId: $ScriptId, Name: $Name, Version: $Version, StorageLocation: $StorageLocation, ZipFile: $ZipFile} | compact
+  let body = {"ScriptId": $script_id, "Name": $name, "Version": $version, "StorageLocation": $storage_location, "ZipFile": $zip_file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4243,7 +4243,7 @@ export def "x-amz-target-game-lift-update-script UpdateScript" [
 #
 # POST /#X-Amz-Target=GameLift.ValidateMatchmakingRuleSet
 # operationId: ValidateMatchmakingRuleSet
-export def "x-amz-target-game-lift-validate-matchmaking-rule-set ValidateMatchmakingRuleSet" [
+export def "x-amz-target-game-lift-validate-matchmaking-rule-set validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4252,23 +4252,23 @@ export def "x-amz-target-game-lift-validate-matchmaking-rule-set ValidateMatchma
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-103
-  RuleSetBody: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-103
+  rule_set_body: any
 ]: any -> record<Valid: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GameLift.ValidateMatchmakingRuleSet")
-  let body = {RuleSetBody: $RuleSetBody} | compact
+  let body = {"RuleSetBody": $rule_set_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

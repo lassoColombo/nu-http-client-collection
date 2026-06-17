@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-security-alert-policies ListByDatabase" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-security-alert-policies list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,11 +93,11 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/securityAlertPolicies
 # operationId: ManagedDatabaseSecurityAlertPolicies_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-security-alert-policies ListByDatabase" [
-  resourceGroupName: string
-  managedInstanceName: string
-  databaseName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-security-alert-policies list-by" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +111,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)/databases/($databaseName)/securityAlertPolicies" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name, database_name: $database_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/securityAlertPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -121,12 +121,12 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/securityAlertPolicies/{securityAlertPolicyName}
 # operationId: ManagedDatabaseSecurityAlertPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-security-alert-policies Get" [
-  resourceGroupName: string
-  managedInstanceName: string
-  databaseName: string
-  securityAlertPolicyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-security-alert-policies get" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
+  database_name: string
+  security_alert_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)/databases/($databaseName)/securityAlertPolicies/($securityAlertPolicyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name, database_name: $database_name, security_alert_policy_name: $security_alert_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/securityAlertPolicies/{security_alert_policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,12 +151,12 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/securityAlertPolicies/{securityAlertPolicyName}
 # operationId: ManagedDatabaseSecurityAlertPolicies_CreateOrUpdate
 # --properties shape: {disabledAlerts?: list, emailAccountAdmins?: bool, emailAddresses?: list, retentionDays?: int, state: "New"|"Enabled"|"Disabled", storageAccountAccessKey?: string, storageEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-security-alert-policies CreateOrUpdate" [
-  resourceGroupName: string
-  managedInstanceName: string
-  databaseName: string
-  securityAlertPolicyName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-security-alert-policies create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
+  database_name: string
+  security_alert_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,8 +172,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)/databases/($databaseName)/securityAlertPolicies/($securityAlertPolicyName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name, database_name: $database_name, security_alert_policy_name: $security_alert_policy_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}/databases/{database_name}/securityAlertPolicies/{security_alert_policy_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -72,7 +72,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reporting-mortgagesbycreateddate MortgagesByCreatedDate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reporting-mortgagesbycreateddate get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,8 +96,8 @@ export def commands []: nothing -> table {
 #
 # GET /v3/reporting/{shortName}/mortgagesbycreateddate
 # operationId: ReportingController_MortgagesByCreatedDate
-export def "reporting-mortgagesbycreateddate MortgagesByCreatedDate" [
-  shortName: string
+export def "reporting-mortgagesbycreateddate get" [
+  short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,15 +107,15 @@ export def "reporting-mortgagesbycreateddate MortgagesByCreatedDate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branchID: string # The unique ID of the Branch
-  --startDate: string # The date to search from. (format: date-time)
+  --branch-id: string # The unique ID of the Branch
+  --start-date: string # The date to search from. (format: date-time)
   --offset: int # The index of the first item to return (format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
 ]: nothing -> record<Count: int, Data: table<Amount: float, BorrowersAccountName: string, CreatedAt: string, DisplayType: string, ExtraNotes: string, From: string, IntrestRate: float, MarketValue: float, MonthlyPayment: float, MortgageAccountNumber: string, MortgageProvider: string, PropertyOwnableID: string, SalesInstructionID: string, Type: string, ValuationDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "branchID" $branchID "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/reporting/($shortName)/mortgagesbycreateddate" $qp)
+  let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/reporting/{short_name}/mortgagesbycreateddate") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -125,8 +125,8 @@ export def "reporting-mortgagesbycreateddate MortgagesByCreatedDate" [
 #
 # GET /v3/reporting/{shortName}/mortgagesbyupdateddate
 # operationId: ReportingController_MortgagesByUpdatedDate
-export def "reporting-mortgagesbyupdateddate MortgagesByUpdatedDate" [
-  shortName: string
+export def "reporting-mortgagesbyupdateddate get" [
+  short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,15 +136,15 @@ export def "reporting-mortgagesbyupdateddate MortgagesByUpdatedDate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branchID: string # The unique ID of the Branch
-  --startDate: string # The date to search from. (format: date-time)
+  --branch-id: string # The unique ID of the Branch
+  --start-date: string # The date to search from. (format: date-time)
   --offset: int # The index of the first item to return (format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
 ]: nothing -> record<Count: int, Data: table<Amount: float, BorrowersAccountName: string, CreatedAt: string, DisplayType: string, ExtraNotes: string, From: string, IntrestRate: float, MarketValue: float, MonthlyPayment: float, MortgageAccountNumber: string, MortgageProvider: string, PropertyOwnableID: string, SalesInstructionID: string, Type: string, ValuationDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "branchID" $branchID "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/reporting/($shortName)/mortgagesbyupdateddate" $qp)
+  let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/reporting/{short_name}/mortgagesbyupdateddate") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,8 +154,8 @@ export def "reporting-mortgagesbyupdateddate MortgagesByUpdatedDate" [
 #
 # GET /v3/reporting/{shortName}/repossesionsbycreateddate
 # operationId: ReportingController_RepossessionsByCreatedDate
-export def "reporting-repossesionsbycreateddate RepossessionsByCreatedDate" [
-  shortName: string
+export def "reporting-repossesionsbycreateddate get" [
+  short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,15 +165,15 @@ export def "reporting-repossesionsbycreateddate RepossessionsByCreatedDate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branchID: string # The unique ID of the Branch
-  --startDate: string # The date to search from. (format: date-time)
+  --branch-id: string # The unique ID of the Branch
+  --start-date: string # The date to search from. (format: date-time)
   --offset: int # The index of the first item to return (format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
 ]: nothing -> record<Count: int, Data: table<CaseDetails: record, ExitStrategy: list, Litigation: list>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "branchID" $branchID "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/reporting/($shortName)/repossesionsbycreateddate" $qp)
+  let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/reporting/{short_name}/repossesionsbycreateddate") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,8 +183,8 @@ export def "reporting-repossesionsbycreateddate RepossessionsByCreatedDate" [
 #
 # GET /v3/reporting/{shortName}/repossesionsbyupdateddate
 # operationId: ReportingController_RepossessionsByUpdatedDate
-export def "reporting-repossesionsbyupdateddate RepossessionsByUpdatedDate" [
-  shortName: string
+export def "reporting-repossesionsbyupdateddate get" [
+  short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,15 +194,15 @@ export def "reporting-repossesionsbyupdateddate RepossessionsByUpdatedDate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --branchID: string # The unique ID of the Branch
-  --startDate: string # The date to search from. (format: date-time)
+  --branch-id: string # The unique ID of the Branch
+  --start-date: string # The date to search from. (format: date-time)
   --offset: int # The index of the first item to return (format: int32)
   --count: int # The maximum number of items to return (up to 1000 per request) (format: int32)
 ]: nothing -> record<Count: int, Data: table<CaseDetails: record, ExitStrategy: list, Litigation: list>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "branchID" $branchID "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v3/reporting/($shortName)/repossesionsbyupdateddate" $qp)
+  let qp = [(serialize-qp "branchID" $branch_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({short_name: $short_name} | format pattern "/v3/reporting/{short_name}/repossesionsbyupdateddate") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -71,7 +71,7 @@ def kind-completer [] { ["AzureActivityLog" "ChangeTrackingCustomRegistry" "Chan
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-operational-insights-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-operational-insights-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.OperationalInsights/operations
 # operationId: Operations_List
-export def "providers-microsoft-operational-insights-operations List" [
+export def "providers-microsoft-operational-insights-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-operational-insights-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.OperationalInsights/workspaces
 # operationId: Workspaces_List
-export def "subscriptions-providers-microsoft-operational-insights-workspaces List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-operational-insights-workspaces list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoft-operational-insights-workspaces Li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.OperationalInsights/workspaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.OperationalInsights/workspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,9 +144,9 @@ export def "subscriptions-providers-microsoft-operational-insights-workspaces Li
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces
 # operationId: Workspaces_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,10 +170,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}
 # operationId: Workspaces_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces Delete" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,10 +197,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}
 # operationId: Workspaces_Get
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces Get" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -225,10 +225,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}
 # operationId: Workspaces_Update
 # --properties shape: {provisioningState?: "Creating"|"Succeeded"|"Failed"|"Canceled"|"Deleting"|"ProvisioningAccount", retentionInDays?: int, sku?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces Update" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces update" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --eTag: string # The ETag of the workspace.
+  --e-tag: string # The ETag of the workspace.
   --properties: any # Workspace properties. — shape: {provisioningState?: "Creating"|"Succeeded"|"Failed"|"Canceled"|"Deleting"|"ProvisioningAccount", retentionInDays?: int, sku?: any}
   --location: string # Resource location
   --tags: record # Resource tags
@@ -247,8 +247,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)" $qp)
-  let body = {eTag: $eTag, properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}") $qp)
+  let body = {"eTag": $e_tag, "properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -260,10 +260,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}
 # operationId: Workspaces_CreateOrUpdate
 # --properties shape: {provisioningState?: "Creating"|"Succeeded"|"Failed"|"Canceled"|"Deleting"|"ProvisioningAccount", retentionInDays?: int, sku?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces CreateOrUpdate" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --eTag: string # The ETag of the workspace.
+  --e-tag: string # The ETag of the workspace.
   --properties: any # Workspace properties. — shape: {provisioningState?: "Creating"|"Succeeded"|"Failed"|"Canceled"|"Deleting"|"ProvisioningAccount", retentionInDays?: int, sku?: any}
   --location: string # Resource location
   --tags: record # Resource tags
@@ -282,8 +282,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)" $qp)
-  let body = {eTag: $eTag, properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}") $qp)
+  let body = {"eTag": $e_tag, "properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -294,10 +294,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/dataSources
 # operationId: DataSources_ListByWorkspace
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources ListByWorkspace" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources list-by" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$skiptoken" $skiptoken "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/dataSources" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/dataSources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,11 +323,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/dataSources/{dataSourceName}
 # operationId: DataSources_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources Delete" [
-  resourceGroupName: string
-  workspaceName: string
-  dataSourceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/dataSources/($dataSourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, data_source_name: $data_source_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/dataSources/{data_source_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -351,11 +351,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/dataSources/{dataSourceName}
 # operationId: DataSources_Get
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources Get" [
-  resourceGroupName: string
-  workspaceName: string
-  dataSourceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/dataSources/($dataSourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, data_source_name: $data_source_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/dataSources/{data_source_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -379,11 +379,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/dataSources/{dataSourceName}
 # operationId: DataSources_CreateOrUpdate
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources CreateOrUpdate" [
-  resourceGroupName: string
-  workspaceName: string
-  dataSourceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-data-sources create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --eTag: string # The ETag of the data source.
+  --e-tag: string # The ETag of the data source.
   kind: string@kind-completer # The kind of the DataSource.
   properties: record # JSON object
   --tags: record # Resource tags
@@ -402,8 +402,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/dataSources/($dataSourceName)" $qp)
-  let body = {eTag: $eTag, kind: $kind, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, data_source_name: $data_source_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/dataSources/{data_source_name}") $qp)
+  let body = {"eTag": $e_tag, "kind": $kind, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -414,10 +414,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/intelligencePacks
 # operationId: Workspaces_ListIntelligencePacks
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-intelligence-packs ListIntelligencePacks" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-intelligence-packs list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,7 +431,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/intelligencePacks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/intelligencePacks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -441,11 +441,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/intelligencePacks/{intelligencePackName}/Disable
 # operationId: Workspaces_DisableIntelligencePack
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-intelligence-packs-disable DisableIntelligencePack" [
-  resourceGroupName: string
-  workspaceName: string
-  intelligencePackName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-intelligence-packs-disable disable" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  intelligence_pack_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,7 +459,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/intelligencePacks/($intelligencePackName)/Disable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, intelligence_pack_name: $intelligence_pack_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/intelligencePacks/{intelligence_pack_name}/Disable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -469,11 +469,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/intelligencePacks/{intelligencePackName}/Enable
 # operationId: Workspaces_EnableIntelligencePack
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-intelligence-packs-enable EnableIntelligencePack" [
-  resourceGroupName: string
-  workspaceName: string
-  intelligencePackName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-intelligence-packs-enable enable" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  intelligence_pack_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/intelligencePacks/($intelligencePackName)/Enable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, intelligence_pack_name: $intelligence_pack_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/intelligencePacks/{intelligence_pack_name}/Enable") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -497,10 +497,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/linkedServices
 # operationId: LinkedServices_ListByWorkspace
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services ListByWorkspace" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services list-by" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/linkedServices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/linkedServices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -524,11 +524,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/linkedServices/{linkedServiceName}
 # operationId: LinkedServices_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services Delete" [
-  resourceGroupName: string
-  workspaceName: string
-  linkedServiceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  linked_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,7 +542,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/linkedServices/($linkedServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, linked_service_name: $linked_service_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/linkedServices/{linked_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -552,11 +552,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/linkedServices/{linkedServiceName}
 # operationId: LinkedServices_Get
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services Get" [
-  resourceGroupName: string
-  workspaceName: string
-  linkedServiceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  linked_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +570,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/linkedServices/($linkedServiceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, linked_service_name: $linked_service_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/linkedServices/{linked_service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -581,11 +581,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/linkedServices/{linkedServiceName}
 # operationId: LinkedServices_CreateOrUpdate
 # --properties shape: {resourceId: string}
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services CreateOrUpdate" [
-  resourceGroupName: string
-  workspaceName: string
-  linkedServiceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-linked-services create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  linked_service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,8 +602,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/linkedServices/($linkedServiceName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, linked_service_name: $linked_service_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/linkedServices/{linked_service_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -614,10 +614,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/managementGroups
 # operationId: Workspaces_ListManagementGroups
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-management-groups ListManagementGroups" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-management-groups list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -631,7 +631,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/managementGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/managementGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -641,10 +641,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/sharedKeys
 # operationId: Workspaces_GetSharedKeys
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-shared-keys GetSharedKeys" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-shared-keys get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/sharedKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/sharedKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -668,10 +668,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/usages
 # operationId: Workspaces_ListUsages
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-usages ListUsages" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-workspaces-usages list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,7 +685,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.OperationalInsights/workspaces/($workspaceName)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.OperationalInsights/workspaces/{workspace_name}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

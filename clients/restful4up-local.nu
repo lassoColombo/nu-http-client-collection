@@ -111,7 +111,7 @@ export def "apply-yara-rules applyYaraRules" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/apply-yara-rules")
-  let body = {file: $file, is_unpacking_required: $is_unpacking_required, rules: $rules} | compact
+  let body = {"file": $file, "is_unpacking_required": $is_unpacking_required, "rules": $rules} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -122,7 +122,7 @@ export def "apply-yara-rules applyYaraRules" [
 #
 # HEAD /clean
 # operationId: clean
-export def "clean clean" [
+export def "clean head" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "emulation-output emulationOutput" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/emulation-output")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -188,7 +188,7 @@ export def "generate-partial-yara-rules generatePartialYaraRule" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/generate-partial-yara-rules")
-  let body = {file: $file, is_unpacking_required: $is_unpacking_required, minimum_string_length: $minimum_string_length, strings_to_ignore: $strings_to_ignore} | compact
+  let body = {"file": $file, "is_unpacking_required": $is_unpacking_required, "minimum_string_length": $minimum_string_length, "strings_to_ignore": $strings_to_ignore} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -199,7 +199,7 @@ export def "generate-partial-yara-rules generatePartialYaraRule" [
 #
 # POST /unpack
 # operationId: unpack
-export def "unpack unpack" [
+export def "unpack post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "unpack unpack" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unpack")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

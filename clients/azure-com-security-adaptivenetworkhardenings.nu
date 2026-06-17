@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings ListByExtendedResource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings list-by-extended" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,12 +93,12 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.Security/adaptiveNetworkHardenings
 # operationId: AdaptiveNetworkHardenings_ListByExtendedResource
-export def "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings ListByExtendedResource" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceNamespace: string
-  resourceType: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings list-by-extended" [
+  subscription_id: string
+  resource_group_name: string
+  resource_namespace: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-security
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/($resourceNamespace)/($resourceType)/($resourceName)/providers/Microsoft.Security/adaptiveNetworkHardenings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_namespace: $resource_namespace, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.Security/adaptiveNetworkHardenings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,13 +122,13 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-security
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.Security/adaptiveNetworkHardenings/{adaptiveNetworkHardeningResourceName}
 # operationId: AdaptiveNetworkHardenings_Get
-export def "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceNamespace: string
-  resourceType: string
-  resourceName: string
-  adaptiveNetworkHardeningResourceName: string
+export def "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_namespace: string
+  resource_type: string
+  resource_name: string
+  adaptive_network_hardening_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,7 +142,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-security
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/($resourceNamespace)/($resourceType)/($resourceName)/providers/Microsoft.Security/adaptiveNetworkHardenings/($adaptiveNetworkHardeningResourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_namespace: $resource_namespace, resource_type: $resource_type, resource_name: $resource_name, adaptive_network_hardening_resource_name: $adaptive_network_hardening_resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.Security/adaptiveNetworkHardenings/{adaptive_network_hardening_resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -152,14 +152,14 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-security
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceNamespace}/{resourceType}/{resourceName}/providers/Microsoft.Security/adaptiveNetworkHardenings/{adaptiveNetworkHardeningResourceName}/{adaptiveNetworkHardeningEnforceAction}
 # operationId: AdaptiveNetworkHardenings_Enforce
-export def "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings Enforce" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceNamespace: string
-  resourceType: string
-  resourceName: string
-  adaptiveNetworkHardeningResourceName: string
-  adaptiveNetworkHardeningEnforceAction: string
+export def "subscriptions-resource-groups-providers-providers-microsoft-security-adaptive-network-hardenings post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_namespace: string
+  resource_type: string
+  resource_name: string
+  adaptive_network_hardening_resource_name: string
+  adaptive_network_hardening_enforce_action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "subscriptions-resource-groups-providers-providers-microsoft-security
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/($resourceNamespace)/($resourceType)/($resourceName)/providers/Microsoft.Security/adaptiveNetworkHardenings/($adaptiveNetworkHardeningResourceName)/($adaptiveNetworkHardeningEnforceAction)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_namespace: $resource_namespace, resource_type: $resource_type, resource_name: $resource_name, adaptive_network_hardening_resource_name: $adaptive_network_hardening_resource_name, adaptive_network_hardening_enforce_action: $adaptive_network_hardening_enforce_action} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/{resource_namespace}/{resource_type}/{resource_name}/providers/Microsoft.Security/adaptiveNetworkHardenings/{adaptive_network_hardening_resource_name}/{adaptive_network_hardening_enforce_action}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

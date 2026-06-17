@@ -160,7 +160,7 @@ export def "workspaces get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_orbit_level_counts" $include_orbit_level_counts "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace_slug)" $qp)
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/workspaces/{workspace_slug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,7 +202,7 @@ export def "activities list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "member_tags" $member_tags "scalar") (serialize-qp "orbit" $orbit "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "identity" $identity "scalar") (serialize-qp "company[]" $company "scalar") (serialize-qp "title[]" $title "scalar") (serialize-qp "regions[]" $regions "scalar") (serialize-qp "countries[]" $countries "scalar") (serialize-qp "cities[]" $cities "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/activities" $qp)
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/{workspace_slug}/activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,8 +228,8 @@ export def "activities post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/activities")
-  let body = {activity: $activity, identity: $identity} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/{workspace_slug}/activities"))
+  let body = {"activity": $activity, "identity": $identity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +253,7 @@ export def "activities get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/activities/($id)")
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, id: $id} | format pattern "/{workspace_slug}/activities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -275,7 +275,7 @@ export def "activity-types get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/activity_types")
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/{workspace_slug}/activity_types"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,7 +320,7 @@ export def "members list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "affiliation" $affiliation "scalar") (serialize-qp "member_tags" $member_tags "scalar") (serialize-qp "orbit" $orbit "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "identity" $identity "scalar") (serialize-qp "company[]" $company "scalar") (serialize-qp "title[]" $title "scalar") (serialize-qp "regions[]" $regions "scalar") (serialize-qp "countries[]" $countries "scalar") (serialize-qp "cities[]" $cities "scalar") (serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "activities_count_min" $activities_count_min "scalar") (serialize-qp "activities_count_max" $activities_count_max "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/members" $qp)
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/{workspace_slug}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -347,8 +347,8 @@ export def "members post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members")
-  let body = {identity: $identity, member: $member} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/{workspace_slug}/members"))
+  let body = {"identity": $identity, "member": $member} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,7 +378,7 @@ export def "members-find get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "source_host" $source_host "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "github" $github "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/members/find" $qp)
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/{workspace_slug}/members/find") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -401,7 +401,7 @@ export def "members delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)")
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug} | format pattern "/{workspace_slug}/members/{member_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -424,7 +424,7 @@ export def "members get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)")
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug} | format pattern "/{workspace_slug}/members/{member_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -468,8 +468,8 @@ export def "members put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)")
-  let body = {bio: $bio, birthday: $birthday, company: $company, devto: $devto, email: $email, github: $github, linkedin: $linkedin, location: $location, name: $name, pronouns: $pronouns, shipping_address: $shipping_address, slug: $slug, tag_list: $tag_list, tags: $tags, tags_to_add: $tags_to_add, teammate: $teammate, title: $title, tshirt: $tshirt, twitter: $twitter, url: $body_url} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug} | format pattern "/{workspace_slug}/members/{member_slug}"))
+  let body = {"bio": $bio, "birthday": $birthday, "company": $company, "devto": $devto, "email": $email, "github": $github, "linkedin": $linkedin, "location": $location, "name": $name, "pronouns": $pronouns, "shipping_address": $shipping_address, "slug": $slug, "tag_list": $tag_list, "tags": $tags, "tags_to_add": $tags_to_add, "teammate": $teammate, "title": $title, "tshirt": $tshirt, "twitter": $twitter, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -501,7 +501,7 @@ export def "members-activities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/activities" $qp)
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug} | format pattern "/{workspace_slug}/members/{member_slug}/activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -536,8 +536,8 @@ export def "members-activities post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/activities")
-  let body = {activity_type: $activity_type, activity_type_key: $activity_type_key, description: $description, key: $key, link: $link, link_text: $link_text, occurred_at: $occurred_at, properties: $properties, title: $title, weight: $weight, url: $body_url} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug} | format pattern "/{workspace_slug}/members/{member_slug}/activities"))
+  let body = {"activity_type": $activity_type, "activity_type_key": $activity_type_key, "description": $description, "key": $key, "link": $link, "link_text": $link_text, "occurred_at": $occurred_at, "properties": $properties, "title": $title, "weight": $weight, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,7 +562,7 @@ export def "members-activities delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/activities/($id)")
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug, id: $id} | format pattern "/{workspace_slug}/members/{member_slug}/activities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -597,8 +597,8 @@ export def "members-activities put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/activities/($id)")
-  let body = {activity_type: $activity_type, activity_type_key: $activity_type_key, description: $description, key: $key, link: $link, link_text: $link_text, occurred_at: $occurred_at, properties: $properties, title: $title, weight: $weight} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug, id: $id} | format pattern "/{workspace_slug}/members/{member_slug}/activities/{id}"))
+  let body = {"activity_type": $activity_type, "activity_type_key": $activity_type_key, "description": $description, "key": $key, "link": $link, "link_text": $link_text, "occurred_at": $occurred_at, "properties": $properties, "title": $title, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -630,8 +630,8 @@ export def "members-identities delete" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/identities")
-  let body = {email: $email, name: $name, source: $body_source, source_host: $source_host, uid: $uid, url: $body_url, username: $username} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug} | format pattern "/{workspace_slug}/members/{member_slug}/identities"))
+  let body = {"email": $email, "name": $name, "source": $body_source, "source_host": $source_host, "uid": $uid, "url": $body_url, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -663,8 +663,8 @@ export def "members-identities post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/identities")
-  let body = {email: $email, name: $name, source: $body_source, source_host: $source_host, uid: $uid, url: $body_url, username: $username} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug} | format pattern "/{workspace_slug}/members/{member_slug}/identities"))
+  let body = {"email": $email, "name": $name, "source": $body_source, "source_host": $source_host, "uid": $uid, "url": $body_url, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -690,7 +690,7 @@ export def "members-notes get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/notes" $qp)
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug} | format pattern "/{workspace_slug}/members/{member_slug}/notes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -715,8 +715,8 @@ export def "members-notes post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/notes")
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug} | format pattern "/{workspace_slug}/members/{member_slug}/notes"))
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -743,8 +743,8 @@ export def "members-notes put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/members/($member_slug)/notes/($id)")
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, member_slug: $member_slug, id: $id} | format pattern "/{workspace_slug}/members/{member_slug}/notes/{id}"))
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -773,7 +773,7 @@ export def "organizations list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/organizations" $qp)
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/{workspace_slug}/organizations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -796,7 +796,7 @@ export def "organizations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/organizations/($organization_id)")
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, organization_id: $organization_id} | format pattern "/{workspace_slug}/organizations/{organization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -828,8 +828,8 @@ export def "organizations put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/organizations/($organization_id)")
-  let body = {crm_uid: $crm_uid, crm_url: $crm_url, deal_closed_date: $deal_closed_date, lifecycle_stage: $lifecycle_stage, owner_email: $owner_email, owner_name: $owner_name, price_plan: $price_plan, source: $body_source} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, organization_id: $organization_id} | format pattern "/{workspace_slug}/organizations/{organization_id}"))
+  let body = {"crm_uid": $crm_uid, "crm_url": $crm_url, "deal_closed_date": $deal_closed_date, "lifecycle_stage": $lifecycle_stage, "owner_email": $owner_email, "owner_name": $owner_name, "price_plan": $price_plan, "source": $body_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -859,7 +859,7 @@ export def "organizations-activities get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "items" $items "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "activity_type" $activity_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/organizations/($organization_id)/activities" $qp)
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, organization_id: $organization_id} | format pattern "/{workspace_slug}/organizations/{organization_id}/activities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -885,7 +885,7 @@ export def "organizations-members get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "items" $items "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/organizations/($organization_id)/members" $qp)
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, organization_id: $organization_id} | format pattern "/{workspace_slug}/organizations/{organization_id}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -915,7 +915,7 @@ export def "reports get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_date" $start_date "scalar") (serialize-qp "end_date" $end_date "scalar") (serialize-qp "relative" $relative "scalar") (serialize-qp "properties" $properties "scalar") (serialize-qp "activity_type" $activity_type "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($workspace_slug)/reports" $qp)
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/{workspace_slug}/reports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -937,7 +937,7 @@ export def "webhooks list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/webhooks")
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/{workspace_slug}/webhooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -967,8 +967,8 @@ export def "webhooks post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/webhooks")
-  let body = {activity_tags: $activity_tags, activity_types: $activity_types, event_type: $event_type, member_tags: $member_tags, name: $name, secret: $secret, url: $body_url} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug} | format pattern "/{workspace_slug}/webhooks"))
+  let body = {"activity_tags": $activity_tags, "activity_types": $activity_types, "event_type": $event_type, "member_tags": $member_tags, "name": $name, "secret": $secret, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -992,7 +992,7 @@ export def "webhooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/webhooks/($id)")
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, id: $id} | format pattern "/{workspace_slug}/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1015,7 +1015,7 @@ export def "webhooks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/webhooks/($id)")
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, id: $id} | format pattern "/{workspace_slug}/webhooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1046,8 +1046,8 @@ export def "webhooks put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($workspace_slug)/webhooks/($id)")
-  let body = {activity_tags: $activity_tags, activity_types: $activity_types, event_type: $event_type, member_tags: $member_tags, name: $name, secret: $secret, url: $body_url} | compact
+  let full_url = (build-url $base ({workspace_slug: $workspace_slug, id: $id} | format pattern "/{workspace_slug}/webhooks/{id}"))
+  let body = {"activity_tags": $activity_tags, "activity_types": $activity_types, "event_type": $event_type, "member_tags": $member_tags, "name": $name, "secret": $secret, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

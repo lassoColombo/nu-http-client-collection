@@ -114,7 +114,7 @@ export def "device generateDeviceCode" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/device")
-  let body = {client_id: $client_id, client_secret: $client_secret, scope: $scope} | compact
+  let body = {"client_id": $client_id, "client_secret": $client_secret, "scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -125,7 +125,7 @@ export def "device generateDeviceCode" [
 #
 # POST /v2/token
 # operationId: createToken
-export def "token createToken" [
+export def "token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,7 +150,7 @@ export def "token createToken" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/token")
-  let body = {grant_type: $grant_type, client_id: $client_id, client_secret: $client_secret, code: $code, redirect_uri: $redirect_uri, username: $username, password: $password, service: $service, refresh_token: $refresh_token, scope: $scope, token_type_hint: $token_type_hint} | compact
+  let body = {"grant_type": $grant_type, "client_id": $client_id, "client_secret": $client_secret, "code": $code, "redirect_uri": $redirect_uri, "username": $username, "password": $password, "service": $service, "refresh_token": $refresh_token, "scope": $scope, "token_type_hint": $token_type_hint} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -161,7 +161,7 @@ export def "token createToken" [
 #
 # POST /v2/token/revoke
 # operationId: revokeToken
-export def "token-revoke revokeToken" [
+export def "token-revoke delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "token-revoke revokeToken" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Authorization: string # A `client_credentials` access token from the same client application as the token being revoked. Should start with `Bearer`, followed by a space, followed by the token.
+  --authorization: string # A `client_credentials` access token from the same client application as the token being revoked. Should start with `Bearer`, followed by a space, followed by the token.
   --body-token: string # The access token or refresh token that the client wants to have revoked.
   --token-type-hint: string@token-type-hint-completer # A hint about the type of the token submitted for revocation. If unspecified, the default value is assumed to be `access_token`.
 ]: any -> record {
@@ -178,9 +178,9 @@ export def "token-revoke revokeToken" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/token/revoke")
-  let body = {token: $body_token, token_type_hint: $token_type_hint} | compact
+  let body = {"token": $body_token, "token_type_hint": $token_type_hint} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

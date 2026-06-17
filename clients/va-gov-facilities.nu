@@ -68,14 +68,14 @@ def auth-scheme-completer [] { ["apikey"] }
 # Completers for enum parameters
 def type-completer [] { ["benefits" "cemetery" "health" "vet_center"] }
 def accept-completer [] { ["application/geo+json" "application/json" "application/vnd.geo+json"] }
-def Accept-completer [] { ["application/geo+json" "application/vnd.geo+json" "text/csv"] }
-def accept-completer-1 [] { ["application/geo+json" "application/json" "application/vnd.geo+json" "text/csv"] }
+def accept-completer-1 [] { ["application/geo+json" "application/vnd.geo+json" "text/csv"] }
+def accept-completer-2 [] { ["application/geo+json" "application/json" "application/vnd.geo+json" "text/csv"] }
 def drive-time-completer [] { ["10" "20" "30" "40" "50" "60" "70" "80" "90"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "facilities list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "facilities get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +99,7 @@ export def commands []: nothing -> table {
 #
 # GET /facilities
 # operationId: getFacilitiesByLocation
-export def "facilities list" [
+export def "facilities get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,13 +144,13 @@ export def "facilities-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept: string@accept-completer-1 # Response content type
-  --Accept: string@Accept-completer # e.g. application/geo+json
+  --accept: string@accept-completer-2 # Response content type
+  --hdr-accept: string@accept-completer-1 # e.g. application/geo+json
 ]: nothing -> record<features: table<geometry: record, properties: record, type: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/facilities/all")
-  let extra_headers = {"Accept": $Accept} | compact
+  let extra_headers = {"Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -161,7 +161,7 @@ export def "facilities-all get" [
 #
 # GET /facilities/{id}
 # operationId: getFacilityById
-export def "facilities get" [
+export def "facilities get-facility" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,7 +175,7 @@ export def "facilities get" [
 ]: nothing -> record<data: record<attributes: record<active_status: string, address: record, classification: string, detailed_services: list, facility_type: string, hours: record, lat: float, long: float, mobile: bool, name: string, operating_status: record, operational_hours_special_instructions: string, phone: record, satisfaction: record, services: record, time_zone: string, visn: string, wait_times: record, website: string>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/facilities/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/facilities/{id}"))
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,7 +185,7 @@ export def "facilities get" [
 #
 # GET /ids
 # operationId: getFacilityIds
-export def "ids get" [
+export def "ids get-facility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "ids get" [
 #
 # GET /nearby
 # operationId: getNearbyFacilities
-export def "nearby get" [
+export def "nearby get-nearby-facilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

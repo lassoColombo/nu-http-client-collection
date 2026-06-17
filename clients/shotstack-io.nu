@@ -108,7 +108,7 @@ export def "assets-render get" [
 ]: nothing -> record<data: table<attributes: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/assets/render/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/assets/render/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +131,7 @@ export def "assets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/assets/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/assets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -154,7 +154,7 @@ export def "assets get" [
 ]: nothing -> record<data: record<attributes: record<created: string, filename: string, id: string, owner: string, region: string, renderId: string, status: string, updated: string, url: string>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/assets/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/assets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -166,7 +166,7 @@ export def "assets get" [
 # operationId: postRender
 # --output shape: {aspectRatio?: "16:9"|"9:16"|"1:1"|"4:5"|"4:3", destinations?: list, format: "mp4"|"gif"|"mp3"|"jpg"|"png"|"bmp", fps?: "12"|"15"|"24"|"25"|"30", poster?: record, quality?: "low"|"medium"|"high", range?: record, resolution?: "preview"|"mobile"|"sd"|"hd"|"1080", scaleTo?: "preview"|"mobile"|"sd"|"hd"|"1080", size?: record, thumbnail?: record}
 # --timeline shape: {background?: string, cache?: bool, fonts?: list, soundtrack?: record, tracks: list}
-export def "render post" [
+export def "render create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "render post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/render")
-  let body = {callback: $callback, disk: $disk, output: $output, timeline: $timeline} | compact
+  let body = {"callback": $callback, "disk": $disk, "output": $output, "timeline": $timeline} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -208,7 +208,7 @@ export def "render get" [
 ]: nothing -> record<message: string, response: record<created: string, data: record<callback: string, disk: string, output: record, timeline: record>, duration: float, error: string, id: string, owner: string, plan: string, poster: string, renderTime: float, status: string, thumbnail: string, updated: string, url: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/render/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/render/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

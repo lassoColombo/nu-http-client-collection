@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "suggestions Getsuggestions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "suggestions get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /suggestions
 # operationId: Getsuggestions
-export def "suggestions Getsuggestions" [
+export def "suggestions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,7 +103,7 @@ export def "suggestions Getsuggestions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
+  --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
   --q: string # This field allows you to customize your search. You can fill in this query param if you want to narrow down your search using the available filters on Received SKU modules. (e.g. )
   --type: string # This field allows users to filter SKU suggestions, by searching only the new suggestions that were just sent, and suggestions that have already been sent, but were updated. Possible values for this field include `new` and `update`. (e.g. new)
   --seller: string # A string that identifies the seller in the marketplace. This ID must be created by the marketplace and informed to the seller so it can call this endpoint. (e.g. )
@@ -112,14 +112,14 @@ export def "suggestions Getsuggestions" [
   --matcherid: string # Identifies the matching entity. It can be either VTEX's matcher, or an external matcher developed by partners, for example. The `matcherId`'s value can be obtained through the [Get SKU Suggestion by ID](https://developers.vtex.com/vtex-rest-api/reference/getsuggestion) endpoint. (default: vtex-matcher)
   --qp-from: int # Define your pagination range, by adding the pagination starting value. Values should be bigger than 0, with a maximum of 50 records per page. (format: int32, default: 1)
   --qp-to: int # Define your pagination range, by adding the pagination ending value. Values should be bigger than 0, with a maximum of 50 records per page. (format: int32, default: 50)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "seller" $seller "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "hasmapping" $hasmapping "scalar") (serialize-qp "matcherid" $matcherid "scalar") (serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountName" $account_name "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "seller" $seller "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "hasmapping" $hasmapping "scalar") (serialize-qp "matcherid" $matcherid "scalar") (serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions" $qp)
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -130,7 +130,7 @@ export def "suggestions Getsuggestions" [
 #
 # GET /suggestions/configuration
 # operationId: Getaccountconfig
-export def "suggestions-configuration Getaccountconfig" [
+export def "suggestions-configuration get-accountconfig" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,15 +139,15 @@ export def "suggestions-configuration Getaccountconfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
 ]: nothing -> record<MatchFlux: string, Matchers: list<any>, Rules: record, Score: record, SpecificationsMapping: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration" $qp)
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -160,7 +160,7 @@ export def "suggestions-configuration Getaccountconfig" [
 # operationId: Saveaccountconfig
 # --Matchers item shape: {Description?: string, IsActive: bool, MatcherId: string, UpdatesNotificationEndpoint: string, hook-base-address: string}
 # --Score shape: {Approve: int, Reject: int}
-export def "suggestions-configuration Saveaccountconfig" [
+export def "suggestions-configuration put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,22 +169,22 @@ export def "suggestions-configuration Saveaccountconfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Describes the type of the content being sent.
-  MatchFlux: string # This field determines the type of approval configuration applied to SKUs received  from a seller. The possible values include:   - `default` where the Matcher reviews the SKU, and approves it based on its score   - `manual` for manual approvals through the Received SKU UI or Match API   - `autoApprove` for every SKU received from a given seller to be approved automatically, regardless of the Matcher Score. (default: autoApprove)
-  Matchers: list # Matchers for approving and rejecting SKUs received from sellers. — item shape: {Description?: string, IsActive: bool, MatcherId: string, UpdatesNotificationEndpoint: string, hook-base-address: string}
-  Score: record # Matcher rates received SKUs by comparing the data sent by sellers to existing fields in the marketplace. The calculation of these scores determines whether the product has been: `Approved` or `Denied`. — shape: {Approve: int, Reject: int}
-  SpecificationsMapping: list # This attribute maps product and SKU specifications.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  match_flux: string # This field determines the type of approval configuration applied to SKUs received  from a seller. The possible values include:   - `default` where the Matcher reviews the SKU, and approves it based on its score   - `manual` for manual approvals through the Received SKU UI or Match API   - `autoApprove` for every SKU received from a given seller to be approved automatically, regardless of the Matcher Score. (default: autoApprove)
+  matchers: list # Matchers for approving and rejecting SKUs received from sellers. — item shape: {Description?: string, IsActive: bool, MatcherId: string, UpdatesNotificationEndpoint: string, hook-base-address: string}
+  score: record # Matcher rates received SKUs by comparing the data sent by sellers to existing fields in the marketplace. The calculation of these scores determines whether the product has been: `Approved` or `Denied`. — shape: {Approve: int, Reject: int}
+  specifications_mapping: list # This attribute maps product and SKU specifications.
 ]: any -> record<MatchFlux: string, Matchers: list<any>, Rules: record<Item: list<int>, Product: list<string>>, Score: record<Approve: int, Reject: int>, SpecificationsMapping: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration" $qp)
-  let body = {MatchFlux: $MatchFlux, Matchers: $Matchers, Score: $Score, SpecificationsMapping: $SpecificationsMapping} | compact
+  let body = {"MatchFlux": $match_flux, "Matchers": $matchers, "Score": $score, "SpecificationsMapping": $specifications_mapping} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -195,7 +195,7 @@ export def "suggestions-configuration Saveaccountconfig" [
 #
 # GET /suggestions/configuration/autoapproval/toggle
 # operationId: GetautoApprovevaluefromconfig
-export def "suggestions-configuration-autoapproval-toggle GetautoApprovevaluefromconfig" [
+export def "suggestions-configuration-autoapproval-toggle get-auto-approvevaluefromconfig" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,16 +204,16 @@ export def "suggestions-configuration-autoapproval-toggle GetautoApprovevaluefro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sellerId: string # A string that identifies the seller in the marketplace. This ID must be created by the marketplace. (default: seller123)
-  --accountName: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Describes the type of the content being sent.
+  --seller-id: string # A string that identifies the seller in the marketplace. This ID must be created by the marketplace. (default: seller123)
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
 ]: nothing -> record<Enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sellerId" $sellerId "scalar") (serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sellerId" $seller_id "scalar") (serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration/autoapproval/toggle" $qp)
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -224,7 +224,7 @@ export def "suggestions-configuration-autoapproval-toggle GetautoApprovevaluefro
 #
 # PUT /suggestions/configuration/autoapproval/toggle
 # operationId: Saveautoapproveforaccount
-export def "suggestions-configuration-autoapproval-toggle Saveautoapproveforaccount" [
+export def "suggestions-configuration-autoapproval-toggle put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,19 +233,19 @@ export def "suggestions-configuration-autoapproval-toggle Saveautoapproveforacco
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Describes the type of the content being sent.
-  --Enabled: oneof<nothing, bool> # Insert `true` if you wish to activate the autoapprove rule for an entire marketplace account. Insert `false` if you wish to deactivate it. Be aware that once enabling the setting through this request, all received SKUs will be automatically approved on your store, regardless of the seller, or the Matcher Score. (default: true)
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --enabled: oneof<nothing, bool> # Insert `true` if you wish to activate the autoapprove rule for an entire marketplace account. Insert `false` if you wish to deactivate it. Be aware that once enabling the setting through this request, all received SKUs will be automatically approved on your store, regardless of the seller, or the Matcher Score. (default: true)
 ]: any -> record<Enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/suggestions/configuration/autoapproval/toggle" $qp)
-  let body = {Enabled: $Enabled} | compact
+  let body = {"Enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -256,8 +256,8 @@ export def "suggestions-configuration-autoapproval-toggle Saveautoapproveforacco
 #
 # PUT /suggestions/configuration/autoapproval/toggle/seller/{sellerId}
 # operationId: Saveautoapproveforaccountseller
-export def "suggestions-configuration-autoapproval-toggle-seller Saveautoapproveforaccountseller" [
-  sellerId: string
+export def "suggestions-configuration-autoapproval-toggle-seller put" [
+  seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,19 +266,19 @@ export def "suggestions-configuration-autoapproval-toggle-seller Saveautoapprove
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Describes the type of the content being sent.
-  --Enabled: oneof<nothing, bool> # Insert `true` if you wish to activate the autoapprove rule for that specific seller account. Insert `false` if you wish to deactivate it. Be aware that once enabling the setting through this request, all SKUs received from this seller will be automatically approved on your store regardless of the Matcher Score. (default: true)
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --enabled: oneof<nothing, bool> # Insert `true` if you wish to activate the autoapprove rule for that specific seller account. Insert `false` if you wish to deactivate it. Be aware that once enabling the setting through this request, all SKUs received from this seller will be automatically approved on your store regardless of the Matcher Score. (default: true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggestions/configuration/autoapproval/toggle/seller/($sellerId)" $qp)
-  let body = {Enabled: $Enabled} | compact
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/suggestions/configuration/autoapproval/toggle/seller/{seller_id}") $qp)
+  let body = {"Enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,8 +289,8 @@ export def "suggestions-configuration-autoapproval-toggle-seller Saveautoapprove
 #
 # GET /suggestions/configuration/seller/{sellerId}
 # operationId: Getselleraccountconfig
-export def "suggestions-configuration-seller Getselleraccountconfig" [
-  sellerId: string
+export def "suggestions-configuration-seller get-selleraccountconfig" [
+  seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,15 +299,15 @@ export def "suggestions-configuration-seller Getselleraccountconfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggestions/configuration/seller/($sellerId)" $qp)
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/suggestions/configuration/seller/{seller_id}") $qp)
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -318,8 +318,8 @@ export def "suggestions-configuration-seller Getselleraccountconfig" [
 #
 # PUT /suggestions/configuration/seller/{sellerId}
 # operationId: Putselleraccountconfig
-export def "suggestions-configuration-seller Putselleraccountconfig" [
-  sellerId: string
+export def "suggestions-configuration-seller update-selleraccountconfig" [
+  seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,21 +328,21 @@ export def "suggestions-configuration-seller Putselleraccountconfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account that belongs to the marketplace. All data extracted, and changes added will be posted into this account. (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
   --mapping: record # Mapping of SKU and product Specifications. This object should be sent in the following format for all fields you wish to map:  {specificationName}:{specificationValue},  Example:  Choose voltage: Voltage,  Choose size: Size (nullable, default: {Choose size: Size, Choose type: Type, Choose voltage: Voltage, Choose volume: Volume})
-  matchFlux: string # This field determines the type of approval configuration applied to SKUs received  from a seller. The possible values include:   - `default` where the Matcher reviews the SKU, and approves it based on its score   - `manual` for manual approvals through the Received SKU UI or Match API   - `autoApprove` for every SKU received from a given seller to be approved automatically, regardless of the Matcher Score. (default: autoApprove)
-  --body-sellerId: string # A string that identifies the seller in the marketplace. This ID must be created by the marketplace. (default: seller123)
+  match_flux: string # This field determines the type of approval configuration applied to SKUs received  from a seller. The possible values include:   - `default` where the Matcher reviews the SKU, and approves it based on its score   - `manual` for manual approvals through the Received SKU UI or Match API   - `autoApprove` for every SKU received from a given seller to be approved automatically, regardless of the Matcher Score. (default: autoApprove)
+  --body-seller-id: string # A string that identifies the seller in the marketplace. This ID must be created by the marketplace. (default: seller123)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggestions/configuration/seller/($sellerId)" $qp)
-  let body = {mapping: $mapping, matchFlux: $matchFlux, sellerId: $body_sellerId} | compact
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/suggestions/configuration/seller/{seller_id}") $qp)
+  let body = {"mapping": $mapping, "matchFlux": $match_flux, "sellerId": $body_seller_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -353,8 +353,8 @@ export def "suggestions-configuration-seller Putselleraccountconfig" [
 #
 # PUT /suggestions/matches/action/{actionName}
 # operationId: MatchMultiple
-export def "suggestions-matches-action MatchMultiple" [
-  actionName: string
+export def "suggestions-matches-action put" [
+  action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,18 +363,18 @@ export def "suggestions-matches-action MatchMultiple" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggestions/matches/action/($actionName)" $qp)
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({action_name: $action_name} | format pattern "/suggestions/matches/action/{action_name}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -385,9 +385,9 @@ export def "suggestions-matches-action MatchMultiple" [
 #
 # DELETE /suggestions/{sellerId}/{sellerSkuId}
 # operationId: DeleteSuggestion
-export def "suggestions DeleteSuggestion" [
-  sellerId: string
-  sellerSkuId: string
+export def "suggestions delete" [
+  seller_id: string
+  seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,15 +396,15 @@ export def "suggestions DeleteSuggestion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account. Used as part of the URL. (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account. Used as part of the URL. (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggestions/($sellerId)/($sellerSkuId)" $qp)
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp)
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,9 +415,9 @@ export def "suggestions DeleteSuggestion" [
 #
 # GET /suggestions/{sellerId}/{sellerSkuId}
 # operationId: GetSuggestion
-export def "suggestions GetSuggestion" [
-  sellerId: string
-  sellerSkuId: string
+export def "suggestions get-by-sellerId-sellerSkuId" [
+  seller_id: string
+  seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,15 +426,15 @@ export def "suggestions GetSuggestion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggestions/($sellerId)/($sellerSkuId)" $qp)
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp)
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -449,9 +449,9 @@ export def "suggestions GetSuggestion" [
 # --Pricing shape: {Currency?: string, CurrencySymbol?: string, SalePrice?: int}
 # --ProductSpecifications item shape: {fieldName?: string, fieldValues?: list}
 # --SkuSpecifications item shape: {fieldName?: string, fieldValues?: list}
-export def "suggestions SaveSuggestion" [
-  sellerId: string
-  sellerSkuId: string
+export def "suggestions put" [
+  seller_id: string
+  seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,39 +460,39 @@ export def "suggestions SaveSuggestion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account to which the seller wants to suggest a new SKU. It is used as part of the request URL. (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/vnd.vtex.suggestion.v0+json)
-  --Content-Type: string # Describes the type of the content being sent.
-  AvailableQuantity: int # format: int32
-  BrandName: string # Name of the brand to which this SKU belongs. It must match the brand created in the marketplace.
-  CategoryFullPath: string # Full path to the SKU's category. It should be written as {department}/{category}. For example: if the department is **Appliances** and the category is **Oven**, the full path should be 'Appliances/Oven'.
-  EAN: string # SKU reference code. Mandatory if the RefId is not informed. (default: EAN10)
-  Height: int # Height of the SKU. (format: decimal, default: 10)
-  Images: list # Array containing the URLs and names the SKU images. — item shape: {imageName: string, imageUrl: string}
-  Length: int # Length of the SKU. (format: decimal, default: 10)
-  --MeasurementUnit: string # Measurement unit that should be used for this SKU. If this information doesn't apply, you should use the default value `un`.
-  Pricing: record # shape: {Currency?: string, CurrencySymbol?: string, SalePrice?: int}
-  ProductDescription: string # Product Description containing the main information about the product (not the SKU).
-  ProductId: string # Product ID in seller's account. (default: 1234)
-  ProductName: string # Name of the suggested product. This field has a limit of 150 characters. (default: )
-  --ProductSpecifications: list # Array containing the names and values of the product specifications. — item shape: {fieldName?: string, fieldValues?: list}
-  RefId: string # SKU reference code. Mandotory if the EAN is not informed. (default: REF10)
-  SellerId: string # ID of the seller in the marketplace. This ID must be created by the marketplace and informed to the seller before the integration is built. (default: 1)
-  --SellerStockKeepingUnitId: int # ID of the SKU registered in the seller. (format: int32)
-  SkuName: string # Name of the suggested SKU.
-  --SkuSpecifications: list # Array containing the names and values of the SKU specifications. — item shape: {fieldName?: string, fieldValues?: list}
-  --UnitMultiplier: int # Unit multiplier for this SKU. If this information doesn't apply, you should use the default value `1`. (format: int32)
-  Weight: int # Weight of the SKU in grams. (format: decimal, default: 100)
-  Width: int # Width of the SKU. (format: decimal, default: 10)
+  --account-name: string # Name of the VTEX account to which the seller wants to suggest a new SKU. It is used as part of the request URL. (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/vnd.vtex.suggestion.v0+json)
+  --content-type: string # Describes the type of the content being sent.
+  available_quantity: int # format: int32
+  brand_name: string # Name of the brand to which this SKU belongs. It must match the brand created in the marketplace.
+  category_full_path: string # Full path to the SKU's category. It should be written as {department}/{category}. For example: if the department is **Appliances** and the category is **Oven**, the full path should be 'Appliances/Oven'.
+  ean: string # SKU reference code. Mandatory if the RefId is not informed. (default: EAN10)
+  height: int # Height of the SKU. (format: decimal, default: 10)
+  images: list # Array containing the URLs and names the SKU images. — item shape: {imageName: string, imageUrl: string}
+  length: int # Length of the SKU. (format: decimal, default: 10)
+  --measurement-unit: string # Measurement unit that should be used for this SKU. If this information doesn't apply, you should use the default value `un`.
+  pricing: record # shape: {Currency?: string, CurrencySymbol?: string, SalePrice?: int}
+  product_description: string # Product Description containing the main information about the product (not the SKU).
+  product_id: string # Product ID in seller's account. (default: 1234)
+  product_name: string # Name of the suggested product. This field has a limit of 150 characters. (default: )
+  --product-specifications: list # Array containing the names and values of the product specifications. — item shape: {fieldName?: string, fieldValues?: list}
+  ref_id: string # SKU reference code. Mandotory if the EAN is not informed. (default: REF10)
+  --body-seller-id: string # ID of the seller in the marketplace. This ID must be created by the marketplace and informed to the seller before the integration is built. (default: 1)
+  --seller-stock-keeping-unit-id: int # ID of the SKU registered in the seller. (format: int32)
+  sku_name: string # Name of the suggested SKU.
+  --sku-specifications: list # Array containing the names and values of the SKU specifications. — item shape: {fieldName?: string, fieldValues?: list}
+  --unit-multiplier: int # Unit multiplier for this SKU. If this information doesn't apply, you should use the default value `1`. (format: int32)
+  weight: int # Weight of the SKU in grams. (format: decimal, default: 100)
+  width: int # Width of the SKU. (format: decimal, default: 10)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggestions/($sellerId)/($sellerSkuId)" $qp)
-  let body = {AvailableQuantity: $AvailableQuantity, BrandName: $BrandName, CategoryFullPath: $CategoryFullPath, EAN: $EAN, Height: $Height, Images: $Images, Length: $Length, MeasurementUnit: $MeasurementUnit, Pricing: $Pricing, ProductDescription: $ProductDescription, ProductId: $ProductId, ProductName: $ProductName, ProductSpecifications: $ProductSpecifications, RefId: $RefId, SellerId: $SellerId, SellerStockKeepingUnitId: $SellerStockKeepingUnitId, SkuName: $SkuName, SkuSpecifications: $SkuSpecifications, UnitMultiplier: $UnitMultiplier, Weight: $Weight, Width: $Width} | compact
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/suggestions/{seller_id}/{seller_sku_id}") $qp)
+  let body = {"AvailableQuantity": $available_quantity, "BrandName": $brand_name, "CategoryFullPath": $category_full_path, "EAN": $ean, "Height": $height, "Images": $images, "Length": $length, "MeasurementUnit": $measurement_unit, "Pricing": $pricing, "ProductDescription": $product_description, "ProductId": $product_id, "ProductName": $product_name, "ProductSpecifications": $product_specifications, "RefId": $ref_id, "SellerId": $body_seller_id, "SellerStockKeepingUnitId": $seller_stock_keeping_unit_id, "SkuName": $sku_name, "SkuSpecifications": $sku_specifications, "UnitMultiplier": $unit_multiplier, "Weight": $weight, "Width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,8 +503,8 @@ export def "suggestions SaveSuggestion" [
 #
 # GET /suggestions/{sellerId}/{sellerskuid}/versions
 # operationId: GetVersions
-export def "suggestions-versions GetVersions" [
-  sellerId: string
+export def "suggestions-versions get" [
+  seller_id: string
   sellerskuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,15 +514,15 @@ export def "suggestions-versions GetVersions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggestions/($sellerId)/($sellerskuid)/versions" $qp)
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({seller_id: $seller_id, sellerskuid: $sellerskuid} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions") $qp)
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -533,8 +533,8 @@ export def "suggestions-versions GetVersions" [
 #
 # GET /suggestions/{sellerId}/{sellerskuid}/versions/{version}
 # operationId: GetSuggestionbyversion
-export def "suggestions-versions GetSuggestionbyversion" [
-  sellerId: string
+export def "suggestions-versions get-suggestionbyversion" [
+  seller_id: string
   sellerskuid: string
   version: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -545,15 +545,15 @@ export def "suggestions-versions GetSuggestionbyversion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Describes the type of the content being sent.
+  --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggestions/($sellerId)/($sellerskuid)/versions/($version)" $qp)
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({seller_id: $seller_id, sellerskuid: $sellerskuid, version: $version} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions/{version}") $qp)
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -566,8 +566,8 @@ export def "suggestions-versions GetSuggestionbyversion" [
 # operationId: Match
 # --product shape: {brandId: int, categoryId: int, description: string, name: string, specifications: string}
 # --sku shape: {eans: list, height: int, images: list, length: int, measurementUnit: string, name: string, refId: string, specifications: record, unitMultiplier: int, weight: int, width: int}
-export def "suggestions-versions-matches Match" [
-  sellerId: string
+export def "suggestions-versions-matches put" [
+  seller_id: string
   sellerskuid: string
   version: string
   matchid: string
@@ -579,25 +579,25 @@ export def "suggestions-versions-matches Match" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Describes the type of the content being sent.
-  matchType: string # Define the action you want to apply to each SKU. Values include:   1. `newproduct`: match the SKU as a new product.   2. `itemMatch`: associate the received SKU to an existing SKU.   3. `productMatch`: associate the received SKU to an existing product.   4. `deny`: deny the received SKU.   5. `pending`: the received SKU requires attention.   6. `incomplete`: the received SKU is lacking information to be matched.   7. `insufficientScore`: the score given by the Matcher to this received SKU doesn't qualify it to be matched.   Note that  if the autoApprove setting is enabled, the SKUs will be approved, regardless of the Score. (default: itemMatch)
-  matcherId: string # Identifies the matching entity. It can be either VTEX's matcher, or an external matcher developed by partners, for example. The `matcherId`'s value can be obtained through the [Get SKU Suggestion by ID](https://developers.vtex.com/vtex-rest-api/reference/getsuggestion) endpoint. (default: vtex-matcher)
+  --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent.
+  match_type: string # Define the action you want to apply to each SKU. Values include:   1. `newproduct`: match the SKU as a new product.   2. `itemMatch`: associate the received SKU to an existing SKU.   3. `productMatch`: associate the received SKU to an existing product.   4. `deny`: deny the received SKU.   5. `pending`: the received SKU requires attention.   6. `incomplete`: the received SKU is lacking information to be matched.   7. `insufficientScore`: the score given by the Matcher to this received SKU doesn't qualify it to be matched.   Note that  if the autoApprove setting is enabled, the SKUs will be approved, regardless of the Score. (default: itemMatch)
+  matcher_id: string # Identifies the matching entity. It can be either VTEX's matcher, or an external matcher developed by partners, for example. The `matcherId`'s value can be obtained through the [Get SKU Suggestion by ID](https://developers.vtex.com/vtex-rest-api/reference/getsuggestion) endpoint. (default: vtex-matcher)
   --product: record # shape: {brandId: int, categoryId: int, description: string, name: string, specifications: string}
-  --productRef: string # In `productMatch` actions, fill in this field on your request to match the item to an existing product in the marketplace. (nullable, default: )
+  --product-ref: string # In `productMatch` actions, fill in this field on your request to match the item to an existing product in the marketplace. (nullable, default: )
   score: string # Matcher rates received SKUs by correlating the data sent by sellers, to existing fields in the marketplace. The calculation of these scores determines whether the product has been:   `Approved`: score equal to or greater than 80 points.   `Pending`: from 31 to 79 points.  `Denied`: from 0 to 30 points.   Note that  if the autoApprove setting is enabled, the SKUs will be approved, regardless of the Score. (default: 80)
   --sku: record # e.g. {eans: [12345678901213], height: 1, images: [{imagem1.jpg: imageurl.example}], length: 1, measurementUnit: un, name: Sku exemplo, refId: , specifications: {Embalagem: 3 kg}, unitMultiplier: 1, weight: 1, width: 1} — shape: {eans: list, height: int, images: list, length: int, measurementUnit: string, name: string, refId: string, specifications: record, unitMultiplier: int, weight: int, width: int}
-  --skuRef: string # In `itemMatch` actions, fill in this field on your request to match the item to an existing SKU in the marketplace. (nullable, default: )
+  --sku-ref: string # In `itemMatch` actions, fill in this field on your request to match the item to an existing SKU in the marketplace. (nullable, default: )
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/suggestions/($sellerId)/($sellerskuid)/versions/($version)/matches/($matchid)" $qp)
-  let body = {matchType: $matchType, matcherId: $matcherId, product: $product, productRef: $productRef, score: $score, sku: $sku, skuRef: $skuRef} | compact
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({seller_id: $seller_id, sellerskuid: $sellerskuid, version: $version, matchid: $matchid} | format pattern "/suggestions/{seller_id}/{sellerskuid}/versions/{version}/matches/{matchid}") $qp)
+  let body = {"matchType": $match_type, "matcherId": $matcher_id, "product": $product, "productRef": $product_ref, "score": $score, "sku": $sku, "skuRef": $sku_ref} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

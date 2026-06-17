@@ -179,7 +179,7 @@ export def "lead-leads leadsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/lead/leads" $qp)
-  let body = {addresses: $addresses, company_id: $company_id, company_name: $company_name, contact_id: $contact_id, currency: $currency, custom_fields: $custom_fields, description: $description, emails: $emails, fax: $fax, first_name: $first_name, language: $language, last_name: $last_name, lead_source: $lead_source, monetary_amount: $monetary_amount, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, prefix: $prefix, social_links: $social_links, status: $status, tags: $tags, title: $title, websites: $websites} | compact
+  let body = {"addresses": $addresses, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "language": $language, "last_name": $last_name, "lead_source": $lead_source, "monetary_amount": $monetary_amount, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "prefix": $prefix, "social_links": $social_links, "status": $status, "tags": $tags, "title": $title, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -210,7 +210,7 @@ export def "lead-leads leadsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lead/leads/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/lead/leads/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -241,7 +241,7 @@ export def "lead-leads leadsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lead/leads/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/lead/leads/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -301,8 +301,8 @@ export def "lead-leads leadsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lead/leads/($id)" $qp)
-  let body = {addresses: $addresses, company_id: $company_id, company_name: $company_name, contact_id: $contact_id, currency: $currency, custom_fields: $custom_fields, description: $description, emails: $emails, fax: $fax, first_name: $first_name, language: $language, last_name: $last_name, lead_source: $lead_source, monetary_amount: $monetary_amount, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, prefix: $prefix, social_links: $social_links, status: $status, tags: $tags, title: $title, websites: $websites} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/lead/leads/{id}") $qp)
+  let body = {"addresses": $addresses, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "language": $language, "last_name": $last_name, "lead_source": $lead_source, "monetary_amount": $monetary_amount, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "prefix": $prefix, "social_links": $social_links, "status": $status, "tags": $tags, "title": $title, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

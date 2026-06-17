@@ -67,17 +67,17 @@ def base-url-completer [] { ["http://api.wmata.com/Rail.svc" "https://api.wmata.
 def auth-scheme-completer [] { ["api_key" "query-api_key"] }
 
 # Completers for enum parameters
-def FromStationCode-completer [] { ["N06"] }
-def ToStationCode-completer [] { ["G05"] }
-def FromStationCode-completer-1 [] { ["E10"] }
-def ToStationCode-completer-1 [] { ["J03"] }
-def Lat-completer [] { ["38.8978168"] }
-def Lon-completer [] { ["-77.0404246"] }
-def Radius-completer [] { ["500"] }
-def StationCode-completer [] { ["A01"] }
-def StationCode-completer-1 [] { ["E08" "F06"] }
-def StationCode-completer-2 [] { ["E10"] }
-def LineCode-completer [] { ["BL" "GR" "OR" "RD" "SV" "YL"] }
+def from-station-code-completer [] { ["N06"] }
+def to-station-code-completer [] { ["G05"] }
+def from-station-code-completer-1 [] { ["E10"] }
+def to-station-code-completer-1 [] { ["J03"] }
+def lat-completer [] { ["38.8978168"] }
+def lon-completer [] { ["-77.0404246"] }
+def radius-completer [] { ["500"] }
+def station-code-completer [] { ["A01"] }
+def station-code-completer-1 [] { ["E08" "F06"] }
+def station-code-completer-2 [] { ["E10"] }
+def line-code-completer [] { ["BL" "GR" "OR" "RD" "SV" "YL"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -137,12 +137,12 @@ export def "path 5476364f031f5909e4fe3316" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FromStationCode: string@FromStationCode-completer # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: N06)
-  --ToStationCode: string@ToStationCode-completer # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: G05)
+  --from-station-code: string@from-station-code-completer # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: N06)
+  --to-station-code: string@to-station-code-completer # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: G05)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "FromStationCode" $FromStationCode "scalar") (serialize-qp "ToStationCode" $ToStationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "FromStationCode" $from_station_code "scalar") (serialize-qp "ToStationCode" $to_station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Path" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,12 +162,12 @@ export def "src-station-to-dst-station-info 5476364f031f5909e4fe331b" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FromStationCode: string@FromStationCode-completer-1 # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: E10)
-  --ToStationCode: string@ToStationCode-completer-1 # Station code for the destination station.  Use the Station List method to return a list of all station codes. (default: J03)
+  --from-station-code: string@from-station-code-completer-1 # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: E10)
+  --to-station-code: string@to-station-code-completer-1 # Station code for the destination station.  Use the Station List method to return a list of all station codes. (default: J03)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "FromStationCode" $FromStationCode "scalar") (serialize-qp "ToStationCode" $ToStationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "FromStationCode" $from_station_code "scalar") (serialize-qp "ToStationCode" $to_station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/SrcStationToDstStationInfo" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -187,13 +187,13 @@ export def "station-entrances 5476364f031f5909e4fe3317" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Lat: float@Lat-completer # Center point Latitude, required if Longitude and Radius are specified. (default: 38.8978168)
-  --Lon: float@Lon-completer # Center point Longitude, required if Latitude and Radius are specified. (default: -77.0404246)
-  --Radius: float@Radius-completer # Radius (meters) to include in the search area, required if Latitude and Longitude are specified. (default: 500)
+  --lat: float@lat-completer # Center point Latitude, required if Longitude and Radius are specified. (default: 38.8978168)
+  --lon: float@lon-completer # Center point Longitude, required if Latitude and Radius are specified. (default: -77.0404246)
+  --radius: float@radius-completer # Radius (meters) to include in the search area, required if Latitude and Longitude are specified. (default: 500)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Lat" $Lat "scalar") (serialize-qp "Lon" $Lon "scalar") (serialize-qp "Radius" $Radius "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Lat" $lat "scalar") (serialize-qp "Lon" $lon "scalar") (serialize-qp "Radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StationEntrances" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,11 +213,11 @@ export def "station-info 5476364f031f5909e4fe3318" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StationCode: string@StationCode-completer # Station code.  Use the Station List method to return a list of all station codes. (default: A01)
+  --station-code: string@station-code-completer # Station code.  Use the Station List method to return a list of all station codes. (default: A01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StationCode" $StationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StationCode" $station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StationInfo" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,11 +237,11 @@ export def "station-parking 5476364f031f5909e4fe3315" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StationCode: string@StationCode-completer-1 # Station code.  Use the Station List method to return a list of all station codes.
+  --station-code: string@station-code-completer-1 # Station code.  Use the Station List method to return a list of all station codes.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StationCode" $StationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StationCode" $station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StationParking" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,11 +261,11 @@ export def "station-times 5476364f031f5909e4fe331a" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StationCode: string@StationCode-completer-2 # Station code.  Use the Station List method to return a list of all station codes. (default: E10)
+  --station-code: string@station-code-completer-2 # Station code.  Use the Station List method to return a list of all station codes. (default: E10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StationCode" $StationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StationCode" $station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/StationTimes" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,11 +285,11 @@ export def "stations 5476364f031f5909e4fe3319" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --LineCode: string@LineCode-completer # Two-letter line code abbreviation:  <ul> <li>RD - Red</li> <li>YL - Yellow</li> <li>GR - Green</li> <li>BL - Blue</li> <li>OR - Orange</li> <li>SV - Silver</li> </ul>
+  --line-code: string@line-code-completer # Two-letter line code abbreviation:  <ul> <li>RD - Red</li> <li>YL - Yellow</li> <li>GR - Green</li> <li>BL - Blue</li> <li>OR - Orange</li> <li>SV - Silver</li> </ul>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "LineCode" $LineCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "LineCode" $line_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Stations" $qp)
   let accept_val = "application/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -331,12 +331,12 @@ export def "json-j-path 5476364f031f5909e4fe330e" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FromStationCode: string@FromStationCode-completer # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: N06)
-  --ToStationCode: string@ToStationCode-completer # Station code for the destination station.  Use the Station List method to return a list of all station codes. (default: G05)
+  --from-station-code: string@from-station-code-completer # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: N06)
+  --to-station-code: string@to-station-code-completer # Station code for the destination station.  Use the Station List method to return a list of all station codes. (default: G05)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "FromStationCode" $FromStationCode "scalar") (serialize-qp "ToStationCode" $ToStationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "FromStationCode" $from_station_code "scalar") (serialize-qp "ToStationCode" $to_station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jPath" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -356,12 +356,12 @@ export def "json-j-src-station-to-dst-station-info 5476364f031f5909e4fe3313" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FromStationCode: string@FromStationCode-completer-1 # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: E10)
-  --ToStationCode: string@ToStationCode-completer-1 # Station code for the destination station.  Use the Station List method to return a list of all station codes. (default: J03)
+  --from-station-code: string@from-station-code-completer-1 # Station code for the origin station.  Use the Station List method to return a list of all station codes. (default: E10)
+  --to-station-code: string@to-station-code-completer-1 # Station code for the destination station.  Use the Station List method to return a list of all station codes. (default: J03)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "FromStationCode" $FromStationCode "scalar") (serialize-qp "ToStationCode" $ToStationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "FromStationCode" $from_station_code "scalar") (serialize-qp "ToStationCode" $to_station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jSrcStationToDstStationInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,13 +381,13 @@ export def "json-j-station-entrances 5476364f031f5909e4fe330f" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Lat: float@Lat-completer # Center point Latitude, required if Longitude and Radius are specified. (default: 38.8978168)
-  --Lon: float@Lon-completer # Center point Longitude, required if Latitude and Radius are specified. (default: -77.0404246)
-  --Radius: float@Radius-completer # Radius (meters) to include in the search area, required if Latitude and Longitude are specified. (default: 500)
+  --lat: float@lat-completer # Center point Latitude, required if Longitude and Radius are specified. (default: 38.8978168)
+  --lon: float@lon-completer # Center point Longitude, required if Latitude and Radius are specified. (default: -77.0404246)
+  --radius: float@radius-completer # Radius (meters) to include in the search area, required if Latitude and Longitude are specified. (default: 500)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Lat" $Lat "scalar") (serialize-qp "Lon" $Lon "scalar") (serialize-qp "Radius" $Radius "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Lat" $lat "scalar") (serialize-qp "Lon" $lon "scalar") (serialize-qp "Radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStationEntrances" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -407,11 +407,11 @@ export def "json-j-station-info 5476364f031f5909e4fe3310" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StationCode: string@StationCode-completer # Station code.  Use the Station List method to return a list of all station codes. (default: A01)
+  --station-code: string@station-code-completer # Station code.  Use the Station List method to return a list of all station codes. (default: A01)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StationCode" $StationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StationCode" $station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStationInfo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -431,11 +431,11 @@ export def "json-j-station-parking 5476364f031f5909e4fe330d" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StationCode: string@StationCode-completer-1 # Station code.  Use the Station List method to return a list of all station codes.
+  --station-code: string@station-code-completer-1 # Station code.  Use the Station List method to return a list of all station codes.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StationCode" $StationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StationCode" $station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStationParking" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -455,11 +455,11 @@ export def "json-j-station-times 5476364f031f5909e4fe3312" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StationCode: string@StationCode-completer-2 # Station code.  Use the Station List method to return a list of all station codes. (default: E10)
+  --station-code: string@station-code-completer-2 # Station code.  Use the Station List method to return a list of all station codes. (default: E10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StationCode" $StationCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StationCode" $station_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStationTimes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -479,11 +479,11 @@ export def "json-j-stations 5476364f031f5909e4fe3311" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --LineCode: string@LineCode-completer # Two-letter line code abbreviation:  <ul> <li>RD - Red</li> <li>YL - Yellow</li> <li>GR - Green</li> <li>BL - Blue</li> <li>OR - Orange</li> <li>SV - Silver</li> </ul>
+  --line-code: string@line-code-completer # Two-letter line code abbreviation:  <ul> <li>RD - Red</li> <li>YL - Yellow</li> <li>GR - Green</li> <li>BL - Blue</li> <li>OR - Orange</li> <li>SV - Silver</li> </ul>
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "LineCode" $LineCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "LineCode" $line_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jStations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

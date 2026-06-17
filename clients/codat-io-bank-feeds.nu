@@ -94,8 +94,8 @@ export def commands []: nothing -> table {
 # GET /companies/{companyId}/connections/{connectionId}/connectionInfo/bankFeedAccounts
 # operationId: get-bank-feeds
 export def "companies-connections-connection-info-bank-feed-accounts get-bank-feeds" [
-  companyId: string
-  connectionId: string
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -107,7 +107,7 @@ export def "companies-connections-connection-info-bank-feed-accounts get-bank-fe
 ]: nothing -> table<accountName: string, accountNumber: string, accountType: string, balance: float, currency: string, feedStartDate: string, id: string, modifiedDate: string, sortCode: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/companies/($companyId)/connections/($connectionId)/connectionInfo/bankFeedAccounts")
+  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id} | format pattern "/companies/{company_id}/connections/{connection_id}/connectionInfo/bankFeedAccounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,8 +118,8 @@ export def "companies-connections-connection-info-bank-feed-accounts get-bank-fe
 # PUT /companies/{companyId}/connections/{connectionId}/connectionInfo/bankFeedAccounts
 # operationId: create-bank-feed
 export def "companies-connections-connection-info-bank-feed-accounts create-bank-feed" [
-  companyId: string
-  connectionId: string
+  company_id: string
+  connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,7 +133,7 @@ export def "companies-connections-connection-info-bank-feed-accounts create-bank
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/companies/($companyId)/connections/($connectionId)/connectionInfo/bankFeedAccounts")
+  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id} | format pattern "/companies/{company_id}/connections/{connection_id}/connectionInfo/bankFeedAccounts"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -145,9 +145,9 @@ export def "companies-connections-connection-info-bank-feed-accounts create-bank
 # PATCH /companies/{companyId}/connections/{connectionId}/connectionInfo/bankFeedAccounts/{accountId}
 # operationId: update-bank-feed
 export def "companies-connections-connection-info-bank-feed-accounts update-bank-feed" [
-  companyId: string
-  connectionId: string
-  accountId: string
+  company_id: string
+  connection_id: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,22 +156,22 @@ export def "companies-connections-connection-info-bank-feed-accounts update-bank
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # The bank account name (nullable)
-  --accountNumber: string # The account number (nullable)
-  --accountType: string # The type of bank account e.g. Credit (nullable)
+  --account-name: string # The bank account name (nullable)
+  --account-number: string # The account number (nullable)
+  --account-type: string # The type of bank account e.g. Credit (nullable)
   --balance: float # The latest balance for the bank account (nullable)
   --currency: string # The currency e.g. USD (nullable)
-  --feedStartDate: string # In Codat's data model, dates and times are represented using the <a class="external" href="https://en.wikipedia.org/wiki/ISO_8601" target="_blank">ISO 8601 standard</a>. Date and time fields are formatted as strings; for example:  ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ```    When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information:  - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00`  > Time zones >  > Not all dates from Codat will contain information about time zones.   > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced. (e.g. 2022-10-23T00:00:00Z)
+  --feed-start-date: string # In Codat's data model, dates and times are represented using the <a class="external" href="https://en.wikipedia.org/wiki/ISO_8601" target="_blank">ISO 8601 standard</a>. Date and time fields are formatted as strings; for example:  ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ```    When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information:  - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00`  > Time zones >  > Not all dates from Codat will contain information about time zones.   > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced. (e.g. 2022-10-23T00:00:00Z)
   id: string # Unique ID for the bank feed account
-  --modifiedDate: string # In Codat's data model, dates and times are represented using the <a class="external" href="https://en.wikipedia.org/wiki/ISO_8601" target="_blank">ISO 8601 standard</a>. Date and time fields are formatted as strings; for example:  ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ```    When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information:  - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00`  > Time zones >  > Not all dates from Codat will contain information about time zones.   > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced. (e.g. 2022-10-23T00:00:00Z)
-  --sortCode: string # The sort code (nullable)
+  --modified-date: string # In Codat's data model, dates and times are represented using the <a class="external" href="https://en.wikipedia.org/wiki/ISO_8601" target="_blank">ISO 8601 standard</a>. Date and time fields are formatted as strings; for example:  ``` 2020-10-08T22:40:50Z 2021-01-01T00:00:00 ```    When syncing data that contains `DateTime` fields from Codat, make sure you support the following cases when reading time information:  - Coordinated Universal Time (UTC): `2021-11-15T06:00:00Z` - Unqualified local time: `2021-11-15T01:00:00` - UTC time offsets: `2021-11-15T01:00:00-05:00`  > Time zones >  > Not all dates from Codat will contain information about time zones.   > Where it is not available from the underlying platform, Codat will return these as times local to the business whose data has been synced. (e.g. 2022-10-23T00:00:00Z)
+  --sort-code: string # The sort code (nullable)
   --status: string # nullable
 ]: any -> record<accountName: string, accountNumber: string, accountType: string, balance: float, currency: string, feedStartDate: string, id: string, modifiedDate: string, sortCode: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/companies/($companyId)/connections/($connectionId)/connectionInfo/bankFeedAccounts/($accountId)")
-  let body = {accountName: $accountName, accountNumber: $accountNumber, accountType: $accountType, balance: $balance, currency: $currency, feedStartDate: $feedStartDate, id: $id, modifiedDate: $modifiedDate, sortCode: $sortCode, status: $status} | compact
+  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id, account_id: $account_id} | format pattern "/companies/{company_id}/connections/{connection_id}/connectionInfo/bankFeedAccounts/{account_id}"))
+  let body = {"accountName": $account_name, "accountNumber": $account_number, "accountType": $account_type, "balance": $balance, "currency": $currency, "feedStartDate": $feed_start_date, "id": $id, "modifiedDate": $modified_date, "sortCode": $sort_code, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -183,9 +183,9 @@ export def "companies-connections-connection-info-bank-feed-accounts update-bank
 # GET /companies/{companyId}/connections/{connectionId}/data/bankAccounts/{accountId}/bankTransactions
 # operationId: list-bank-account-transactions
 export def "companies-connections-data-bank-accounts-bank-transactions list-bank-account-transactions" [
-  companyId: string
-  connectionId: string
-  accountId: string
+  company_id: string
+  connection_id: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,14 +195,14 @@ export def "companies-connections-data-bank-accounts-bank-transactions list-bank
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 1, e.g. 1)
-  --pageSize: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
+  --page-size: int # Number of records to return in a page. [Read more](https://docs.codat.io/using-the-api/paging). (format: int32, default: 100, e.g. 100)
   --query: string # Codat query string. [Read more](https://docs.codat.io/using-the-api/querying).
-  --orderBy: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results). (e.g. -modifiedDate)
+  --order-by: string # Field to order results by. [Read more](https://docs.codat.io/using-the-api/ordering-results). (e.g. -modifiedDate)
 ]: nothing -> record<results: table<accountId: string, transactions: list>, _links: record<current: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, pageNumber: int, pageSize: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/companies/($companyId)/connections/($connectionId)/data/bankAccounts/($accountId)/bankTransactions" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id, account_id: $account_id} | format pattern "/companies/{company_id}/connections/{connection_id}/data/bankAccounts/{account_id}/bankTransactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,9 +213,9 @@ export def "companies-connections-data-bank-accounts-bank-transactions list-bank
 # GET /companies/{companyId}/connections/{connectionId}/options/bankAccounts/{accountId}/bankTransactions
 # operationId: get-create-bank-account-model
 export def "companies-connections-options-bank-accounts-bank-transactions get-create-bank-account-model" [
-  companyId: string
-  connectionId: string
-  accountId: string
+  company_id: string
+  connection_id: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "companies-connections-options-bank-accounts-bank-transactions get-cr
 ]: nothing -> record<description: string, displayName: string, options: list<any>, properties: record, required: bool, type: any, validation: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/companies/($companyId)/connections/($connectionId)/options/bankAccounts/($accountId)/bankTransactions")
+  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id, account_id: $account_id} | format pattern "/companies/{company_id}/connections/{connection_id}/options/bankAccounts/{account_id}/bankTransactions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -238,9 +238,9 @@ export def "companies-connections-options-bank-accounts-bank-transactions get-cr
 # POST /companies/{companyId}/connections/{connectionId}/push/bankAccounts/{accountId}/bankTransactions
 # operationId: create-bank-transactions
 export def "companies-connections-push-bank-accounts-bank-transactions create-bank-transactions" [
-  companyId: string
-  connectionId: string
-  accountId: string
+  company_id: string
+  connection_id: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,17 +249,17 @@ export def "companies-connections-push-bank-accounts-bank-transactions create-ba
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowSyncOnPushComplete: oneof<nothing, bool> # default: true
-  --timeoutInMinutes: int # format: int32
-  --body-accountId: string # nullable
+  --allow-sync-on-push-complete: oneof<nothing, bool> # default: true
+  --timeout-in-minutes: int # format: int32
+  --body-account-id: string # nullable
   --transactions: list # nullable
 ]: any -> record<data: record<accountId: string, transactions: list<any>>, changes: list<any>, companyId: any, completedOnUtc: string, dataConnectionKey: any, dataType: string, errorMessage: string, pushOperationKey: string, requestedOnUtc: string, status: any, statusCode: int, timeoutInMinutes: int, timeoutInSeconds: int, validation: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowSyncOnPushComplete" $allowSyncOnPushComplete "scalar") (serialize-qp "timeoutInMinutes" $timeoutInMinutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/companies/($companyId)/connections/($connectionId)/push/bankAccounts/($accountId)/bankTransactions" $qp)
-  let body = {accountId: $body_accountId, transactions: $transactions} | compact
+  let qp = [(serialize-qp "allowSyncOnPushComplete" $allow_sync_on_push_complete "scalar") (serialize-qp "timeoutInMinutes" $timeout_in_minutes "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({company_id: $company_id, connection_id: $connection_id, account_id: $account_id} | format pattern "/companies/{company_id}/connections/{connection_id}/push/bankAccounts/{account_id}/bankTransactions") $qp)
+  let body = {"accountId": $body_account_id, "transactions": $transactions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

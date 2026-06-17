@@ -94,8 +94,8 @@ export def commands []: nothing -> table {
 #
 # GET /api/logistics-capacity/resources/carrier@{capacityType}@{shippingPolicyId}/time-frames
 export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-id-time-frames get-by-capacityType-shippingPolicyId" [
-  capacityType: string
-  shippingPolicyId: string
+  capacity_type: string
+  shipping_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,16 +104,16 @@ export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-i
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --rangeStart: string # Starting date of time range (e.g. yyyy-mm-dd)
-  --rangeEnd: string # End date of time range. (e.g. yyyy-mm-dd)
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/vnd.vtex.availability.v1+json)
+  --range-start: string # Starting date of time range (e.g. yyyy-mm-dd)
+  --range-end: string # End date of time range. (e.g. yyyy-mm-dd)
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/vnd.vtex.availability.v1+json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "rangeStart" $rangeStart "scalar") (serialize-qp "rangeEnd" $rangeEnd "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/logistics-capacity/resources/carrier@($capacityType)@($shippingPolicyId)/time-frames" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let qp = [(serialize-qp "rangeStart" $range_start "scalar") (serialize-qp "rangeEnd" $range_end "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({capacity_type: $capacity_type, shipping_policy_id: $shipping_policy_id} | format pattern "/api/logistics-capacity/resources/carrier@{capacity_type}@{shipping_policy_id}/time-frames") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -124,11 +124,11 @@ export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-i
 #
 # GET /api/logistics-capacity/resources/carrier@{capacityType}@{shippingPolicyId}/time-frames/{windowDay}F{windowStartTime}T{windowEndTime}
 export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-id-time-frames get-by-capacityType-shippingPolicyId-windowDay-windowStartTime-windowEndTime" [
-  capacityType: string
-  shippingPolicyId: string
-  windowDay: string
-  windowStartTime: string
-  windowEndTime: string
+  capacity_type: string
+  shipping_policy_id: string
+  window_day: string
+  window_start_time: string
+  window_end_time: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,13 +137,13 @@ export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-i
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/vnd.vtex.availability.v1+json)
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/vnd.vtex.availability.v1+json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics-capacity/resources/carrier@($capacityType)@($shippingPolicyId)/time-frames/($windowDay)F($windowStartTime)T($windowEndTime)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({capacity_type: $capacity_type, shipping_policy_id: $shipping_policy_id, window_day: $window_day, window_start_time: $window_start_time, window_end_time: $window_end_time} | format pattern "/api/logistics-capacity/resources/carrier@{capacity_type}@{shipping_policy_id}/time-frames/{window_day}F{window_start_time}T{window_end_time}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -154,8 +154,8 @@ export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-i
 #
 # POST /api/logistics/pvt/configuration/carriers/{carrierId}/adddayofweekblocked
 # operationId: AddBlockedDeliveryWindows
-export def "logistics-pvt-configuration-carriers-adddayofweekblocked AddBlockedDeliveryWindows" [
-  carrierId: string
+export def "logistics-pvt-configuration-carriers-adddayofweekblocked create-blocked-delivery-windows" [
+  carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,16 +164,16 @@ export def "logistics-pvt-configuration-carriers-adddayofweekblocked AddBlockedD
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/carriers/($carrierId)/adddayofweekblocked")
+  let full_url = (build-url $base ({carrier_id: $carrier_id} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/adddayofweekblocked"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,8 +184,8 @@ export def "logistics-pvt-configuration-carriers-adddayofweekblocked AddBlockedD
 #
 # GET /api/logistics/pvt/configuration/carriers/{carrierId}/getdayofweekblocked
 # operationId: RetrieveBlockedDeliveryWindows
-export def "logistics-pvt-configuration-carriers-getdayofweekblocked RetrieveBlockedDeliveryWindows" [
-  carrierId: string
+export def "logistics-pvt-configuration-carriers-getdayofweekblocked retrieve-blocked-delivery-windows" [
+  carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,13 +194,13 @@ export def "logistics-pvt-configuration-carriers-getdayofweekblocked RetrieveBlo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/carriers/($carrierId)/getdayofweekblocked")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({carrier_id: $carrier_id} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/getdayofweekblocked"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,8 +211,8 @@ export def "logistics-pvt-configuration-carriers-getdayofweekblocked RetrieveBlo
 #
 # POST /api/logistics/pvt/configuration/carriers/{carrierId}/removedayofweekblocked
 # operationId: RemoveBlockedDeliveryWindows
-export def "logistics-pvt-configuration-carriers-removedayofweekblocked RemoveBlockedDeliveryWindows" [
-  carrierId: string
+export def "logistics-pvt-configuration-carriers-removedayofweekblocked delete-blocked-delivery-windows" [
+  carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,16 +221,16 @@ export def "logistics-pvt-configuration-carriers-removedayofweekblocked RemoveBl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/carriers/($carrierId)/removedayofweekblocked")
+  let full_url = (build-url $base ({carrier_id: $carrier_id} | format pattern "/api/logistics/pvt/configuration/carriers/{carrier_id}/removedayofweekblocked"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,7 +241,7 @@ export def "logistics-pvt-configuration-carriers-removedayofweekblocked RemoveBl
 #
 # GET /api/logistics/pvt/configuration/docks
 # operationId: AllDocks
-export def "logistics-pvt-configuration-docks AllDocks" [
+export def "logistics-pvt-configuration-docks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,13 +250,13 @@ export def "logistics-pvt-configuration-docks AllDocks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/logistics/pvt/configuration/docks")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -267,7 +267,7 @@ export def "logistics-pvt-configuration-docks AllDocks" [
 #
 # POST /api/logistics/pvt/configuration/docks
 # operationId: Create/UpdateDock
-export def "logistics-pvt-configuration-docks Create/UpdateDock" [
+export def "logistics-pvt-configuration-docks update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,8 +276,8 @@ export def "logistics-pvt-configuration-docks Create/UpdateDock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
 ]: any -> any {
   let input = $in
@@ -285,7 +285,7 @@ export def "logistics-pvt-configuration-docks Create/UpdateDock" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/logistics/pvt/configuration/docks")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -296,8 +296,8 @@ export def "logistics-pvt-configuration-docks Create/UpdateDock" [
 #
 # DELETE /api/logistics/pvt/configuration/docks/{dockId}
 # operationId: Dock
-export def "logistics-pvt-configuration-docks Dock" [
-  dockId: string
+export def "logistics-pvt-configuration-docks delete" [
+  dock_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,13 +306,13 @@ export def "logistics-pvt-configuration-docks Dock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/docks/($dockId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({dock_id: $dock_id} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -323,8 +323,8 @@ export def "logistics-pvt-configuration-docks Dock" [
 #
 # GET /api/logistics/pvt/configuration/docks/{dockId}
 # operationId: DockById
-export def "logistics-pvt-configuration-docks DockById" [
-  dockId: string
+export def "logistics-pvt-configuration-docks get" [
+  dock_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,13 +333,13 @@ export def "logistics-pvt-configuration-docks DockById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/docks/($dockId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({dock_id: $dock_id} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -350,8 +350,8 @@ export def "logistics-pvt-configuration-docks DockById" [
 #
 # POST /api/logistics/pvt/configuration/docks/{dockId}/activation
 # operationId: ActivateDock
-export def "logistics-pvt-configuration-docks-activation ActivateDock" [
-  dockId: string
+export def "logistics-pvt-configuration-docks-activation post" [
+  dock_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,13 +360,13 @@ export def "logistics-pvt-configuration-docks-activation ActivateDock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/docks/($dockId)/activation")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({dock_id: $dock_id} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}/activation"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -377,8 +377,8 @@ export def "logistics-pvt-configuration-docks-activation ActivateDock" [
 #
 # POST /api/logistics/pvt/configuration/docks/{dockId}/deactivation
 # operationId: DeactivateDock
-export def "logistics-pvt-configuration-docks-deactivation DeactivateDock" [
-  dockId: string
+export def "logistics-pvt-configuration-docks-deactivation post" [
+  dock_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,13 +387,13 @@ export def "logistics-pvt-configuration-docks-deactivation DeactivateDock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/docks/($dockId)/deactivation")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({dock_id: $dock_id} | format pattern "/api/logistics/pvt/configuration/docks/{dock_id}/deactivation"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,8 +404,8 @@ export def "logistics-pvt-configuration-docks-deactivation DeactivateDock" [
 #
 # POST /api/logistics/pvt/configuration/freights/{carrierId}/values/update
 # operationId: Create/UpdateFreightValues
-export def "logistics-pvt-configuration-freights-values-update Create/UpdateFreightValues" [
-  carrierId: string
+export def "logistics-pvt-configuration-freights-values-update update" [
+  carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,16 +414,16 @@ export def "logistics-pvt-configuration-freights-values-update Create/UpdateFrei
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/freights/($carrierId)/values/update")
+  let full_url = (build-url $base ({carrier_id: $carrier_id} | format pattern "/api/logistics/pvt/configuration/freights/{carrier_id}/values/update"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -434,8 +434,8 @@ export def "logistics-pvt-configuration-freights-values-update Create/UpdateFrei
 #
 # GET /api/logistics/pvt/configuration/freights/{carrierId}/{cep}/values
 # operationId: FreightValues
-export def "logistics-pvt-configuration-freights-values FreightValues" [
-  carrierId: string
+export def "logistics-pvt-configuration-freights-values get" [
+  carrier_id: string
   cep: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,13 +445,13 @@ export def "logistics-pvt-configuration-freights-values FreightValues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/freights/($carrierId)/($cep)/values")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({carrier_id: $carrier_id, cep: $cep} | format pattern "/api/logistics/pvt/configuration/freights/{carrier_id}/{cep}/values"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -462,7 +462,7 @@ export def "logistics-pvt-configuration-freights-values FreightValues" [
 #
 # GET /api/logistics/pvt/configuration/geoshape
 # operationId: PagedPolygons
-export def "logistics-pvt-configuration-geoshape PagedPolygons" [
+export def "logistics-pvt-configuration-geoshape list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,15 +472,15 @@ export def "logistics-pvt-configuration-geoshape PagedPolygons" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # e.g. {{page}}
-  --perPage: string # e.g. {{perPage}}
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --per-page: string # e.g. {{perPage}}
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "perPage" $perPage "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/logistics/pvt/configuration/geoshape" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -491,7 +491,7 @@ export def "logistics-pvt-configuration-geoshape PagedPolygons" [
 #
 # PUT /api/logistics/pvt/configuration/geoshape
 # operationId: CreateUpdatePolygon
-export def "logistics-pvt-configuration-geoshape CreateUpdatePolygon" [
+export def "logistics-pvt-configuration-geoshape create-update-polygon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,8 +500,8 @@ export def "logistics-pvt-configuration-geoshape CreateUpdatePolygon" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
 ]: any -> any {
   let input = $in
@@ -509,7 +509,7 @@ export def "logistics-pvt-configuration-geoshape CreateUpdatePolygon" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/logistics/pvt/configuration/geoshape")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -520,8 +520,8 @@ export def "logistics-pvt-configuration-geoshape CreateUpdatePolygon" [
 #
 # DELETE /api/logistics/pvt/configuration/geoshape/{polygonName}
 # operationId: DeletePolygon
-export def "logistics-pvt-configuration-geoshape DeletePolygon" [
-  polygonName: string
+export def "logistics-pvt-configuration-geoshape delete-polygon" [
+  polygon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,13 +530,13 @@ export def "logistics-pvt-configuration-geoshape DeletePolygon" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/geoshape/($polygonName)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({polygon_name: $polygon_name} | format pattern "/api/logistics/pvt/configuration/geoshape/{polygon_name}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -547,8 +547,8 @@ export def "logistics-pvt-configuration-geoshape DeletePolygon" [
 #
 # GET /api/logistics/pvt/configuration/geoshape/{polygonName}
 # operationId: PolygonbyId
-export def "logistics-pvt-configuration-geoshape PolygonbyId" [
-  polygonName: string
+export def "logistics-pvt-configuration-geoshape get" [
+  polygon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,13 +557,13 @@ export def "logistics-pvt-configuration-geoshape PolygonbyId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/geoshape/($polygonName)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({polygon_name: $polygon_name} | format pattern "/api/logistics/pvt/configuration/geoshape/{polygon_name}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -574,7 +574,7 @@ export def "logistics-pvt-configuration-geoshape PolygonbyId" [
 #
 # GET /api/logistics/pvt/configuration/holidays
 # operationId: AllHolidays
-export def "logistics-pvt-configuration-holidays AllHolidays" [
+export def "logistics-pvt-configuration-holidays list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,13 +583,13 @@ export def "logistics-pvt-configuration-holidays AllHolidays" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/logistics/pvt/configuration/holidays")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -600,8 +600,8 @@ export def "logistics-pvt-configuration-holidays AllHolidays" [
 #
 # DELETE /api/logistics/pvt/configuration/holidays/{holidayId}
 # operationId: Holiday
-export def "logistics-pvt-configuration-holidays Holiday" [
-  holidayId: string
+export def "logistics-pvt-configuration-holidays delete" [
+  holiday_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,13 +610,13 @@ export def "logistics-pvt-configuration-holidays Holiday" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/holidays/($holidayId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({holiday_id: $holiday_id} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -627,8 +627,8 @@ export def "logistics-pvt-configuration-holidays Holiday" [
 #
 # GET /api/logistics/pvt/configuration/holidays/{holidayId}
 # operationId: HolidayById
-export def "logistics-pvt-configuration-holidays HolidayById" [
-  holidayId: string
+export def "logistics-pvt-configuration-holidays get" [
+  holiday_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,13 +637,13 @@ export def "logistics-pvt-configuration-holidays HolidayById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/holidays/($holidayId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({holiday_id: $holiday_id} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -654,8 +654,8 @@ export def "logistics-pvt-configuration-holidays HolidayById" [
 #
 # PUT /api/logistics/pvt/configuration/holidays/{holidayId}
 # operationId: Create/UpdateHoliday
-export def "logistics-pvt-configuration-holidays Create/UpdateHoliday" [
-  holidayId: string
+export def "logistics-pvt-configuration-holidays update" [
+  holiday_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,16 +664,16 @@ export def "logistics-pvt-configuration-holidays Create/UpdateHoliday" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/holidays/($holidayId)")
+  let full_url = (build-url $base ({holiday_id: $holiday_id} | format pattern "/api/logistics/pvt/configuration/holidays/{holiday_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -684,7 +684,7 @@ export def "logistics-pvt-configuration-holidays Create/UpdateHoliday" [
 #
 # GET /api/logistics/pvt/configuration/pickuppoints
 # operationId: ListAllPickupPpoints
-export def "logistics-pvt-configuration-pickuppoints ListAllPickupPpoints" [
+export def "logistics-pvt-configuration-pickuppoints list-all-pickup-ppoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,13 +693,13 @@ export def "logistics-pvt-configuration-pickuppoints ListAllPickupPpoints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/logistics/pvt/configuration/pickuppoints")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -710,7 +710,7 @@ export def "logistics-pvt-configuration-pickuppoints ListAllPickupPpoints" [
 #
 # GET /api/logistics/pvt/configuration/pickuppoints/_search
 # operationId: Getpaged
-export def "logistics-pvt-configuration-pickuppoints-search Getpaged" [
+export def "logistics-pvt-configuration-pickuppoints-search get-paged" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,16 +720,16 @@ export def "logistics-pvt-configuration-pickuppoints-search Getpaged" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # e.g. {{pageNumber}}
-  --pageSize: string # e.g. {{pageSize}}
+  --page-size: string # e.g. {{pageSize}}
   --keyword: string # e.g. 
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "keyword" $keyword "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "keyword" $keyword "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/logistics/pvt/configuration/pickuppoints/_search" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -740,8 +740,8 @@ export def "logistics-pvt-configuration-pickuppoints-search Getpaged" [
 #
 # DELETE /api/logistics/pvt/configuration/pickuppoints/{pickupPointId}
 # operationId: Delete
-export def "logistics-pvt-configuration-pickuppoints Delete" [
-  pickupPointId: string
+export def "logistics-pvt-configuration-pickuppoints delete" [
+  pickup_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,13 +750,13 @@ export def "logistics-pvt-configuration-pickuppoints Delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/pickuppoints/($pickupPointId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({pickup_point_id: $pickup_point_id} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -767,8 +767,8 @@ export def "logistics-pvt-configuration-pickuppoints Delete" [
 #
 # GET /api/logistics/pvt/configuration/pickuppoints/{pickupPointId}
 # operationId: GetById
-export def "logistics-pvt-configuration-pickuppoints GetById" [
-  pickupPointId: string
+export def "logistics-pvt-configuration-pickuppoints get-by" [
+  pickup_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,13 +777,13 @@ export def "logistics-pvt-configuration-pickuppoints GetById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/pickuppoints/($pickupPointId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({pickup_point_id: $pickup_point_id} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -794,8 +794,8 @@ export def "logistics-pvt-configuration-pickuppoints GetById" [
 #
 # PUT /api/logistics/pvt/configuration/pickuppoints/{pickupPointId}
 # operationId: CreateUpdatePickupPoint
-export def "logistics-pvt-configuration-pickuppoints CreateUpdatePickupPoint" [
-  pickupPointId: string
+export def "logistics-pvt-configuration-pickuppoints create-update" [
+  pickup_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,16 +804,16 @@ export def "logistics-pvt-configuration-pickuppoints CreateUpdatePickupPoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/pickuppoints/($pickupPointId)")
+  let full_url = (build-url $base ({pickup_point_id: $pickup_point_id} | format pattern "/api/logistics/pvt/configuration/pickuppoints/{pickup_point_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -824,7 +824,7 @@ export def "logistics-pvt-configuration-pickuppoints CreateUpdatePickupPoint" [
 #
 # GET /api/logistics/pvt/configuration/warehouses
 # operationId: AllWarehouses
-export def "logistics-pvt-configuration-warehouses AllWarehouses" [
+export def "logistics-pvt-configuration-warehouses list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,13 +833,13 @@ export def "logistics-pvt-configuration-warehouses AllWarehouses" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/logistics/pvt/configuration/warehouses")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -850,7 +850,7 @@ export def "logistics-pvt-configuration-warehouses AllWarehouses" [
 #
 # POST /api/logistics/pvt/configuration/warehouses
 # operationId: Create/UpdateWarehouse
-export def "logistics-pvt-configuration-warehouses Create/UpdateWarehouse" [
+export def "logistics-pvt-configuration-warehouses update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -859,8 +859,8 @@ export def "logistics-pvt-configuration-warehouses Create/UpdateWarehouse" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
   --body: record
 ]: any -> any {
   let input = $in
@@ -868,7 +868,7 @@ export def "logistics-pvt-configuration-warehouses Create/UpdateWarehouse" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/logistics/pvt/configuration/warehouses")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -879,8 +879,8 @@ export def "logistics-pvt-configuration-warehouses Create/UpdateWarehouse" [
 #
 # DELETE /api/logistics/pvt/configuration/warehouses/{warehouseId}
 # operationId: RemoveWarehouse
-export def "logistics-pvt-configuration-warehouses RemoveWarehouse" [
-  warehouseId: string
+export def "logistics-pvt-configuration-warehouses delete" [
+  warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -889,13 +889,13 @@ export def "logistics-pvt-configuration-warehouses RemoveWarehouse" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/warehouses/($warehouseId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({warehouse_id: $warehouse_id} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -906,8 +906,8 @@ export def "logistics-pvt-configuration-warehouses RemoveWarehouse" [
 #
 # GET /api/logistics/pvt/configuration/warehouses/{warehouseId}
 # operationId: WarehouseById
-export def "logistics-pvt-configuration-warehouses WarehouseById" [
-  warehouseId: string
+export def "logistics-pvt-configuration-warehouses get" [
+  warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,13 +916,13 @@ export def "logistics-pvt-configuration-warehouses WarehouseById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/warehouses/($warehouseId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({warehouse_id: $warehouse_id} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -933,8 +933,8 @@ export def "logistics-pvt-configuration-warehouses WarehouseById" [
 #
 # POST /api/logistics/pvt/configuration/warehouses/{warehouseId}/activation
 # operationId: ActivateWarehouse
-export def "logistics-pvt-configuration-warehouses-activation ActivateWarehouse" [
-  warehouseId: string
+export def "logistics-pvt-configuration-warehouses-activation post" [
+  warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,13 +943,13 @@ export def "logistics-pvt-configuration-warehouses-activation ActivateWarehouse"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/warehouses/($warehouseId)/activation")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({warehouse_id: $warehouse_id} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}/activation"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -960,8 +960,8 @@ export def "logistics-pvt-configuration-warehouses-activation ActivateWarehouse"
 #
 # POST /api/logistics/pvt/configuration/warehouses/{warehouseId}/deactivation
 # operationId: DeactivateWarehouse
-export def "logistics-pvt-configuration-warehouses-deactivation DeactivateWarehouse" [
-  warehouseId: string
+export def "logistics-pvt-configuration-warehouses-deactivation post" [
+  warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,13 +970,13 @@ export def "logistics-pvt-configuration-warehouses-deactivation DeactivateWareho
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/configuration/warehouses/($warehouseId)/deactivation")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({warehouse_id: $warehouse_id} | format pattern "/api/logistics/pvt/configuration/warehouses/{warehouse_id}/deactivation"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -987,9 +987,9 @@ export def "logistics-pvt-configuration-warehouses-deactivation DeactivateWareho
 #
 # GET /api/logistics/pvt/inventory/items/{itemId}/warehouses/{warehouseId}/dispatched
 # operationId: Getinventorywithdispatchedreservations
-export def "logistics-pvt-inventory-items-warehouses-dispatched Getinventorywithdispatchedreservations" [
-  itemId: string
-  warehouseId: string
+export def "logistics-pvt-inventory-items-warehouses-dispatched get-inventorywithdispatchedreservations" [
+  item_id: string
+  warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,13 +998,13 @@ export def "logistics-pvt-inventory-items-warehouses-dispatched Getinventorywith
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> table<availableQuantity: int, dispatchedReservationsQuantity: int, isUnlimitedQuantity: bool, quantity: int, skuId: string, totalReservedQuantity: int, warehouseId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/items/($itemId)/warehouses/($warehouseId)/dispatched")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({item_id: $item_id, warehouse_id: $warehouse_id} | format pattern "/api/logistics/pvt/inventory/items/{item_id}/warehouses/{warehouse_id}/dispatched"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1015,9 +1015,9 @@ export def "logistics-pvt-inventory-items-warehouses-dispatched Getinventorywith
 #
 # GET /api/logistics/pvt/inventory/items/{skuId}/docks/{dockId}
 # operationId: Inventoryperdock
-export def "logistics-pvt-inventory-items-docks Inventoryperdock" [
-  skuId: string
-  dockId: string
+export def "logistics-pvt-inventory-items-docks get" [
+  sku_id: string
+  dock_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1026,13 +1026,13 @@ export def "logistics-pvt-inventory-items-docks Inventoryperdock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> table<availableQuantity: int, dateOfSupplyUtc: string, deliveryChannel: list<string>, dockId: string, isUnlimited: bool, keepSellingAfterExpiration: bool, reservedQuantity: int, salesChannel: list<string>, skuId: string, timeToRefill: string, totalQuantity: int, transfer: string, warehouseId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/items/($skuId)/docks/($dockId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, dock_id: $dock_id} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/docks/{dock_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1043,10 +1043,10 @@ export def "logistics-pvt-inventory-items-docks Inventoryperdock" [
 #
 # GET /api/logistics/pvt/inventory/items/{skuId}/docks/{dockId}/warehouses/{warehouseId}
 # operationId: Inventoryperdockandwarehouse
-export def "logistics-pvt-inventory-items-docks-warehouses Inventoryperdockandwarehouse" [
-  skuId: string
-  dockId: string
-  warehouseId: string
+export def "logistics-pvt-inventory-items-docks-warehouses get" [
+  sku_id: string
+  dock_id: string
+  warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,13 +1055,13 @@ export def "logistics-pvt-inventory-items-docks-warehouses Inventoryperdockandwa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> table<availableQuantity: int, dateOfSupplyUtc: string, deliveryChannel: list<string>, dockId: string, isUnlimited: bool, keepSellingAfterExpiration: bool, reservedQuantity: int, salesChannel: list<string>, skuId: string, timeToRefill: string, totalQuantity: int, transfer: string, warehouseId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/items/($skuId)/docks/($dockId)/warehouses/($warehouseId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, dock_id: $dock_id, warehouse_id: $warehouse_id} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/docks/{dock_id}/warehouses/{warehouse_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1072,9 +1072,9 @@ export def "logistics-pvt-inventory-items-docks-warehouses Inventoryperdockandwa
 #
 # GET /api/logistics/pvt/inventory/items/{skuId}/warehouses/{warehouseId}
 # operationId: Inventoryperwarehouse
-export def "logistics-pvt-inventory-items-warehouses Inventoryperwarehouse" [
-  skuId: string
-  warehouseId: string
+export def "logistics-pvt-inventory-items-warehouses get" [
+  sku_id: string
+  warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1083,13 +1083,13 @@ export def "logistics-pvt-inventory-items-warehouses Inventoryperwarehouse" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> table<availableQuantity: int, dateOfSupplyUtc: string, deliveryChannel: list<string>, dockId: string, isUnlimited: bool, keepSellingAfterExpiration: bool, reservedQuantity: int, salesChannel: list<string>, skuId: string, timeToRefill: string, totalQuantity: int, transfer: string, warehouseId: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/items/($skuId)/warehouses/($warehouseId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, warehouse_id: $warehouse_id} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1100,9 +1100,9 @@ export def "logistics-pvt-inventory-items-warehouses Inventoryperwarehouse" [
 #
 # GET /api/logistics/pvt/inventory/items/{skuId}/warehouses/{warehouseId}/supplyLots
 # operationId: GetSupplyLots
-export def "logistics-pvt-inventory-items-warehouses-supply-lots GetSupplyLots" [
-  skuId: string
-  warehouseId: string
+export def "logistics-pvt-inventory-items-warehouses-supply-lots get" [
+  sku_id: string
+  warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1111,13 +1111,13 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots GetSupplyLots" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
-  --Content-Type: string # Type of the content being sent. (e.g. application/json; charset=utf-8)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand. (e.g. application/json)
+  --content-type: string # Type of the content being sent. (e.g. application/json; charset=utf-8)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/items/($skuId)/warehouses/($warehouseId)/supplyLots")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, warehouse_id: $warehouse_id} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1128,10 +1128,10 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots GetSupplyLots" 
 #
 # PUT /api/logistics/pvt/inventory/items/{skuId}/warehouses/{warehouseId}/supplyLots/{supplyLotId}
 # operationId: SaveSupplyLot
-export def "logistics-pvt-inventory-items-warehouses-supply-lots SaveSupplyLot" [
-  skuId: string
-  warehouseId: string
-  supplyLotId: string
+export def "logistics-pvt-inventory-items-warehouses-supply-lots put" [
+  sku_id: string
+  warehouse_id: string
+  supply_lot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,16 +1140,16 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots SaveSupplyLot" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/items/($skuId)/warehouses/($warehouseId)/supplyLots/($supplyLotId)")
+  let full_url = (build-url $base ({sku_id: $sku_id, warehouse_id: $warehouse_id, supply_lot_id: $supply_lot_id} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots/{supply_lot_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1160,10 +1160,10 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots SaveSupplyLot" 
 #
 # POST /api/logistics/pvt/inventory/items/{skuId}/warehouses/{warehouseId}/supplyLots/{supplyLotId}/transfer
 # operationId: TransferSupplyLot
-export def "logistics-pvt-inventory-items-warehouses-supply-lots-transfer TransferSupplyLot" [
-  skuId: string
-  warehouseId: string
-  supplyLotId: string
+export def "logistics-pvt-inventory-items-warehouses-supply-lots-transfer post" [
+  sku_id: string
+  warehouse_id: string
+  supply_lot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1172,13 +1172,13 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots-transfer Transf
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/items/($skuId)/warehouses/($warehouseId)/supplyLots/($supplyLotId)/transfer")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, warehouse_id: $warehouse_id, supply_lot_id: $supply_lot_id} | format pattern "/api/logistics/pvt/inventory/items/{sku_id}/warehouses/{warehouse_id}/supplyLots/{supply_lot_id}/transfer"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1189,7 +1189,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots-transfer Transf
 #
 # POST /api/logistics/pvt/inventory/reservations
 # operationId: CreateReservation
-export def "logistics-pvt-inventory-reservations CreateReservation" [
+export def "logistics-pvt-inventory-reservations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1198,8 +1198,8 @@ export def "logistics-pvt-inventory-reservations CreateReservation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
   --body: record
 ]: any -> any {
   let input = $in
@@ -1207,7 +1207,7 @@ export def "logistics-pvt-inventory-reservations CreateReservation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/logistics/pvt/inventory/reservations")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1218,8 +1218,8 @@ export def "logistics-pvt-inventory-reservations CreateReservation" [
 #
 # GET /api/logistics/pvt/inventory/reservations/{reservationId}
 # operationId: ReservationById
-export def "logistics-pvt-inventory-reservations ReservationById" [
-  reservationId: string
+export def "logistics-pvt-inventory-reservations list" [
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1228,13 +1228,13 @@ export def "logistics-pvt-inventory-reservations ReservationById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/reservations/($reservationId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({reservation_id: $reservation_id} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1245,8 +1245,8 @@ export def "logistics-pvt-inventory-reservations ReservationById" [
 #
 # POST /api/logistics/pvt/inventory/reservations/{reservationId}/acknowledge
 # operationId: AcknowledgmentReservation
-export def "logistics-pvt-inventory-reservations-acknowledge AcknowledgmentReservation" [
-  reservationId: string
+export def "logistics-pvt-inventory-reservations-acknowledge post" [
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1255,13 +1255,13 @@ export def "logistics-pvt-inventory-reservations-acknowledge AcknowledgmentReser
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/reservations/($reservationId)/acknowledge")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({reservation_id: $reservation_id} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/acknowledge"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1272,8 +1272,8 @@ export def "logistics-pvt-inventory-reservations-acknowledge AcknowledgmentReser
 #
 # POST /api/logistics/pvt/inventory/reservations/{reservationId}/cancel
 # operationId: CancelReservation
-export def "logistics-pvt-inventory-reservations-cancel CancelReservation" [
-  reservationId: string
+export def "logistics-pvt-inventory-reservations-cancel cancel" [
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,13 +1282,13 @@ export def "logistics-pvt-inventory-reservations-cancel CancelReservation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/reservations/($reservationId)/cancel")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({reservation_id: $reservation_id} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/cancel"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1299,8 +1299,8 @@ export def "logistics-pvt-inventory-reservations-cancel CancelReservation" [
 #
 # POST /api/logistics/pvt/inventory/reservations/{reservationId}/confirm
 # operationId: ConfirmReservation
-export def "logistics-pvt-inventory-reservations-confirm ConfirmReservation" [
-  reservationId: string
+export def "logistics-pvt-inventory-reservations-confirm post" [
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1309,13 +1309,13 @@ export def "logistics-pvt-inventory-reservations-confirm ConfirmReservation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/reservations/($reservationId)/confirm")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({reservation_id: $reservation_id} | format pattern "/api/logistics/pvt/inventory/reservations/{reservation_id}/confirm"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1326,9 +1326,9 @@ export def "logistics-pvt-inventory-reservations-confirm ConfirmReservation" [
 #
 # GET /api/logistics/pvt/inventory/reservations/{warehouseId}/{skuId}
 # operationId: ReservationbyWarehouseandSku
-export def "logistics-pvt-inventory-reservations ReservationbyWarehouseandSku" [
-  warehouseId: string
-  skuId: string
+export def "logistics-pvt-inventory-reservations get" [
+  warehouse_id: string
+  sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1337,13 +1337,13 @@ export def "logistics-pvt-inventory-reservations ReservationbyWarehouseandSku" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/reservations/($warehouseId)/($skuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({warehouse_id: $warehouse_id, sku_id: $sku_id} | format pattern "/api/logistics/pvt/inventory/reservations/{warehouse_id}/{sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1354,8 +1354,8 @@ export def "logistics-pvt-inventory-reservations ReservationbyWarehouseandSku" [
 #
 # GET /api/logistics/pvt/inventory/skus/{skuId}
 # operationId: InventoryBySku
-export def "logistics-pvt-inventory-skus InventoryBySku" [
-  skuId: string
+export def "logistics-pvt-inventory-skus get" [
+  sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1364,13 +1364,13 @@ export def "logistics-pvt-inventory-skus InventoryBySku" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/skus/($skuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/logistics/pvt/inventory/skus/{sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1381,9 +1381,9 @@ export def "logistics-pvt-inventory-skus InventoryBySku" [
 #
 # PUT /api/logistics/pvt/inventory/skus/{skuId}/warehouses/{warehouseId}
 # operationId: UpdateInventoryBySkuandWarehouse
-export def "logistics-pvt-inventory-skus-warehouses UpdateInventoryBySkuandWarehouse" [
-  skuId: string
-  warehouseId: string
+export def "logistics-pvt-inventory-skus-warehouses update" [
+  sku_id: string
+  warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1392,16 +1392,16 @@ export def "logistics-pvt-inventory-skus-warehouses UpdateInventoryBySkuandWareh
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
-  --Content-Type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/inventory/skus/($skuId)/warehouses/($warehouseId)")
+  let full_url = (build-url $base ({sku_id: $sku_id, warehouse_id: $warehouse_id} | format pattern "/api/logistics/pvt/inventory/skus/{sku_id}/warehouses/{warehouse_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1421,15 +1421,15 @@ export def "logistics-pvt-shipping-policies list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Desired number of pages to retrieve information from your Shipping Policies. (e.g. page)
-  --perPage: string # Desired number of items per page, to retrieve information from your Shipping Policies. (e.g. perPage)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Type of the content being sent
+  --per-page: string # Desired number of items per page, to retrieve information from your Shipping Policies. (e.g. perPage)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "perPage" $perPage "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "perPage" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/logistics/pvt/shipping-policies" $qp)
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1456,31 +1456,31 @@ export def "logistics-pvt-shipping-policies post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Type of the content being sent
-  businessHourSettings: record # Business hour configuration. (e.g. {carrierBusinessHours: [{closingTime: 18:59:59, dayOfWeek: 0, openingTime: 09:00:00}], isOpenOutsideBusinessHours: true}) — shape: {carrierBusinessHours: list, isOpenOutsideBusinessHours: bool}
-  --carrierSchedule: list # Schedule sent by the carrier, to configure Shipping policy — item shape: {dayOfWeek?: int, timeLimit?: string}
-  cubicWeightSettings: record # Measure that accounts package's volume, and not only weight. (e.g. {minimunAcceptableVolumetricWeight: 5, volumetricFactor: 3}) — shape: {minimunAcceptableVolumetricWeight: float, volumetricFactor: float}
-  deliveryScheduleSettings: record # Settings for the Scheduled Delivery feature. (e.g. {dayOfWeekForDelivery: [{dayOfWeek: 2, deliveryRanges: [{endTime: 12:00:00, listPrice: 5, startTime: 08:00:00}, {endTime: 18:00:00, listPrice: 10, startTime: 12:01:00}]}], maxRangeDelivery: 5, useDeliverySchedule: true}) — shape: {dayOfWeekForDelivery: list, maxRangeDelivery: float, useDeliverySchedule: bool}
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  business_hour_settings: record # Business hour configuration. (e.g. {carrierBusinessHours: [{closingTime: 18:59:59, dayOfWeek: 0, openingTime: 09:00:00}], isOpenOutsideBusinessHours: true}) — shape: {carrierBusinessHours: list, isOpenOutsideBusinessHours: bool}
+  --carrier-schedule: list # Schedule sent by the carrier, to configure Shipping policy — item shape: {dayOfWeek?: int, timeLimit?: string}
+  cubic_weight_settings: record # Measure that accounts package's volume, and not only weight. (e.g. {minimunAcceptableVolumetricWeight: 5, volumetricFactor: 3}) — shape: {minimunAcceptableVolumetricWeight: float, volumetricFactor: float}
+  delivery_schedule_settings: record # Settings for the Scheduled Delivery feature. (e.g. {dayOfWeekForDelivery: [{dayOfWeek: 2, deliveryRanges: [{endTime: 12:00:00, listPrice: 5, startTime: 08:00:00}, {endTime: 18:00:00, listPrice: 10, startTime: 12:01:00}]}], maxRangeDelivery: 5, useDeliverySchedule: true}) — shape: {dayOfWeekForDelivery: list, maxRangeDelivery: float, useDeliverySchedule: bool}
   id: string # ID of the shipping policy. (e.g. 123)
-  --isActive: oneof<nothing, bool> # Indicates whether shipping policy is active or not. (e.g. false)
-  maxDimension: record # Object containing attributes of maximum dimension permitted by the shipping policy (carrier). (e.g. {largestMeasure: 15, maxMeasureSum: 25}) — shape: {largestMeasure: float, maxMeasureSum: float}
-  maximumValueAceptable: float # Maximum value accepted by the carrier, to realize the shipping. (e.g. 0)
-  minimumValueAceptable: float # Minimum value accepted by the carrier, to realize the shipping. (e.g. 0)
-  modalSettings: record # Configurations for the [modal](https://help.vtex.com/en/tutorial/how-does-the-modal-work--tutorials_125), which is the attachement of a specific product to a carrier specialized in delivering that type of product. (e.g. {modals: [Modal1], useOnlyItemsWithDefinedModal: false}) — shape: {modals: list, useOnlyItemsWithDefinedModal: bool}
+  --is-active: oneof<nothing, bool> # Indicates whether shipping policy is active or not. (e.g. false)
+  max_dimension: record # Object containing attributes of maximum dimension permitted by the shipping policy (carrier). (e.g. {largestMeasure: 15, maxMeasureSum: 25}) — shape: {largestMeasure: float, maxMeasureSum: float}
+  maximum_value_aceptable: float # Maximum value accepted by the carrier, to realize the shipping. (e.g. 0)
+  minimum_value_aceptable: float # Minimum value accepted by the carrier, to realize the shipping. (e.g. 0)
+  modal_settings: record # Configurations for the [modal](https://help.vtex.com/en/tutorial/how-does-the-modal-work--tutorials_125), which is the attachement of a specific product to a carrier specialized in delivering that type of product. (e.g. {modals: [Modal1], useOnlyItemsWithDefinedModal: false}) — shape: {modals: list, useOnlyItemsWithDefinedModal: bool}
   name: string # Name of the shipping policy. (e.g. Normal)
-  numberOfItemsPerShipment: int # Capacity of your store's logistics of shipment, determines number of items permitted per shipment. (e.g. 5)
-  pickupPointsSettings: record # Configuration for Pickup Points. (e.g. {pickupPointIds: [null], pickupPointTags: [null], sellers: [cosmetics2]}) — shape: {pickupPointIds: list, pickupPointTags: list, sellers: list}
-  shippingMethod: string # Type of shipping available for this shipping policy (carrier). Options shown on freight simulation (e.g. Normal)
-  weekendAndHolidays: record # If the shipping policy includes deliveries on weekends and holidays. (e.g. {holiday: false, saturday: false, sunday: false}) — shape: {holiday: bool, saturday: bool, sunday: bool}
+  number_of_items_per_shipment: int # Capacity of your store's logistics of shipment, determines number of items permitted per shipment. (e.g. 5)
+  pickup_points_settings: record # Configuration for Pickup Points. (e.g. {pickupPointIds: [null], pickupPointTags: [null], sellers: [cosmetics2]}) — shape: {pickupPointIds: list, pickupPointTags: list, sellers: list}
+  shipping_method: string # Type of shipping available for this shipping policy (carrier). Options shown on freight simulation (e.g. Normal)
+  weekend_and_holidays: record # If the shipping policy includes deliveries on weekends and holidays. (e.g. {holiday: false, saturday: false, sunday: false}) — shape: {holiday: bool, saturday: bool, sunday: bool}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/logistics/pvt/shipping-policies")
-  let body = {businessHourSettings: $businessHourSettings, carrierSchedule: $carrierSchedule, cubicWeightSettings: $cubicWeightSettings, deliveryScheduleSettings: $deliveryScheduleSettings, id: $id, isActive: $isActive, maxDimension: $maxDimension, maximumValueAceptable: $maximumValueAceptable, minimumValueAceptable: $minimumValueAceptable, modalSettings: $modalSettings, name: $name, numberOfItemsPerShipment: $numberOfItemsPerShipment, pickupPointsSettings: $pickupPointsSettings, shippingMethod: $shippingMethod, weekendAndHolidays: $weekendAndHolidays} | compact
+  let body = {"businessHourSettings": $business_hour_settings, "carrierSchedule": $carrier_schedule, "cubicWeightSettings": $cubic_weight_settings, "deliveryScheduleSettings": $delivery_schedule_settings, "id": $id, "isActive": $is_active, "maxDimension": $max_dimension, "maximumValueAceptable": $maximum_value_aceptable, "minimumValueAceptable": $minimum_value_aceptable, "modalSettings": $modal_settings, "name": $name, "numberOfItemsPerShipment": $number_of_items_per_shipment, "pickupPointsSettings": $pickup_points_settings, "shippingMethod": $shipping_method, "weekendAndHolidays": $weekend_and_holidays} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1500,13 +1500,13 @@ export def "logistics-pvt-shipping-policies delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/shipping-policies/($id)")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/logistics/pvt/shipping-policies/{id}"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1526,13 +1526,13 @@ export def "logistics-pvt-shipping-policies get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/shipping-policies/($id)")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/logistics/pvt/shipping-policies/{id}"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1554,22 +1554,22 @@ export def "logistics-pvt-shipping-policies put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Type of the content being sent
-  --deliveryOnWeekends: oneof<nothing, bool> # If the shipping policy (carrier) delivers on weekends (e.g. false)
-  --deliveryScheduleSettings: record # Settings for the Scheduled Delivery feature. — shape: {dayOfWeekForDelivery: list, maxRangeDelivery: float, useDeliverySchedule: bool}
-  --isActive: oneof<nothing, bool> # If the shipping policy is active or not. (e.g. true)
-  maxDimension: record # Object containing attributes of maximum dimension permitted by the shipping policy (carrier). (e.g. {largestMeasure: 10, maxMeasureSum: 30}) — shape: {largestMeasure: float, maxMeasureSum: float}
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Type of the content being sent
+  --delivery-on-weekends: oneof<nothing, bool> # If the shipping policy (carrier) delivers on weekends (e.g. false)
+  --delivery-schedule-settings: record # Settings for the Scheduled Delivery feature. — shape: {dayOfWeekForDelivery: list, maxRangeDelivery: float, useDeliverySchedule: bool}
+  --is-active: oneof<nothing, bool> # If the shipping policy is active or not. (e.g. true)
+  max_dimension: record # Object containing attributes of maximum dimension permitted by the shipping policy (carrier). (e.g. {largestMeasure: 10, maxMeasureSum: 30}) — shape: {largestMeasure: float, maxMeasureSum: float}
   name: string # Name of the shipping policy (e.g. Correios PAC)
-  shippingMethod: string # Type of shipping available for this shipping policy (carrier). Options shown on freight simulation. (e.g. Normal)
+  shipping_method: string # Type of shipping available for this shipping policy (carrier). Options shown on freight simulation. (e.g. Normal)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/logistics/pvt/shipping-policies/($id)")
-  let body = {deliveryOnWeekends: $deliveryOnWeekends, deliveryScheduleSettings: $deliveryScheduleSettings, isActive: $isActive, maxDimension: $maxDimension, name: $name, shippingMethod: $shippingMethod} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/logistics/pvt/shipping-policies/{id}"))
+  let body = {"deliveryOnWeekends": $delivery_on_weekends, "deliveryScheduleSettings": $delivery_schedule_settings, "isActive": $is_active, "maxDimension": $max_dimension, "name": $name, "shippingMethod": $shipping_method} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1580,7 +1580,7 @@ export def "logistics-pvt-shipping-policies put" [
 #
 # POST /api/logistics/pvt/shipping/calculate
 # operationId: CalculateSLA
-export def "logistics-pvt-shipping-calculate CalculateSLA" [
+export def "logistics-pvt-shipping-calculate post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1589,8 +1589,8 @@ export def "logistics-pvt-shipping-calculate CalculateSLA" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand.
   --body: record
 ]: any -> any {
   let input = $in
@@ -1598,7 +1598,7 @@ export def "logistics-pvt-shipping-calculate CalculateSLA" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/logistics/pvt/shipping/calculate")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

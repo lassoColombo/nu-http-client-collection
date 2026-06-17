@@ -187,7 +187,7 @@ export def "id-info update-a-media-item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/:id/info")
-  let body = {description: $description, max_downloads_allowed: $max_downloads_allowed, metadata_primary: $metadata_primary, metadata_secondary: $metadata_secondary, mime_type: $mime_type, public: $public, title: $title} | compact
+  let body = {"description": $description, "max_downloads_allowed": $max_downloads_allowed, "metadata_primary": $metadata_primary, "metadata_secondary": $metadata_secondary, "mime_type": $mime_type, "public": $public, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

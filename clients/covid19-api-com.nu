@@ -72,7 +72,7 @@ def date-format-completer [] { ["DD-MM-YYYY" "MM-DD-YYYY" "YYYY-DD-MM" "YYYY-MM-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "country get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "country get-latest-country-data" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /country
 # operationId: getLatestCountryDataByName
-export def "country get" [
+export def "country get-latest-country-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +122,7 @@ export def "country get" [
 #
 # GET /country/all
 # operationId: getLatestAllCountries
-export def "country-all get" [
+export def "country-all get-latest-all-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,7 +147,7 @@ export def "country-all get" [
 #
 # GET /country/code
 # operationId: getLatestCountryDataByCode
-export def "country-code get" [
+export def "country-code get-latest-country-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "country-code get" [
 #
 # GET /help/countries
 # operationId: getListOfCountries
-export def "help-countries get" [
+export def "help-countries get-list-of" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "help-countries get" [
 #
 # GET /report/country/all
 # operationId: getDailyReportAllCountries
-export def "report-country-all get" [
+export def "report-country-all get-daily-report-all-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "report-country-all get" [
 #
 # GET /report/country/code
 # operationId: getDailyReportByCountryCode
-export def "report-country-code get" [
+export def "report-country-code get-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "report-country-code get" [
 #
 # GET /report/country/name
 # operationId: getDailyReportByCountryName
-export def "report-country-name get" [
+export def "report-country-name get-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "report-country-name get" [
 #
 # GET /report/totals
 # operationId: getDailyReportTotals
-export def "report-totals get" [
+export def "report-totals get-daily" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "report-totals get" [
 #
 # GET /totals
 # operationId: getLatestTotals
-export def "totals get" [
+export def "totals get-latest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftinsights-diagnostic-settings List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoftinsights-diagnostic-settings list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/diagnosticSettings
 # operationId: SubscriptionDiagnosticSettings_List
-export def "subscriptions-providers-microsoftinsights-diagnostic-settings List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoftinsights-diagnostic-settings list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoftinsights-diagnostic-settings List" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/microsoft.insights/diagnosticSettings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/diagnosticSettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,8 +118,8 @@ export def "subscriptions-providers-microsoftinsights-diagnostic-settings List" 
 #
 # DELETE /subscriptions/{subscriptionId}/providers/microsoft.insights/diagnosticSettings/{name}
 # operationId: SubscriptionDiagnosticSettings_Delete
-export def "subscriptions-providers-microsoftinsights-diagnostic-settings Delete" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoftinsights-diagnostic-settings delete" [
+  subscription_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoftinsights-diagnostic-settings Delete
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/microsoft.insights/diagnosticSettings/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, name: $name} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/diagnosticSettings/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,8 +144,8 @@ export def "subscriptions-providers-microsoftinsights-diagnostic-settings Delete
 #
 # GET /subscriptions/{subscriptionId}/providers/microsoft.insights/diagnosticSettings/{name}
 # operationId: SubscriptionDiagnosticSettings_Get
-export def "subscriptions-providers-microsoftinsights-diagnostic-settings Get" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoftinsights-diagnostic-settings get" [
+  subscription_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +160,7 @@ export def "subscriptions-providers-microsoftinsights-diagnostic-settings Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/microsoft.insights/diagnosticSettings/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, name: $name} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/diagnosticSettings/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,8 +171,8 @@ export def "subscriptions-providers-microsoftinsights-diagnostic-settings Get" [
 # PUT /subscriptions/{subscriptionId}/providers/microsoft.insights/diagnosticSettings/{name}
 # operationId: SubscriptionDiagnosticSettings_CreateOrUpdate
 # --properties shape: {eventHubAuthorizationRuleId?: string, eventHubName?: string, logs?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-export def "subscriptions-providers-microsoftinsights-diagnostic-settings CreateOrUpdate" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoftinsights-diagnostic-settings create-or-update" [
+  subscription_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -190,8 +190,8 @@ export def "subscriptions-providers-microsoftinsights-diagnostic-settings Create
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/microsoft.insights/diagnosticSettings/($name)" $qp)
-  let body = {properties: $properties, location: $location} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, name: $name} | format pattern "/subscriptions/{subscription_id}/providers/microsoft.insights/diagnosticSettings/{name}") $qp)
+  let body = {"properties": $properties, "location": $location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

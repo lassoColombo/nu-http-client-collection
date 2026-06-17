@@ -68,9 +68,9 @@ def auth-scheme-completer [] { ["bearer" "x-hip-id"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["*/*" "image/png"] }
-def authType-completer [] { ["FINGERSCAN" "IRIS" "OTP"] }
-def authMethod-completer [] { ["AADHAAR_BIO" "AADHAAR_OTP" "DEMOGRAPHICS" "MOBILE_OTP" "PASSWORD"] }
-def benefitDocType-completer [] { ["ADOPTION_CERTIFICATE" "BIRTH_CERTIFICATE" "CERTIFICATE_IDENTIFY" "DISABILITY_ID_CARD" "DRIVING_LICENSE" "FREEDOM_FIGHTER_PHOTO_CARD" "KISSAN_PHOTO_PASSBOOK" "MARRIAGE_CERTIFICATE" "MNREGA_JOB_CARD" "OTHER_GOVERNMENT_ID" "PAN_CARD" "PENSIONER_PHOTO_CARD" "RATION_CARD" "VOTER_ID_CARD"] }
+def auth-type-completer [] { ["FINGERSCAN" "IRIS" "OTP"] }
+def auth-method-completer [] { ["AADHAAR_BIO" "AADHAAR_OTP" "DEMOGRAPHICS" "MOBILE_OTP" "PASSWORD"] }
+def benefit-doc-type-completer [] { ["ADOPTION_CERTIFICATE" "BIRTH_CERTIFICATE" "CERTIFICATE_IDENTIFY" "DISABILITY_ID_CARD" "DRIVING_LICENSE" "FREEDOM_FIGHTER_PHOTO_CARD" "KISSAN_PHOTO_PASSBOOK" "MARRIAGE_CERTIFICATE" "MNREGA_JOB_CARD" "OTHER_GOVERNMENT_ID" "PAN_CARD" "PENSIONER_PHOTO_CARD" "RATION_CARD" "VOTER_ID_CARD"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -108,13 +108,13 @@ export def "account-aadhaar-generate-otp generatereKycAadharOTPUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/aadhaar/generateOTP")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -125,7 +125,7 @@ export def "account-aadhaar-generate-otp generatereKycAadharOTPUsingPOST" [
 #
 # POST /v1/account/aadhaar/verifyOTP
 # operationId: verifyAadharOTPOnlyUsingPOST_1
-export def "account-aadhaar-verify-otp verifyAadharOTPOnlyUsingPOST-by-" [
+export def "account-aadhaar-verify-otp verify-aadhar-otp-only-using-post-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,19 +134,19 @@ export def "account-aadhaar-verify-otp verifyAadharOTPOnlyUsingPOST-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
   --otp: string
   --restrictions: string
-  --txnId: string
+  --txn-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/aadhaar/verifyOTP")
-  let body = {otp: $otp, restrictions: $restrictions, txnId: $txnId} | compact
+  let body = {"otp": $otp, "restrictions": $restrictions, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -157,7 +157,7 @@ export def "account-aadhaar-verify-otp verifyAadharOTPOnlyUsingPOST-by-" [
 #
 # GET /v1/account/benefits
 # operationId: getBenefitsUsingGET
-export def "account-benefits get" [
+export def "account-benefits get-benefits-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,13 +166,13 @@ export def "account-benefits get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer XToken)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer XToken)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/benefits")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -192,19 +192,19 @@ export def "account-change-passwd-by-aadhaar changePasswordViaAadharUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
-  --newPassword: string
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --new-password: string
   --otp: string
-  --txnId: string
+  --txn-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/change/passwd/byAadhaar")
-  let body = {newPassword: $newPassword, otp: $otp, txnId: $txnId} | compact
+  let body = {"newPassword": $new_password, "otp": $otp, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -224,19 +224,19 @@ export def "account-change-passwd-by-mobile changePasswordViaMobileUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
-  --newPassword: string
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --new-password: string
   --otp: string
-  --txnId: string
+  --txn-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/change/passwd/byMobile")
-  let body = {newPassword: $newPassword, otp: $otp, txnId: $txnId} | compact
+  let body = {"newPassword": $new_password, "otp": $otp, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -256,13 +256,13 @@ export def "account-change-passwd-generate-aadhaar-otp generateAadharOTPUsingGET
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/change/passwd/generateAadhaarOTP")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -282,13 +282,13 @@ export def "account-change-passwd-generate-mobile-otp generateMobileOTPUsingGET"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/change/passwd/generateMobileOTP")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -308,18 +308,18 @@ export def "account-change-password changePasswordViaUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
-  --newPassword: string
-  --oldPassword: string
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
+  --new-password: string
+  --old-password: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/change/password")
-  let body = {newPassword: $newPassword, oldPassword: $oldPassword} | compact
+  let body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,13 +339,13 @@ export def "account-get-card generateCardUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/getCard")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -365,13 +365,13 @@ export def "account-get-png-card generatePngCardUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/getPngCard")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -391,13 +391,13 @@ export def "account-get-svg-card generateSvgCardUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/getSvgCard")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -408,7 +408,7 @@ export def "account-get-svg-card generateSvgCardUsingGET" [
 #
 # DELETE /v1/account/profile
 # operationId: deleteAccountUsingDELETE
-export def "account-profile delete" [
+export def "account-profile delete-account-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,13 +417,13 @@ export def "account-profile delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/profile")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -434,7 +434,7 @@ export def "account-profile delete" [
 #
 # GET /v1/account/profile
 # operationId: getAccountInformationUsingGET
-export def "account-profile get" [
+export def "account-profile get-account-information-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,13 +443,13 @@ export def "account-profile get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer XToken)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer XToken)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/profile")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -460,7 +460,7 @@ export def "account-profile get" [
 #
 # POST /v1/account/profile
 # operationId: updateAccountInformationUsingPOST
-export def "account-profile updateAccountInformationUsingPOST" [
+export def "account-profile update-account-information-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,34 +469,34 @@ export def "account-profile updateAccountInformationUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
   --address: string
-  --dayOfBirth: string
-  --districtCode: string
+  --day-of-birth: string
+  --district-code: string
   --email: string
-  --firstName: string
-  --healthId: string
-  --lastName: string
-  --middleName: string
-  --monthOfBirth: string
+  --first-name: string
+  --health-id: string
+  --last-name: string
+  --middle-name: string
+  --month-of-birth: string
   --password: string
   --pincode: int # format: int32
-  --profilePhoto: string
-  --stateCode: string
-  --subdistrictCode: string
-  --townCode: string
-  --villageCode: string
-  --wardCode: string
-  --yearOfBirth: string
+  --profile-photo: string
+  --state-code: string
+  --subdistrict-code: string
+  --town-code: string
+  --village-code: string
+  --ward-code: string
+  --year-of-birth: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/profile")
-  let body = {address: $address, dayOfBirth: $dayOfBirth, districtCode: $districtCode, email: $email, firstName: $firstName, healthId: $healthId, lastName: $lastName, middleName: $middleName, monthOfBirth: $monthOfBirth, password: $password, pincode: $pincode, profilePhoto: $profilePhoto, stateCode: $stateCode, subdistrictCode: $subdistrictCode, townCode: $townCode, villageCode: $villageCode, wardCode: $wardCode, yearOfBirth: $yearOfBirth} | compact
+  let body = {"address": $address, "dayOfBirth": $day_of_birth, "districtCode": $district_code, "email": $email, "firstName": $first_name, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "password": $password, "pincode": $pincode, "profilePhoto": $profile_photo, "stateCode": $state_code, "subdistrictCode": $subdistrict_code, "townCode": $town_code, "villageCode": $village_code, "wardCode": $ward_code, "yearOfBirth": $year_of_birth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,7 +507,7 @@ export def "account-profile updateAccountInformationUsingPOST" [
 #
 # GET /v1/account/qrCode
 # operationId: getQrCodeUsingGET
-export def "account-qr-code get" [
+export def "account-qr-code get-qr-code-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,13 +517,13 @@ export def "account-qr-code get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer XToken)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer XToken)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/qrCode")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -534,7 +534,7 @@ export def "account-qr-code get" [
 #
 # POST /v1/account/token
 # operationId: validateTokenUsingPOST
-export def "account-token validateTokenUsingPOST" [
+export def "account-token validate-token-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,16 +543,16 @@ export def "account-token validateTokenUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --authToken: string
+  --accept-language: string
+  --auth-token: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/token")
-  let body = {authToken: $authToken} | compact
+  let body = {"authToken": $auth_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -572,17 +572,17 @@ export def "auth-auth-password authenticateWithPasswordUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --healthId: string
+  --accept-language: string
+  --health-id: string
   --password: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/authPassword")
-  let body = {healthId: $healthId, password: $password} | compact
+  let body = {"healthId": $health_id, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -602,16 +602,16 @@ export def "auth-auth-with-mobile authenticateUserUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --healthid: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/authWithMobile")
-  let body = {healthid: $healthid} | compact
+  let body = {"healthid": $healthid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -631,21 +631,21 @@ export def "auth-auth-with-mobile-token authWithMobileTokenUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --gender: string
-  --healthId: string
+  --health-id: string
   --name: string
   --body-token: string
-  txnId: string
-  --yearOfBirth: string
+  txn_id: string
+  --year-of-birth: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/authWithMobileToken")
-  let body = {gender: $gender, healthId: $healthId, name: $name, token: $body_token, txnId: $txnId, yearOfBirth: $yearOfBirth} | compact
+  let body = {"gender": $gender, "healthId": $health_id, "name": $name, "token": $body_token, "txnId": $txn_id, "yearOfBirth": $year_of_birth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -665,12 +665,12 @@ export def "auth-cert certUsingGET" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/cert")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -690,19 +690,19 @@ export def "auth-confirm-with-aadhaar-bio confirmWithAadhaarBioUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --authType: string@authType-completer
-  --bioType: string
+  --accept-language: string
+  --auth-type: string@auth-type-completer
+  --bio-type: string
   --pid: string
-  --txnId: string # format: uuid
+  --txn-id: string # format: uuid
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/confirmWithAadhaarBio")
-  let body = {authType: $authType, bioType: $bioType, pid: $pid, txnId: $txnId} | compact
+  let body = {"authType": $auth_type, "bioType": $bio_type, "pid": $pid, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,17 +722,17 @@ export def "auth-confirm-with-aadhaar-otp confirmWithAadhaarOtpUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   otp: string
-  txnId: string # format: uuid
+  txn_id: string # format: uuid
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/confirmWithAadhaarOtp")
-  let body = {otp: $otp, txnId: $txnId} | compact
+  let body = {"otp": $otp, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -752,19 +752,19 @@ export def "auth-confirm-with-demographics confirmWithDemographicsUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --gender: string
   --name: string
-  txnId: string # format: uuid
-  --yearOfBirth: string
+  txn_id: string # format: uuid
+  --year-of-birth: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/confirmWithDemographics")
-  let body = {gender: $gender, name: $name, txnId: $txnId, yearOfBirth: $yearOfBirth} | compact
+  let body = {"gender": $gender, "name": $name, "txnId": $txn_id, "yearOfBirth": $year_of_birth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -784,17 +784,17 @@ export def "auth-confirm-with-mobile-otp confirmWithMobileUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --otp: string
-  --txnId: string
+  --txn-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/confirmWithMobileOTP")
-  let body = {otp: $otp, txnId: $txnId} | compact
+  let body = {"otp": $otp, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -814,17 +814,17 @@ export def "auth-confirm-with-password authAccountPasswordRequestUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   password: string
-  txnId: string # format: uuid
+  txn_id: string # format: uuid
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/confirmWithPassword")
-  let body = {password: $password, txnId: $txnId} | compact
+  let body = {"password": $password, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -844,17 +844,17 @@ export def "auth-init initiateAuthUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  authMethod: string@authMethod-completer
+  --accept-language: string
+  auth_method: string@auth-method-completer
   --healthid: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/init")
-  let body = {authMethod: $authMethod, healthid: $healthid} | compact
+  let body = {"authMethod": $auth_method, "healthid": $healthid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -874,16 +874,16 @@ export def "auth-resend-auth-otp resendAuthMobileOTPUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  txnId: string
+  --accept-language: string
+  txn_id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/resendAuthOTP")
-  let body = {txnId: $txnId} | compact
+  let body = {"txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -903,17 +903,17 @@ export def "forgot-health-id-aadhaar retrievalHealthIdByAadharUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   otp: string
-  txnId: string # format: uuid
+  txn_id: string # format: uuid
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/forgot/healthId/aadhaar")
-  let body = {otp: $otp, txnId: $txnId} | compact
+  let body = {"otp": $otp, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -933,16 +933,16 @@ export def "forgot-health-id-aadhaar-generate-otp generateAadharOTPUsingPOST-by-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --aadhaar: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/forgot/healthId/aadhaar/generateOtp")
-  let body = {aadhaar: $aadhaar} | compact
+  let body = {"aadhaar": $aadhaar} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -962,25 +962,25 @@ export def "forgot-health-id-mobile retrievalHealthIdByMobileUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --dayOfBirth: string
-  --firstName: string
+  --accept-language: string
+  --day-of-birth: string
+  --first-name: string
   --gender: string
-  --lastName: string
-  --middleName: string
-  --monthOfBirth: string
+  --last-name: string
+  --middle-name: string
+  --month-of-birth: string
   --name: string
   --otp: string
-  txnId: string
-  --yearOfBirth: string
+  txn_id: string
+  --year-of-birth: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/forgot/healthId/mobile")
-  let body = {dayOfBirth: $dayOfBirth, firstName: $firstName, gender: $gender, lastName: $lastName, middleName: $middleName, monthOfBirth: $monthOfBirth, name: $name, otp: $otp, txnId: $txnId, yearOfBirth: $yearOfBirth} | compact
+  let body = {"dayOfBirth": $day_of_birth, "firstName": $first_name, "gender": $gender, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "name": $name, "otp": $otp, "txnId": $txn_id, "yearOfBirth": $year_of_birth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1000,16 +1000,16 @@ export def "forgot-health-id-mobile-generate-otp generateMobileOTPUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --mobile: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/forgot/healthId/mobile/generateOtp")
-  let body = {mobile: $mobile} | compact
+  let body = {"mobile": $mobile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1020,7 +1020,7 @@ export def "forgot-health-id-mobile-generate-otp generateMobileOTPUsingPOST" [
 #
 # GET /v1/ha/lgd/districts
 # operationId: getDistrictsInStateUsingGET
-export def "ha-lgd-districts get" [
+export def "ha-lgd-districts get-districts-in-state-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,14 +1029,14 @@ export def "ha-lgd-districts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --stateCode: string # stateCode
-  --Accept-Language: string
+  --state-code: string # stateCode
+  --accept-language: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "stateCode" $stateCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/ha/lgd/districts" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1047,7 +1047,7 @@ export def "ha-lgd-districts get" [
 #
 # GET /v1/ha/lgd/states
 # operationId: getStatesUsingGET
-export def "ha-lgd-states get" [
+export def "ha-lgd-states get-states-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,12 +1056,12 @@ export def "ha-lgd-states get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/lgd/states")
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1072,7 +1072,7 @@ export def "ha-lgd-states get" [
 #
 # DELETE /v1/ha/tags
 # operationId: deleteTagUsingDELETE
-export def "ha-tags delete" [
+export def "ha-tags delete-tag-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1081,7 +1081,7 @@ export def "ha-tags delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --body: record
 ]: any -> any {
   let input = $in
@@ -1089,7 +1089,7 @@ export def "ha-tags delete" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/tags")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1100,7 +1100,7 @@ export def "ha-tags delete" [
 #
 # GET /v1/ha/tags
 # operationId: getTagsUsingGET
-export def "ha-tags get" [
+export def "ha-tags get-tags-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,13 +1109,13 @@ export def "ha-tags get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/tags")
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1126,7 +1126,7 @@ export def "ha-tags get" [
 #
 # POST /v1/ha/tags
 # operationId: addTagUsingPOST
-export def "ha-tags addTagUsingPOST" [
+export def "ha-tags create-tag-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1135,17 +1135,17 @@ export def "ha-tags addTagUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --healthId: string
+  --accept-language: string
+  --health-id: string
   --tags: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/tags")
-  let body = {healthId: $healthId, tags: $tags} | compact
+  let body = {"healthId": $health_id, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1165,17 +1165,17 @@ export def "health-facility-authenticate authenticateHealthFacilityUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --hfrUid: string
+  --accept-language: string
+  --hfr-uid: string
   --password: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/authenticate")
-  let body = {hfrUid: $hfrUid, password: $password} | compact
+  let body = {"hfrUid": $hfr_uid, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1195,18 +1195,18 @@ export def "health-facility-change-password changePasswordUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --hfrUid: string
-  --newPassword: string
-  --oldPassword: string
+  --accept-language: string
+  --hfr-uid: string
+  --new-password: string
+  --old-password: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/change/password")
-  let body = {hfrUid: $hfrUid, newPassword: $newPassword, oldPassword: $oldPassword} | compact
+  let body = {"hfrUid": $hfr_uid, "newPassword": $new_password, "oldPassword": $old_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1217,7 +1217,7 @@ export def "health-facility-change-password changePasswordUsingPOST" [
 #
 # POST /v1/health/facility/createHealthIdWithPreVerified
 # operationId: createAadhaarAccountUsingPOST_1
-export def "health-facility-create-health-id-with-pre-verified createAadhaarAccountUsingPOST-by-" [
+export def "health-facility-create-health-id-with-pre-verified create-aadhaar-account-using-post-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,23 +1226,23 @@ export def "health-facility-create-health-id-with-pre-verified createAadhaarAcco
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --email: string
-  --firstName: string
-  --healthId: string
-  --lastName: string
-  --middleName: string
+  --first-name: string
+  --health-id: string
+  --last-name: string
+  --middle-name: string
   --password: string
-  --profilePhoto: string
-  --txnId: string
+  --profile-photo: string
+  --txn-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/createHealthIdWithPreVerified")
-  let body = {email: $email, firstName: $firstName, healthId: $healthId, lastName: $lastName, middleName: $middleName, password: $password, profilePhoto: $profilePhoto, txnId: $txnId} | compact
+  let body = {"email": $email, "firstName": $first_name, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "password": $password, "profilePhoto": $profile_photo, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1262,16 +1262,16 @@ export def "health-facility-generate-password generatePasswordUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --hfrUid: string
+  --accept-language: string
+  --hfr-uid: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/generate/password")
-  let body = {hfrUid: $hfrUid} | compact
+  let body = {"hfrUid": $hfr_uid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1291,17 +1291,17 @@ export def "health-facility-generate-otp generateFacilityOTPUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --X-Token: string # Auth Token (e.g. Bearer XToken)
+  --accept-language: string
+  --x-token: string # Auth Token (e.g. Bearer XToken)
   --aadhaar: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/generateOtp")
-  let body = {aadhaar: $aadhaar} | compact
+  let body = {"aadhaar": $aadhaar} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1321,14 +1321,14 @@ export def "health-facility-get-svg-card generateSvgCardUsingGET-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --Health-ID: string # Your health id (e.g. demo@ndhm)
-  --X-Token: string # Auth Token (e.g. Bearer X-Token)
+  --accept-language: string
+  --health-id: string # Your health id (e.g. demo@ndhm)
+  --x-token: string # Auth Token (e.g. Bearer X-Token)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/getSvgCard")
-  let extra_headers = {"Accept-Language": $Accept_Language, "Health-ID": $Health_ID, "X-Token": $X_Token} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "Health-ID": $health_id, "X-Token": $x_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1339,7 +1339,7 @@ export def "health-facility-get-svg-card generateSvgCardUsingGET-by-" [
 #
 # POST /v1/health/facility/reset/password
 # operationId: resetPasswordUsingPOST
-export def "health-facility-reset-password resetPasswordUsingPOST" [
+export def "health-facility-reset-password reset-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1348,16 +1348,16 @@ export def "health-facility-reset-password resetPasswordUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --hfrUid: string
+  --accept-language: string
+  --hfr-uid: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/reset/password")
-  let body = {hfrUid: $hfrUid} | compact
+  let body = {"hfrUid": $hfr_uid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1377,16 +1377,16 @@ export def "hid-benefit-aadhaar-generate-otp generateAadharOTPUsingPOST-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --aadhaar: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/aadhaar/generateOtp")
-  let body = {aadhaar: $aadhaar} | compact
+  let body = {"aadhaar": $aadhaar} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1397,7 +1397,7 @@ export def "hid-benefit-aadhaar-generate-otp generateAadharOTPUsingPOST-by-" [
 #
 # POST /v1/hid/benefit/aadhaar/verifyAadharOtp
 # operationId: verifyAadharOtpUsingPOST
-export def "hid-benefit-aadhaar-verify-aadhar-otp verifyAadharOtpUsingPOST" [
+export def "hid-benefit-aadhaar-verify-aadhar-otp verify-aadhar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,23 +1406,23 @@ export def "hid-benefit-aadhaar-verify-aadhar-otp verifyAadharOtpUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --autoGeneratedBenefitId: oneof<nothing, bool>
-  --benefitId: string
-  --benefitName: string
-  --consentHealthId: oneof<nothing, bool>
-  --mobileNumber: string
+  --accept-language: string
+  --auto-generated-benefit-id: oneof<nothing, bool>
+  --benefit-id: string
+  --benefit-name: string
+  --consent-health-id: oneof<nothing, bool>
+  --mobile-number: string
   --otp: string
-  --txnId: string
+  --txn-id: string
   --validity: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/aadhaar/verifyAadharOtp")
-  let body = {autoGeneratedBenefitId: $autoGeneratedBenefitId, benefitId: $benefitId, benefitName: $benefitName, consentHealthId: $consentHealthId, mobileNumber: $mobileNumber, otp: $otp, txnId: $txnId, validity: $validity} | compact
+  let body = {"autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "mobileNumber": $mobile_number, "otp": $otp, "txnId": $txn_id, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1433,7 +1433,7 @@ export def "hid-benefit-aadhaar-verify-aadhar-otp verifyAadharOtpUsingPOST" [
 #
 # POST /v1/hid/benefit/aadhaar/verifyBio
 # operationId: verifyBioUsingPOST
-export def "hid-benefit-aadhaar-verify-bio verifyBioUsingPOST" [
+export def "hid-benefit-aadhaar-verify-bio verify-bio-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1442,14 +1442,14 @@ export def "hid-benefit-aadhaar-verify-bio verifyBioUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --aadhaar: string
-  --autoGeneratedBenefitId: oneof<nothing, bool>
-  --benefitId: string
-  --benefitName: string
-  --bioType: string
-  --consentHealthId: oneof<nothing, bool>
-  --mobileNumber: string
+  --auto-generated-benefit-id: oneof<nothing, bool>
+  --benefit-id: string
+  --benefit-name: string
+  --bio-type: string
+  --consent-health-id: oneof<nothing, bool>
+  --mobile-number: string
   --pid: string
   --validity: string
 ]: any -> any {
@@ -1457,9 +1457,9 @@ export def "hid-benefit-aadhaar-verify-bio verifyBioUsingPOST" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/aadhaar/verifyBio")
-  let body = {aadhaar: $aadhaar, autoGeneratedBenefitId: $autoGeneratedBenefitId, benefitId: $benefitId, benefitName: $benefitName, bioType: $bioType, consentHealthId: $consentHealthId, mobileNumber: $mobileNumber, pid: $pid, validity: $validity} | compact
+  let body = {"aadhaar": $aadhaar, "autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "bioType": $bio_type, "consentHealthId": $consent_health_id, "mobileNumber": $mobile_number, "pid": $pid, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1470,7 +1470,7 @@ export def "hid-benefit-aadhaar-verify-bio verifyBioUsingPOST" [
 #
 # POST /v1/hid/benefit/createHealthId/demo/auth
 # operationId: createHealthIdByDemoAuthUsingPOST
-export def "hid-benefit-create-health-id-demo-auth createHealthIdByDemoAuthUsingPOST" [
+export def "hid-benefit-create-health-id-demo-auth create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1479,15 +1479,15 @@ export def "hid-benefit-create-health-id-demo-auth createHealthIdByDemoAuthUsing
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --aadharNumber: string
-  --autoGeneratedBenefitId: oneof<nothing, bool>
-  --benefitId: string
-  --benefitName: string
-  --consentHealthId: oneof<nothing, bool>
-  --dateOfBirth: string
+  --accept-language: string
+  --aadhar-number: string
+  --auto-generated-benefit-id: oneof<nothing, bool>
+  --benefit-id: string
+  --benefit-name: string
+  --consent-health-id: oneof<nothing, bool>
+  --date-of-birth: string
   --gender: string
-  --mobileNumber: string
+  --mobile-number: string
   --name: string
   --validity: string
 ]: any -> any {
@@ -1495,9 +1495,9 @@ export def "hid-benefit-create-health-id-demo-auth createHealthIdByDemoAuthUsing
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/createHealthId/demo/auth")
-  let body = {aadharNumber: $aadharNumber, autoGeneratedBenefitId: $autoGeneratedBenefitId, benefitId: $benefitId, benefitName: $benefitName, consentHealthId: $consentHealthId, dateOfBirth: $dateOfBirth, gender: $gender, mobileNumber: $mobileNumber, name: $name, validity: $validity} | compact
+  let body = {"aadharNumber": $aadhar_number, "autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "dateOfBirth": $date_of_birth, "gender": $gender, "mobileNumber": $mobile_number, "name": $name, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1517,17 +1517,17 @@ export def "hid-benefit-delink delinkHidBenefitUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --benefitName: string
-  --uidToken: string
+  --accept-language: string
+  --benefit-name: string
+  --uid-token: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/delink")
-  let body = {benefitName: $benefitName, uidToken: $uidToken} | compact
+  let body = {"benefitName": $benefit_name, "uidToken": $uid_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1547,20 +1547,20 @@ export def "hid-benefit-link linkHidBenefitUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --benefitId: string
-  --benefitName: string
-  --stateCode: string
-  --uidToken: string
+  --accept-language: string
+  --benefit-id: string
+  --benefit-name: string
+  --state-code: string
+  --uid-token: string
   --validity: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/link")
-  let body = {benefitId: $benefitId, benefitName: $benefitName, stateCode: $stateCode, uidToken: $uidToken, validity: $validity} | compact
+  let body = {"benefitId": $benefit_id, "benefitName": $benefit_name, "stateCode": $state_code, "uidToken": $uid_token, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1571,7 +1571,7 @@ export def "hid-benefit-link linkHidBenefitUsingPOST" [
 #
 # POST /v1/hid/benefit/mobile/createHealthId
 # operationId: createHealthIdByMobileUsingPOST
-export def "hid-benefit-mobile-create-health-id createHealthIdByMobileUsingPOST" [
+export def "hid-benefit-mobile-create-health-id create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1580,29 +1580,29 @@ export def "hid-benefit-mobile-create-health-id createHealthIdByMobileUsingPOST"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --autoGeneratedBenefitId: oneof<nothing, bool>
-  --benefitDocType: string@benefitDocType-completer
-  --benefitId: string
-  --benefitName: string
-  --consentHealthId: oneof<nothing, bool>
-  --dateOfBirth: string
-  --docNumber: string
-  --fileType: string
+  --accept-language: string
+  --auto-generated-benefit-id: oneof<nothing, bool>
+  --benefit-doc-type: string@benefit-doc-type-completer
+  --benefit-id: string
+  --benefit-name: string
+  --consent-health-id: oneof<nothing, bool>
+  --date-of-birth: string
+  --doc-number: string
+  --file-type: string
   --gender: string
   --name: string
   --otp: string
-  --txnId: string
-  --uploadedDoc: string
+  --txn-id: string
+  --uploaded-doc: string
   --validity: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/mobile/createHealthId")
-  let body = {autoGeneratedBenefitId: $autoGeneratedBenefitId, benefitDocType: $benefitDocType, benefitId: $benefitId, benefitName: $benefitName, consentHealthId: $consentHealthId, dateOfBirth: $dateOfBirth, docNumber: $docNumber, fileType: $fileType, gender: $gender, name: $name, otp: $otp, txnId: $txnId, uploadedDoc: $uploadedDoc, validity: $validity} | compact
+  let body = {"autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitDocType": $benefit_doc_type, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "dateOfBirth": $date_of_birth, "docNumber": $doc_number, "fileType": $file_type, "gender": $gender, "name": $name, "otp": $otp, "txnId": $txn_id, "uploadedDoc": $uploaded_doc, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1622,16 +1622,16 @@ export def "hid-benefit-mobile-generate-otp generateMobileOtpUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --mobile: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/mobile/generateOtp")
-  let body = {mobile: $mobile} | compact
+  let body = {"mobile": $mobile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1651,26 +1651,26 @@ export def "hid-benefit-notify-benefit notifyBenefitUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --aadharNumberOrUidToken: string
-  --autoGeneratedBenefitId: oneof<nothing, bool>
-  --benefitId: string
-  --benefitName: string
-  --consentHealthId: oneof<nothing, bool>
-  --dateOfBirth: string
+  --accept-language: string
+  --aadhar-number-or-uid-token: string
+  --auto-generated-benefit-id: oneof<nothing, bool>
+  --benefit-id: string
+  --benefit-name: string
+  --consent-health-id: oneof<nothing, bool>
+  --date-of-birth: string
   --gender: string
-  --mobileNumber: string
+  --mobile-number: string
   --name: string
-  --stateCode: string
+  --state-code: string
   --validity: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/notify/benefit")
-  let body = {aadharNumberOrUidToken: $aadharNumberOrUidToken, autoGeneratedBenefitId: $autoGeneratedBenefitId, benefitId: $benefitId, benefitName: $benefitName, consentHealthId: $consentHealthId, dateOfBirth: $dateOfBirth, gender: $gender, mobileNumber: $mobileNumber, name: $name, stateCode: $stateCode, validity: $validity} | compact
+  let body = {"aadharNumberOrUidToken": $aadhar_number_or_uid_token, "autoGeneratedBenefitId": $auto_generated_benefit_id, "benefitId": $benefit_id, "benefitName": $benefit_name, "consentHealthId": $consent_health_id, "dateOfBirth": $date_of_birth, "gender": $gender, "mobileNumber": $mobile_number, "name": $name, "stateCode": $state_code, "validity": $validity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1690,16 +1690,16 @@ export def "hid-benefit-search-aadhaar findByAadharUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --aadhaar: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/search/aadhaar")
-  let body = {aadhaar: $aadhaar} | compact
+  let body = {"aadhaar": $aadhaar} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1719,17 +1719,17 @@ export def "hid-benefit-search-health-id-number findByHealthIdUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --benefitId: string
-  --healthId: string
+  --accept-language: string
+  --benefit-id: string
+  --health-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/search/healthIdNumber")
-  let body = {benefitId: $benefitId, healthId: $healthId} | compact
+  let body = {"benefitId": $benefit_id, "healthId": $health_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1740,7 +1740,7 @@ export def "hid-benefit-search-health-id-number findByHealthIdUsingPOST" [
 #
 # POST /v1/hid/benefit/update/mobile
 # operationId: updateMobileInformationUsingPOST
-export def "hid-benefit-update-mobile updateMobileInformationUsingPOST" [
+export def "hid-benefit-update-mobile update-mobile-information-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1749,17 +1749,17 @@ export def "hid-benefit-update-mobile updateMobileInformationUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --healthIdNumber: string
+  --accept-language: string
+  --health-id-number: string
   --mobile: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/update/mobile")
-  let body = {healthIdNumber: $healthIdNumber, mobile: $mobile} | compact
+  let body = {"healthIdNumber": $health_id_number, "mobile": $mobile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1770,7 +1770,7 @@ export def "hid-benefit-update-mobile updateMobileInformationUsingPOST" [
 #
 # POST /v1/hid/benefit/update/profile
 # operationId: updateAccountInformationUsingPOST_1
-export def "hid-benefit-update-profile updateAccountInformationUsingPOST-by-" [
+export def "hid-benefit-update-profile update-account-information-using-post-by-" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1779,34 +1779,34 @@ export def "hid-benefit-update-profile updateAccountInformationUsingPOST-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --address: string
-  --dayOfBirth: string
-  --districtCode: string
+  --day-of-birth: string
+  --district-code: string
   --email: string
-  --firstName: string
-  --healthId: string
-  --healthIdNumber: string
-  --lastName: string
-  --middleName: string
-  --monthOfBirth: string
+  --first-name: string
+  --health-id: string
+  --health-id-number: string
+  --last-name: string
+  --middle-name: string
+  --month-of-birth: string
   --password: string
   --pincode: int # format: int32
-  --profilePhoto: string
-  --stateCode: string
-  --subdistrictCode: string
-  --townCode: string
-  --villageCode: string
-  --wardCode: string
-  --yearOfBirth: string
+  --profile-photo: string
+  --state-code: string
+  --subdistrict-code: string
+  --town-code: string
+  --village-code: string
+  --ward-code: string
+  --year-of-birth: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/update/profile")
-  let body = {address: $address, dayOfBirth: $dayOfBirth, districtCode: $districtCode, email: $email, firstName: $firstName, healthId: $healthId, healthIdNumber: $healthIdNumber, lastName: $lastName, middleName: $middleName, monthOfBirth: $monthOfBirth, password: $password, pincode: $pincode, profilePhoto: $profilePhoto, stateCode: $stateCode, subdistrictCode: $subdistrictCode, townCode: $townCode, villageCode: $villageCode, wardCode: $wardCode, yearOfBirth: $yearOfBirth} | compact
+  let body = {"address": $address, "dayOfBirth": $day_of_birth, "districtCode": $district_code, "email": $email, "firstName": $first_name, "healthId": $health_id, "healthIdNumber": $health_id_number, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "password": $password, "pincode": $pincode, "profilePhoto": $profile_photo, "stateCode": $state_code, "subdistrictCode": $subdistrict_code, "townCode": $town_code, "villageCode": $village_code, "wardCode": $ward_code, "yearOfBirth": $year_of_birth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1817,7 +1817,7 @@ export def "hid-benefit-update-profile updateAccountInformationUsingPOST-by-" [
 #
 # POST /v1/hid/benefit/update/status
 # operationId: updateStatusUsingPOST
-export def "hid-benefit-update-status updateStatusUsingPOST" [
+export def "hid-benefit-update-status update-status-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,16 +1826,16 @@ export def "hid-benefit-update-status updateStatusUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --healthIdNumber: string
+  --accept-language: string
+  --health-id-number: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hid/benefit/update/status")
-  let body = {healthIdNumber: $healthIdNumber} | compact
+  let body = {"healthIdNumber": $health_id_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1846,7 +1846,7 @@ export def "hid-benefit-update-status updateStatusUsingPOST" [
 #
 # POST /v1/registration/aadhaar/createHealthIdWithAadhaarOtp
 # operationId: verifyAadharOTPUsingPOST
-export def "registration-aadhaar-create-health-id-with-aadhaar-otp verifyAadharOTPUsingPOST" [
+export def "registration-aadhaar-create-health-id-with-aadhaar-otp verify-aadhar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1855,26 +1855,26 @@ export def "registration-aadhaar-create-health-id-with-aadhaar-otp verifyAadharO
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --email: string
-  --firstName: string
-  --lastName: string
-  --middleName: string
+  --first-name: string
+  --last-name: string
+  --middle-name: string
   --mobile: string
   --otp: string
   --password: string
-  --profilePhoto: string
+  --profile-photo: string
   --restrictions: string
-  --txnId: string
+  --txn-id: string
   --username: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/createHealthIdWithAadhaarOtp")
-  let body = {email: $email, firstName: $firstName, lastName: $lastName, middleName: $middleName, mobile: $mobile, otp: $otp, password: $password, profilePhoto: $profilePhoto, restrictions: $restrictions, txnId: $txnId, username: $username} | compact
+  let body = {"email": $email, "firstName": $first_name, "lastName": $last_name, "middleName": $middle_name, "mobile": $mobile, "otp": $otp, "password": $password, "profilePhoto": $profile_photo, "restrictions": $restrictions, "txnId": $txn_id, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1885,7 +1885,7 @@ export def "registration-aadhaar-create-health-id-with-aadhaar-otp verifyAadharO
 #
 # POST /v1/registration/aadhaar/createHealthIdWithPreVerified
 # operationId: createAadhaarAccountUsingPOST
-export def "registration-aadhaar-create-health-id-with-pre-verified createAadhaarAccountUsingPOST" [
+export def "registration-aadhaar-create-health-id-with-pre-verified create-aadhaar-account-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1894,23 +1894,23 @@ export def "registration-aadhaar-create-health-id-with-pre-verified createAadhaa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --email: string
-  --firstName: string
-  --healthId: string
-  --lastName: string
-  --middleName: string
+  --first-name: string
+  --health-id: string
+  --last-name: string
+  --middle-name: string
   --password: string
-  --profilePhoto: string
-  --txnId: string
+  --profile-photo: string
+  --txn-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/createHealthIdWithPreVerified")
-  let body = {email: $email, firstName: $firstName, healthId: $healthId, lastName: $lastName, middleName: $middleName, password: $password, profilePhoto: $profilePhoto, txnId: $txnId} | compact
+  let body = {"email": $email, "firstName": $first_name, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "password": $password, "profilePhoto": $profile_photo, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1930,17 +1930,17 @@ export def "registration-aadhaar-generate-mobile-otp generateMobileOTPForTxnUsin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --mobile: string
-  --txnId: string
+  --txn-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/generateMobileOTP")
-  let body = {mobile: $mobile, txnId: $txnId} | compact
+  let body = {"mobile": $mobile, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1960,16 +1960,16 @@ export def "registration-aadhaar-generate-otp generateAadharOTPUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --aadhaar: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/generateOtp")
-  let body = {aadhaar: $aadhaar} | compact
+  let body = {"aadhaar": $aadhaar} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1989,16 +1989,16 @@ export def "registration-aadhaar-resend-aadhaar-otp resendAadharOTPUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  txnId: string
+  --accept-language: string
+  txn_id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/resendAadhaarOtp")
-  let body = {txnId: $txnId} | compact
+  let body = {"txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2009,7 +2009,7 @@ export def "registration-aadhaar-resend-aadhaar-otp resendAadharOTPUsingPOST" [
 #
 # POST /v1/registration/aadhaar/search/aadhar
 # operationId: getHealthIdNumbersByAadharUsingPOST
-export def "registration-aadhaar-search-aadhar post" [
+export def "registration-aadhaar-search-aadhar get-health-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2018,16 +2018,16 @@ export def "registration-aadhaar-search-aadhar post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --aadhaar: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/search/aadhar")
-  let body = {aadhaar: $aadhaar} | compact
+  let body = {"aadhaar": $aadhaar} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2038,7 +2038,7 @@ export def "registration-aadhaar-search-aadhar post" [
 #
 # POST /v1/registration/aadhaar/verifyBio
 # operationId: verifyAadharBioUsingPOST
-export def "registration-aadhaar-verify-bio verifyAadharBioUsingPOST" [
+export def "registration-aadhaar-verify-bio verify-aadhar-bio-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2047,9 +2047,9 @@ export def "registration-aadhaar-verify-bio verifyAadharBioUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --aadhaar: string
-  --bioType: string
+  --bio-type: string
   --pid: string
   --restrictions: string
 ]: any -> any {
@@ -2057,9 +2057,9 @@ export def "registration-aadhaar-verify-bio verifyAadharBioUsingPOST" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/verifyBio")
-  let body = {aadhaar: $aadhaar, bioType: $bioType, pid: $pid, restrictions: $restrictions} | compact
+  let body = {"aadhaar": $aadhaar, "bioType": $bio_type, "pid": $pid, "restrictions": $restrictions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2070,7 +2070,7 @@ export def "registration-aadhaar-verify-bio verifyAadharBioUsingPOST" [
 #
 # POST /v1/registration/aadhaar/verifyMobileOTP
 # operationId: verifyMobileOTPForTxnUsingPOST
-export def "registration-aadhaar-verify-mobile-otp verifyMobileOTPForTxnUsingPOST" [
+export def "registration-aadhaar-verify-mobile-otp verify-mobile-otp-for-txn-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,17 +2079,17 @@ export def "registration-aadhaar-verify-mobile-otp verifyMobileOTPForTxnUsingPOS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --otp: string
-  --txnId: string
+  --txn-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/verifyMobileOTP")
-  let body = {otp: $otp, txnId: $txnId} | compact
+  let body = {"otp": $otp, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2100,7 +2100,7 @@ export def "registration-aadhaar-verify-mobile-otp verifyMobileOTPForTxnUsingPOS
 #
 # POST /v1/registration/aadhaar/verifyOTP
 # operationId: verifyAadharOTPOnlyUsingPOST
-export def "registration-aadhaar-verify-otp verifyAadharOTPOnlyUsingPOST" [
+export def "registration-aadhaar-verify-otp verify-aadhar-otp-only-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2109,18 +2109,18 @@ export def "registration-aadhaar-verify-otp verifyAadharOTPOnlyUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --otp: string
   --restrictions: string
-  --txnId: string
+  --txn-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/aadhaar/verifyOTP")
-  let body = {otp: $otp, restrictions: $restrictions, txnId: $txnId} | compact
+  let body = {"otp": $otp, "restrictions": $restrictions, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2131,7 +2131,7 @@ export def "registration-aadhaar-verify-otp verifyAadharOTPOnlyUsingPOST" [
 #
 # POST /v1/registration/mobile/createHealthId
 # operationId: verifyUserViaMobileUsingPOST
-export def "registration-mobile-create-health-id verifyUserViaMobileUsingPOST" [
+export def "registration-mobile-create-health-id verify-user-via-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2140,38 +2140,38 @@ export def "registration-mobile-create-health-id verifyUserViaMobileUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --address: string
-  --dayOfBirth: string
-  --districtCode: string
+  --day-of-birth: string
+  --district-code: string
   --email: string
-  --firstName: string
+  --first-name: string
   --gender: string
-  --healthId: string
-  --lastName: string
-  --middleName: string
-  --monthOfBirth: string
+  --health-id: string
+  --last-name: string
+  --middle-name: string
+  --month-of-birth: string
   --name: string
   --password: string
   --pincode: int # format: int32
-  --profilePhoto: string
+  --profile-photo: string
   --restrictions: string
-  --stateCode: string
-  --subdistrictCode: string
+  --state-code: string
+  --subdistrict-code: string
   --body-token: string
-  --townCode: string
-  txnId: string
-  --villageCode: string
-  --wardCode: string
-  --yearOfBirth: string
+  --town-code: string
+  txn_id: string
+  --village-code: string
+  --ward-code: string
+  --year-of-birth: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/mobile/createHealthId")
-  let body = {address: $address, dayOfBirth: $dayOfBirth, districtCode: $districtCode, email: $email, firstName: $firstName, gender: $gender, healthId: $healthId, lastName: $lastName, middleName: $middleName, monthOfBirth: $monthOfBirth, name: $name, password: $password, pincode: $pincode, profilePhoto: $profilePhoto, restrictions: $restrictions, stateCode: $stateCode, subdistrictCode: $subdistrictCode, token: $body_token, townCode: $townCode, txnId: $txnId, villageCode: $villageCode, wardCode: $wardCode, yearOfBirth: $yearOfBirth} | compact
+  let body = {"address": $address, "dayOfBirth": $day_of_birth, "districtCode": $district_code, "email": $email, "firstName": $first_name, "gender": $gender, "healthId": $health_id, "lastName": $last_name, "middleName": $middle_name, "monthOfBirth": $month_of_birth, "name": $name, "password": $password, "pincode": $pincode, "profilePhoto": $profile_photo, "restrictions": $restrictions, "stateCode": $state_code, "subdistrictCode": $subdistrict_code, "token": $body_token, "townCode": $town_code, "txnId": $txn_id, "villageCode": $village_code, "wardCode": $ward_code, "yearOfBirth": $year_of_birth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2191,16 +2191,16 @@ export def "registration-mobile-generate-otp generateMobileOTPUsingPOST-by-" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --mobile: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/mobile/generateOtp")
-  let body = {mobile: $mobile} | compact
+  let body = {"mobile": $mobile} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2220,16 +2220,16 @@ export def "registration-mobile-resend-otp resentOtpUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  txnId: string
+  --accept-language: string
+  txn_id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/mobile/resendOtp")
-  let body = {txnId: $txnId} | compact
+  let body = {"txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2240,7 +2240,7 @@ export def "registration-mobile-resend-otp resentOtpUsingPOST" [
 #
 # POST /v1/registration/mobile/verifyOtp
 # operationId: verifyMobileOTPUsingPOST
-export def "registration-mobile-verify-otp verifyMobileOTPUsingPOST" [
+export def "registration-mobile-verify-otp verify-mobile-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2249,17 +2249,17 @@ export def "registration-mobile-verify-otp verifyMobileOTPUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --otp: string
-  --txnId: string
+  --txn-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/registration/mobile/verifyOtp")
-  let body = {otp: $otp, txnId: $txnId} | compact
+  let body = {"otp": $otp, "txnId": $txn_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2270,7 +2270,7 @@ export def "registration-mobile-verify-otp verifyMobileOTPUsingPOST" [
 #
 # POST /v1/search/existsByHealthId
 # operationId: searchUserByUseridUsingPOST
-export def "search-exists-by-health-id searchUserByUseridUsingPOST" [
+export def "search-exists-by-health-id list-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2279,16 +2279,16 @@ export def "search-exists-by-health-id searchUserByUseridUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --healthId: string
+  --accept-language: string
+  --health-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/search/existsByHealthId")
-  let body = {healthId: $healthId} | compact
+  let body = {"healthId": $health_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2299,7 +2299,7 @@ export def "search-exists-by-health-id searchUserByUseridUsingPOST" [
 #
 # POST /v1/search/searchByHealthId
 # operationId: searchUserByAccountUsingPOST
-export def "search-search-by-health-id searchUserByAccountUsingPOST" [
+export def "search-search-by-health-id list-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2308,16 +2308,16 @@ export def "search-search-by-health-id searchUserByAccountUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
-  --healthId: string
+  --accept-language: string
+  --health-id: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/search/searchByHealthId")
-  let body = {healthId: $healthId} | compact
+  let body = {"healthId": $health_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2328,7 +2328,7 @@ export def "search-search-by-health-id searchUserByAccountUsingPOST" [
 #
 # POST /v1/search/searchByMobile
 # operationId: searchUserByMobileUsingPOST
-export def "search-search-by-mobile searchUserByMobileUsingPOST" [
+export def "search-search-by-mobile list-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2337,19 +2337,19 @@ export def "search-search-by-mobile searchUserByMobileUsingPOST" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept-Language: string
+  --accept-language: string
   --gender: string
   --mobile: string
   --name: string
-  --yearOfBirth: string
+  --year-of-birth: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/search/searchByMobile")
-  let body = {gender: $gender, mobile: $mobile, name: $name, yearOfBirth: $yearOfBirth} | compact
+  let body = {"gender": $gender, "mobile": $mobile, "name": $name, "yearOfBirth": $year_of_birth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

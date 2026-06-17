@@ -66,12 +66,12 @@ def base-url-completer [] { ["http://amplifybackend.us-east-1.amazonaws.com" "ht
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def serviceName-completer [] { ["S3"] }
+def service-name-completer [] { ["S3"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "backend-environments-clone CloneBackend" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "backend-environments-clone clone" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,9 +95,9 @@ export def commands []: nothing -> table {
 #
 # POST /backend/{appId}/environments/{backendEnvironmentName}/clone
 # operationId: CloneBackend
-export def "backend-environments-clone CloneBackend" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-environments-clone clone" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,22 +106,22 @@ export def "backend-environments-clone CloneBackend" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  targetEnvironmentName: string # The name of the destination backend environment to be created.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  target_environment_name: string # The name of the destination backend environment to be created.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/environments/($backendEnvironmentName)/clone")
-  let body = {targetEnvironmentName: $targetEnvironmentName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/environments/{backend_environment_name}/clone"))
+  let body = {"targetEnvironmentName": $target_environment_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,7 +132,7 @@ export def "backend-environments-clone CloneBackend" [
 #
 # POST /backend
 # operationId: CreateBackend
-export def "backend CreateBackend" [
+export def "backend create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,26 +141,26 @@ export def "backend CreateBackend" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  appId: string # The app ID.
-  appName: string # The name of the app.
-  backendEnvironmentName: string # The name of the backend environment.
-  --resourceConfig: record # Defines the resource configuration for the data model in your Amplify project.
-  --resourceName: string # The name of the resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  app_id: string # The app ID.
+  app_name: string # The name of the app.
+  backend_environment_name: string # The name of the backend environment.
+  --resource-config: record # Defines the resource configuration for the data model in your Amplify project.
+  --resource-name: string # The name of the resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/backend")
-  let body = {appId: $appId, appName: $appName, backendEnvironmentName: $backendEnvironmentName, resourceConfig: $resourceConfig, resourceName: $resourceName} | compact
+  let body = {"appId": $app_id, "appName": $app_name, "backendEnvironmentName": $backend_environment_name, "resourceConfig": $resource_config, "resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -172,8 +172,8 @@ export def "backend CreateBackend" [
 # POST /backend/{appId}/api
 # operationId: CreateBackendAPI
 # --resourceConfig shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-export def "backend CreateBackendAPI" [
-  appId: string
+export def "backend create-backend-api" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,24 +182,24 @@ export def "backend CreateBackendAPI" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  backendEnvironmentName: string # The name of the backend environment.
-  resourceConfig: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-  resourceName: string # The name of this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  backend_environment_name: string # The name of the backend environment.
+  resource_config: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
+  resource_name: string # The name of this resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/api")
-  let body = {backendEnvironmentName: $backendEnvironmentName, resourceConfig: $resourceConfig, resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/backend/{app_id}/api"))
+  let body = {"backendEnvironmentName": $backend_environment_name, "resourceConfig": $resource_config, "resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,8 +211,8 @@ export def "backend CreateBackendAPI" [
 # POST /backend/{appId}/auth
 # operationId: CreateBackendAuth
 # --resourceConfig shape: {AuthResources?: any, IdentityPoolConfigs?: any, Service?: any, UserPoolConfigs?: any}
-export def "backend-auth CreateBackendAuth" [
-  appId: string
+export def "backend-auth create" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,24 +221,24 @@ export def "backend-auth CreateBackendAuth" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  backendEnvironmentName: string # The name of the backend environment.
-  resourceConfig: record # Defines the resource configuration when creating an auth resource in your Amplify project. — shape: {AuthResources?: any, IdentityPoolConfigs?: any, Service?: any, UserPoolConfigs?: any}
-  resourceName: string # The name of this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  backend_environment_name: string # The name of the backend environment.
+  resource_config: record # Defines the resource configuration when creating an auth resource in your Amplify project. — shape: {AuthResources?: any, IdentityPoolConfigs?: any, Service?: any, UserPoolConfigs?: any}
+  resource_name: string # The name of this resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/auth")
-  let body = {backendEnvironmentName: $backendEnvironmentName, resourceConfig: $resourceConfig, resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/backend/{app_id}/auth"))
+  let body = {"backendEnvironmentName": $backend_environment_name, "resourceConfig": $resource_config, "resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -249,8 +249,8 @@ export def "backend-auth CreateBackendAuth" [
 #
 # POST /backend/{appId}/config
 # operationId: CreateBackendConfig
-export def "backend-config CreateBackendConfig" [
-  appId: string
+export def "backend-config create" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,22 +259,22 @@ export def "backend-config CreateBackendConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --backendManagerAppId: string # The app ID for the backend manager.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --backend-manager-app-id: string # The app ID for the backend manager.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, JobId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/config")
-  let body = {backendManagerAppId: $backendManagerAppId} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/backend/{app_id}/config"))
+  let body = {"backendManagerAppId": $backend_manager_app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,8 +286,8 @@ export def "backend-config CreateBackendConfig" [
 # POST /backend/{appId}/storage
 # operationId: CreateBackendStorage
 # --resourceConfig shape: {BucketName?: any, Permissions?: any, ServiceName?: any}
-export def "backend-storage CreateBackendStorage" [
-  appId: string
+export def "backend-storage create" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,24 +296,24 @@ export def "backend-storage CreateBackendStorage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  backendEnvironmentName: string # The name of the backend environment.
-  resourceConfig: record # The resource configuration for creating backend storage. — shape: {BucketName?: any, Permissions?: any, ServiceName?: any}
-  resourceName: string # The name of the storage resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  backend_environment_name: string # The name of the backend environment.
+  resource_config: record # The resource configuration for creating backend storage. — shape: {BucketName?: any, Permissions?: any, ServiceName?: any}
+  resource_name: string # The name of the storage resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, JobId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/storage")
-  let body = {backendEnvironmentName: $backendEnvironmentName, resourceConfig: $resourceConfig, resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/backend/{app_id}/storage"))
+  let body = {"backendEnvironmentName": $backend_environment_name, "resourceConfig": $resource_config, "resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,8 +324,8 @@ export def "backend-storage CreateBackendStorage" [
 #
 # POST /backend/{appId}/challenge
 # operationId: CreateToken
-export def "backend-challenge CreateToken" [
-  appId: string
+export def "backend-challenge create-token" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,18 +334,18 @@ export def "backend-challenge CreateToken" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AppId: record, ChallengeCode: record, SessionId: record, Ttl: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/challenge")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/backend/{app_id}/challenge"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -356,9 +356,9 @@ export def "backend-challenge CreateToken" [
 #
 # POST /backend/{appId}/environments/{backendEnvironmentName}/remove
 # operationId: DeleteBackend
-export def "backend-environments-remove DeleteBackend" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-environments-remove delete" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,18 +367,18 @@ export def "backend-environments-remove DeleteBackend" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/environments/($backendEnvironmentName)/remove")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/environments/{backend_environment_name}/remove"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -390,9 +390,9 @@ export def "backend-environments-remove DeleteBackend" [
 # POST /backend/{appId}/api/{backendEnvironmentName}/remove
 # operationId: DeleteBackendAPI
 # --resourceConfig shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-export def "backend-remove DeleteBackendAPI" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-remove delete-backend-api" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,23 +401,23 @@ export def "backend-remove DeleteBackendAPI" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --resourceConfig: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-  resourceName: string # The name of this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --resource-config: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
+  resource_name: string # The name of this resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/api/($backendEnvironmentName)/remove")
-  let body = {resourceConfig: $resourceConfig, resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/api/{backend_environment_name}/remove"))
+  let body = {"resourceConfig": $resource_config, "resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -428,9 +428,9 @@ export def "backend-remove DeleteBackendAPI" [
 #
 # POST /backend/{appId}/auth/{backendEnvironmentName}/remove
 # operationId: DeleteBackendAuth
-export def "backend-auth-remove DeleteBackendAuth" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-auth-remove delete" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,22 +439,22 @@ export def "backend-auth-remove DeleteBackendAuth" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceName: string # The name of this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_name: string # The name of this resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/auth/($backendEnvironmentName)/remove")
-  let body = {resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/auth/{backend_environment_name}/remove"))
+  let body = {"resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -465,9 +465,9 @@ export def "backend-auth-remove DeleteBackendAuth" [
 #
 # POST /backend/{appId}/storage/{backendEnvironmentName}/remove
 # operationId: DeleteBackendStorage
-export def "backend-storage-remove DeleteBackendStorage" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-storage-remove delete" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,23 +476,23 @@ export def "backend-storage-remove DeleteBackendStorage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceName: string # The name of the storage resource.
-  serviceName: string@serviceName-completer # The name of the storage service.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_name: string # The name of the storage resource.
+  service_name: string@service-name-completer # The name of the storage service.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, JobId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/storage/($backendEnvironmentName)/remove")
-  let body = {resourceName: $resourceName, serviceName: $serviceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/storage/{backend_environment_name}/remove"))
+  let body = {"resourceName": $resource_name, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,9 +503,9 @@ export def "backend-storage-remove DeleteBackendStorage" [
 #
 # POST /backend/{appId}/challenge/{sessionId}/remove
 # operationId: DeleteToken
-export def "backend-challenge-remove DeleteToken" [
-  appId: string
-  sessionId: string
+export def "backend-challenge-remove delete-token" [
+  app_id: string
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,18 +514,18 @@ export def "backend-challenge-remove DeleteToken" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<IsSuccess: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/challenge/($sessionId)/remove")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({app_id: $app_id, session_id: $session_id} | format pattern "/backend/{app_id}/challenge/{session_id}/remove"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -536,9 +536,9 @@ export def "backend-challenge-remove DeleteToken" [
 #
 # POST /backend/{appId}/api/{backendEnvironmentName}/generateModels
 # operationId: GenerateBackendAPIModels
-export def "backend-generate-models GenerateBackendAPIModels" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-generate-models post" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,22 +547,22 @@ export def "backend-generate-models GenerateBackendAPIModels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceName: string # The name of this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_name: string # The name of this resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/api/($backendEnvironmentName)/generateModels")
-  let body = {resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/api/{backend_environment_name}/generateModels"))
+  let body = {"resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -573,8 +573,8 @@ export def "backend-generate-models GenerateBackendAPIModels" [
 #
 # POST /backend/{appId}/details
 # operationId: GetBackend
-export def "backend-details GetBackend" [
-  appId: string
+export def "backend-details get" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,22 +583,22 @@ export def "backend-details GetBackend" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --backendEnvironmentName: string # The name of the backend environment.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --backend-environment-name: string # The name of the backend environment.
 ]: any -> record<AmplifyFeatureFlags: record, AmplifyMetaConfig: record, AppId: record, AppName: record, BackendEnvironmentList: record, BackendEnvironmentName: record, Error: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/details")
-  let body = {backendEnvironmentName: $backendEnvironmentName} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/backend/{app_id}/details"))
+  let body = {"backendEnvironmentName": $backend_environment_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -610,9 +610,9 @@ export def "backend-details GetBackend" [
 # POST /backend/{appId}/api/{backendEnvironmentName}/details
 # operationId: GetBackendAPI
 # --resourceConfig shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-export def "backend-details GetBackendAPI" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-details get-backend-api" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,23 +621,23 @@ export def "backend-details GetBackendAPI" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --resourceConfig: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-  resourceName: string # The name of this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --resource-config: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
+  resource_name: string # The name of this resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, ResourceConfig: record<AdditionalAuthTypes: record, ApiName: record, ConflictResolution: record<ResolutionStrategy: record>, DefaultAuthType: record<Mode: record, Settings: record>, Service: record, TransformSchema: record>, ResourceName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/api/($backendEnvironmentName)/details")
-  let body = {resourceConfig: $resourceConfig, resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/api/{backend_environment_name}/details"))
+  let body = {"resourceConfig": $resource_config, "resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -648,9 +648,9 @@ export def "backend-details GetBackendAPI" [
 #
 # POST /backend/{appId}/api/{backendEnvironmentName}/getModels
 # operationId: GetBackendAPIModels
-export def "backend-get-models GetBackendAPIModels" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-get-models get-backend-api" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,22 +659,22 @@ export def "backend-get-models GetBackendAPIModels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceName: string # The name of this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_name: string # The name of this resource.
 ]: any -> record<Models: record, Status: record, ModelIntrospectionSchema: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/api/($backendEnvironmentName)/getModels")
-  let body = {resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/api/{backend_environment_name}/getModels"))
+  let body = {"resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,9 +685,9 @@ export def "backend-get-models GetBackendAPIModels" [
 #
 # POST /backend/{appId}/auth/{backendEnvironmentName}/details
 # operationId: GetBackendAuth
-export def "backend-auth-details GetBackendAuth" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-auth-details get" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,22 +696,22 @@ export def "backend-auth-details GetBackendAuth" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceName: string # The name of this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_name: string # The name of this resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, ResourceConfig: record<AuthResources: record, IdentityPoolConfigs: record<IdentityPoolName: record, UnauthenticatedLogin: record>, Service: record, UserPoolConfigs: record<ForgotPassword: record, Mfa: record, OAuth: record, PasswordPolicy: record, RequiredSignUpAttributes: record, SignInMethod: record, UserPoolName: record, VerificationMessage: record>>, ResourceName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/auth/($backendEnvironmentName)/details")
-  let body = {resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/auth/{backend_environment_name}/details"))
+  let body = {"resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,10 +722,10 @@ export def "backend-auth-details GetBackendAuth" [
 #
 # GET /backend/{appId}/job/{backendEnvironmentName}/{jobId}
 # operationId: GetBackendJob
-export def "backend-job GetBackendJob" [
-  appId: string
-  backendEnvironmentName: string
-  jobId: string
+export def "backend-job get" [
+  app_id: string
+  backend_environment_name: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,18 +734,18 @@ export def "backend-job GetBackendJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AppId: record, BackendEnvironmentName: record, CreateTime: record, Error: record, JobId: record, Operation: record, Status: record, UpdateTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/job/($backendEnvironmentName)/($jobId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name, job_id: $job_id} | format pattern "/backend/{app_id}/job/{backend_environment_name}/{job_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -756,10 +756,10 @@ export def "backend-job GetBackendJob" [
 #
 # POST /backend/{appId}/job/{backendEnvironmentName}/{jobId}
 # operationId: UpdateBackendJob
-export def "backend-job UpdateBackendJob" [
-  appId: string
-  backendEnvironmentName: string
-  jobId: string
+export def "backend-job update" [
+  app_id: string
+  backend_environment_name: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,23 +768,23 @@ export def "backend-job UpdateBackendJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --operation: string # Filters the list of response objects to include only those with the specified operation name.
   --status: string # Filters the list of response objects to include only those with the specified status.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, CreateTime: record, Error: record, JobId: record, Operation: record, Status: record, UpdateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/job/($backendEnvironmentName)/($jobId)")
-  let body = {operation: $operation, status: $status} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name, job_id: $job_id} | format pattern "/backend/{app_id}/job/{backend_environment_name}/{job_id}"))
+  let body = {"operation": $operation, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -795,9 +795,9 @@ export def "backend-job UpdateBackendJob" [
 #
 # POST /backend/{appId}/storage/{backendEnvironmentName}/details
 # operationId: GetBackendStorage
-export def "backend-storage-details GetBackendStorage" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-storage-details get" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,22 +806,22 @@ export def "backend-storage-details GetBackendStorage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceName: string # The name of the storage resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_name: string # The name of the storage resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, ResourceConfig: record<BucketName: record, Imported: record, Permissions: record<Authenticated: record, UnAuthenticated: record>, ServiceName: record>, ResourceName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/storage/($backendEnvironmentName)/details")
-  let body = {resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/storage/{backend_environment_name}/details"))
+  let body = {"resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -832,9 +832,9 @@ export def "backend-storage-details GetBackendStorage" [
 #
 # GET /backend/{appId}/challenge/{sessionId}
 # operationId: GetToken
-export def "backend-challenge GetToken" [
-  appId: string
-  sessionId: string
+export def "backend-challenge get-token" [
+  app_id: string
+  session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,18 +843,18 @@ export def "backend-challenge GetToken" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<AppId: record, ChallengeCode: record, SessionId: record, Ttl: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/challenge/($sessionId)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({app_id: $app_id, session_id: $session_id} | format pattern "/backend/{app_id}/challenge/{session_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -865,9 +865,9 @@ export def "backend-challenge GetToken" [
 #
 # POST /backend/{appId}/auth/{backendEnvironmentName}/import
 # operationId: ImportBackendAuth
-export def "backend-auth-import ImportBackendAuth" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-auth-import import" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,25 +876,25 @@ export def "backend-auth-import ImportBackendAuth" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --identityPoolId: string # The ID of the Amazon Cognito identity pool.
-  nativeClientId: string # The ID of the Amazon Cognito native client.
-  userPoolId: string # The ID of the Amazon Cognito user pool.
-  webClientId: string # The ID of the Amazon Cognito web client.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --identity-pool-id: string # The ID of the Amazon Cognito identity pool.
+  native_client_id: string # The ID of the Amazon Cognito native client.
+  user_pool_id: string # The ID of the Amazon Cognito user pool.
+  web_client_id: string # The ID of the Amazon Cognito web client.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/auth/($backendEnvironmentName)/import")
-  let body = {identityPoolId: $identityPoolId, nativeClientId: $nativeClientId, userPoolId: $userPoolId, webClientId: $webClientId} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/auth/{backend_environment_name}/import"))
+  let body = {"identityPoolId": $identity_pool_id, "nativeClientId": $native_client_id, "userPoolId": $user_pool_id, "webClientId": $web_client_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -905,9 +905,9 @@ export def "backend-auth-import ImportBackendAuth" [
 #
 # POST /backend/{appId}/storage/{backendEnvironmentName}/import
 # operationId: ImportBackendStorage
-export def "backend-storage-import ImportBackendStorage" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-storage-import import" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,23 +916,23 @@ export def "backend-storage-import ImportBackendStorage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --bucketName: string # The name of the S3 bucket.
-  serviceName: string@serviceName-completer # The name of the storage service.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --bucket-name: string # The name of the S3 bucket.
+  service_name: string@service-name-completer # The name of the storage service.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, JobId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/storage/($backendEnvironmentName)/import")
-  let body = {bucketName: $bucketName, serviceName: $serviceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/storage/{backend_environment_name}/import"))
+  let body = {"bucketName": $bucket_name, "serviceName": $service_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -943,9 +943,9 @@ export def "backend-storage-import ImportBackendStorage" [
 #
 # POST /backend/{appId}/job/{backendEnvironmentName}
 # operationId: ListBackendJobs
-export def "backend-job ListBackendJobs" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-job list" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,29 +954,29 @@ export def "backend-job ListBackendJobs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --jobId: string # The ID for the job.
-  --maxResults: int # The maximum number of results that you want in the response.
-  --nextToken: string # The token for the next set of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --job-id: string # The ID for the job.
+  --max-results: int # The maximum number of results that you want in the response.
+  --next-token: string # The token for the next set of results.
   --operation: string # Filters the list of response objects to include only those with the specified operation name.
   --status: string # Filters the list of response objects to include only those with the specified status.
 ]: any -> record<Jobs: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/backend/($appId)/job/($backendEnvironmentName)" $qp)
-  let body = {jobId: $jobId, maxResults: $maxResults, nextToken: $nextToken, operation: $operation, status: $status} | compact
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/job/{backend_environment_name}") $qp)
+  let body = {"jobId": $job_id, "maxResults": $max_results, "nextToken": $next_token, "operation": $operation, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -987,7 +987,7 @@ export def "backend-job ListBackendJobs" [
 #
 # POST /s3Buckets
 # operationId: ListS3Buckets
-export def "s3-buckets ListS3Buckets" [
+export def "s3-buckets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,22 +996,22 @@ export def "s3-buckets ListS3Buckets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --nextToken: string # Reserved for future use.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --next-token: string # Reserved for future use.
 ]: any -> record<Buckets: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/s3Buckets")
-  let body = {nextToken: $nextToken} | compact
+  let body = {"nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1022,8 +1022,8 @@ export def "s3-buckets ListS3Buckets" [
 #
 # POST /backend/{appId}/remove
 # operationId: RemoveAllBackends
-export def "backend-remove RemoveAllBackends" [
-  appId: string
+export def "backend-remove delete-all" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1032,22 +1032,22 @@ export def "backend-remove RemoveAllBackends" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --cleanAmplifyApp: oneof<nothing, bool> # Cleans up the Amplify Console app if this value is set to true.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --clean-amplify-app: oneof<nothing, bool> # Cleans up the Amplify Console app if this value is set to true.
 ]: any -> record<AppId: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/remove")
-  let body = {cleanAmplifyApp: $cleanAmplifyApp} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/backend/{app_id}/remove"))
+  let body = {"cleanAmplifyApp": $clean_amplify_app} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1058,8 +1058,8 @@ export def "backend-remove RemoveAllBackends" [
 #
 # POST /backend/{appId}/config/remove
 # operationId: RemoveBackendConfig
-export def "backend-config-remove RemoveBackendConfig" [
-  appId: string
+export def "backend-config-remove delete" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,18 +1068,18 @@ export def "backend-config-remove RemoveBackendConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Error: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/config/remove")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/backend/{app_id}/config/remove"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1091,9 +1091,9 @@ export def "backend-config-remove RemoveBackendConfig" [
 # POST /backend/{appId}/api/{backendEnvironmentName}
 # operationId: UpdateBackendAPI
 # --resourceConfig shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-export def "backend UpdateBackendAPI" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend update-backend-api" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1102,23 +1102,23 @@ export def "backend UpdateBackendAPI" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --resourceConfig: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
-  resourceName: string # The name of this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --resource-config: record # The resource config for the data model, configured as a part of the Amplify project. — shape: {AdditionalAuthTypes?: any, ApiName?: any, ConflictResolution?: any, DefaultAuthType?: any, Service?: any, TransformSchema?: any}
+  resource_name: string # The name of this resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/api/($backendEnvironmentName)")
-  let body = {resourceConfig: $resourceConfig, resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/api/{backend_environment_name}"))
+  let body = {"resourceConfig": $resource_config, "resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1130,9 +1130,9 @@ export def "backend UpdateBackendAPI" [
 # POST /backend/{appId}/auth/{backendEnvironmentName}
 # operationId: UpdateBackendAuth
 # --resourceConfig shape: {AuthResources?: any, IdentityPoolConfigs?: any, Service?: any, UserPoolConfigs?: any}
-export def "backend-auth UpdateBackendAuth" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-auth update" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1141,23 +1141,23 @@ export def "backend-auth UpdateBackendAuth" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceConfig: record # Defines the resource configuration when updating an authentication resource in your Amplify project. — shape: {AuthResources?: any, IdentityPoolConfigs?: any, Service?: any, UserPoolConfigs?: any}
-  resourceName: string # The name of this resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_config: record # Defines the resource configuration when updating an authentication resource in your Amplify project. — shape: {AuthResources?: any, IdentityPoolConfigs?: any, Service?: any, UserPoolConfigs?: any}
+  resource_name: string # The name of this resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, Error: record, JobId: record, Operation: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/auth/($backendEnvironmentName)")
-  let body = {resourceConfig: $resourceConfig, resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/auth/{backend_environment_name}"))
+  let body = {"resourceConfig": $resource_config, "resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1169,8 +1169,8 @@ export def "backend-auth UpdateBackendAuth" [
 # POST /backend/{appId}/config/update
 # operationId: UpdateBackendConfig
 # --loginAuthConfig shape: {AwsCognitoIdentityPoolId?: any, AwsCognitoRegion?: any, AwsUserPoolsId?: any, AwsUserPoolsWebClientId?: any}
-export def "backend-config-update UpdateBackendConfig" [
-  appId: string
+export def "backend-config-update update" [
+  app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,22 +1179,22 @@ export def "backend-config-update UpdateBackendConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --loginAuthConfig: record # The request object for this operation. — shape: {AwsCognitoIdentityPoolId?: any, AwsCognitoRegion?: any, AwsUserPoolsId?: any, AwsUserPoolsWebClientId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --login-auth-config: record # The request object for this operation. — shape: {AwsCognitoIdentityPoolId?: any, AwsCognitoRegion?: any, AwsUserPoolsId?: any, AwsUserPoolsWebClientId?: any}
 ]: any -> record<AppId: record, BackendManagerAppId: record, Error: record, LoginAuthConfig: record<AwsCognitoIdentityPoolId: record, AwsCognitoRegion: record, AwsUserPoolsId: record, AwsUserPoolsWebClientId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/config/update")
-  let body = {loginAuthConfig: $loginAuthConfig} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/backend/{app_id}/config/update"))
+  let body = {"loginAuthConfig": $login_auth_config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1206,9 +1206,9 @@ export def "backend-config-update UpdateBackendConfig" [
 # POST /backend/{appId}/storage/{backendEnvironmentName}
 # operationId: UpdateBackendStorage
 # --resourceConfig shape: {Permissions?: any, ServiceName?: any}
-export def "backend-storage UpdateBackendStorage" [
-  appId: string
-  backendEnvironmentName: string
+export def "backend-storage update" [
+  app_id: string
+  backend_environment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,23 +1217,23 @@ export def "backend-storage UpdateBackendStorage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceConfig: record # The resource configuration for updating backend storage. — shape: {Permissions?: any, ServiceName?: any}
-  resourceName: string # The name of the storage resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_config: record # The resource configuration for updating backend storage. — shape: {Permissions?: any, ServiceName?: any}
+  resource_name: string # The name of the storage resource.
 ]: any -> record<AppId: record, BackendEnvironmentName: record, JobId: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/backend/($appId)/storage/($backendEnvironmentName)")
-  let body = {resourceConfig: $resourceConfig, resourceName: $resourceName} | compact
+  let full_url = (build-url $base ({app_id: $app_id, backend_environment_name: $backend_environment_name} | format pattern "/backend/{app_id}/storage/{backend_environment_name}"))
+  let body = {"resourceConfig": $resource_config, "resourceName": $resource_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

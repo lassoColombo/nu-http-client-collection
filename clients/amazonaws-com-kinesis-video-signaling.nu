@@ -66,12 +66,12 @@ def base-url-completer [] { ["http://kinesisvideo.us-east-1.amazonaws.com" "http
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def Service-completer [] { ["TURN"] }
+def service-completer [] { ["TURN"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-ice-server-config GetIceServerConfig" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-ice-server-config get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/get-ice-server-config
 # operationId: GetIceServerConfig
-export def "get-ice-server-config GetIceServerConfig" [
+export def "get-ice-server-config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,25 +104,25 @@ export def "get-ice-server-config GetIceServerConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ChannelARN: string # The ARN of the signaling channel to be used for the peer-to-peer connection between configured peers. 
-  --ClientId: string # Unique identifier for the viewer. Must be unique within the signaling channel.
-  --Service: string@Service-completer # Specifies the desired service. Currently, <code>TURN</code> is the only valid value.
-  --Username: string # An optional user ID to be associated with the credentials.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  channel_arn: string # The ARN of the signaling channel to be used for the peer-to-peer connection between configured peers. 
+  --client-id: string # Unique identifier for the viewer. Must be unique within the signaling channel.
+  --service: string@service-completer # Specifies the desired service. Currently, <code>TURN</code> is the only valid value.
+  --username: string # An optional user ID to be associated with the credentials.
 ]: any -> record<IceServerList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/get-ice-server-config")
-  let body = {ChannelARN: $ChannelARN, ClientId: $ClientId, Service: $Service, Username: $Username} | compact
+  let body = {"ChannelARN": $channel_arn, "ClientId": $client_id, "Service": $service, "Username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -133,7 +133,7 @@ export def "get-ice-server-config GetIceServerConfig" [
 #
 # POST /v1/send-alexa-offer-to-master
 # operationId: SendAlexaOfferToMaster
-export def "send-alexa-offer-to-master SendAlexaOfferToMaster" [
+export def "send-alexa-offer-to-master send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,24 +142,24 @@ export def "send-alexa-offer-to-master SendAlexaOfferToMaster" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ChannelARN: string # The ARN of the signaling channel by which Alexa and the master peer communicate.
-  SenderClientId: string # The unique identifier for the sender client.
-  MessagePayload: string # The base64-encoded SDP offer content.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  channel_arn: string # The ARN of the signaling channel by which Alexa and the master peer communicate.
+  sender_client_id: string # The unique identifier for the sender client.
+  message_payload: string # The base64-encoded SDP offer content.
 ]: any -> record<Answer: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/send-alexa-offer-to-master")
-  let body = {ChannelARN: $ChannelARN, SenderClientId: $SenderClientId, MessagePayload: $MessagePayload} | compact
+  let body = {"ChannelARN": $channel_arn, "SenderClientId": $sender_client_id, "MessagePayload": $message_payload} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

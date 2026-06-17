@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["query-apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "listsjson ListsDirectoryTopLevelLists" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "listsjson list-s-directory-top-level-lists" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 # GET /lists.json
 #
 # operationId: ListsDirectoryTopLevelLists
-export def "listsjson ListsDirectoryTopLevelLists" [
+export def "listsjson list-s-directory-top-level-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,7 +113,7 @@ export def "listsjson ListsDirectoryTopLevelLists" [
 # GET /lists/dvds.json
 #
 # operationId: DVDListsDirectoryTopLevelLists
-export def "lists-dvdsjson DVDListsDirectoryTopLevelLists" [
+export def "lists-dvdsjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "lists-dvdsjson DVDListsDirectoryTopLevelLists" [
 # GET /lists/dvds/current_releases.json
 #
 # operationId: CurrentReleaseDVDsDVDLists
-export def "lists-dvds-current-releasesjson CurrentReleaseDVDsDVDLists" [
+export def "lists-dvds-current-releasesjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "lists-dvds-current-releasesjson CurrentReleaseDVDsDVDLists" [
 # GET /lists/dvds/new_releases.json
 #
 # operationId: NewReleaseDVDsDVDLists
-export def "lists-dvds-new-releasesjson NewReleaseDVDsDVDLists" [
+export def "lists-dvds-new-releasesjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "lists-dvds-new-releasesjson NewReleaseDVDsDVDLists" [
 # GET /lists/dvds/top_rentals.json
 #
 # operationId: TopRentalsDVDLists
-export def "lists-dvds-top-rentalsjson TopRentalsDVDLists" [
+export def "lists-dvds-top-rentalsjson top-rentals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "lists-dvds-top-rentalsjson TopRentalsDVDLists" [
 # GET /lists/dvds/upcoming.json
 #
 # operationId: UpcomingDVDsDVDLists
-export def "lists-dvds-upcomingjson UpcomingDVDsDVDLists" [
+export def "lists-dvds-upcomingjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "lists-dvds-upcomingjson UpcomingDVDsDVDLists" [
 # GET /lists/movies.json
 #
 # operationId: MovieListsDirectoryTopLevelLists
-export def "lists-moviesjson MovieListsDirectoryTopLevelLists" [
+export def "lists-moviesjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "lists-moviesjson MovieListsDirectoryTopLevelLists" [
 # GET /lists/movies/box_office.json
 #
 # operationId: BoxOfficeMovieLists
-export def "lists-movies-box-officejson BoxOfficeMovieLists" [
+export def "lists-movies-box-officejson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "lists-movies-box-officejson BoxOfficeMovieLists" [
 # GET /lists/movies/in_theaters.json
 #
 # operationId: InTheatersMovieLists
-export def "lists-movies-in-theatersjson InTheatersMovieLists" [
+export def "lists-movies-in-theatersjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,7 +303,7 @@ export def "lists-movies-in-theatersjson InTheatersMovieLists" [
 # GET /lists/movies/opening.json
 #
 # operationId: OpeningMoviesMovieLists
-export def "lists-movies-openingjson OpeningMoviesMovieLists" [
+export def "lists-movies-openingjson open-ing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "lists-movies-openingjson OpeningMoviesMovieLists" [
 # GET /lists/movies/upcoming.json
 #
 # operationId: UpcomingMoviesMovieLists
-export def "lists-movies-upcomingjson UpcomingMoviesMovieLists" [
+export def "lists-movies-upcomingjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "lists-movies-upcomingjson UpcomingMoviesMovieLists" [
 # GET /movie_alias.json
 #
 # operationId: MoviesAliasDetailedInfo
-export def "movie-aliasjson MoviesAliasDetailedInfo" [
+export def "movie-aliasjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "movie-aliasjson MoviesAliasDetailedInfo" [
 # GET /movies.json
 #
 # operationId: MoviesSearchSearch
-export def "moviesjson MoviesSearchSearch" [
+export def "moviesjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "moviesjson MoviesSearchSearch" [
 # GET /movies/{id}.json
 #
 # operationId: MoviesInfoDetailedInfo
-export def "movies MoviesInfoDetailedInfo" [
+export def "movies get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,7 +414,7 @@ export def "movies MoviesInfoDetailedInfo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id).json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -423,7 +423,7 @@ export def "movies MoviesInfoDetailedInfo" [
 # GET /movies/{id}/cast.json
 #
 # operationId: CastInfoDetailedInfo
-export def "movies-castjson CastInfoDetailedInfo" [
+export def "movies-castjson get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +436,7 @@ export def "movies-castjson CastInfoDetailedInfo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/cast.json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/cast.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -445,7 +445,7 @@ export def "movies-castjson CastInfoDetailedInfo" [
 # GET /movies/{id}/clips.json
 #
 # operationId: MovieClipsDetailedInfo
-export def "movies-clipsjson MovieClipsDetailedInfo" [
+export def "movies-clipsjson get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "movies-clipsjson MovieClipsDetailedInfo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/clips.json")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/clips.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -467,7 +467,7 @@ export def "movies-clipsjson MovieClipsDetailedInfo" [
 # GET /movies/{id}/reviews.json
 #
 # operationId: MoviesReviewsDetailedInfo
-export def "movies-reviewsjson MoviesReviewsDetailedInfo" [
+export def "movies-reviewsjson get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "movies-reviewsjson MoviesReviewsDetailedInfo" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "review_type" $review_type "scalar") (serialize-qp "page_limit" $page_limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/movies/($id)/reviews.json" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/reviews.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -494,7 +494,7 @@ export def "movies-reviewsjson MoviesReviewsDetailedInfo" [
 # GET /movies/{id}/similar.json
 #
 # operationId: MoviesSimilarDetailedInfo
-export def "movies-similarjson MoviesSimilarDetailedInfo" [
+export def "movies-similarjson get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -509,7 +509,7 @@ export def "movies-similarjson MoviesSimilarDetailedInfo" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/movies/($id)/similar.json" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/similar.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

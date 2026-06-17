@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configurations-policy Reset" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configurations-policy reset" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /configurations/policy
 # operationId: Policy_Reset
-export def "configurations-policy Reset" [
+export def "configurations-policy reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +115,7 @@ export def "configurations-policy Reset" [
 #
 # GET /configurations/policy
 # operationId: Policy_Get
-export def "configurations-policy Get" [
+export def "configurations-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "configurations-policy Get" [
 #
 # PUT /configurations/policy
 # operationId: Policy_Update
-export def "configurations-policy Update" [
+export def "configurations-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +153,7 @@ export def "configurations-policy Update" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configurations/policy")
-  let body = {arguments: $arguments, name: $name} | compact
+  let body = {"arguments": $arguments, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -164,7 +164,7 @@ export def "configurations-policy Update" [
 #
 # GET /configurations/service
 # operationId: ServiceConfiguration_Get
-export def "configurations-service Get" [
+export def "configurations-service get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "configurations-service Get" [
 #
 # PUT /configurations/service
 # operationId: ServiceConfiguration_Update
-export def "configurations-service Update" [
+export def "configurations-service update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,20 +195,20 @@ export def "configurations-service Update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  defaultReward: float # The reward given if a reward is not received within the specified wait time. (format: float)
-  explorationPercentage: float # The percentage of rank responses that will use exploration. (format: float)
-  --logMirrorEnabled: oneof<nothing, bool> # Flag indicates whether log mirroring is enabled.
-  --logMirrorSasUri: string # Azure storage account container SAS URI for log mirroring.
-  logRetentionDays: int # Number of days historical logs are to be maintained. -1 implies the logs will never be deleted. (format: int32)
-  modelExportFrequency: string # Personalizer will start using the most updated trained model for online ranks automatically every specified time period. For example, PT5M (5 mins). For information about the time format, see http://en.wikipedia.org/wiki/ISO_8601#Durations (format: duration)
-  rewardAggregation: string # The function used to process rewards, if multiple reward scores are received before rewardWaitTime is over.
-  rewardWaitTime: string # The time span waited until a request is marked with the default reward. For example, PT5M (5 mins). For information about the time format, see http://en.wikipedia.org/wiki/ISO_8601#Durations (format: duration)
+  default_reward: float # The reward given if a reward is not received within the specified wait time. (format: float)
+  exploration_percentage: float # The percentage of rank responses that will use exploration. (format: float)
+  --log-mirror-enabled: oneof<nothing, bool> # Flag indicates whether log mirroring is enabled.
+  --log-mirror-sas-uri: string # Azure storage account container SAS URI for log mirroring.
+  log_retention_days: int # Number of days historical logs are to be maintained. -1 implies the logs will never be deleted. (format: int32)
+  model_export_frequency: string # Personalizer will start using the most updated trained model for online ranks automatically every specified time period. For example, PT5M (5 mins). For information about the time format, see http://en.wikipedia.org/wiki/ISO_8601#Durations (format: duration)
+  reward_aggregation: string # The function used to process rewards, if multiple reward scores are received before rewardWaitTime is over.
+  reward_wait_time: string # The time span waited until a request is marked with the default reward. For example, PT5M (5 mins). For information about the time format, see http://en.wikipedia.org/wiki/ISO_8601#Durations (format: duration)
 ]: any -> record<defaultReward: float, explorationPercentage: float, logMirrorEnabled: bool, logMirrorSasUri: string, logRetentionDays: int, modelExportFrequency: string, rewardAggregation: string, rewardWaitTime: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configurations/service")
-  let body = {defaultReward: $defaultReward, explorationPercentage: $explorationPercentage, logMirrorEnabled: $logMirrorEnabled, logMirrorSasUri: $logMirrorSasUri, logRetentionDays: $logRetentionDays, modelExportFrequency: $modelExportFrequency, rewardAggregation: $rewardAggregation, rewardWaitTime: $rewardWaitTime} | compact
+  let body = {"defaultReward": $default_reward, "explorationPercentage": $exploration_percentage, "logMirrorEnabled": $log_mirror_enabled, "logMirrorSasUri": $log_mirror_sas_uri, "logRetentionDays": $log_retention_days, "modelExportFrequency": $model_export_frequency, "rewardAggregation": $reward_aggregation, "rewardWaitTime": $reward_wait_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -219,7 +219,7 @@ export def "configurations-service Update" [
 #
 # GET /evaluations
 # operationId: Evaluations_List
-export def "evaluations List" [
+export def "evaluations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "evaluations List" [
 # POST /evaluations
 # operationId: Evaluations_Create
 # --policies item shape: {arguments: string, name: string}
-export def "evaluations Create" [
+export def "evaluations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,17 +251,17 @@ export def "evaluations Create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --enableOfflineExperimentation: oneof<nothing, bool> # True if the evaluation should explore for a more optimal Learning settings.
-  endTime: string # The end time of the evaluation. (format: date-time)
+  --enable-offline-experimentation: oneof<nothing, bool> # True if the evaluation should explore for a more optimal Learning settings.
+  end_time: string # The end time of the evaluation. (format: date-time)
   name: string # The name of the evaluation.
   policies: list # Additional Learning settings to evaluate. — item shape: {arguments: string, name: string}
-  startTime: string # The start time of the evaluation. (format: date-time)
+  start_time: string # The start time of the evaluation. (format: date-time)
 ]: any -> record<endTime: string, featureImportance: list<list<string>>, id: string, jobId: string, name: string, policyResults: table<arguments: string, name: string, summary: list, totalSummary: record>, startTime: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/evaluations")
-  let body = {enableOfflineExperimentation: $enableOfflineExperimentation, endTime: $endTime, name: $name, policies: $policies, startTime: $startTime} | compact
+  let body = {"enableOfflineExperimentation": $enable_offline_experimentation, "endTime": $end_time, "name": $name, "policies": $policies, "startTime": $start_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -272,8 +272,8 @@ export def "evaluations Create" [
 #
 # DELETE /evaluations/{evaluationId}
 # operationId: Evaluations_Delete
-export def "evaluations Delete" [
-  evaluationId: string
+export def "evaluations delete" [
+  evaluation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "evaluations Delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/evaluations/($evaluationId)")
+  let full_url = (build-url $base ({evaluation_id: $evaluation_id} | format pattern "/evaluations/{evaluation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,8 +295,8 @@ export def "evaluations Delete" [
 #
 # GET /evaluations/{evaluationId}
 # operationId: Evaluations_Get
-export def "evaluations Get" [
-  evaluationId: string
+export def "evaluations get" [
+  evaluation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "evaluations Get" [
 ]: nothing -> record<endTime: string, featureImportance: list<list<string>>, id: string, jobId: string, name: string, policyResults: table<arguments: string, name: string, summary: list, totalSummary: record>, startTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/evaluations/($evaluationId)")
+  let full_url = (build-url $base ({evaluation_id: $evaluation_id} | format pattern "/evaluations/{evaluation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -318,8 +318,8 @@ export def "evaluations Get" [
 #
 # POST /events/{eventId}/activate
 # operationId: Events_Activate
-export def "events-activate Activate" [
-  eventId: string
+export def "events-activate post" [
+  event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "events-activate Activate" [
 ]: nothing -> record<error: record<code: string, details: list<any>, innerError: record<code: string, innererror: any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($eventId)/activate")
+  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}/activate"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,8 +341,8 @@ export def "events-activate Activate" [
 #
 # POST /events/{eventId}/reward
 # operationId: Events_Reward
-export def "events-reward Reward" [
-  eventId: string
+export def "events-reward post" [
+  event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,8 +356,8 @@ export def "events-reward Reward" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($eventId)/reward")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/events/{event_id}/reward"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -368,7 +368,7 @@ export def "events-reward Reward" [
 #
 # DELETE /logs
 # operationId: Log_Delete
-export def "logs Delete" [
+export def "logs delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "logs Delete" [
 #
 # GET /logs/properties
 # operationId: Log_GetProperties
-export def "logs-properties GetProperties" [
+export def "logs-properties get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "logs-properties GetProperties" [
 #
 # DELETE /model
 # operationId: Model_Reset
-export def "model Reset" [
+export def "model reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "model Reset" [
 #
 # GET /model
 # operationId: Model_Get
-export def "model Get" [
+export def "model get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "model Get" [
 #
 # GET /model/properties
 # operationId: Model_GetProperties
-export def "model-properties GetProperties" [
+export def "model-properties get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "model-properties GetProperties" [
 # POST /rank
 # operationId: Rank
 # --actions item shape: {features: list, id: string}
-export def "rank Rank" [
+export def "rank post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,16 +489,16 @@ export def "rank Rank" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   actions: list # The set of actions the Personalizer service can pick from. The set should not contain more than 50 actions. The order of the actions does not affect the rank result but the order should match the sequence your application would have used to display them. The first item in the array will be used as Baseline item in Offline evaluations. — item shape: {features: list, id: string}
-  --contextFeatures: list # Features of the context used for Personalizer as a dictionary of dictionaries. This depends on the application, and typically includes features about the current user, their device, profile information, aggregated data about time and date, etc. Features should not include personally identifiable information (PII), unique UserIDs, or precise timestamps.
-  --deferActivation: oneof<nothing, bool> # Send false if it is certain the rewardActionId in rank results will be shown to the user, therefore Personalizer will expect a Reward call, otherwise it will assign the default Reward to the event. Send true if it is possible the user will not see the action specified in the rank results, because the page is rendering later, or the Rank results may be overridden by code further downstream. (default: false)
-  --eventId: string # Optionally pass an eventId that uniquely identifies this Rank event. If null, the service generates a unique eventId. The eventId will be used for associating this request with its reward, as well as seeding the pseudo-random generator when making a Personalizer call.
-  --excludedActions: list # The set of action ids to exclude from ranking.
+  --context-features: list # Features of the context used for Personalizer as a dictionary of dictionaries. This depends on the application, and typically includes features about the current user, their device, profile information, aggregated data about time and date, etc. Features should not include personally identifiable information (PII), unique UserIDs, or precise timestamps.
+  --defer-activation: oneof<nothing, bool> # Send false if it is certain the rewardActionId in rank results will be shown to the user, therefore Personalizer will expect a Reward call, otherwise it will assign the default Reward to the event. Send true if it is possible the user will not see the action specified in the rank results, because the page is rendering later, or the Rank results may be overridden by code further downstream. (default: false)
+  --event-id: string # Optionally pass an eventId that uniquely identifies this Rank event. If null, the service generates a unique eventId. The eventId will be used for associating this request with its reward, as well as seeding the pseudo-random generator when making a Personalizer call.
+  --excluded-actions: list # The set of action ids to exclude from ranking.
 ]: any -> record<eventId: string, ranking: table<id: string, probability: float>, rewardActionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rank")
-  let body = {actions: $actions, contextFeatures: $contextFeatures, deferActivation: $deferActivation, eventId: $eventId, excludedActions: $excludedActions} | compact
+  let body = {"actions": $actions, "contextFeatures": $context_features, "deferActivation": $defer_activation, "eventId": $event_id, "excludedActions": $excluded_actions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

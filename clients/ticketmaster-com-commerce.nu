@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 # GET /commerce/v2/events/{eventId}/offers
 # operationId: getEventOffers
 export def "commerce-events-offers get" [
-  eventId: string
+  event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,17 +104,17 @@ export def "commerce-events-offers get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-token: string # Query Param Access Token
   --api-key: string # Query Param API Key for external API developer
-  --X-SSL-CERT-UID: string # API Key for external API developer
-  --X-TM-ACCESS-TOKEN: string # Access token for
+  --x-ssl-cert-uid: string # API Key for external API developer
+  --x-tm-access-token: string # Access token for
   --body: record
 ]: any -> record<_embedded: record<areas: record<_links: record, data: list>, attributesRefs: record<_links: record, data: list>, holds: record<_links: record, data: list>, passwords: record<_links: record, data: list>, priceZones: record<_links: record, data: list>>, debug: list<string>, limits: record<max: int, maxAccessibleSeats: int, maxCompanionSeatsPerAccessibleSeat: int, min: int, multiples: int, sellableQty: string>, metadata: record<accessibleSeatingEnabled: bool, eventMapping: record<id: string, source: record, type: string>>, offers: table<_links: record, attributes: record, id: string, relationships: record, type: string>, prices: record<_links: record<self: record>, data: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access_token" $access_token "scalar") (serialize-qp "api-key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/commerce/v2/events/($eventId)/offers" $qp)
+  let full_url = (build-url $base ({event_id: $event_id} | format pattern "/commerce/v2/events/{event_id}/offers") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-SSL-CERT-UID": $X_SSL_CERT_UID, "X-TM-ACCESS-TOKEN": $X_TM_ACCESS_TOKEN} | compact
+  let extra_headers = {"X-SSL-CERT-UID": $x_ssl_cert_uid, "X-TM-ACCESS-TOKEN": $x_tm_access_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

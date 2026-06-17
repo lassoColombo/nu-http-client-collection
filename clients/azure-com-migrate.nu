@@ -72,7 +72,7 @@ def type-completer [] { ["Microsoft.Migrate/projects"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-migrate-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-migrate-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Migrate/operations
 # operationId: Operations_List
-export def "providers-microsoft-migrate-operations List" [
+export def "providers-microsoft-migrate-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,9 +118,9 @@ export def "providers-microsoft-migrate-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Migrate/locations/{locationName}/assessmentOptions
 # operationId: AssessmentOptions_Get
-export def "subscriptions-providers-microsoft-migrate-locations-assessment-options Get" [
-  subscriptionId: string
-  locationName: string
+export def "subscriptions-providers-microsoft-migrate-locations-assessment-options get" [
+  subscription_id: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,13 +130,13 @@ export def "subscriptions-providers-microsoft-migrate-locations-assessment-optio
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<reservedInstanceVmFamilies: list<string>, vmFamilies: table<category: list, familyName: string, targetLocations: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Migrate/locations/($locationName)/assessmentOptions" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Migrate/locations/{location_name}/assessmentOptions") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -147,9 +147,9 @@ export def "subscriptions-providers-microsoft-migrate-locations-assessment-optio
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Migrate/locations/{locationName}/checkNameAvailability
 # operationId: Location_CheckNameAvailability
-export def "subscriptions-providers-microsoft-migrate-locations-check-name-availability CheckNameAvailability" [
-  locationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-migrate-locations-check-name-availability check" [
+  subscription_id: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,8 +166,8 @@ export def "subscriptions-providers-microsoft-migrate-locations-check-name-avail
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Migrate/locations/($locationName)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Migrate/locations/{location_name}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,8 +178,8 @@ export def "subscriptions-providers-microsoft-migrate-locations-check-name-avail
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Migrate/projects
 # operationId: Projects_ListBySubscription
-export def "subscriptions-providers-microsoft-migrate-projects ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-migrate-projects list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,13 +189,13 @@ export def "subscriptions-providers-microsoft-migrate-projects ListBySubscriptio
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, location: string, name: string, properties: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Migrate/projects" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Migrate/projects") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -206,10 +206,10 @@ export def "subscriptions-providers-microsoft-migrate-projects ListBySubscriptio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/assessments
 # operationId: Assessments_ListByProject
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-assessments ListByProject" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-assessments list-by" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,13 +219,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-a
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/assessments" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/assessments") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -236,10 +236,10 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups
 # operationId: Groups_ListByProject
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups ListByProject" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups list-by" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,13 +249,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,11 +266,11 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}
 # operationId: Groups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  groupName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups delete" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,13 +280,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups/($groupName)" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, group_name: $group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,11 +297,11 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}
 # operationId: Groups_Get
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  groupName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups get" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,13 +311,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<eTag: string, id: string, name: string, properties: record<assessments: list<string>, createdTimestamp: string, machines: list<string>, updatedTimestamp: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups/($groupName)" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, group_name: $group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -329,11 +329,11 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}
 # operationId: Groups_Create
 # --properties shape: {machines: list}
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  groupName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups create" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,18 +343,18 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
-  --eTag: string # For optimistic concurrency control.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --e-tag: string # For optimistic concurrency control.
   properties: record # Properties of group resource. — shape: {machines: list}
 ]: any -> record<eTag: string, id: string, name: string, properties: record<assessments: list<string>, createdTimestamp: string, machines: list<string>, updatedTimestamp: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups/($groupName)" $qp)
-  let body = {eTag: $eTag, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, group_name: $group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}") $qp)
+  let body = {"eTag": $e_tag, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -365,11 +365,11 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments
 # operationId: Assessments_ListByGroup
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments ListByGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  groupName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments list-by" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,13 +379,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups/($groupName)/assessments" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, group_name: $group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -396,12 +396,12 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}
 # operationId: Assessments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  groupName: string
-  assessmentName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments delete" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  group_name: string
+  assessment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,13 +411,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups/($groupName)/assessments/($assessmentName)" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, group_name: $group_name, assessment_name: $assessment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -428,12 +428,12 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}
 # operationId: Assessments_Get
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  groupName: string
-  assessmentName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments get" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  group_name: string
+  assessment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,13 +443,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<eTag: string, id: string, name: string, properties: record<azureHybridUseBenefit: string, azureLocation: string, azureOfferCode: string, azurePricingTier: string, azureStorageRedundancy: string, confidenceRatingInPercentage: float, createdTimestamp: string, currency: string, discountPercentage: float, monthlyBandwidthCost: float, monthlyComputeCost: float, monthlyStorageCost: float, numberOfMachines: int, percentile: string, pricesTimestamp: string, scalingFactor: float, sizingCriterion: string, stage: string, status: string, timeRange: string, updatedTimestamp: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups/($groupName)/assessments/($assessmentName)" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, group_name: $group_name, assessment_name: $assessment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -461,12 +461,12 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}
 # operationId: Assessments_Create
 # --properties shape: {azureHybridUseBenefit: "Unknown"|"Yes"|"No", azureLocation: "Unknown"|"EastAsia"|"SoutheastAsia"|"AustraliaEast"|"AustraliaSoutheast"|"BrazilSouth"|"CanadaCentral"|"CanadaEast"|"WestEurope"|"NorthEurope"|"CentralIndia"|"SouthIndia"|"WestIndia"|"JapanEast"|"JapanWest"|"KoreaCentral"|"KoreaSouth"|"UkWest"|"UkSouth"|"NorthCentralUs"|"EastUs"|"WestUs2"|"SouthCentralUs"|"CentralUs"|"EastUs2"|"WestUs"|"WestCentralUs"|"GermanyCentral"|"GermanyNortheast"|"ChinaNorth"|"ChinaEast", azureOfferCode: "Unknown"|"MSAZR0003P"|"MSAZR0044P"|"MSAZR0059P"|"MSAZR0060P"|"MSAZR0062P"|"MSAZR0063P"|"MSAZR0064P"|"MSAZR0029P"|"MSAZR0022P"|"MSAZR0023P"|"MSAZR0148P"|"MSAZR0025P"|"MSAZR0036P"|"MSAZR0120P"|"MSAZR0121P"|"MSAZR0122P"|"MSAZR0123P"|"MSAZR0124P"|"MSAZR0125P"|"MSAZR0126P"|"MSAZR0127P"|"MSAZR0128P"|"MSAZR0129P"|"MSAZR0130P"|"MSAZR0111P"|"MSAZR0144P"|"MSAZR0149P"|"MSMCAZR0044P"|"MSMCAZR0059P"|"MSMCAZR0060P"|"MSMCAZR0063P"|"MSMCAZR0120P"|"MSMCAZR0121P"|"MSMCAZR0125P"|"MSMCAZR0128P"|"MSAZRDE0003P"|"MSAZRDE0044P", azurePricingTier: "Standard"|"Basic", azureStorageRedundancy: "Unknown"|"LocallyRedundant"|"ZoneRedundant"|"GeoRedundant"|"ReadAccessGeoRedundant", currency: "Unknown"|"USD"|"DKK"|"CAD"|"IDR"|"JPY"|"KRW"|"NZD"|"NOK"|"RUB"|"SAR"|"ZAR"|"SEK"|"TRY"|"GBP"|"MXN"|"MYR"|"INR"|"HKD"|"BRL"|"TWD"|"EUR"|"CHF"|"ARS"|"AUD"|"CNY", discountPercentage: float, percentile: "Percentile50"|"Percentile90"|"Percentile95"|"Percentile99", scalingFactor: float, sizingCriterion: "PerformanceBased"|"AsOnPremises", stage: "InProgress"|"UnderReview"|"Approved", timeRange: "Day"|"Week"|"Month"}
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  groupName: string
-  assessmentName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments create" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  group_name: string
+  assessment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,18 +476,18 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
-  --eTag: string # For optimistic concurrency control.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --e-tag: string # For optimistic concurrency control.
   properties: record # Properties of an assessment. — shape: {azureHybridUseBenefit: "Unknown"|"Yes"|"No", azureLocation: "Unknown"|"EastAsia"|"SoutheastAsia"|"AustraliaEast"|"AustraliaSoutheast"|"BrazilSouth"|"CanadaCentral"|"CanadaEast"|"WestEurope"|"NorthEurope"|"CentralIndia"|"SouthIndia"|"WestIndia"|"JapanEast"|"JapanWest"|"KoreaCentral"|"KoreaSouth"|"UkWest"|"UkSouth"|"NorthCentralUs"|"EastUs"|"WestUs2"|"SouthCentralUs"|"CentralUs"|"EastUs2"|"WestUs"|"WestCentralUs"|"GermanyCentral"|"GermanyNortheast"|"ChinaNorth"|"ChinaEast", azureOfferCode: "Unknown"|"MSAZR0003P"|"MSAZR0044P"|"MSAZR0059P"|"MSAZR0060P"|"MSAZR0062P"|"MSAZR0063P"|"MSAZR0064P"|"MSAZR0029P"|"MSAZR0022P"|"MSAZR0023P"|"MSAZR0148P"|"MSAZR0025P"|"MSAZR0036P"|"MSAZR0120P"|"MSAZR0121P"|"MSAZR0122P"|"MSAZR0123P"|"MSAZR0124P"|"MSAZR0125P"|"MSAZR0126P"|"MSAZR0127P"|"MSAZR0128P"|"MSAZR0129P"|"MSAZR0130P"|"MSAZR0111P"|"MSAZR0144P"|"MSAZR0149P"|"MSMCAZR0044P"|"MSMCAZR0059P"|"MSMCAZR0060P"|"MSMCAZR0063P"|"MSMCAZR0120P"|"MSMCAZR0121P"|"MSMCAZR0125P"|"MSMCAZR0128P"|"MSAZRDE0003P"|"MSAZRDE0044P", azurePricingTier: "Standard"|"Basic", azureStorageRedundancy: "Unknown"|"LocallyRedundant"|"ZoneRedundant"|"GeoRedundant"|"ReadAccessGeoRedundant", currency: "Unknown"|"USD"|"DKK"|"CAD"|"IDR"|"JPY"|"KRW"|"NZD"|"NOK"|"RUB"|"SAR"|"ZAR"|"SEK"|"TRY"|"GBP"|"MXN"|"MYR"|"INR"|"HKD"|"BRL"|"TWD"|"EUR"|"CHF"|"ARS"|"AUD"|"CNY", discountPercentage: float, percentile: "Percentile50"|"Percentile90"|"Percentile95"|"Percentile99", scalingFactor: float, sizingCriterion: "PerformanceBased"|"AsOnPremises", stage: "InProgress"|"UnderReview"|"Approved", timeRange: "Day"|"Week"|"Month"}
 ]: any -> record<eTag: string, id: string, name: string, properties: record<azureHybridUseBenefit: string, azureLocation: string, azureOfferCode: string, azurePricingTier: string, azureStorageRedundancy: string, confidenceRatingInPercentage: float, createdTimestamp: string, currency: string, discountPercentage: float, monthlyBandwidthCost: float, monthlyComputeCost: float, monthlyStorageCost: float, numberOfMachines: int, percentile: string, pricesTimestamp: string, scalingFactor: float, sizingCriterion: string, stage: string, status: string, timeRange: string, updatedTimestamp: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups/($groupName)/assessments/($assessmentName)" $qp)
-  let body = {eTag: $eTag, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, group_name: $group_name, assessment_name: $assessment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}") $qp)
+  let body = {"eTag": $e_tag, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,12 +498,12 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}/assessedMachines
 # operationId: AssessedMachines_ListByAssessment
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments-assessed-machines ListByAssessment" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  groupName: string
-  assessmentName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments-assessed-machines list-by" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  group_name: string
+  assessment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,13 +513,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups/($groupName)/assessments/($assessmentName)/assessedMachines" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, group_name: $group_name, assessment_name: $assessment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}/assessedMachines") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,13 +530,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}/assessedMachines/{assessedMachineName}
 # operationId: AssessedMachines_Get
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments-assessed-machines Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  groupName: string
-  assessmentName: string
-  assessedMachineName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments-assessed-machines get" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  group_name: string
+  assessment_name: string
+  assessed_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,13 +546,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<eTag: string, id: string, name: string, properties: record<bootType: string, createdTimestamp: string, datacenterContainer: string, datacenterMachineId: string, datacenterManagementServer: string, datacenterManagementServerId: string, description: string, discoveredTimestamp: string, disks: record, displayName: string, groups: list<string>, megabytesOfMemory: float, megabytesOfMemoryForRecommendedSize: float, monthlyBandwidthCost: float, monthlyComputeCostForRecommendedSize: float, monthlyStorageCost: float, networkAdapters: record, numberOfCores: int, numberOfCoresForRecommendedSize: int, operatingSystem: string, percentageCoresUtilization: float, percentageCoresUtilizationDataPointsExpected: int, percentageCoresUtilizationDataPointsReceived: int, percentageMemoryUtilization: float, percentageMemoryUtilizationDataPointsExpected: int, percentageMemoryUtilizationDataPointsReceived: int, recommendedSize: string, suitability: string, suitabilityExplanation: string, updatedTimestamp: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups/($groupName)/assessments/($assessmentName)/assessedMachines/($assessedMachineName)" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, group_name: $group_name, assessment_name: $assessment_name, assessed_machine_name: $assessed_machine_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}/assessedMachines/{assessed_machine_name}") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -563,12 +563,12 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/groups/{groupName}/assessments/{assessmentName}/downloadUrl
 # operationId: Assessments_GetReportDownloadUrl
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments-download-url GetReportDownloadUrl" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  groupName: string
-  assessmentName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-groups-assessments-download-url get-report" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  group_name: string
+  assessment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,13 +578,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<assessmentReportUrl: string, expirationTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/groups/($groupName)/assessments/($assessmentName)/downloadUrl" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, group_name: $group_name, assessment_name: $assessment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/groups/{group_name}/assessments/{assessment_name}/downloadUrl") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -595,10 +595,10 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-g
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/machines
 # operationId: Machines_ListByProject
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-machines ListByProject" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-machines list-by" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,13 +608,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-m
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, name: string, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/machines" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/machines") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -625,11 +625,11 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/machines/{machineName}
 # operationId: Machines_Get
-export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-machines Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
-  machineName: string
+export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-machines get" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
+  machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,13 +639,13 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-m
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<eTag: string, id: string, name: string, properties: record<bootType: string, createdTimestamp: string, datacenterContainer: string, datacenterMachineId: string, datacenterManagementServer: string, datacenterManagementServerId: string, description: string, discoveredTimestamp: string, disks: record, displayName: string, groups: list<string>, megabytesOfMemory: float, networkAdapters: record, numberOfCores: int, operatingSystem: string, updatedTimestamp: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/machines/($machineName)" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name, machine_name: $machine_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/machines/{machine_name}") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -656,9 +656,9 @@ export def "subscriptions-resource-groups-providers-microsoft-migrate-projects-m
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects
 # operationId: Projects_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,13 +668,13 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Li
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<value: table<eTag: string, id: string, location: string, name: string, properties: record, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Migrate/projects" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,10 +685,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Li
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}
 # operationId: Projects_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
+export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects delete" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,13 +698,13 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects De
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<error: record<code: string, details: list<any>, message: string, target: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -715,10 +715,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects De
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}
 # operationId: Projects_Get
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
+export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects get" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,13 +728,13 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Ge
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<eTag: string, id: string, location: string, name: string, properties: record<createdTimestamp: string, customerWorkspaceId: string, customerWorkspaceLocation: string, discoveryStatus: string, lastAssessmentTimestamp: string, lastDiscoverySessionId: string, lastDiscoveryTimestamp: string, numberOfAssessments: int, numberOfGroups: int, numberOfMachines: int, provisioningState: string, updatedTimestamp: string>, tags: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -746,10 +746,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Ge
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}
 # operationId: Projects_Update
 # --properties shape: {customerWorkspaceId?: string, customerWorkspaceLocation?: string, provisioningState?: "Accepted"|"Creating"|"Deleting"|"Failed"|"Moving"|"Succeeded"}
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
+export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects update" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,8 +759,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Up
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
-  --eTag: string # For optimistic concurrency control.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --e-tag: string # For optimistic concurrency control.
   --location: string # Azure location in which project is created.
   --properties: record # Properties of a project. — shape: {customerWorkspaceId?: string, customerWorkspaceLocation?: string, provisioningState?: "Accepted"|"Creating"|"Deleting"|"Failed"|"Moving"|"Succeeded"}
   --tags: record # Tags provided by Azure Tagging service.
@@ -769,10 +769,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Up
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)" $qp)
-  let body = {eTag: $eTag, location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}") $qp)
+  let body = {"eTag": $e_tag, "location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -784,10 +784,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Up
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}
 # operationId: Projects_Create
 # --properties shape: {customerWorkspaceId?: string, customerWorkspaceLocation?: string, provisioningState?: "Accepted"|"Creating"|"Deleting"|"Failed"|"Moving"|"Succeeded"}
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
+export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects create" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,8 +797,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Cr
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
-  --eTag: string # For optimistic concurrency control.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --e-tag: string # For optimistic concurrency control.
   --location: string # Azure location in which project is created.
   --properties: record # Properties of a project. — shape: {customerWorkspaceId?: string, customerWorkspaceLocation?: string, provisioningState?: "Accepted"|"Creating"|"Deleting"|"Failed"|"Moving"|"Succeeded"}
   --tags: record # Tags provided by Azure Tagging service.
@@ -807,10 +807,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Cr
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)" $qp)
-  let body = {eTag: $eTag, location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}") $qp)
+  let body = {"eTag": $e_tag, "location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -821,10 +821,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects Cr
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Migrate/projects/{projectName}/keys
 # operationId: Projects_GetKeys
-export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects-keys GetKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  projectName: string
+export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects-keys get" [
+  subscription_id: string
+  resource_group_name: string
+  project_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,13 +834,13 @@ export def "subscriptions-resourcegroups-providers-microsoft-migrate-projects-ke
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Standard request header. Used by service to identify API version used by client.
-  --Accept-Language: string # Standard request header. Used by service to respond to client in appropriate language.
+  --accept-language: string # Standard request header. Used by service to respond to client in appropriate language.
 ]: nothing -> record<workspaceId: string, workspaceKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Migrate/projects/($projectName)/keys" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, project_name: $project_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Migrate/projects/{project_name}/keys") $qp)
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -100,12 +100,12 @@ export def "gasweekly get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CurrentRow: string # Starting record number to return. (e.g. 1)
-  --Offset: string # Used to restrict the number of records returned if needed to be less than max. (e.g. 25)
+  --current-row: string # Starting record number to return. (e.g. 1)
+  --offset: string # Used to restrict the number of records returned if needed to be less than max. (e.g. 25)
 ]: nothing -> record<GasWeeklyList: record<Count: string, GasWeeklyArray: record<GasWeeklyRecord: list>, Message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "CurrentRow" $CurrentRow "scalar") (serialize-qp "Offset" $Offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "CurrentRow" $current_row "scalar") (serialize-qp "Offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/gasweekly" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -124,12 +124,12 @@ export def "parameters get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CurrentRow: string # Starting record number to return. (e.g. 1)
-  --Offset: string # Used to restrict the number of records returned if needed to be less than max. (e.g. 25)
+  --current-row: string # Starting record number to return. (e.g. 1)
+  --offset: string # Used to restrict the number of records returned if needed to be less than max. (e.g. 25)
 ]: nothing -> record<ParameterList: record<Count: string, Message: string, ParameterArray: record<Parameter: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "CurrentRow" $CurrentRow "scalar") (serialize-qp "Offset" $Offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "CurrentRow" $current_row "scalar") (serialize-qp "Offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/parameters" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,19 +148,19 @@ export def "spendingpulse get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CurrentRow: string # Starting record number to return. (e.g. 1)
-  --Offset: string # Used to restrict the number of records returned if needed to be less than max. (e.g. 25)
-  --ProductLine: string # Product Line.  Either ?US Executive Report? or ?Weekly Sales? (e.g. Weekly Sales)
-  --PublicationCoveragePeriod: string # Publication Coverage Period indicates what period is to be covered, often the current report will include the month prior. (e.g. March 2015)
-  --Country: string # Country code. (e.g. US)
-  --ReportType: string # Report type name, today the only report supported is "monitor". (e.g. reportA)
-  --Period: string # Indicates the period covered by the data with possible values of - day, week, month, quarter, annual (e.g. Weekly)
-  --Sector: string # Sector name. (e.g. sectorA)
-  --Ecomm: string # Ecommerce indicator. (e.g. Y)
+  --current-row: string # Starting record number to return. (e.g. 1)
+  --offset: string # Used to restrict the number of records returned if needed to be less than max. (e.g. 25)
+  --product-line: string # Product Line.  Either ?US Executive Report? or ?Weekly Sales? (e.g. Weekly Sales)
+  --publication-coverage-period: string # Publication Coverage Period indicates what period is to be covered, often the current report will include the month prior. (e.g. March 2015)
+  --country: string # Country code. (e.g. US)
+  --report-type: string # Report type name, today the only report supported is "monitor". (e.g. reportA)
+  --period: string # Indicates the period covered by the data with possible values of - day, week, month, quarter, annual (e.g. Weekly)
+  --sector: string # Sector name. (e.g. sectorA)
+  --ecomm: string # Ecommerce indicator. (e.g. Y)
 ]: nothing -> record<SpendingPulseList: record<Count: string, Message: string, SpendingPulseArray: record<SpendingPulseRecord: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "CurrentRow" $CurrentRow "scalar") (serialize-qp "Offset" $Offset "scalar") (serialize-qp "ProductLine" $ProductLine "scalar") (serialize-qp "PublicationCoveragePeriod" $PublicationCoveragePeriod "scalar") (serialize-qp "Country" $Country "scalar") (serialize-qp "ReportType" $ReportType "scalar") (serialize-qp "Period" $Period "scalar") (serialize-qp "Sector" $Sector "scalar") (serialize-qp "Ecomm" $Ecomm "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "CurrentRow" $current_row "scalar") (serialize-qp "Offset" $offset "scalar") (serialize-qp "ProductLine" $product_line "scalar") (serialize-qp "PublicationCoveragePeriod" $publication_coverage_period "scalar") (serialize-qp "Country" $country "scalar") (serialize-qp "ReportType" $report_type "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "Sector" $sector "scalar") (serialize-qp "Ecomm" $ecomm "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spendingpulse" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,12 +179,12 @@ export def "subscription get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CurrentRow: string # Starting record number to return. (e.g. 1)
-  --Offset: string # Used to restrict the number of records returned if needed to be less than max. (e.g. 25)
+  --current-row: string # Starting record number to return. (e.g. 1)
+  --offset: string # Used to restrict the number of records returned if needed to be less than max. (e.g. 25)
 ]: nothing -> record<SubscriptionList: record<Count: string, Message: string, SubscriptionArray: record<Subscription: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "CurrentRow" $CurrentRow "scalar") (serialize-qp "Offset" $Offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "CurrentRow" $current_row "scalar") (serialize-qp "Offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscription" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

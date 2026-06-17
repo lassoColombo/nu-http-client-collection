@@ -142,7 +142,7 @@ export def "gifs-random randomGif" [
 #
 # GET /gifs/search
 # operationId: searchGifs
-export def "gifs-search searchGifs" [
+export def "gifs-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "gifs-trending trendingGifs" [
 # GET /gifs/{gifId}
 # operationId: getGifById
 export def "gifs get" [
-  gifId: int
+  gif_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "gifs get" [
 ]: nothing -> record<data: record<bitly_url: string, content_url: string, create_datetime: string, embded_url: string, featured_tags: list<string>, id: string, images: record<downsized: record, downsized_large: record, downsized_medium: record, downsized_small: record, downsized_still: record, fixed_height: record, fixed_height_downsampled: record, fixed_height_small: record, fixed_height_small_still: record, fixed_height_still: record, fixed_width: record, fixed_width_downsampled: record, fixed_width_small: record, fixed_width_small_still: record, fixed_width_still: record, looping: record, original: record, original_still: record, preview: record, preview_gif: record>, import_datetime: string, rating: string, slug: string, source: string, source_post_url: string, source_tld: string, tags: list<string>, trending_datetime: string, type: string, update_datetime: string, url: string, user: record<avatar_url: string, banner_url: string, display_name: string, profile_url: string, twitter: string, username: string>, username: string>, meta: record<msg: string, response_id: string, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/gifs/($gifId)")
+  let full_url = (build-url $base ({gif_id: $gif_id} | format pattern "/gifs/{gif_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,7 +268,7 @@ export def "stickers-random randomSticker" [
 #
 # GET /stickers/search
 # operationId: searchStickers
-export def "stickers-search searchStickers" [
+export def "stickers-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

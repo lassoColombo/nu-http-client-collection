@@ -105,10 +105,10 @@ export def "accounts-call-logs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --start:gte: string # Filter records by start date (greater equal or equal to) (e.g. 2019-01-01 00:00:00)
-  --start:lte: string # Filter records by start date (less equal or equal to) (e.g. 2019-01-01 00:00:00)
-  --end:gte: string # Filter records by end date (greater equal or equal to) (e.g. 2019-01-01 00:00:00)
-  --end:lte: string # Filter records by end date (less equal or equal to) (e.g. 2019-01-01 00:00:00)
+  --start-gte: string # Filter records by start date (greater equal or equal to) (e.g. 2019-01-01 00:00:00)
+  --start-lte: string # Filter records by start date (less equal or equal to) (e.g. 2019-01-01 00:00:00)
+  --end-gte: string # Filter records by end date (greater equal or equal to) (e.g. 2019-01-01 00:00:00)
+  --end-lte: string # Filter records by end date (less equal or equal to) (e.g. 2019-01-01 00:00:00)
   --page-size: float # Number of records per page (default: 10, e.g. 10)
   --page: float # Current page number (default: 0, e.g. 10)
   --qp-to: string # Filter by called number (e.g. 17325550100)
@@ -119,8 +119,8 @@ export def "accounts-call-logs get" [
 ]: nothing -> record<_embedded: record<call_logs: list<record>>, _links: record<first: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, page: float, page_size: float, total_items: float, total_page: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start:gte" $start:gte "scalar") (serialize-qp "start:lte" $start:lte "scalar") (serialize-qp "end:gte" $end:gte "scalar") (serialize-qp "end:lte" $end:lte "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "source_user" $source_user "scalar") (serialize-qp "destination_user" $destination_user "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($account_id)/call-logs" $qp)
+  let qp = [(serialize-qp "start:gte" $start_gte "scalar") (serialize-qp "start:lte" $start_lte "scalar") (serialize-qp "end:gte" $end_gte "scalar") (serialize-qp "end:lte" $end_lte "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "source_user" $source_user "scalar") (serialize-qp "destination_user" $destination_user "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/call-logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

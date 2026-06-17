@@ -72,7 +72,7 @@ def pod-type-completer [] { ["p1.x1" "p1.x2" "p1.x4" "p1.x8" "p2.x1" "p2.x2" "p2
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collections collections" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collections get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /collections
 # operationId: list_collections
-export def "collections collections" [
+export def "collections get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "collections collection" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/collections")
-  let body = {name: $name, source: $body_source} | compact
+  let body = {"name": $name, "source": $body_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +146,7 @@ export def "collections collection" [
 # DELETE /collections/{collectionName}
 # operationId: delete_collection
 export def "collections collection-by-collectionName" [
-  collectionName: string
+  collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "collections collection-by-collectionName" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/collections/($collectionName)")
+  let full_url = (build-url $base ({collection_name: $collection_name} | format pattern "/collections/{collection_name}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,7 +169,7 @@ export def "collections collection-by-collectionName" [
 # GET /collections/{collectionName}
 # operationId: describe_collection
 export def "collections collection-by-collectionName-1" [
-  collectionName: string
+  collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "collections collection-by-collectionName-1" [
 ]: nothing -> record<name: string, size: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/collections/($collectionName)")
+  let full_url = (build-url $base ({collection_name: $collection_name} | format pattern "/collections/{collection_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,7 +191,7 @@ export def "collections collection-by-collectionName-1" [
 #
 # POST /describe_index_stats
 # operationId: DescribeIndexStats
-export def "describe-index-stats DescribeIndexStats" [
+export def "describe-index-stats stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "describe-index-stats DescribeIndexStats" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default "https://{index_name}-{project_id}.svc.{environment}.pincone.io")
   let full_url = (build-url $base "/describe_index_stats")
-  let body = {filter: $filter} | compact
+  let body = {"filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -217,7 +217,7 @@ export def "describe-index-stats DescribeIndexStats" [
 #
 # GET /indexes
 # operationId: list_indexes
-export def "indexes indexes" [
+export def "indexes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "indexes index" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/indexes")
-  let body = {dimension: $dimension, metadata_config: $metadata_config, metric: $metric, name: $name, pod_type: $pod_type, pods: $pods, replicas: $replicas, source_collection: $source_collection} | compact
+  let body = {"dimension": $dimension, "metadata_config": $metadata_config, "metric": $metric, "name": $name, "pod_type": $pod_type, "pods": $pods, "replicas": $replicas, "source_collection": $source_collection} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,7 +274,7 @@ export def "indexes index" [
 # DELETE /indexes/{indexName}
 # operationId: delete_index
 export def "indexes index-by-indexName" [
-  indexName: string
+  index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "indexes index-by-indexName" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/indexes/($indexName)")
+  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes/{index_name}"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,7 +297,7 @@ export def "indexes index-by-indexName" [
 # GET /indexes/{indexName}
 # operationId: describe_index
 export def "indexes index-by-indexName-1" [
-  indexName: string
+  index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "indexes index-by-indexName-1" [
 ]: nothing -> record<database: record<dimension: int, metric: string, name: string, pod_type: string, pods: int, replicas: int, shards: int>, status: record<host: string, port: int, ready: bool, state: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/indexes/($indexName)")
+  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes/{index_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,7 +320,7 @@ export def "indexes index-by-indexName-1" [
 # PATCH /indexes/{indexName}
 # operationId: configure_index
 export def "indexes index-by-indexName-2" [
-  indexName: string
+  index_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,8 +335,8 @@ export def "indexes index-by-indexName-2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/indexes/($indexName)")
-  let body = {pod_type: $pod_type, replicas: $replicas} | compact
+  let full_url = (build-url $base ({index_name: $index_name} | format pattern "/indexes/{index_name}"))
+  let body = {"pod_type": $pod_type, "replicas": $replicas} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -348,7 +348,7 @@ export def "indexes index-by-indexName-2" [
 # POST /query
 # operationId: Query
 # --sparseVector shape: {indices: list, values: list}
-export def "query Query" [
+export def "query list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,18 +359,18 @@ export def "query Query" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: record # If this parameter is present, the operation only affects vectors that satisfy the filter. See https://www.pinecone.io/docs/metadata-filtering/. (e.g. {hello: [alpha, bravo]})
   --id: string # The unique ID of a vector (format: VectorId, e.g. vector-0)
-  --includeMetadata: oneof<nothing, bool> # default: false
-  --includeValues: oneof<nothing, bool> # default: false
+  --include-metadata: oneof<nothing, bool> # default: false
+  --include-values: oneof<nothing, bool> # default: false
   --namespace: string # An index namespace name (format: NamespaceName, e.g. namespace-0)
-  --sparseVector: record # Vector sparse data. Represented as a list of indices and a list of corresponded values, which must be the same length. — shape: {indices: list, values: list}
-  topK: int # The number of results to return for each query. (format: int64, default: 100)
+  --sparse-vector: record # Vector sparse data. Represented as a list of indices and a list of corresponded values, which must be the same length. — shape: {indices: list, values: list}
+  top_k: int # The number of results to return for each query. (format: int64, default: 100)
   --vector: list # Vector dense data. This should be the same length as the dimension of the index being queried. (e.g. [1, 2, 3])
 ]: any -> record<matches: table<id: string, metadata: record, score: float, sparseValues: record, values: list>, namespace: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default "https://{index_name}-{project_id}.svc.{environment}.pincone.io")
   let full_url = (build-url $base "/query")
-  let body = {filter: $filter, id: $id, includeMetadata: $includeMetadata, includeValues: $includeValues, namespace: $namespace, sparseVector: $sparseVector, topK: $topK, vector: $vector} | compact
+  let body = {"filter": $filter, "id": $id, "includeMetadata": $include_metadata, "includeValues": $include_values, "namespace": $namespace, "sparseVector": $sparse_vector, "topK": $top_k, "vector": $vector} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,7 +381,7 @@ export def "query Query" [
 #
 # POST /vectors/delete
 # operationId: Delete
-export def "vectors-delete Delete" [
+export def "vectors-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "vectors-delete Delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deleteAll: oneof<nothing, bool> # default: false
+  --delete-all: oneof<nothing, bool> # default: false
   --filter: record # If this parameter is present, the operation only affects vectors that satisfy the filter. See https://www.pinecone.io/docs/metadata-filtering/. (e.g. {hello: [alpha, bravo]})
   --ids: list
   --namespace: string # An index namespace name (format: NamespaceName, e.g. namespace-0)
@@ -399,7 +399,7 @@ export def "vectors-delete Delete" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default "https://{index_name}-{project_id}.svc.{environment}.pincone.io")
   let full_url = (build-url $base "/vectors/delete")
-  let body = {deleteAll: $deleteAll, filter: $filter, ids: $ids, namespace: $namespace} | compact
+  let body = {"deleteAll": $delete_all, "filter": $filter, "ids": $ids, "namespace": $namespace} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -410,7 +410,7 @@ export def "vectors-delete Delete" [
 #
 # POST /vectors/fetch
 # operationId: Fetch
-export def "vectors-fetch Fetch" [
+export def "vectors-fetch get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "vectors-fetch Fetch" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default "https://{index_name}-{project_id}.svc.{environment}.pincone.io")
   let full_url = (build-url $base "/vectors/fetch")
-  let body = {ids: $ids, namespace: $namespace} | compact
+  let body = {"ids": $ids, "namespace": $namespace} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -438,7 +438,7 @@ export def "vectors-fetch Fetch" [
 # POST /vectors/update
 # operationId: Update
 # --sparseValues shape: {indices: list, values: list}
-export def "vectors-update Update" [
+export def "vectors-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,15 +449,15 @@ export def "vectors-update Update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   id: string # The vector's unique ID (format: VectorId)
   --namespace: string # An index namespace name (format: NamespaceName, e.g. namespace-0)
-  --setMetadata: record # e.g. {hello: alpha}
-  --sparseValues: record # Vector sparse data. Represented as a list of indices and a list of corresponded values, which must be the same length. — shape: {indices: list, values: list}
+  --set-metadata: record # e.g. {hello: alpha}
+  --sparse-values: record # Vector sparse data. Represented as a list of indices and a list of corresponded values, which must be the same length. — shape: {indices: list, values: list}
   --values: list # Vector dense data. This should be the same length as the dimension of the index being queried. (e.g. [1, 2, 3])
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default "https://{index_name}-{project_id}.svc.{environment}.pincone.io")
   let full_url = (build-url $base "/vectors/update")
-  let body = {id: $id, namespace: $namespace, setMetadata: $setMetadata, sparseValues: $sparseValues, values: $values} | compact
+  let body = {"id": $id, "namespace": $namespace, "setMetadata": $set_metadata, "sparseValues": $sparse_values, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -469,7 +469,7 @@ export def "vectors-update Update" [
 # POST /vectors/upsert
 # operationId: Upsert
 # --vectors item shape: {id?: string, metadata?: record, sparseValues?: record, values?: list}
-export def "vectors-upsert Upsert" [
+export def "vectors-upsert update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "vectors-upsert Upsert" [
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default "https://{index_name}-{project_id}.svc.{environment}.pincone.io")
   let full_url = (build-url $base "/vectors/upsert")
-  let body = {namespace: $namespace, vectors: $vectors} | compact
+  let body = {"namespace": $namespace, "vectors": $vectors} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "path put" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "path update-benefits-document-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # PUT /path
 # operationId: putBenefitsDocumentUpload
-export def "path put" [
+export def "path update-benefits-document-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,12 +102,12 @@ export def "path put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-MD5: string # Base64-encoded 128-bit MD5 digest of the message. Use for integrity control
+  --content-md5: string # Base64-encoded 128-bit MD5 digest of the message. Use for integrity control
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/path")
-  let extra_headers = {"Content-MD5": $Content_MD5} | compact
+  let extra_headers = {"Content-MD5": $content_md5} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -118,7 +118,7 @@ export def "path put" [
 #
 # POST /uploads
 # operationId: postBenefitsDocumentUpload
-export def "uploads post" [
+export def "uploads create-benefits-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "uploads post" [
 #
 # POST /uploads/report
 # operationId: getBenefitsDocumentUploadStatusReport
-export def "uploads-report post" [
+export def "uploads-report get-benefits-document-upload-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "uploads-report post" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/uploads/report")
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -166,7 +166,7 @@ export def "uploads-report post" [
 #
 # POST /uploads/validate_document
 # operationId: postBenefitsDocumentUploadValidateDocument
-export def "uploads-validate-document post" [
+export def "uploads-validate-document create-benefits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "uploads-validate-document post" [
 #
 # GET /uploads/{id}
 # operationId: getBenefitsDocumentUploadStatus
-export def "uploads get" [
+export def "uploads get-benefits-document-upload-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -201,7 +201,7 @@ export def "uploads get" [
 ]: nothing -> record<data: record<attributes: record<code: string, detail: string, guid: string, message: string, status: string, updated_at: string, uploaded_pdf: record>, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/uploads/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/uploads/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +211,7 @@ export def "uploads get" [
 #
 # GET /uploads/{id}/download
 # operationId: getBenefitsDocumentUploadDownload
-export def "uploads-download get" [
+export def "uploads-download get-benefits-document" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "uploads-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/uploads/($id)/download")
+  let full_url = (build-url $base ({id: $id} | format pattern "/uploads/{id}/download"))
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -117,7 +117,7 @@ export def "providers-microsoft-subscription-operations list" [
 #
 # GET /providers/Microsoft.Subscription/subscriptionDefinitions
 # operationId: SubscriptionDefinitions_List
-export def "providers-microsoft-subscription-subscription-definitions List" [
+export def "providers-microsoft-subscription-subscription-definitions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,8 +141,8 @@ export def "providers-microsoft-subscription-subscription-definitions List" [
 #
 # GET /providers/Microsoft.Subscription/subscriptionDefinitions/{subscriptionDefinitionName}
 # operationId: SubscriptionDefinitions_Get
-export def "providers-microsoft-subscription-subscription-definitions Get" [
-  subscriptionDefinitionName: string
+export def "providers-microsoft-subscription-subscription-definitions get" [
+  subscription_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "providers-microsoft-subscription-subscription-definitions Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Subscription/subscriptionDefinitions/($subscriptionDefinitionName)" $qp)
+  let full_url = (build-url $base ({subscription_definition_name: $subscription_definition_name} | format pattern "/providers/Microsoft.Subscription/subscriptionDefinitions/{subscription_definition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -167,8 +167,8 @@ export def "providers-microsoft-subscription-subscription-definitions Get" [
 # PUT /providers/Microsoft.Subscription/subscriptionDefinitions/{subscriptionDefinitionName}
 # operationId: SubscriptionDefinitions_Create
 # --properties shape: {etag?: string, offerType?: string, subscriptionDisplayName?: string}
-export def "providers-microsoft-subscription-subscription-definitions Create" [
-  subscriptionDefinitionName: string
+export def "providers-microsoft-subscription-subscription-definitions create" [
+  subscription_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,8 +184,8 @@ export def "providers-microsoft-subscription-subscription-definitions Create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Subscription/subscriptionDefinitions/($subscriptionDefinitionName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_definition_name: $subscription_definition_name} | format pattern "/providers/Microsoft.Subscription/subscriptionDefinitions/{subscription_definition_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -196,8 +196,8 @@ export def "providers-microsoft-subscription-subscription-definitions Create" [
 #
 # GET /providers/Microsoft.Subscription/subscriptionOperations/{operationId}
 # operationId: SubscriptionDefinitions_GetOperationStatus
-export def "providers-microsoft-subscription-subscription-operations GetOperationStatus" [
-  operationId: string
+export def "providers-microsoft-subscription-subscription-operations get-operation-status" [
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "providers-microsoft-subscription-subscription-operations GetOperatio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Subscription/subscriptionOperations/($operationId)" $qp)
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/providers/Microsoft.Subscription/subscriptionOperations/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

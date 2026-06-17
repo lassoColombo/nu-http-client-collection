@@ -71,7 +71,7 @@ def optional-completer [] { ["0" "1" "false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "info Root" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "info get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1
 # operationId: Root
-export def "info Root" [
+export def "info get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +117,7 @@ export def "info Root" [
 #
 # GET /api/v1/holidays
 # operationId: Holidays
-export def "holidays Holidays" [
+export def "holidays list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,8 +143,8 @@ export def "holidays Holidays" [
 #
 # GET /api/v1/holidays/{holidayId}
 # operationId: Holiday
-export def "holidays Holiday" [
-  holidayId: int
+export def "holidays get" [
+  holiday_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "holidays Holiday" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "optional" $optional "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/holidays/($holidayId)" $qp)
+  let full_url = (build-url $base ({holiday_id: $holiday_id} | format pattern "/api/v1/holidays/{holiday_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,7 +169,7 @@ export def "holidays Holiday" [
 #
 # GET /api/v1/provinces
 # operationId: Provinces
-export def "provinces Provinces" [
+export def "provinces list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,8 +194,8 @@ export def "provinces Provinces" [
 #
 # GET /api/v1/provinces/{provinceId}
 # operationId: Province
-export def "provinces Province" [
-  provinceId: string
+export def "provinces get" [
+  province_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "provinces Province" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "year" $year "scalar") (serialize-qp "optional" $optional "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/provinces/($provinceId)" $qp)
+  let full_url = (build-url $base ({province_id: $province_id} | format pattern "/api/v1/provinces/{province_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,7 +220,7 @@ export def "provinces Province" [
 #
 # GET /api/v1/spec
 # operationId: Spec
-export def "spec Spec" [
+export def "spec get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

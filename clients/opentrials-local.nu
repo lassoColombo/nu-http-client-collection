@@ -105,7 +105,7 @@ export def "conditions get" [
 ]: nothing -> record<id: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/conditions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/conditions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -115,7 +115,7 @@ export def "conditions get" [
 #
 # GET /document_categories
 # operationId: listDocumentCategories
-export def "document-categories listDocumentCategories" [
+export def "document-categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "document-categories listDocumentCategories" [
 #
 # GET /documents
 # operationId: listDocuments
-export def "documents listDocuments" [
+export def "documents list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "documents get" [
 ]: nothing -> record<document_category: record<group: string, id: int, name: string>, fda_application: record<active_ingredients: string, drug_name: string, fda_approvals: list<record>, id: string, organisation: record<id: string, name: string, url: string>, type: string, url: string>, file: record, id: string, name: string, source: record<id: string, name: string, source_url: string, terms_and_conditions_url: string, type: string>, source_url: string, trials: table<id: string, public_title: string, url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -185,7 +185,7 @@ export def "documents get" [
 #
 # GET /fda_applications
 # operationId: listFDAApplications
-export def "fda-applications listFDAApplications" [
+export def "fda-applications list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "fda-applications get" [
 ]: nothing -> record<active_ingredients: string, drug_name: string, fda_approvals: table<action_date: string, fda_application: any, id: string, notes: string, supplement_number: int, type: string>, id: string, organisation: record<id: string, name: string, url: string>, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fda_applications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/fda_applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -246,7 +246,7 @@ export def "interventions get" [
 ]: nothing -> record<id: string, name: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/interventions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/interventions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +269,7 @@ export def "organisations get" [
 ]: nothing -> record<id: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organisations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/organisations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,7 +292,7 @@ export def "persons get" [
 ]: nothing -> record<id: string, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persons/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/persons/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,7 +315,7 @@ export def "publications get" [
 ]: nothing -> record<abstract: string, authors: list<string>, created_at: string, date: string, id: string, journal: string, slug: string, source: record<id: string, name: string, source_url: string, terms_and_conditions_url: string, type: string>, source_url: string, title: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/publications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/publications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,7 +325,7 @@ export def "publications get" [
 #
 # GET /search
 # operationId: searchTrials
-export def "search searchTrials" [
+export def "search list-trials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "search searchTrials" [
 # GET /search/autocomplete/{in}
 # operationId: autocomplete
 export def "search-autocomplete autocomplete" [
-  in: string
+  in_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "search-autocomplete autocomplete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/autocomplete/($in)" $qp)
+  let full_url = (build-url $base ({in_arg: $in_arg} | format pattern "/search/autocomplete/{in_arg}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -378,7 +378,7 @@ export def "search-autocomplete autocomplete" [
 #
 # GET /search/fda_documents
 # operationId: searchFDADocuments
-export def "search-fda-documents searchFDADocuments" [
+export def "search-fda-documents list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "trials get" [
 ]: nothing -> record<age_range: record<max_age: string, min_age: string>, brief_summary: string, completion_date: string, conditions: table<id: string, name: string, url: string>, discrepancies: record, documents: table<document_category: record, fda_application: record, file: record, id: string, name: string, source_id: string, source_url: string, trials: list, url: string>, gender: string, has_published_results: bool, id: string, identifiers: record, interventions: table<id: string, name: string, type: string, url: string>, locations: list<record>, organisations: list<record>, persons: list<record>, public_title: string, publications: table<id: string, source_id: string, source_url: string, title: string, url: string>, records: table<id: string, is_primary: bool, last_verification_date: string, source_id: string, url: string>, recruitment_status: string, registration_date: string, results_exemption_date: string, risks_of_bias: table<id: string, risk_of_bias_criteria: list, source_id: string, source_url: string, study_id: string>, source_id: string, sources: record, status: string, study_phase: list<string>, target_sample_size: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/trials/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/trials/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -463,7 +463,7 @@ export def "trials-records list" [
 ]: nothing -> table<created_at: string, id: string, identifiers: record, is_primary: bool, last_verification_date: string, public_title: string, recruitment_status: string, source: record<id: string, name: string, source_url: string, terms_and_conditions_url: string, type: string>, source_id: string, source_url: string, status: string, trial_id: string, trial_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/trials/($id)/records")
+  let full_url = (build-url $base ({id: $id} | format pattern "/trials/{id}/records"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -474,7 +474,7 @@ export def "trials-records list" [
 # GET /trials/{trialId}/records/{id}
 # operationId: getRecord
 export def "trials-records get" [
-  trialId: string
+  trial_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,7 +487,7 @@ export def "trials-records get" [
 ]: nothing -> record<created_at: string, id: string, identifiers: record, is_primary: bool, last_verification_date: string, public_title: string, recruitment_status: string, source: record<id: string, name: string, source_url: string, terms_and_conditions_url: string, type: string>, source_id: string, source_url: string, status: string, trial_id: string, trial_url: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/trials/($trialId)/records/($id)")
+  let full_url = (build-url $base ({trial_id: $trial_id, id: $id} | format pattern "/trials/{trial_id}/records/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

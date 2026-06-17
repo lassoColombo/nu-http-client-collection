@@ -110,7 +110,7 @@ export def "rank-collect rankCollect" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rank-collect")
-  let body = {task_ids: $task_ids} | compact
+  let body = {"task_ids": $task_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -138,7 +138,7 @@ export def "rank-submit rankSubmit" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rank-submit")
-  let body = {priority: $priority, tasks: $tasks} | compact
+  let body = {"priority": $priority, "tasks": $tasks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -164,7 +164,7 @@ export def "serp-collect serpCollect" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/serp-collect")
-  let body = {task_ids: $task_ids} | compact
+  let body = {"task_ids": $task_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -192,7 +192,7 @@ export def "serp-submit serpSubmit" [
   let auth = (build-auth $token ($auth_scheme | default "query-apiKey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/serp-submit")
-  let body = {priority: $priority, tasks: $tasks} | compact
+  let body = {"priority": $priority, "tasks": $tasks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

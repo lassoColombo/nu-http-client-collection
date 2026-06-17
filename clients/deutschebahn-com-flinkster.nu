@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "areas listAreas" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "areas list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /areas
 # operationId: listAreas
-export def "areas listAreas" [
+export def "areas list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,7 +125,7 @@ export def "areas listAreas" [
 # GET /areas/{areaUID}
 # operationId: getArea
 export def "areas get" [
-  areaUID: string
+  area_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "areas get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/areas/($areaUID)" $qp)
+  let full_url = (build-url $base ({area_uid: $area_uid} | format pattern "/areas/{area_uid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -149,7 +149,7 @@ export def "areas get" [
 #
 # GET /bookingproposals
 # operationId: listBookingProposals
-export def "bookingproposals listBookingProposals" [
+export def "bookingproposals list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,8 +204,8 @@ export def "index get" [
 #
 # GET /providernetworks/{providernetworkUID}/categories
 # operationId: listCategories
-export def "providernetworks-categories listCategories" [
-  providernetworkUID: string
+export def "providernetworks-categories list" [
+  providernetwork_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "providernetworks-categories listCategories" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providernetworks/($providernetworkUID)/categories" $qp)
+  let full_url = (build-url $base ({providernetwork_uid: $providernetwork_uid} | format pattern "/providernetworks/{providernetwork_uid}/categories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,9 +229,9 @@ export def "providernetworks-categories listCategories" [
 #
 # GET /providernetworks/{providernetworkUID}/categories/{categoryUID}
 # operationId: getCategory
-export def "providernetworks-categories get" [
-  providernetworkUID: string
-  categoryUID: string
+export def "providernetworks-categories get-category" [
+  providernetwork_uid: string
+  category_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "providernetworks-categories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providernetworks/($providernetworkUID)/categories/($categoryUID)" $qp)
+  let full_url = (build-url $base ({providernetwork_uid: $providernetwork_uid, category_uid: $category_uid} | format pattern "/providernetworks/{providernetwork_uid}/categories/{category_uid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +256,7 @@ export def "providernetworks-categories get" [
 # GET /providernetworks/{providernetworkUID}/prices
 # operationId: getPrices
 export def "providernetworks-prices get" [
-  providernetworkUID: string
+  providernetwork_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "providernetworks-prices get" [
 ]: nothing -> record<_links: table<href: string, rel: string, verb: string>, attributes: record, category: record<_links: list<record>, attributes: record, description: string, expand: string, href: string, name: string, price: list<record>, uid: string>, description: string, expand: string, href: string, name: string, provider: record<_links: list<record>, attributes: record, description: string, expand: string, href: string, name: string, uid: string>, providerNetworkIds: list<int>, providerRentalObjectId: string, rentalModel: string, type: string, uid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/providernetworks/($providernetworkUID)/prices")
+  let full_url = (build-url $base ({providernetwork_uid: $providernetwork_uid} | format pattern "/providernetworks/{providernetwork_uid}/prices"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,8 +279,8 @@ export def "providernetworks-prices get" [
 # GET /providernetworks/{providernetworkUID}/rentalobjects/{rentalObjectUID}
 # operationId: getRentalObject
 export def "providernetworks-rentalobjects get" [
-  rentalObjectUID: string
-  providernetworkUID: string
+  providernetwork_uid: string
+  rental_object_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "providernetworks-rentalobjects get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providernetworks/($providernetworkUID)/rentalobjects/($rentalObjectUID)" $qp)
+  let full_url = (build-url $base ({providernetwork_uid: $providernetwork_uid, rental_object_uid: $rental_object_uid} | format pattern "/providernetworks/{providernetwork_uid}/rentalobjects/{rental_object_uid}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -317,7 +317,7 @@ export def "providernetworks get" [
 ]: nothing -> record<_links: table<href: string, rel: string, verb: string>, attributes: record, category: record<_links: list<record>, attributes: record, description: string, expand: string, href: string, name: string, price: list<record>, uid: string>, description: string, expand: string, href: string, name: string, provider: record<_links: list<record>, attributes: record, description: string, expand: string, href: string, name: string, uid: string>, providerNetworkIds: list<int>, providerRentalObjectId: string, rentalModel: string, type: string, uid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/providernetworks/($uid)")
+  let full_url = (build-url $base ({uid: $uid} | format pattern "/providernetworks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -340,7 +340,7 @@ export def "providers get" [
 ]: nothing -> record<_links: table<href: string, rel: string, verb: string>, attributes: record, category: record<_links: list<record>, attributes: record, description: string, expand: string, href: string, name: string, price: list<record>, uid: string>, description: string, expand: string, href: string, name: string, provider: record<_links: list<record>, attributes: record, description: string, expand: string, href: string, name: string, uid: string>, providerNetworkIds: list<int>, providerRentalObjectId: string, rentalModel: string, type: string, uid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/providers/($uid)")
+  let full_url = (build-url $base ({uid: $uid} | format pattern "/providers/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

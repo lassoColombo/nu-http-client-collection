@@ -112,23 +112,23 @@ export def "account-reports-search localservicesaccountReportssearch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --endDateday: int # Day of a month. Must be from 1 to 31 and valid for the year and month, or 0 to specify a year by itself or a year and month where the day isn't significant.
-  --endDatemonth: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
-  --endDateyear: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
-  --pageSize: int # The maximum number of accounts to return. If the page size is unset, page size will default to 1000. Maximum page_size is 10000. Optional.
-  --pageToken: string # The `next_page_token` value returned from a previous request to SearchAccountReports that indicates where listing should continue. Optional.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --end-date-day: int # Day of a month. Must be from 1 to 31 and valid for the year and month, or 0 to specify a year by itself or a year and month where the day isn't significant.
+  --end-date-month: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
+  --end-date-year: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
+  --page-size: int # The maximum number of accounts to return. If the page size is unset, page size will default to 1000. Maximum page_size is 10000. Optional.
+  --page-token: string # The `next_page_token` value returned from a previous request to SearchAccountReports that indicates where listing should continue. Optional.
   --query: string # A query string for searching for account reports. Caller must provide a customer id of their MCC account with an associated Gaia Mint that allows read permission on their linked accounts. Search expressions are case insensitive. Example query: | Query | Description | |-------------------------|-----------------------------------------------| | manager_customer_id:123 | Get Account Report for Manager with id 123. | Required.
-  --startDateday: int # Day of a month. Must be from 1 to 31 and valid for the year and month, or 0 to specify a year by itself or a year and month where the day isn't significant.
-  --startDatemonth: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
-  --startDateyear: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
+  --start-date-day: int # Day of a month. Must be from 1 to 31 and valid for the year and month, or 0 to specify a year by itself or a year and month where the day isn't significant.
+  --start-date-month: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
+  --start-date-year: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
 ]: nothing -> record<accountReports: table<accountId: string, aggregatorInfo: record, averageFiveStarRating: float, averageWeeklyBudget: float, businessName: string, currencyCode: string, currentPeriodChargedLeads: string, currentPeriodConnectedPhoneCalls: string, currentPeriodPhoneCalls: string, currentPeriodTotalCost: float, impressionsLastTwoDays: string, phoneLeadResponsiveness: float, previousPeriodChargedLeads: string, previousPeriodConnectedPhoneCalls: string, previousPeriodPhoneCalls: string, previousPeriodTotalCost: float, totalReview: int>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "endDate.day" $endDateday "scalar") (serialize-qp "endDate.month" $endDatemonth "scalar") (serialize-qp "endDate.year" $endDateyear "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "startDate.day" $startDateday "scalar") (serialize-qp "startDate.month" $startDatemonth "scalar") (serialize-qp "startDate.year" $startDateyear "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate.day" $end_date_day "scalar") (serialize-qp "endDate.month" $end_date_month "scalar") (serialize-qp "endDate.year" $end_date_year "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "startDate.day" $start_date_day "scalar") (serialize-qp "startDate.month" $start_date_month "scalar") (serialize-qp "startDate.year" $start_date_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/accountReports:search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,23 +155,23 @@ export def "detailed-lead-reports-search localservicesdetailedLeadReportssearch"
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --endDateday: int # Day of a month. Must be from 1 to 31 and valid for the year and month, or 0 to specify a year by itself or a year and month where the day isn't significant.
-  --endDatemonth: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
-  --endDateyear: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
-  --pageSize: int # The maximum number of accounts to return. If the page size is unset, page size will default to 1000. Maximum page_size is 10000. Optional.
-  --pageToken: string # The `next_page_token` value returned from a previous request to SearchDetailedLeadReports that indicates where listing should continue. Optional.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --end-date-day: int # Day of a month. Must be from 1 to 31 and valid for the year and month, or 0 to specify a year by itself or a year and month where the day isn't significant.
+  --end-date-month: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
+  --end-date-year: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
+  --page-size: int # The maximum number of accounts to return. If the page size is unset, page size will default to 1000. Maximum page_size is 10000. Optional.
+  --page-token: string # The `next_page_token` value returned from a previous request to SearchDetailedLeadReports that indicates where listing should continue. Optional.
   --query: string # A query string for searching for account reports. Caller must provide a customer id of their MCC account with an associated Gaia Mint that allows read permission on their linked accounts. Search expressions are case insensitive. Example query: | Query | Description | |-------------------------|-----------------------------------------------| | manager_customer_id:123 | Get Detailed Lead Report for Manager with id | | | 123. | Required.
-  --startDateday: int # Day of a month. Must be from 1 to 31 and valid for the year and month, or 0 to specify a year by itself or a year and month where the day isn't significant.
-  --startDatemonth: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
-  --startDateyear: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
+  --start-date-day: int # Day of a month. Must be from 1 to 31 and valid for the year and month, or 0 to specify a year by itself or a year and month where the day isn't significant.
+  --start-date-month: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
+  --start-date-year: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
 ]: nothing -> record<detailedLeadReports: table<accountId: string, aggregatorInfo: record, bookingLead: record, businessName: string, chargeStatus: string, currencyCode: string, disputeStatus: string, geo: string, leadCategory: string, leadCreationTimestamp: string, leadId: string, leadPrice: float, leadType: string, messageLead: record, phoneLead: record, timezone: record>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "endDate.day" $endDateday "scalar") (serialize-qp "endDate.month" $endDatemonth "scalar") (serialize-qp "endDate.year" $endDateyear "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "startDate.day" $startDateday "scalar") (serialize-qp "startDate.month" $startDatemonth "scalar") (serialize-qp "startDate.year" $startDateyear "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate.day" $end_date_day "scalar") (serialize-qp "endDate.month" $end_date_month "scalar") (serialize-qp "endDate.year" $end_date_year "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "startDate.day" $start_date_day "scalar") (serialize-qp "startDate.month" $start_date_month "scalar") (serialize-qp "startDate.year" $start_date_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/detailedLeadReports:search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

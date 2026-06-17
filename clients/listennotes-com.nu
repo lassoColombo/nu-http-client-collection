@@ -122,13 +122,13 @@ export def "best-podcasts get" [
   --language: string # Filter best podcasts by language. You can get a list of supported languages (e.g., English, Chinese, Japanese...) from `GET /languages`. If not specified, you'll get "best podcasts" in any language.
   --qp-sort: string@sort-completer # How do you want to sort these podcasts? If you'd like to sort by popularity, please use **listen_score**.  (default: recent_added_first, e.g. listen_score)
   --safe-mode: int@safe-mode-completer # Whether or not to exclude podcasts with explicit language. 1 is yes, and 0 is no. (default: 0)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<has_next: bool, has_previous: bool, id: int, listennotes_url: string, name: string, next_page_number: int, page_number: int, parent_id: int, podcasts: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>, previous_page_number: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "genre_id" $genre_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "publisher_region" $publisher_region "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "safe_mode" $safe_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/best_podcasts" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,13 +149,13 @@ export def "curated-podcasts list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number of curated lists. (default: 1, e.g. 2)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<curated_lists: table<description: string, id: string, listennotes_url: string, podcasts: list, pub_date_ms: int, source_domain: string, source_url: string, title: string, total: int>, has_next: bool, has_previous: bool, next_page_number: int, page_number: int, previous_page_number: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/curated_podcasts" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -176,12 +176,12 @@ export def "curated-podcasts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<description: string, id: string, listennotes_url: string, podcasts: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>, pub_date_ms: int, source_domain: string, source_url: string, title: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/curated_podcasts/($id)")
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/curated_podcasts/{id}"))
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -192,7 +192,7 @@ export def "curated-podcasts get" [
 #
 # POST /episodes
 # operationId: getEpisodesInBatch
-export def "episodes post" [
+export def "episodes get-episodes-in-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,16 +201,16 @@ export def "episodes post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
   ids: string # Comma-separated list of episode ids.
 ]: any -> record<episodes: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record, pub_date_ms: int, thumbnail: string, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/episodes")
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,13 +232,13 @@ export def "episodes get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --show-transcript: int # To include the transcript of this episode or not? If it is 1, then include the transcript in the **transcript** field. The default value is 0 - we don't include transcript by default, because 1) it would make the response data very big, thus slow response time; 2) less than 1% of episodes have transcripts. The transcript field is available only in the PRO/ENTERPRISE plan. (default: 0)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record<amazon_music_url: string, facebook_handle: string, google_url: string, instagram_handle: string, linkedin_url: string, patreon_handle: string, spotify_url: string, twitter_handle: string, url1: string, url2: string, url3: string, wechat_handle: string, youtube_url: string>, genre_ids: list<int>, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record<cohosts: bool, cross_promotion: bool, guests: bool, sponsors: bool>, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>, pub_date_ms: int, thumbnail: string, title: string, transcript: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_transcript" $show_transcript "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/episodes/($id)" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/episodes/{id}") $qp)
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -260,13 +260,13 @@ export def "episodes-recommendations get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --safe-mode: int@safe-mode-completer # Whether or not to exclude podcasts with explicit language. 1 is yes, and 0 is no. (default: 0)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<recommendations: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record, pub_date_ms: int, thumbnail: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "safe_mode" $safe_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/episodes/($id)/recommendations" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/episodes/{id}/recommendations") $qp)
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -287,13 +287,13 @@ export def "genres get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --top-level-only: int@top-level-only-completer # Just show top level genres? If 1, yes, just show top level genres. If 0, no, show all genres.  (default: 0)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<genres: table<id: int, name: string, parent_id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "top_level_only" $top_level_only "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/genres" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,12 +313,12 @@ export def "just-listen justListen" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, podcast: record<id: string, image: string, listen_score: int, listen_score_global_rank: string, listennotes_url: string, publisher: string, thumbnail: string, title: string>, pub_date_ms: int, thumbnail: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/just_listen")
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,12 +338,12 @@ export def "languages get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<languages: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/languages")
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -365,13 +365,13 @@ export def "playlists list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-sort: string@sort-completer-1 # How do you want to sort playlists?  (default: recent_added_first)
   --page: int # Page number of playlists.  (default: 1)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<has_next: bool, has_previous: bool, next_page_number: int, page_number: int, playlists: table<description: string, episode_count: int, id: string, image: string, last_timestamp_ms: int, listennotes_url: string, name: string, podcast_count: int, thumbnail: string, total_audio_length_sec: int, visibility: string>, previous_page_number: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playlists" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -395,13 +395,13 @@ export def "playlists get" [
   --type: string@type-completer # The type of this playlist, which should be either **episode_list** or **podcast_list**.  (default: episode_list)
   --last-timestamp-ms: int # For playlist items pagination. It's the value of **last_timestamp_ms** from the response of last request. If it's 0 or not specified, just return the latest or the oldest 20 items, depending on the value of the **sort** parameter.  (default: 0)
   --qp-sort: string@sort-completer-2 # How do you want to sort playlist items?  (default: recent_added_first)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<description: string, id: string, image: string, items: table<added_at_ms: int, data: any, id: int, notes: string, type: string>, last_timestamp_ms: int, listennotes_url: string, name: string, thumbnail: string, total: int, total_audio_length_sec: int, type: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "last_timestamp_ms" $last_timestamp_ms "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/playlists/($id)" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/playlists/{id}") $qp)
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -412,7 +412,7 @@ export def "playlists get" [
 #
 # POST /podcasts
 # operationId: getPodcastsInBatch
-export def "podcasts post" [
+export def "podcasts get-podcasts-in-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "podcasts post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
   --ids: string # Comma-separated list of podcast ids.
   --itunes-ids: string # Comma-separated Apple Podcasts (iTunes) ids, e.g., 659155419
   --next-episode-pub-date: int # For latest episodes pagination. It's the value of **next_episode_pub_date** from the response of last request. If not specified, just return latest 15 episodes.
@@ -433,9 +433,9 @@ export def "podcasts post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/podcasts")
-  let body = {ids: $ids, itunes_ids: $itunes_ids, next_episode_pub_date: $next_episode_pub_date, rsses: $rsses, show_latest_episodes: $show_latest_episodes, spotify_ids: $spotify_ids} | compact
+  let body = {"ids": $ids, "itunes_ids": $itunes_ids, "next_episode_pub_date": $next_episode_pub_date, "rsses": $rsses, "show_latest_episodes": $show_latest_episodes, "spotify_ids": $spotify_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -446,7 +446,7 @@ export def "podcasts post" [
 #
 # POST /podcasts/submit
 # operationId: submitPodcast
-export def "podcasts-submit submitPodcast" [
+export def "podcasts-submit submit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "podcasts-submit submitPodcast" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
   --email: string # A valid email address. If **email** is specified, then we'll notify this email address once the podcast is accepted.
   rss: string # A valid podcast rss url.
 ]: any -> record<podcast: record<id: string, image: string, listen_score: int, listen_score_global_rank: string, listennotes_url: string, publisher: string, thumbnail: string, title: string>, status: string> {
@@ -463,9 +463,9 @@ export def "podcasts-submit submitPodcast" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/podcasts/submit")
-  let body = {email: $email, rss: $rss} | compact
+  let body = {"email": $email, "rss": $rss} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,13 +487,13 @@ export def "podcasts delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --reason: string # The reason why this podcast should be deleted, e.g., copyright violation, the podcaster wants to delete it... You can put "testing" here to indicate that you are testing this endpoint, so we will not actually delete the podcast. (e.g. the podcaster wants to delete it)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/podcasts/($id)" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/podcasts/{id}") $qp)
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -516,13 +516,13 @@ export def "podcasts get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-episode-pub-date: int # For episodes pagination. It's the value of **next_episode_pub_date** from the response of last request. If not specified, just return latest 10 episodes or oldest 10 episodes, depending on the value of the **sort** parameter.  (e.g. 1479154463000)
   --qp-sort: string@sort-completer-3 # How do you want to sort the episodes of this podcast?  (default: recent_first, e.g. recent_first)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, episodes: table<audio: string, audio_length_sec: int, description: string, explicit_content: bool, id: string, image: string, link: string, listennotes_edit_url: string, listennotes_url: string, maybe_audio_invalid: bool, pub_date_ms: int, thumbnail: string, title: string>, explicit_content: bool, extra: record<amazon_music_url: string, facebook_handle: string, google_url: string, instagram_handle: string, linkedin_url: string, patreon_handle: string, spotify_url: string, twitter_handle: string, url1: string, url2: string, url3: string, wechat_handle: string, youtube_url: string>, genre_ids: list<int>, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record<cohosts: bool, cross_promotion: bool, guests: bool, sponsors: bool>, next_episode_pub_date: int, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next_episode_pub_date" $next_episode_pub_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/podcasts/($id)" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/podcasts/{id}") $qp)
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -543,12 +543,12 @@ export def "podcasts-audience get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<by_regions: table<ratio: string, region: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/podcasts/($id)/audience")
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/podcasts/{id}/audience"))
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -570,13 +570,13 @@ export def "podcasts-recommendations get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --safe-mode: int@safe-mode-completer # Whether or not to exclude podcasts with explicit language. 1 is yes, and 0 is no. (default: 0)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<recommendations: table<audio_length_sec: int, country: string, description: string, earliest_pub_date_ms: int, email: string, explicit_content: bool, extra: record, genre_ids: list, id: string, image: string, is_claimed: bool, itunes_id: int, language: string, latest_episode_id: string, latest_pub_date_ms: int, listen_score: int, listen_score_global_rank: string, listennotes_url: string, looking_for: record, publisher: string, rss: string, thumbnail: string, title: string, total_episodes: int, type: string, update_frequency_hours: int, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "safe_mode" $safe_mode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/podcasts/($id)/recommendations" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/podcasts/{id}/recommendations") $qp)
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -596,12 +596,12 @@ export def "regions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<regions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/regions")
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -622,13 +622,13 @@ export def "related-searches get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search term, e.g., person, place, topic...
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<terms: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/related_searches" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -639,7 +639,7 @@ export def "related-searches get" [
 #
 # GET /search
 # operationId: search
-export def "search search" [
+export def "search get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,13 +668,13 @@ export def "search search" [
   --ncid: string # A comma-delimited string of podcast ids (up to 5 podcasts) - you can get a podcast id from the **podcast_id** field in response. This parameter is to exclude search results of a few specific podcasts. It works only when **type** is *episode*.
   --safe-mode: int@safe-mode-completer # Whether or not to exclude podcasts/episodes with explicit language. 1 is yes and 0 is no. It works only when **type** is *episode* or *podcast*.  (default: 0)
   --unique-podcasts: int@unique-podcasts-completer # Whether or not to keep only one episode per podcast in search results. 1 is yes and 0 is no. It works only when **type** is *episode*.  (default: 0)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<count: int, next_offset: int, results: list<any>, took: float, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort_by_date" $sort_by_date "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "len_min" $len_min "scalar") (serialize-qp "len_max" $len_max "scalar") (serialize-qp "episode_count_min" $episode_count_min "scalar") (serialize-qp "episode_count_max" $episode_count_max "scalar") (serialize-qp "update_freq_min" $update_freq_min "scalar") (serialize-qp "update_freq_max" $update_freq_max "scalar") (serialize-qp "genre_ids" $genre_ids "scalar") (serialize-qp "published_before" $published_before "scalar") (serialize-qp "published_after" $published_after "scalar") (serialize-qp "only_in" $only_in "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "region" $region "scalar") (serialize-qp "ocid" $ocid "scalar") (serialize-qp "ncid" $ncid "scalar") (serialize-qp "safe_mode" $safe_mode "scalar") (serialize-qp "unique_podcasts" $unique_podcasts "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,7 +685,7 @@ export def "search search" [
 #
 # GET /spellcheck
 # operationId: spellcheck
-export def "spellcheck spellcheck" [
+export def "spellcheck get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,13 +695,13 @@ export def "spellcheck spellcheck" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # Search term, e.g., person, place, topic...
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<corrected_text_html: string, tokens: table<offset: int, suggestion: string, token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spellcheck" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -721,12 +721,12 @@ export def "trending-searches get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<terms: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/trending_searches")
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -737,7 +737,7 @@ export def "trending-searches get" [
 #
 # GET /typeahead
 # operationId: typeahead
-export def "typeahead typeahead" [
+export def "typeahead get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,13 +750,13 @@ export def "typeahead typeahead" [
   --show-podcasts: int@show-podcasts-completer # Autosuggest podcasts. This only searches podcast title and publisher and returns very limited info of 5 podcasts. 1 is yes, 0 is no. It's a bit slow to autosuggest podcasts, so we turn it off by default. If show_podcasts=1, you can also pass iTunes id (e.g., 474722933) to the q parameter to fetch podcast meta data.  (default: 0)
   --show-genres: int@show-genres-completer # Whether or not to autosuggest genres. 1 is yes, 0 is no.  (default: 0)
   --safe-mode: int@safe-mode-completer # Whether or not to exclude podcasts/episodes with explicit language. 1 is yes and 0 is no. It works only when **show_podcasts** is *1*.  (default: 0)
-  --X-ListenAPI-Key: string # Get API Key on listennotes.com/api
+  --x-listen-api-key: string # Get API Key on listennotes.com/api
 ]: nothing -> record<genres: table<id: int, name: string, parent_id: int>, podcasts: table<explicit_content: bool, id: string, image: string, publisher_highlighted: string, publisher_original: string, thumbnail: string, title_highlighted: string, title_original: string>, terms: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "show_podcasts" $show_podcasts "scalar") (serialize-qp "show_genres" $show_genres "scalar") (serialize-qp "safe_mode" $safe_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/typeahead" $qp)
-  let extra_headers = {"X-ListenAPI-Key": $X_ListenAPI_Key} | compact
+  let extra_headers = {"X-ListenAPI-Key": $x_listen_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

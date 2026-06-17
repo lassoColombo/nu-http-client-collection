@@ -66,60 +66,60 @@ def base-url-completer [] { ["http://globalaccelerator.us-east-1.amazonaws.com" 
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["GlobalAccelerator_V20180706.AddCustomRoutingEndpoints"] }
-def X-Amz-Target-completer-1 [] { ["GlobalAccelerator_V20180706.AddEndpoints"] }
-def X-Amz-Target-completer-2 [] { ["GlobalAccelerator_V20180706.AdvertiseByoipCidr"] }
-def X-Amz-Target-completer-3 [] { ["GlobalAccelerator_V20180706.AllowCustomRoutingTraffic"] }
-def X-Amz-Target-completer-4 [] { ["GlobalAccelerator_V20180706.CreateAccelerator"] }
-def X-Amz-Target-completer-5 [] { ["GlobalAccelerator_V20180706.CreateCustomRoutingAccelerator"] }
-def X-Amz-Target-completer-6 [] { ["GlobalAccelerator_V20180706.CreateCustomRoutingEndpointGroup"] }
-def X-Amz-Target-completer-7 [] { ["GlobalAccelerator_V20180706.CreateCustomRoutingListener"] }
-def X-Amz-Target-completer-8 [] { ["GlobalAccelerator_V20180706.CreateEndpointGroup"] }
-def X-Amz-Target-completer-9 [] { ["GlobalAccelerator_V20180706.CreateListener"] }
-def X-Amz-Target-completer-10 [] { ["GlobalAccelerator_V20180706.DeleteAccelerator"] }
-def X-Amz-Target-completer-11 [] { ["GlobalAccelerator_V20180706.DeleteCustomRoutingAccelerator"] }
-def X-Amz-Target-completer-12 [] { ["GlobalAccelerator_V20180706.DeleteCustomRoutingEndpointGroup"] }
-def X-Amz-Target-completer-13 [] { ["GlobalAccelerator_V20180706.DeleteCustomRoutingListener"] }
-def X-Amz-Target-completer-14 [] { ["GlobalAccelerator_V20180706.DeleteEndpointGroup"] }
-def X-Amz-Target-completer-15 [] { ["GlobalAccelerator_V20180706.DeleteListener"] }
-def X-Amz-Target-completer-16 [] { ["GlobalAccelerator_V20180706.DenyCustomRoutingTraffic"] }
-def X-Amz-Target-completer-17 [] { ["GlobalAccelerator_V20180706.DeprovisionByoipCidr"] }
-def X-Amz-Target-completer-18 [] { ["GlobalAccelerator_V20180706.DescribeAccelerator"] }
-def X-Amz-Target-completer-19 [] { ["GlobalAccelerator_V20180706.DescribeAcceleratorAttributes"] }
-def X-Amz-Target-completer-20 [] { ["GlobalAccelerator_V20180706.DescribeCustomRoutingAccelerator"] }
-def X-Amz-Target-completer-21 [] { ["GlobalAccelerator_V20180706.DescribeCustomRoutingAcceleratorAttributes"] }
-def X-Amz-Target-completer-22 [] { ["GlobalAccelerator_V20180706.DescribeCustomRoutingEndpointGroup"] }
-def X-Amz-Target-completer-23 [] { ["GlobalAccelerator_V20180706.DescribeCustomRoutingListener"] }
-def X-Amz-Target-completer-24 [] { ["GlobalAccelerator_V20180706.DescribeEndpointGroup"] }
-def X-Amz-Target-completer-25 [] { ["GlobalAccelerator_V20180706.DescribeListener"] }
-def X-Amz-Target-completer-26 [] { ["GlobalAccelerator_V20180706.ListAccelerators"] }
-def X-Amz-Target-completer-27 [] { ["GlobalAccelerator_V20180706.ListByoipCidrs"] }
-def X-Amz-Target-completer-28 [] { ["GlobalAccelerator_V20180706.ListCustomRoutingAccelerators"] }
-def X-Amz-Target-completer-29 [] { ["GlobalAccelerator_V20180706.ListCustomRoutingEndpointGroups"] }
-def X-Amz-Target-completer-30 [] { ["GlobalAccelerator_V20180706.ListCustomRoutingListeners"] }
-def X-Amz-Target-completer-31 [] { ["GlobalAccelerator_V20180706.ListCustomRoutingPortMappings"] }
-def X-Amz-Target-completer-32 [] { ["GlobalAccelerator_V20180706.ListCustomRoutingPortMappingsByDestination"] }
-def X-Amz-Target-completer-33 [] { ["GlobalAccelerator_V20180706.ListEndpointGroups"] }
-def X-Amz-Target-completer-34 [] { ["GlobalAccelerator_V20180706.ListListeners"] }
-def X-Amz-Target-completer-35 [] { ["GlobalAccelerator_V20180706.ListTagsForResource"] }
-def X-Amz-Target-completer-36 [] { ["GlobalAccelerator_V20180706.ProvisionByoipCidr"] }
-def X-Amz-Target-completer-37 [] { ["GlobalAccelerator_V20180706.RemoveCustomRoutingEndpoints"] }
-def X-Amz-Target-completer-38 [] { ["GlobalAccelerator_V20180706.RemoveEndpoints"] }
-def X-Amz-Target-completer-39 [] { ["GlobalAccelerator_V20180706.TagResource"] }
-def X-Amz-Target-completer-40 [] { ["GlobalAccelerator_V20180706.UntagResource"] }
-def X-Amz-Target-completer-41 [] { ["GlobalAccelerator_V20180706.UpdateAccelerator"] }
-def X-Amz-Target-completer-42 [] { ["GlobalAccelerator_V20180706.UpdateAcceleratorAttributes"] }
-def X-Amz-Target-completer-43 [] { ["GlobalAccelerator_V20180706.UpdateCustomRoutingAccelerator"] }
-def X-Amz-Target-completer-44 [] { ["GlobalAccelerator_V20180706.UpdateCustomRoutingAcceleratorAttributes"] }
-def X-Amz-Target-completer-45 [] { ["GlobalAccelerator_V20180706.UpdateCustomRoutingListener"] }
-def X-Amz-Target-completer-46 [] { ["GlobalAccelerator_V20180706.UpdateEndpointGroup"] }
-def X-Amz-Target-completer-47 [] { ["GlobalAccelerator_V20180706.UpdateListener"] }
-def X-Amz-Target-completer-48 [] { ["GlobalAccelerator_V20180706.WithdrawByoipCidr"] }
+def x-amz-target-completer [] { ["GlobalAccelerator_V20180706.AddCustomRoutingEndpoints"] }
+def x-amz-target-completer-1 [] { ["GlobalAccelerator_V20180706.AddEndpoints"] }
+def x-amz-target-completer-2 [] { ["GlobalAccelerator_V20180706.AdvertiseByoipCidr"] }
+def x-amz-target-completer-3 [] { ["GlobalAccelerator_V20180706.AllowCustomRoutingTraffic"] }
+def x-amz-target-completer-4 [] { ["GlobalAccelerator_V20180706.CreateAccelerator"] }
+def x-amz-target-completer-5 [] { ["GlobalAccelerator_V20180706.CreateCustomRoutingAccelerator"] }
+def x-amz-target-completer-6 [] { ["GlobalAccelerator_V20180706.CreateCustomRoutingEndpointGroup"] }
+def x-amz-target-completer-7 [] { ["GlobalAccelerator_V20180706.CreateCustomRoutingListener"] }
+def x-amz-target-completer-8 [] { ["GlobalAccelerator_V20180706.CreateEndpointGroup"] }
+def x-amz-target-completer-9 [] { ["GlobalAccelerator_V20180706.CreateListener"] }
+def x-amz-target-completer-10 [] { ["GlobalAccelerator_V20180706.DeleteAccelerator"] }
+def x-amz-target-completer-11 [] { ["GlobalAccelerator_V20180706.DeleteCustomRoutingAccelerator"] }
+def x-amz-target-completer-12 [] { ["GlobalAccelerator_V20180706.DeleteCustomRoutingEndpointGroup"] }
+def x-amz-target-completer-13 [] { ["GlobalAccelerator_V20180706.DeleteCustomRoutingListener"] }
+def x-amz-target-completer-14 [] { ["GlobalAccelerator_V20180706.DeleteEndpointGroup"] }
+def x-amz-target-completer-15 [] { ["GlobalAccelerator_V20180706.DeleteListener"] }
+def x-amz-target-completer-16 [] { ["GlobalAccelerator_V20180706.DenyCustomRoutingTraffic"] }
+def x-amz-target-completer-17 [] { ["GlobalAccelerator_V20180706.DeprovisionByoipCidr"] }
+def x-amz-target-completer-18 [] { ["GlobalAccelerator_V20180706.DescribeAccelerator"] }
+def x-amz-target-completer-19 [] { ["GlobalAccelerator_V20180706.DescribeAcceleratorAttributes"] }
+def x-amz-target-completer-20 [] { ["GlobalAccelerator_V20180706.DescribeCustomRoutingAccelerator"] }
+def x-amz-target-completer-21 [] { ["GlobalAccelerator_V20180706.DescribeCustomRoutingAcceleratorAttributes"] }
+def x-amz-target-completer-22 [] { ["GlobalAccelerator_V20180706.DescribeCustomRoutingEndpointGroup"] }
+def x-amz-target-completer-23 [] { ["GlobalAccelerator_V20180706.DescribeCustomRoutingListener"] }
+def x-amz-target-completer-24 [] { ["GlobalAccelerator_V20180706.DescribeEndpointGroup"] }
+def x-amz-target-completer-25 [] { ["GlobalAccelerator_V20180706.DescribeListener"] }
+def x-amz-target-completer-26 [] { ["GlobalAccelerator_V20180706.ListAccelerators"] }
+def x-amz-target-completer-27 [] { ["GlobalAccelerator_V20180706.ListByoipCidrs"] }
+def x-amz-target-completer-28 [] { ["GlobalAccelerator_V20180706.ListCustomRoutingAccelerators"] }
+def x-amz-target-completer-29 [] { ["GlobalAccelerator_V20180706.ListCustomRoutingEndpointGroups"] }
+def x-amz-target-completer-30 [] { ["GlobalAccelerator_V20180706.ListCustomRoutingListeners"] }
+def x-amz-target-completer-31 [] { ["GlobalAccelerator_V20180706.ListCustomRoutingPortMappings"] }
+def x-amz-target-completer-32 [] { ["GlobalAccelerator_V20180706.ListCustomRoutingPortMappingsByDestination"] }
+def x-amz-target-completer-33 [] { ["GlobalAccelerator_V20180706.ListEndpointGroups"] }
+def x-amz-target-completer-34 [] { ["GlobalAccelerator_V20180706.ListListeners"] }
+def x-amz-target-completer-35 [] { ["GlobalAccelerator_V20180706.ListTagsForResource"] }
+def x-amz-target-completer-36 [] { ["GlobalAccelerator_V20180706.ProvisionByoipCidr"] }
+def x-amz-target-completer-37 [] { ["GlobalAccelerator_V20180706.RemoveCustomRoutingEndpoints"] }
+def x-amz-target-completer-38 [] { ["GlobalAccelerator_V20180706.RemoveEndpoints"] }
+def x-amz-target-completer-39 [] { ["GlobalAccelerator_V20180706.TagResource"] }
+def x-amz-target-completer-40 [] { ["GlobalAccelerator_V20180706.UntagResource"] }
+def x-amz-target-completer-41 [] { ["GlobalAccelerator_V20180706.UpdateAccelerator"] }
+def x-amz-target-completer-42 [] { ["GlobalAccelerator_V20180706.UpdateAcceleratorAttributes"] }
+def x-amz-target-completer-43 [] { ["GlobalAccelerator_V20180706.UpdateCustomRoutingAccelerator"] }
+def x-amz-target-completer-44 [] { ["GlobalAccelerator_V20180706.UpdateCustomRoutingAcceleratorAttributes"] }
+def x-amz-target-completer-45 [] { ["GlobalAccelerator_V20180706.UpdateCustomRoutingListener"] }
+def x-amz-target-completer-46 [] { ["GlobalAccelerator_V20180706.UpdateEndpointGroup"] }
+def x-amz-target-completer-47 [] { ["GlobalAccelerator_V20180706.UpdateListener"] }
+def x-amz-target-completer-48 [] { ["GlobalAccelerator_V20180706.WithdrawByoipCidr"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-global-accelerator-v20180706-add-custom-routing-endpoints AddCustomRoutingEndpoints" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-global-accelerator-v20180706-add-custom-routing-endpoints create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.AddCustomRoutingEndpoints
 # operationId: AddCustomRoutingEndpoints
-export def "x-amz-target-global-accelerator-v20180706-add-custom-routing-endpoints AddCustomRoutingEndpoints" [
+export def "x-amz-target-global-accelerator-v20180706-add-custom-routing-endpoints create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,24 +152,24 @@ export def "x-amz-target-global-accelerator-v20180706-add-custom-routing-endpoin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  EndpointConfigurations: any
-  EndpointGroupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  endpoint_configurations: any
+  endpoint_group_arn: any
 ]: any -> record<EndpointDescriptions: record, EndpointGroupArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.AddCustomRoutingEndpoints")
-  let body = {EndpointConfigurations: $EndpointConfigurations, EndpointGroupArn: $EndpointGroupArn} | compact
+  let body = {"EndpointConfigurations": $endpoint_configurations, "EndpointGroupArn": $endpoint_group_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,7 +180,7 @@ export def "x-amz-target-global-accelerator-v20180706-add-custom-routing-endpoin
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.AddEndpoints
 # operationId: AddEndpoints
-export def "x-amz-target-global-accelerator-v20180706-add-endpoints AddEndpoints" [
+export def "x-amz-target-global-accelerator-v20180706-add-endpoints create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,24 +189,24 @@ export def "x-amz-target-global-accelerator-v20180706-add-endpoints AddEndpoints
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  EndpointConfigurations: any
-  EndpointGroupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  endpoint_configurations: any
+  endpoint_group_arn: any
 ]: any -> record<EndpointDescriptions: record, EndpointGroupArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.AddEndpoints")
-  let body = {EndpointConfigurations: $EndpointConfigurations, EndpointGroupArn: $EndpointGroupArn} | compact
+  let body = {"EndpointConfigurations": $endpoint_configurations, "EndpointGroupArn": $endpoint_group_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -217,7 +217,7 @@ export def "x-amz-target-global-accelerator-v20180706-add-endpoints AddEndpoints
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.AdvertiseByoipCidr
 # operationId: AdvertiseByoipCidr
-export def "x-amz-target-global-accelerator-v20180706-advertise-byoip-cidr AdvertiseByoipCidr" [
+export def "x-amz-target-global-accelerator-v20180706-advertise-byoip-cidr post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,23 +226,23 @@ export def "x-amz-target-global-accelerator-v20180706-advertise-byoip-cidr Adver
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  Cidr: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  cidr: any
 ]: any -> record<ByoipCidr: record<Cidr: record, State: record, Events: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.AdvertiseByoipCidr")
-  let body = {Cidr: $Cidr} | compact
+  let body = {"Cidr": $cidr} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +253,7 @@ export def "x-amz-target-global-accelerator-v20180706-advertise-byoip-cidr Adver
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.AllowCustomRoutingTraffic
 # operationId: AllowCustomRoutingTraffic
-export def "x-amz-target-global-accelerator-v20180706-allow-custom-routing-traffic AllowCustomRoutingTraffic" [
+export def "x-amz-target-global-accelerator-v20180706-allow-custom-routing-traffic post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,27 +262,27 @@ export def "x-amz-target-global-accelerator-v20180706-allow-custom-routing-traff
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  EndpointGroupArn: any
-  EndpointId: any
-  --DestinationAddresses: any
-  --DestinationPorts: any
-  --AllowAllTrafficToEndpoint: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  endpoint_group_arn: any
+  endpoint_id: any
+  --destination-addresses: any
+  --destination-ports: any
+  --allow-all-traffic-to-endpoint: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.AllowCustomRoutingTraffic")
-  let body = {EndpointGroupArn: $EndpointGroupArn, EndpointId: $EndpointId, DestinationAddresses: $DestinationAddresses, DestinationPorts: $DestinationPorts, AllowAllTrafficToEndpoint: $AllowAllTrafficToEndpoint} | compact
+  let body = {"EndpointGroupArn": $endpoint_group_arn, "EndpointId": $endpoint_id, "DestinationAddresses": $destination_addresses, "DestinationPorts": $destination_ports, "AllowAllTrafficToEndpoint": $allow_all_traffic_to_endpoint} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,7 +293,7 @@ export def "x-amz-target-global-accelerator-v20180706-allow-custom-routing-traff
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.CreateAccelerator
 # operationId: CreateAccelerator
-export def "x-amz-target-global-accelerator-v20180706-create-accelerator CreateAccelerator" [
+export def "x-amz-target-global-accelerator-v20180706-create-accelerator create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,28 +302,28 @@ export def "x-amz-target-global-accelerator-v20180706-create-accelerator CreateA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  Name: any
-  --IpAddressType: any
-  --IpAddresses: any
-  --Enabled: any
-  IdempotencyToken: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  name: any
+  --ip-address-type: any
+  --ip-addresses: any
+  --enabled: any
+  idempotency_token: any
+  --tags: any
 ]: any -> record<Accelerator: record<AcceleratorArn: record, Name: record, IpAddressType: record, Enabled: record, IpSets: record, DnsName: record, Status: record, CreatedTime: record, LastModifiedTime: record, DualStackDnsName: record, Events: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.CreateAccelerator")
-  let body = {Name: $Name, IpAddressType: $IpAddressType, IpAddresses: $IpAddresses, Enabled: $Enabled, IdempotencyToken: $IdempotencyToken, Tags: $Tags} | compact
+  let body = {"Name": $name, "IpAddressType": $ip_address_type, "IpAddresses": $ip_addresses, "Enabled": $enabled, "IdempotencyToken": $idempotency_token, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -334,7 +334,7 @@ export def "x-amz-target-global-accelerator-v20180706-create-accelerator CreateA
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.CreateCustomRoutingAccelerator
 # operationId: CreateCustomRoutingAccelerator
-export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-accelerator CreateCustomRoutingAccelerator" [
+export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-accelerator create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,28 +343,28 @@ export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-acce
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  Name: any
-  --IpAddressType: any
-  --IpAddresses: any
-  --Enabled: any
-  IdempotencyToken: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  name: any
+  --ip-address-type: any
+  --ip-addresses: any
+  --enabled: any
+  idempotency_token: any
+  --tags: any
 ]: any -> record<Accelerator: record<AcceleratorArn: record, Name: record, IpAddressType: record, Enabled: record, IpSets: record, DnsName: record, Status: record, CreatedTime: record, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.CreateCustomRoutingAccelerator")
-  let body = {Name: $Name, IpAddressType: $IpAddressType, IpAddresses: $IpAddresses, Enabled: $Enabled, IdempotencyToken: $IdempotencyToken, Tags: $Tags} | compact
+  let body = {"Name": $name, "IpAddressType": $ip_address_type, "IpAddresses": $ip_addresses, "Enabled": $enabled, "IdempotencyToken": $idempotency_token, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -375,7 +375,7 @@ export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-acce
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.CreateCustomRoutingEndpointGroup
 # operationId: CreateCustomRoutingEndpointGroup
-export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-endpoint-group CreateCustomRoutingEndpointGroup" [
+export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-endpoint-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,26 +384,26 @@ export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-endp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  ListenerArn: any
-  EndpointGroupRegion: any
-  DestinationConfigurations: any
-  IdempotencyToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  listener_arn: any
+  endpoint_group_region: any
+  destination_configurations: any
+  idempotency_token: any
 ]: any -> record<EndpointGroup: record<EndpointGroupArn: record, EndpointGroupRegion: record, DestinationDescriptions: record, EndpointDescriptions: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.CreateCustomRoutingEndpointGroup")
-  let body = {ListenerArn: $ListenerArn, EndpointGroupRegion: $EndpointGroupRegion, DestinationConfigurations: $DestinationConfigurations, IdempotencyToken: $IdempotencyToken} | compact
+  let body = {"ListenerArn": $listener_arn, "EndpointGroupRegion": $endpoint_group_region, "DestinationConfigurations": $destination_configurations, "IdempotencyToken": $idempotency_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -414,7 +414,7 @@ export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-endp
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.CreateCustomRoutingListener
 # operationId: CreateCustomRoutingListener
-export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-listener CreateCustomRoutingListener" [
+export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-listener create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,25 +423,25 @@ export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  AcceleratorArn: any
-  PortRanges: any
-  IdempotencyToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  accelerator_arn: any
+  port_ranges: any
+  idempotency_token: any
 ]: any -> record<Listener: record<ListenerArn: record, PortRanges: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.CreateCustomRoutingListener")
-  let body = {AcceleratorArn: $AcceleratorArn, PortRanges: $PortRanges, IdempotencyToken: $IdempotencyToken} | compact
+  let body = {"AcceleratorArn": $accelerator_arn, "PortRanges": $port_ranges, "IdempotencyToken": $idempotency_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -452,7 +452,7 @@ export def "x-amz-target-global-accelerator-v20180706-create-custom-routing-list
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.CreateEndpointGroup
 # operationId: CreateEndpointGroup
-export def "x-amz-target-global-accelerator-v20180706-create-endpoint-group CreateEndpointGroup" [
+export def "x-amz-target-global-accelerator-v20180706-create-endpoint-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,33 +461,33 @@ export def "x-amz-target-global-accelerator-v20180706-create-endpoint-group Crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ListenerArn: any
-  EndpointGroupRegion: any
-  --EndpointConfigurations: any
-  --TrafficDialPercentage: any
-  --HealthCheckPort: any
-  --HealthCheckProtocol: any
-  --HealthCheckPath: any
-  --HealthCheckIntervalSeconds: any
-  --ThresholdCount: any
-  IdempotencyToken: any
-  --PortOverrides: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  listener_arn: any
+  endpoint_group_region: any
+  --endpoint-configurations: any
+  --traffic-dial-percentage: any
+  --health-check-port: any
+  --health-check-protocol: any
+  --health-check-path: any
+  --health-check-interval-seconds: any
+  --threshold-count: any
+  idempotency_token: any
+  --port-overrides: any
 ]: any -> record<EndpointGroup: record<EndpointGroupArn: record, EndpointGroupRegion: record, EndpointDescriptions: record, TrafficDialPercentage: record, HealthCheckPort: record, HealthCheckProtocol: record, HealthCheckPath: record, HealthCheckIntervalSeconds: record, ThresholdCount: record, PortOverrides: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.CreateEndpointGroup")
-  let body = {ListenerArn: $ListenerArn, EndpointGroupRegion: $EndpointGroupRegion, EndpointConfigurations: $EndpointConfigurations, TrafficDialPercentage: $TrafficDialPercentage, HealthCheckPort: $HealthCheckPort, HealthCheckProtocol: $HealthCheckProtocol, HealthCheckPath: $HealthCheckPath, HealthCheckIntervalSeconds: $HealthCheckIntervalSeconds, ThresholdCount: $ThresholdCount, IdempotencyToken: $IdempotencyToken, PortOverrides: $PortOverrides} | compact
+  let body = {"ListenerArn": $listener_arn, "EndpointGroupRegion": $endpoint_group_region, "EndpointConfigurations": $endpoint_configurations, "TrafficDialPercentage": $traffic_dial_percentage, "HealthCheckPort": $health_check_port, "HealthCheckProtocol": $health_check_protocol, "HealthCheckPath": $health_check_path, "HealthCheckIntervalSeconds": $health_check_interval_seconds, "ThresholdCount": $threshold_count, "IdempotencyToken": $idempotency_token, "PortOverrides": $port_overrides} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,7 +498,7 @@ export def "x-amz-target-global-accelerator-v20180706-create-endpoint-group Crea
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.CreateListener
 # operationId: CreateListener
-export def "x-amz-target-global-accelerator-v20180706-create-listener CreateListener" [
+export def "x-amz-target-global-accelerator-v20180706-create-listener create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,27 +507,27 @@ export def "x-amz-target-global-accelerator-v20180706-create-listener CreateList
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  AcceleratorArn: any
-  PortRanges: any
-  Protocol: any
-  --ClientAffinity: any
-  IdempotencyToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  accelerator_arn: any
+  port_ranges: any
+  protocol: any
+  --client-affinity: any
+  idempotency_token: any
 ]: any -> record<Listener: record<ListenerArn: record, PortRanges: record, Protocol: record, ClientAffinity: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.CreateListener")
-  let body = {AcceleratorArn: $AcceleratorArn, PortRanges: $PortRanges, Protocol: $Protocol, ClientAffinity: $ClientAffinity, IdempotencyToken: $IdempotencyToken} | compact
+  let body = {"AcceleratorArn": $accelerator_arn, "PortRanges": $port_ranges, "Protocol": $protocol, "ClientAffinity": $client_affinity, "IdempotencyToken": $idempotency_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -538,7 +538,7 @@ export def "x-amz-target-global-accelerator-v20180706-create-listener CreateList
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DeleteAccelerator
 # operationId: DeleteAccelerator
-export def "x-amz-target-global-accelerator-v20180706-delete-accelerator DeleteAccelerator" [
+export def "x-amz-target-global-accelerator-v20180706-delete-accelerator delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,23 +547,23 @@ export def "x-amz-target-global-accelerator-v20180706-delete-accelerator DeleteA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  AcceleratorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  accelerator_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DeleteAccelerator")
-  let body = {AcceleratorArn: $AcceleratorArn} | compact
+  let body = {"AcceleratorArn": $accelerator_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -574,7 +574,7 @@ export def "x-amz-target-global-accelerator-v20180706-delete-accelerator DeleteA
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DeleteCustomRoutingAccelerator
 # operationId: DeleteCustomRoutingAccelerator
-export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-accelerator DeleteCustomRoutingAccelerator" [
+export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-accelerator delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,23 +583,23 @@ export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-acce
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  AcceleratorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  accelerator_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DeleteCustomRoutingAccelerator")
-  let body = {AcceleratorArn: $AcceleratorArn} | compact
+  let body = {"AcceleratorArn": $accelerator_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -610,7 +610,7 @@ export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-acce
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DeleteCustomRoutingEndpointGroup
 # operationId: DeleteCustomRoutingEndpointGroup
-export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-endpoint-group DeleteCustomRoutingEndpointGroup" [
+export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-endpoint-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,23 +619,23 @@ export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-endp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  EndpointGroupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  endpoint_group_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DeleteCustomRoutingEndpointGroup")
-  let body = {EndpointGroupArn: $EndpointGroupArn} | compact
+  let body = {"EndpointGroupArn": $endpoint_group_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -646,7 +646,7 @@ export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-endp
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DeleteCustomRoutingListener
 # operationId: DeleteCustomRoutingListener
-export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-listener DeleteCustomRoutingListener" [
+export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-listener delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,23 +655,23 @@ export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  ListenerArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  listener_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DeleteCustomRoutingListener")
-  let body = {ListenerArn: $ListenerArn} | compact
+  let body = {"ListenerArn": $listener_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -682,7 +682,7 @@ export def "x-amz-target-global-accelerator-v20180706-delete-custom-routing-list
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DeleteEndpointGroup
 # operationId: DeleteEndpointGroup
-export def "x-amz-target-global-accelerator-v20180706-delete-endpoint-group DeleteEndpointGroup" [
+export def "x-amz-target-global-accelerator-v20180706-delete-endpoint-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,23 +691,23 @@ export def "x-amz-target-global-accelerator-v20180706-delete-endpoint-group Dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  EndpointGroupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  endpoint_group_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DeleteEndpointGroup")
-  let body = {EndpointGroupArn: $EndpointGroupArn} | compact
+  let body = {"EndpointGroupArn": $endpoint_group_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -718,7 +718,7 @@ export def "x-amz-target-global-accelerator-v20180706-delete-endpoint-group Dele
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DeleteListener
 # operationId: DeleteListener
-export def "x-amz-target-global-accelerator-v20180706-delete-listener DeleteListener" [
+export def "x-amz-target-global-accelerator-v20180706-delete-listener delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -727,23 +727,23 @@ export def "x-amz-target-global-accelerator-v20180706-delete-listener DeleteList
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  ListenerArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  listener_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DeleteListener")
-  let body = {ListenerArn: $ListenerArn} | compact
+  let body = {"ListenerArn": $listener_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -754,7 +754,7 @@ export def "x-amz-target-global-accelerator-v20180706-delete-listener DeleteList
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DenyCustomRoutingTraffic
 # operationId: DenyCustomRoutingTraffic
-export def "x-amz-target-global-accelerator-v20180706-deny-custom-routing-traffic DenyCustomRoutingTraffic" [
+export def "x-amz-target-global-accelerator-v20180706-deny-custom-routing-traffic post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,27 +763,27 @@ export def "x-amz-target-global-accelerator-v20180706-deny-custom-routing-traffi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  EndpointGroupArn: any
-  EndpointId: any
-  --DestinationAddresses: any
-  --DestinationPorts: any
-  --DenyAllTrafficToEndpoint: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  endpoint_group_arn: any
+  endpoint_id: any
+  --destination-addresses: any
+  --destination-ports: any
+  --deny-all-traffic-to-endpoint: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DenyCustomRoutingTraffic")
-  let body = {EndpointGroupArn: $EndpointGroupArn, EndpointId: $EndpointId, DestinationAddresses: $DestinationAddresses, DestinationPorts: $DestinationPorts, DenyAllTrafficToEndpoint: $DenyAllTrafficToEndpoint} | compact
+  let body = {"EndpointGroupArn": $endpoint_group_arn, "EndpointId": $endpoint_id, "DestinationAddresses": $destination_addresses, "DestinationPorts": $destination_ports, "DenyAllTrafficToEndpoint": $deny_all_traffic_to_endpoint} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -794,7 +794,7 @@ export def "x-amz-target-global-accelerator-v20180706-deny-custom-routing-traffi
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DeprovisionByoipCidr
 # operationId: DeprovisionByoipCidr
-export def "x-amz-target-global-accelerator-v20180706-deprovision-byoip-cidr DeprovisionByoipCidr" [
+export def "x-amz-target-global-accelerator-v20180706-deprovision-byoip-cidr post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -803,23 +803,23 @@ export def "x-amz-target-global-accelerator-v20180706-deprovision-byoip-cidr Dep
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  Cidr: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  cidr: any
 ]: any -> record<ByoipCidr: record<Cidr: record, State: record, Events: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DeprovisionByoipCidr")
-  let body = {Cidr: $Cidr} | compact
+  let body = {"Cidr": $cidr} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,7 +830,7 @@ export def "x-amz-target-global-accelerator-v20180706-deprovision-byoip-cidr Dep
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DescribeAccelerator
 # operationId: DescribeAccelerator
-export def "x-amz-target-global-accelerator-v20180706-describe-accelerator DescribeAccelerator" [
+export def "x-amz-target-global-accelerator-v20180706-describe-accelerator post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,23 +839,23 @@ export def "x-amz-target-global-accelerator-v20180706-describe-accelerator Descr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  AcceleratorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  accelerator_arn: any
 ]: any -> record<Accelerator: record<AcceleratorArn: record, Name: record, IpAddressType: record, Enabled: record, IpSets: record, DnsName: record, Status: record, CreatedTime: record, LastModifiedTime: record, DualStackDnsName: record, Events: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DescribeAccelerator")
-  let body = {AcceleratorArn: $AcceleratorArn} | compact
+  let body = {"AcceleratorArn": $accelerator_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -866,7 +866,7 @@ export def "x-amz-target-global-accelerator-v20180706-describe-accelerator Descr
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DescribeAcceleratorAttributes
 # operationId: DescribeAcceleratorAttributes
-export def "x-amz-target-global-accelerator-v20180706-describe-accelerator-attributes DescribeAcceleratorAttributes" [
+export def "x-amz-target-global-accelerator-v20180706-describe-accelerator-attributes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,23 +875,23 @@ export def "x-amz-target-global-accelerator-v20180706-describe-accelerator-attri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  AcceleratorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  accelerator_arn: any
 ]: any -> record<AcceleratorAttributes: record<FlowLogsEnabled: record, FlowLogsS3Bucket: record, FlowLogsS3Prefix: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DescribeAcceleratorAttributes")
-  let body = {AcceleratorArn: $AcceleratorArn} | compact
+  let body = {"AcceleratorArn": $accelerator_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -902,7 +902,7 @@ export def "x-amz-target-global-accelerator-v20180706-describe-accelerator-attri
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DescribeCustomRoutingAccelerator
 # operationId: DescribeCustomRoutingAccelerator
-export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-accelerator DescribeCustomRoutingAccelerator" [
+export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-accelerator post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -911,23 +911,23 @@ export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-ac
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  AcceleratorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  accelerator_arn: any
 ]: any -> record<Accelerator: record<AcceleratorArn: record, Name: record, IpAddressType: record, Enabled: record, IpSets: record, DnsName: record, Status: record, CreatedTime: record, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DescribeCustomRoutingAccelerator")
-  let body = {AcceleratorArn: $AcceleratorArn} | compact
+  let body = {"AcceleratorArn": $accelerator_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -938,7 +938,7 @@ export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-ac
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DescribeCustomRoutingAcceleratorAttributes
 # operationId: DescribeCustomRoutingAcceleratorAttributes
-export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-accelerator-attributes DescribeCustomRoutingAcceleratorAttributes" [
+export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-accelerator-attributes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,23 +947,23 @@ export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-ac
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  AcceleratorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  accelerator_arn: any
 ]: any -> record<AcceleratorAttributes: record<FlowLogsEnabled: record, FlowLogsS3Bucket: record, FlowLogsS3Prefix: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DescribeCustomRoutingAcceleratorAttributes")
-  let body = {AcceleratorArn: $AcceleratorArn} | compact
+  let body = {"AcceleratorArn": $accelerator_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -974,7 +974,7 @@ export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-ac
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DescribeCustomRoutingEndpointGroup
 # operationId: DescribeCustomRoutingEndpointGroup
-export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-endpoint-group DescribeCustomRoutingEndpointGroup" [
+export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-endpoint-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,23 +983,23 @@ export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-en
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  EndpointGroupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  endpoint_group_arn: any
 ]: any -> record<EndpointGroup: record<EndpointGroupArn: record, EndpointGroupRegion: record, DestinationDescriptions: record, EndpointDescriptions: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DescribeCustomRoutingEndpointGroup")
-  let body = {EndpointGroupArn: $EndpointGroupArn} | compact
+  let body = {"EndpointGroupArn": $endpoint_group_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1010,7 +1010,7 @@ export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-en
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DescribeCustomRoutingListener
 # operationId: DescribeCustomRoutingListener
-export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-listener DescribeCustomRoutingListener" [
+export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-listener post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,23 +1019,23 @@ export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-li
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  ListenerArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  listener_arn: any
 ]: any -> record<Listener: record<ListenerArn: record, PortRanges: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DescribeCustomRoutingListener")
-  let body = {ListenerArn: $ListenerArn} | compact
+  let body = {"ListenerArn": $listener_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1046,7 +1046,7 @@ export def "x-amz-target-global-accelerator-v20180706-describe-custom-routing-li
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DescribeEndpointGroup
 # operationId: DescribeEndpointGroup
-export def "x-amz-target-global-accelerator-v20180706-describe-endpoint-group DescribeEndpointGroup" [
+export def "x-amz-target-global-accelerator-v20180706-describe-endpoint-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,23 +1055,23 @@ export def "x-amz-target-global-accelerator-v20180706-describe-endpoint-group De
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  EndpointGroupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  endpoint_group_arn: any
 ]: any -> record<EndpointGroup: record<EndpointGroupArn: record, EndpointGroupRegion: record, EndpointDescriptions: record, TrafficDialPercentage: record, HealthCheckPort: record, HealthCheckProtocol: record, HealthCheckPath: record, HealthCheckIntervalSeconds: record, ThresholdCount: record, PortOverrides: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DescribeEndpointGroup")
-  let body = {EndpointGroupArn: $EndpointGroupArn} | compact
+  let body = {"EndpointGroupArn": $endpoint_group_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1082,7 +1082,7 @@ export def "x-amz-target-global-accelerator-v20180706-describe-endpoint-group De
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.DescribeListener
 # operationId: DescribeListener
-export def "x-amz-target-global-accelerator-v20180706-describe-listener DescribeListener" [
+export def "x-amz-target-global-accelerator-v20180706-describe-listener post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,23 +1091,23 @@ export def "x-amz-target-global-accelerator-v20180706-describe-listener Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  ListenerArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  listener_arn: any
 ]: any -> record<Listener: record<ListenerArn: record, PortRanges: record, Protocol: record, ClientAffinity: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.DescribeListener")
-  let body = {ListenerArn: $ListenerArn} | compact
+  let body = {"ListenerArn": $listener_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1118,7 +1118,7 @@ export def "x-amz-target-global-accelerator-v20180706-describe-listener Describe
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ListAccelerators
 # operationId: ListAccelerators
-export def "x-amz-target-global-accelerator-v20180706-list-accelerators ListAccelerators" [
+export def "x-amz-target-global-accelerator-v20180706-list-accelerators list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1127,27 +1127,27 @@ export def "x-amz-target-global-accelerator-v20180706-list-accelerators ListAcce
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  --max-results: any
+  --next-token: any
 ]: any -> record<Accelerators: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ListAccelerators" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1158,7 +1158,7 @@ export def "x-amz-target-global-accelerator-v20180706-list-accelerators ListAcce
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ListByoipCidrs
 # operationId: ListByoipCidrs
-export def "x-amz-target-global-accelerator-v20180706-list-byoip-cidrs ListByoipCidrs" [
+export def "x-amz-target-global-accelerator-v20180706-list-byoip-cidrs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,27 +1167,27 @@ export def "x-amz-target-global-accelerator-v20180706-list-byoip-cidrs ListByoip
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  --max-results: any
+  --next-token: any
 ]: any -> record<ByoipCidrs: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ListByoipCidrs" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1198,7 +1198,7 @@ export def "x-amz-target-global-accelerator-v20180706-list-byoip-cidrs ListByoip
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ListCustomRoutingAccelerators
 # operationId: ListCustomRoutingAccelerators
-export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-accelerators ListCustomRoutingAccelerators" [
+export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-accelerators list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1207,27 +1207,27 @@ export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-accele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --max-results: any
+  --next-token: any
 ]: any -> record<Accelerators: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ListCustomRoutingAccelerators" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1238,7 +1238,7 @@ export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-accele
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ListCustomRoutingEndpointGroups
 # operationId: ListCustomRoutingEndpointGroups
-export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-endpoint-groups ListCustomRoutingEndpointGroups" [
+export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-endpoint-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1247,28 +1247,28 @@ export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-endpoi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  ListenerArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  listener_arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<EndpointGroups: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ListCustomRoutingEndpointGroups" $qp)
-  let body = {ListenerArn: $ListenerArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ListenerArn": $listener_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1279,7 +1279,7 @@ export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-endpoi
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ListCustomRoutingListeners
 # operationId: ListCustomRoutingListeners
-export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-listeners ListCustomRoutingListeners" [
+export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-listeners list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,28 +1288,28 @@ export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-listen
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  AcceleratorArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  accelerator_arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Listeners: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ListCustomRoutingListeners" $qp)
-  let body = {AcceleratorArn: $AcceleratorArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AcceleratorArn": $accelerator_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1320,7 +1320,7 @@ export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-listen
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ListCustomRoutingPortMappings
 # operationId: ListCustomRoutingPortMappings
-export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-port-mappings ListCustomRoutingPortMappings" [
+export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-port-mappings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1329,29 +1329,29 @@ export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-port-m
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  AcceleratorArn: any
-  --EndpointGroupArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  accelerator_arn: any
+  --endpoint-group-arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<PortMappings: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ListCustomRoutingPortMappings" $qp)
-  let body = {AcceleratorArn: $AcceleratorArn, EndpointGroupArn: $EndpointGroupArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AcceleratorArn": $accelerator_arn, "EndpointGroupArn": $endpoint_group_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1362,7 +1362,7 @@ export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-port-m
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ListCustomRoutingPortMappingsByDestination
 # operationId: ListCustomRoutingPortMappingsByDestination
-export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-port-mappings-by-destination ListCustomRoutingPortMappingsByDestination" [
+export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-port-mappings-by-destination list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1371,29 +1371,29 @@ export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-port-m
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  EndpointId: any
-  DestinationAddress: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  endpoint_id: any
+  destination_address: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<DestinationPortMappings: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ListCustomRoutingPortMappingsByDestination" $qp)
-  let body = {EndpointId: $EndpointId, DestinationAddress: $DestinationAddress, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"EndpointId": $endpoint_id, "DestinationAddress": $destination_address, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1404,7 +1404,7 @@ export def "x-amz-target-global-accelerator-v20180706-list-custom-routing-port-m
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ListEndpointGroups
 # operationId: ListEndpointGroups
-export def "x-amz-target-global-accelerator-v20180706-list-endpoint-groups ListEndpointGroups" [
+export def "x-amz-target-global-accelerator-v20180706-list-endpoint-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1413,28 +1413,28 @@ export def "x-amz-target-global-accelerator-v20180706-list-endpoint-groups ListE
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  ListenerArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  listener_arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<EndpointGroups: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ListEndpointGroups" $qp)
-  let body = {ListenerArn: $ListenerArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ListenerArn": $listener_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1445,7 +1445,7 @@ export def "x-amz-target-global-accelerator-v20180706-list-endpoint-groups ListE
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ListListeners
 # operationId: ListListeners
-export def "x-amz-target-global-accelerator-v20180706-list-listeners ListListeners" [
+export def "x-amz-target-global-accelerator-v20180706-list-listeners list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1454,28 +1454,28 @@ export def "x-amz-target-global-accelerator-v20180706-list-listeners ListListene
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  AcceleratorArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  accelerator_arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Listeners: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ListListeners" $qp)
-  let body = {AcceleratorArn: $AcceleratorArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AcceleratorArn": $accelerator_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1486,7 +1486,7 @@ export def "x-amz-target-global-accelerator-v20180706-list-listeners ListListene
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-global-accelerator-v20180706-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-global-accelerator-v20180706-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1495,23 +1495,23 @@ export def "x-amz-target-global-accelerator-v20180706-list-tags-for-resource Lis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ListTagsForResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1522,7 +1522,7 @@ export def "x-amz-target-global-accelerator-v20180706-list-tags-for-resource Lis
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.ProvisionByoipCidr
 # operationId: ProvisionByoipCidr
-export def "x-amz-target-global-accelerator-v20180706-provision-byoip-cidr ProvisionByoipCidr" [
+export def "x-amz-target-global-accelerator-v20180706-provision-byoip-cidr post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1531,24 +1531,24 @@ export def "x-amz-target-global-accelerator-v20180706-provision-byoip-cidr Provi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  Cidr: any
-  CidrAuthorizationContext: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  cidr: any
+  cidr_authorization_context: any
 ]: any -> record<ByoipCidr: record<Cidr: record, State: record, Events: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.ProvisionByoipCidr")
-  let body = {Cidr: $Cidr, CidrAuthorizationContext: $CidrAuthorizationContext} | compact
+  let body = {"Cidr": $cidr, "CidrAuthorizationContext": $cidr_authorization_context} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1559,7 +1559,7 @@ export def "x-amz-target-global-accelerator-v20180706-provision-byoip-cidr Provi
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.RemoveCustomRoutingEndpoints
 # operationId: RemoveCustomRoutingEndpoints
-export def "x-amz-target-global-accelerator-v20180706-remove-custom-routing-endpoints RemoveCustomRoutingEndpoints" [
+export def "x-amz-target-global-accelerator-v20180706-remove-custom-routing-endpoints delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1568,24 +1568,24 @@ export def "x-amz-target-global-accelerator-v20180706-remove-custom-routing-endp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  EndpointIds: any
-  EndpointGroupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  endpoint_ids: any
+  endpoint_group_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.RemoveCustomRoutingEndpoints")
-  let body = {EndpointIds: $EndpointIds, EndpointGroupArn: $EndpointGroupArn} | compact
+  let body = {"EndpointIds": $endpoint_ids, "EndpointGroupArn": $endpoint_group_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1596,7 +1596,7 @@ export def "x-amz-target-global-accelerator-v20180706-remove-custom-routing-endp
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.RemoveEndpoints
 # operationId: RemoveEndpoints
-export def "x-amz-target-global-accelerator-v20180706-remove-endpoints RemoveEndpoints" [
+export def "x-amz-target-global-accelerator-v20180706-remove-endpoints delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1605,24 +1605,24 @@ export def "x-amz-target-global-accelerator-v20180706-remove-endpoints RemoveEnd
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  EndpointIdentifiers: any
-  EndpointGroupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  endpoint_identifiers: any
+  endpoint_group_arn: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.RemoveEndpoints")
-  let body = {EndpointIdentifiers: $EndpointIdentifiers, EndpointGroupArn: $EndpointGroupArn} | compact
+  let body = {"EndpointIdentifiers": $endpoint_identifiers, "EndpointGroupArn": $endpoint_group_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1633,7 +1633,7 @@ export def "x-amz-target-global-accelerator-v20180706-remove-endpoints RemoveEnd
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.TagResource
 # operationId: TagResource
-export def "x-amz-target-global-accelerator-v20180706-tag-resource TagResource" [
+export def "x-amz-target-global-accelerator-v20180706-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,24 +1642,24 @@ export def "x-amz-target-global-accelerator-v20180706-tag-resource TagResource" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1670,7 +1670,7 @@ export def "x-amz-target-global-accelerator-v20180706-tag-resource TagResource" 
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-global-accelerator-v20180706-untag-resource UntagResource" [
+export def "x-amz-target-global-accelerator-v20180706-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1679,24 +1679,24 @@ export def "x-amz-target-global-accelerator-v20180706-untag-resource UntagResour
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1707,7 +1707,7 @@ export def "x-amz-target-global-accelerator-v20180706-untag-resource UntagResour
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.UpdateAccelerator
 # operationId: UpdateAccelerator
-export def "x-amz-target-global-accelerator-v20180706-update-accelerator UpdateAccelerator" [
+export def "x-amz-target-global-accelerator-v20180706-update-accelerator update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1716,26 +1716,26 @@ export def "x-amz-target-global-accelerator-v20180706-update-accelerator UpdateA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  AcceleratorArn: any
-  --Name: any
-  --IpAddressType: any
-  --Enabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  accelerator_arn: any
+  --name: any
+  --ip-address-type: any
+  --enabled: any
 ]: any -> record<Accelerator: record<AcceleratorArn: record, Name: record, IpAddressType: record, Enabled: record, IpSets: record, DnsName: record, Status: record, CreatedTime: record, LastModifiedTime: record, DualStackDnsName: record, Events: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.UpdateAccelerator")
-  let body = {AcceleratorArn: $AcceleratorArn, Name: $Name, IpAddressType: $IpAddressType, Enabled: $Enabled} | compact
+  let body = {"AcceleratorArn": $accelerator_arn, "Name": $name, "IpAddressType": $ip_address_type, "Enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1746,7 +1746,7 @@ export def "x-amz-target-global-accelerator-v20180706-update-accelerator UpdateA
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.UpdateAcceleratorAttributes
 # operationId: UpdateAcceleratorAttributes
-export def "x-amz-target-global-accelerator-v20180706-update-accelerator-attributes UpdateAcceleratorAttributes" [
+export def "x-amz-target-global-accelerator-v20180706-update-accelerator-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1755,26 +1755,26 @@ export def "x-amz-target-global-accelerator-v20180706-update-accelerator-attribu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  AcceleratorArn: any
-  --FlowLogsEnabled: any
-  --FlowLogsS3Bucket: any
-  --FlowLogsS3Prefix: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  accelerator_arn: any
+  --flow-logs-enabled: any
+  --flow-logs-s3-bucket: any
+  --flow-logs-s3-prefix: any
 ]: any -> record<AcceleratorAttributes: record<FlowLogsEnabled: record, FlowLogsS3Bucket: record, FlowLogsS3Prefix: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.UpdateAcceleratorAttributes")
-  let body = {AcceleratorArn: $AcceleratorArn, FlowLogsEnabled: $FlowLogsEnabled, FlowLogsS3Bucket: $FlowLogsS3Bucket, FlowLogsS3Prefix: $FlowLogsS3Prefix} | compact
+  let body = {"AcceleratorArn": $accelerator_arn, "FlowLogsEnabled": $flow_logs_enabled, "FlowLogsS3Bucket": $flow_logs_s3_bucket, "FlowLogsS3Prefix": $flow_logs_s3_prefix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1785,7 +1785,7 @@ export def "x-amz-target-global-accelerator-v20180706-update-accelerator-attribu
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.UpdateCustomRoutingAccelerator
 # operationId: UpdateCustomRoutingAccelerator
-export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-accelerator UpdateCustomRoutingAccelerator" [
+export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-accelerator update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1794,26 +1794,26 @@ export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-acce
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  AcceleratorArn: any
-  --Name: any
-  --IpAddressType: any
-  --Enabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  accelerator_arn: any
+  --name: any
+  --ip-address-type: any
+  --enabled: any
 ]: any -> record<Accelerator: record<AcceleratorArn: record, Name: record, IpAddressType: record, Enabled: record, IpSets: record, DnsName: record, Status: record, CreatedTime: record, LastModifiedTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.UpdateCustomRoutingAccelerator")
-  let body = {AcceleratorArn: $AcceleratorArn, Name: $Name, IpAddressType: $IpAddressType, Enabled: $Enabled} | compact
+  let body = {"AcceleratorArn": $accelerator_arn, "Name": $name, "IpAddressType": $ip_address_type, "Enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1824,7 +1824,7 @@ export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-acce
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.UpdateCustomRoutingAcceleratorAttributes
 # operationId: UpdateCustomRoutingAcceleratorAttributes
-export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-accelerator-attributes UpdateCustomRoutingAcceleratorAttributes" [
+export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-accelerator-attributes update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1833,26 +1833,26 @@ export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-acce
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  AcceleratorArn: any
-  --FlowLogsEnabled: any
-  --FlowLogsS3Bucket: any
-  --FlowLogsS3Prefix: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  accelerator_arn: any
+  --flow-logs-enabled: any
+  --flow-logs-s3-bucket: any
+  --flow-logs-s3-prefix: any
 ]: any -> record<AcceleratorAttributes: record<FlowLogsEnabled: record, FlowLogsS3Bucket: record, FlowLogsS3Prefix: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.UpdateCustomRoutingAcceleratorAttributes")
-  let body = {AcceleratorArn: $AcceleratorArn, FlowLogsEnabled: $FlowLogsEnabled, FlowLogsS3Bucket: $FlowLogsS3Bucket, FlowLogsS3Prefix: $FlowLogsS3Prefix} | compact
+  let body = {"AcceleratorArn": $accelerator_arn, "FlowLogsEnabled": $flow_logs_enabled, "FlowLogsS3Bucket": $flow_logs_s3_bucket, "FlowLogsS3Prefix": $flow_logs_s3_prefix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1863,7 +1863,7 @@ export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-acce
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.UpdateCustomRoutingListener
 # operationId: UpdateCustomRoutingListener
-export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-listener UpdateCustomRoutingListener" [
+export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-listener update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1872,24 +1872,24 @@ export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-list
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  ListenerArn: any
-  PortRanges: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  listener_arn: any
+  port_ranges: any
 ]: any -> record<Listener: record<ListenerArn: record, PortRanges: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.UpdateCustomRoutingListener")
-  let body = {ListenerArn: $ListenerArn, PortRanges: $PortRanges} | compact
+  let body = {"ListenerArn": $listener_arn, "PortRanges": $port_ranges} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1900,7 +1900,7 @@ export def "x-amz-target-global-accelerator-v20180706-update-custom-routing-list
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.UpdateEndpointGroup
 # operationId: UpdateEndpointGroup
-export def "x-amz-target-global-accelerator-v20180706-update-endpoint-group UpdateEndpointGroup" [
+export def "x-amz-target-global-accelerator-v20180706-update-endpoint-group update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1909,31 +1909,31 @@ export def "x-amz-target-global-accelerator-v20180706-update-endpoint-group Upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  EndpointGroupArn: any
-  --EndpointConfigurations: any
-  --TrafficDialPercentage: any
-  --HealthCheckPort: any
-  --HealthCheckProtocol: any
-  --HealthCheckPath: any
-  --HealthCheckIntervalSeconds: any
-  --ThresholdCount: any
-  --PortOverrides: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  endpoint_group_arn: any
+  --endpoint-configurations: any
+  --traffic-dial-percentage: any
+  --health-check-port: any
+  --health-check-protocol: any
+  --health-check-path: any
+  --health-check-interval-seconds: any
+  --threshold-count: any
+  --port-overrides: any
 ]: any -> record<EndpointGroup: record<EndpointGroupArn: record, EndpointGroupRegion: record, EndpointDescriptions: record, TrafficDialPercentage: record, HealthCheckPort: record, HealthCheckProtocol: record, HealthCheckPath: record, HealthCheckIntervalSeconds: record, ThresholdCount: record, PortOverrides: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.UpdateEndpointGroup")
-  let body = {EndpointGroupArn: $EndpointGroupArn, EndpointConfigurations: $EndpointConfigurations, TrafficDialPercentage: $TrafficDialPercentage, HealthCheckPort: $HealthCheckPort, HealthCheckProtocol: $HealthCheckProtocol, HealthCheckPath: $HealthCheckPath, HealthCheckIntervalSeconds: $HealthCheckIntervalSeconds, ThresholdCount: $ThresholdCount, PortOverrides: $PortOverrides} | compact
+  let body = {"EndpointGroupArn": $endpoint_group_arn, "EndpointConfigurations": $endpoint_configurations, "TrafficDialPercentage": $traffic_dial_percentage, "HealthCheckPort": $health_check_port, "HealthCheckProtocol": $health_check_protocol, "HealthCheckPath": $health_check_path, "HealthCheckIntervalSeconds": $health_check_interval_seconds, "ThresholdCount": $threshold_count, "PortOverrides": $port_overrides} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1944,7 +1944,7 @@ export def "x-amz-target-global-accelerator-v20180706-update-endpoint-group Upda
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.UpdateListener
 # operationId: UpdateListener
-export def "x-amz-target-global-accelerator-v20180706-update-listener UpdateListener" [
+export def "x-amz-target-global-accelerator-v20180706-update-listener update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1953,26 +1953,26 @@ export def "x-amz-target-global-accelerator-v20180706-update-listener UpdateList
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  ListenerArn: any
-  --PortRanges: any
-  --Protocol: any
-  --ClientAffinity: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  listener_arn: any
+  --port-ranges: any
+  --protocol: any
+  --client-affinity: any
 ]: any -> record<Listener: record<ListenerArn: record, PortRanges: record, Protocol: record, ClientAffinity: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.UpdateListener")
-  let body = {ListenerArn: $ListenerArn, PortRanges: $PortRanges, Protocol: $Protocol, ClientAffinity: $ClientAffinity} | compact
+  let body = {"ListenerArn": $listener_arn, "PortRanges": $port_ranges, "Protocol": $protocol, "ClientAffinity": $client_affinity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1983,7 +1983,7 @@ export def "x-amz-target-global-accelerator-v20180706-update-listener UpdateList
 #
 # POST /#X-Amz-Target=GlobalAccelerator_V20180706.WithdrawByoipCidr
 # operationId: WithdrawByoipCidr
-export def "x-amz-target-global-accelerator-v20180706-withdraw-byoip-cidr WithdrawByoipCidr" [
+export def "x-amz-target-global-accelerator-v20180706-withdraw-byoip-cidr post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1992,23 +1992,23 @@ export def "x-amz-target-global-accelerator-v20180706-withdraw-byoip-cidr Withdr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  Cidr: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  cidr: any
 ]: any -> record<ByoipCidr: record<Cidr: record, State: record, Events: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=GlobalAccelerator_V20180706.WithdrawByoipCidr")
-  let body = {Cidr: $Cidr} | compact
+  let body = {"Cidr": $cidr} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

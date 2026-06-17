@@ -66,48 +66,48 @@ def base-url-completer [] { ["http://sso.us-east-1.amazonaws.com" "http://sso.us
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["SWBExternalService.AttachCustomerManagedPolicyReferenceToPermissionSet"] }
-def X-Amz-Target-completer-1 [] { ["SWBExternalService.AttachManagedPolicyToPermissionSet"] }
-def X-Amz-Target-completer-2 [] { ["SWBExternalService.CreateAccountAssignment"] }
-def X-Amz-Target-completer-3 [] { ["SWBExternalService.CreateInstanceAccessControlAttributeConfiguration"] }
-def X-Amz-Target-completer-4 [] { ["SWBExternalService.CreatePermissionSet"] }
-def X-Amz-Target-completer-5 [] { ["SWBExternalService.DeleteAccountAssignment"] }
-def X-Amz-Target-completer-6 [] { ["SWBExternalService.DeleteInlinePolicyFromPermissionSet"] }
-def X-Amz-Target-completer-7 [] { ["SWBExternalService.DeleteInstanceAccessControlAttributeConfiguration"] }
-def X-Amz-Target-completer-8 [] { ["SWBExternalService.DeletePermissionSet"] }
-def X-Amz-Target-completer-9 [] { ["SWBExternalService.DeletePermissionsBoundaryFromPermissionSet"] }
-def X-Amz-Target-completer-10 [] { ["SWBExternalService.DescribeAccountAssignmentCreationStatus"] }
-def X-Amz-Target-completer-11 [] { ["SWBExternalService.DescribeAccountAssignmentDeletionStatus"] }
-def X-Amz-Target-completer-12 [] { ["SWBExternalService.DescribeInstanceAccessControlAttributeConfiguration"] }
-def X-Amz-Target-completer-13 [] { ["SWBExternalService.DescribePermissionSet"] }
-def X-Amz-Target-completer-14 [] { ["SWBExternalService.DescribePermissionSetProvisioningStatus"] }
-def X-Amz-Target-completer-15 [] { ["SWBExternalService.DetachCustomerManagedPolicyReferenceFromPermissionSet"] }
-def X-Amz-Target-completer-16 [] { ["SWBExternalService.DetachManagedPolicyFromPermissionSet"] }
-def X-Amz-Target-completer-17 [] { ["SWBExternalService.GetInlinePolicyForPermissionSet"] }
-def X-Amz-Target-completer-18 [] { ["SWBExternalService.GetPermissionsBoundaryForPermissionSet"] }
-def X-Amz-Target-completer-19 [] { ["SWBExternalService.ListAccountAssignmentCreationStatus"] }
-def X-Amz-Target-completer-20 [] { ["SWBExternalService.ListAccountAssignmentDeletionStatus"] }
-def X-Amz-Target-completer-21 [] { ["SWBExternalService.ListAccountAssignments"] }
-def X-Amz-Target-completer-22 [] { ["SWBExternalService.ListAccountsForProvisionedPermissionSet"] }
-def X-Amz-Target-completer-23 [] { ["SWBExternalService.ListCustomerManagedPolicyReferencesInPermissionSet"] }
-def X-Amz-Target-completer-24 [] { ["SWBExternalService.ListInstances"] }
-def X-Amz-Target-completer-25 [] { ["SWBExternalService.ListManagedPoliciesInPermissionSet"] }
-def X-Amz-Target-completer-26 [] { ["SWBExternalService.ListPermissionSetProvisioningStatus"] }
-def X-Amz-Target-completer-27 [] { ["SWBExternalService.ListPermissionSets"] }
-def X-Amz-Target-completer-28 [] { ["SWBExternalService.ListPermissionSetsProvisionedToAccount"] }
-def X-Amz-Target-completer-29 [] { ["SWBExternalService.ListTagsForResource"] }
-def X-Amz-Target-completer-30 [] { ["SWBExternalService.ProvisionPermissionSet"] }
-def X-Amz-Target-completer-31 [] { ["SWBExternalService.PutInlinePolicyToPermissionSet"] }
-def X-Amz-Target-completer-32 [] { ["SWBExternalService.PutPermissionsBoundaryToPermissionSet"] }
-def X-Amz-Target-completer-33 [] { ["SWBExternalService.TagResource"] }
-def X-Amz-Target-completer-34 [] { ["SWBExternalService.UntagResource"] }
-def X-Amz-Target-completer-35 [] { ["SWBExternalService.UpdateInstanceAccessControlAttributeConfiguration"] }
-def X-Amz-Target-completer-36 [] { ["SWBExternalService.UpdatePermissionSet"] }
+def x-amz-target-completer [] { ["SWBExternalService.AttachCustomerManagedPolicyReferenceToPermissionSet"] }
+def x-amz-target-completer-1 [] { ["SWBExternalService.AttachManagedPolicyToPermissionSet"] }
+def x-amz-target-completer-2 [] { ["SWBExternalService.CreateAccountAssignment"] }
+def x-amz-target-completer-3 [] { ["SWBExternalService.CreateInstanceAccessControlAttributeConfiguration"] }
+def x-amz-target-completer-4 [] { ["SWBExternalService.CreatePermissionSet"] }
+def x-amz-target-completer-5 [] { ["SWBExternalService.DeleteAccountAssignment"] }
+def x-amz-target-completer-6 [] { ["SWBExternalService.DeleteInlinePolicyFromPermissionSet"] }
+def x-amz-target-completer-7 [] { ["SWBExternalService.DeleteInstanceAccessControlAttributeConfiguration"] }
+def x-amz-target-completer-8 [] { ["SWBExternalService.DeletePermissionSet"] }
+def x-amz-target-completer-9 [] { ["SWBExternalService.DeletePermissionsBoundaryFromPermissionSet"] }
+def x-amz-target-completer-10 [] { ["SWBExternalService.DescribeAccountAssignmentCreationStatus"] }
+def x-amz-target-completer-11 [] { ["SWBExternalService.DescribeAccountAssignmentDeletionStatus"] }
+def x-amz-target-completer-12 [] { ["SWBExternalService.DescribeInstanceAccessControlAttributeConfiguration"] }
+def x-amz-target-completer-13 [] { ["SWBExternalService.DescribePermissionSet"] }
+def x-amz-target-completer-14 [] { ["SWBExternalService.DescribePermissionSetProvisioningStatus"] }
+def x-amz-target-completer-15 [] { ["SWBExternalService.DetachCustomerManagedPolicyReferenceFromPermissionSet"] }
+def x-amz-target-completer-16 [] { ["SWBExternalService.DetachManagedPolicyFromPermissionSet"] }
+def x-amz-target-completer-17 [] { ["SWBExternalService.GetInlinePolicyForPermissionSet"] }
+def x-amz-target-completer-18 [] { ["SWBExternalService.GetPermissionsBoundaryForPermissionSet"] }
+def x-amz-target-completer-19 [] { ["SWBExternalService.ListAccountAssignmentCreationStatus"] }
+def x-amz-target-completer-20 [] { ["SWBExternalService.ListAccountAssignmentDeletionStatus"] }
+def x-amz-target-completer-21 [] { ["SWBExternalService.ListAccountAssignments"] }
+def x-amz-target-completer-22 [] { ["SWBExternalService.ListAccountsForProvisionedPermissionSet"] }
+def x-amz-target-completer-23 [] { ["SWBExternalService.ListCustomerManagedPolicyReferencesInPermissionSet"] }
+def x-amz-target-completer-24 [] { ["SWBExternalService.ListInstances"] }
+def x-amz-target-completer-25 [] { ["SWBExternalService.ListManagedPoliciesInPermissionSet"] }
+def x-amz-target-completer-26 [] { ["SWBExternalService.ListPermissionSetProvisioningStatus"] }
+def x-amz-target-completer-27 [] { ["SWBExternalService.ListPermissionSets"] }
+def x-amz-target-completer-28 [] { ["SWBExternalService.ListPermissionSetsProvisionedToAccount"] }
+def x-amz-target-completer-29 [] { ["SWBExternalService.ListTagsForResource"] }
+def x-amz-target-completer-30 [] { ["SWBExternalService.ProvisionPermissionSet"] }
+def x-amz-target-completer-31 [] { ["SWBExternalService.PutInlinePolicyToPermissionSet"] }
+def x-amz-target-completer-32 [] { ["SWBExternalService.PutPermissionsBoundaryToPermissionSet"] }
+def x-amz-target-completer-33 [] { ["SWBExternalService.TagResource"] }
+def x-amz-target-completer-34 [] { ["SWBExternalService.UntagResource"] }
+def x-amz-target-completer-35 [] { ["SWBExternalService.UpdateInstanceAccessControlAttributeConfiguration"] }
+def x-amz-target-completer-36 [] { ["SWBExternalService.UpdatePermissionSet"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-swb-external-service-attach-customer-managed-policy-reference-to-permission-set AttachCustomerManagedPolicyReferenceToPermissionSet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-swb-external-service-attach-customer-managed-policy-reference-to-permission-set attach" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=SWBExternalService.AttachCustomerManagedPolicyReferenceToPermissionSet
 # operationId: AttachCustomerManagedPolicyReferenceToPermissionSet
-export def "x-amz-target-swb-external-service-attach-customer-managed-policy-reference-to-permission-set AttachCustomerManagedPolicyReferenceToPermissionSet" [
+export def "x-amz-target-swb-external-service-attach-customer-managed-policy-reference-to-permission-set attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,25 +140,25 @@ export def "x-amz-target-swb-external-service-attach-customer-managed-policy-ref
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  InstanceArn: any
-  PermissionSetArn: any
-  CustomerManagedPolicyReference: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  instance_arn: any
+  permission_set_arn: any
+  customer_managed_policy_reference: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.AttachCustomerManagedPolicyReferenceToPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, CustomerManagedPolicyReference: $CustomerManagedPolicyReference} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "CustomerManagedPolicyReference": $customer_managed_policy_reference} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,7 +169,7 @@ export def "x-amz-target-swb-external-service-attach-customer-managed-policy-ref
 #
 # POST /#X-Amz-Target=SWBExternalService.AttachManagedPolicyToPermissionSet
 # operationId: AttachManagedPolicyToPermissionSet
-export def "x-amz-target-swb-external-service-attach-managed-policy-to-permission-set AttachManagedPolicyToPermissionSet" [
+export def "x-amz-target-swb-external-service-attach-managed-policy-to-permission-set attach" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,25 +178,25 @@ export def "x-amz-target-swb-external-service-attach-managed-policy-to-permissio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  InstanceArn: any
-  PermissionSetArn: any
-  ManagedPolicyArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  instance_arn: any
+  permission_set_arn: any
+  managed_policy_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.AttachManagedPolicyToPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, ManagedPolicyArn: $ManagedPolicyArn} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "ManagedPolicyArn": $managed_policy_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,7 +207,7 @@ export def "x-amz-target-swb-external-service-attach-managed-policy-to-permissio
 #
 # POST /#X-Amz-Target=SWBExternalService.CreateAccountAssignment
 # operationId: CreateAccountAssignment
-export def "x-amz-target-swb-external-service-create-account-assignment CreateAccountAssignment" [
+export def "x-amz-target-swb-external-service-create-account-assignment create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,28 +216,28 @@ export def "x-amz-target-swb-external-service-create-account-assignment CreateAc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  InstanceArn: any
-  TargetId: any
-  TargetType: any
-  PermissionSetArn: any
-  PrincipalType: any
-  PrincipalId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  instance_arn: any
+  target_id: any
+  target_type: any
+  permission_set_arn: any
+  principal_type: any
+  principal_id: any
 ]: any -> record<AccountAssignmentCreationStatus: record<Status: record, RequestId: record, FailureReason: record, TargetId: record, TargetType: record, PermissionSetArn: record, PrincipalType: record, PrincipalId: record, CreatedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.CreateAccountAssignment")
-  let body = {InstanceArn: $InstanceArn, TargetId: $TargetId, TargetType: $TargetType, PermissionSetArn: $PermissionSetArn, PrincipalType: $PrincipalType, PrincipalId: $PrincipalId} | compact
+  let body = {"InstanceArn": $instance_arn, "TargetId": $target_id, "TargetType": $target_type, "PermissionSetArn": $permission_set_arn, "PrincipalType": $principal_type, "PrincipalId": $principal_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -248,7 +248,7 @@ export def "x-amz-target-swb-external-service-create-account-assignment CreateAc
 #
 # POST /#X-Amz-Target=SWBExternalService.CreateInstanceAccessControlAttributeConfiguration
 # operationId: CreateInstanceAccessControlAttributeConfiguration
-export def "x-amz-target-swb-external-service-create-instance-access-control-attribute-configuration CreateInstanceAccessControlAttributeConfiguration" [
+export def "x-amz-target-swb-external-service-create-instance-access-control-attribute-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,24 +257,24 @@ export def "x-amz-target-swb-external-service-create-instance-access-control-att
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  InstanceArn: any
-  InstanceAccessControlAttributeConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  instance_arn: any
+  instance_access_control_attribute_configuration: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.CreateInstanceAccessControlAttributeConfiguration")
-  let body = {InstanceArn: $InstanceArn, InstanceAccessControlAttributeConfiguration: $InstanceAccessControlAttributeConfiguration} | compact
+  let body = {"InstanceArn": $instance_arn, "InstanceAccessControlAttributeConfiguration": $instance_access_control_attribute_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,7 +285,7 @@ export def "x-amz-target-swb-external-service-create-instance-access-control-att
 #
 # POST /#X-Amz-Target=SWBExternalService.CreatePermissionSet
 # operationId: CreatePermissionSet
-export def "x-amz-target-swb-external-service-create-permission-set CreatePermissionSet" [
+export def "x-amz-target-swb-external-service-create-permission-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,28 +294,28 @@ export def "x-amz-target-swb-external-service-create-permission-set CreatePermis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  Name: any
-  --Description: any
-  InstanceArn: any
-  --SessionDuration: any
-  --RelayState: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  name: any
+  --description: any
+  instance_arn: any
+  --session-duration: any
+  --relay-state: any
+  --tags: any
 ]: any -> record<PermissionSet: record<Name: record, PermissionSetArn: record, Description: record, CreatedDate: record, SessionDuration: record, RelayState: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.CreatePermissionSet")
-  let body = {Name: $Name, Description: $Description, InstanceArn: $InstanceArn, SessionDuration: $SessionDuration, RelayState: $RelayState, Tags: $Tags} | compact
+  let body = {"Name": $name, "Description": $description, "InstanceArn": $instance_arn, "SessionDuration": $session_duration, "RelayState": $relay_state, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -326,7 +326,7 @@ export def "x-amz-target-swb-external-service-create-permission-set CreatePermis
 #
 # POST /#X-Amz-Target=SWBExternalService.DeleteAccountAssignment
 # operationId: DeleteAccountAssignment
-export def "x-amz-target-swb-external-service-delete-account-assignment DeleteAccountAssignment" [
+export def "x-amz-target-swb-external-service-delete-account-assignment delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,28 +335,28 @@ export def "x-amz-target-swb-external-service-delete-account-assignment DeleteAc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  InstanceArn: any
-  TargetId: any
-  TargetType: any
-  PermissionSetArn: any
-  PrincipalType: any
-  PrincipalId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  instance_arn: any
+  target_id: any
+  target_type: any
+  permission_set_arn: any
+  principal_type: any
+  principal_id: any
 ]: any -> record<AccountAssignmentDeletionStatus: record<Status: record, RequestId: record, FailureReason: record, TargetId: record, TargetType: record, PermissionSetArn: record, PrincipalType: record, PrincipalId: record, CreatedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DeleteAccountAssignment")
-  let body = {InstanceArn: $InstanceArn, TargetId: $TargetId, TargetType: $TargetType, PermissionSetArn: $PermissionSetArn, PrincipalType: $PrincipalType, PrincipalId: $PrincipalId} | compact
+  let body = {"InstanceArn": $instance_arn, "TargetId": $target_id, "TargetType": $target_type, "PermissionSetArn": $permission_set_arn, "PrincipalType": $principal_type, "PrincipalId": $principal_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -367,7 +367,7 @@ export def "x-amz-target-swb-external-service-delete-account-assignment DeleteAc
 #
 # POST /#X-Amz-Target=SWBExternalService.DeleteInlinePolicyFromPermissionSet
 # operationId: DeleteInlinePolicyFromPermissionSet
-export def "x-amz-target-swb-external-service-delete-inline-policy-from-permission-set DeleteInlinePolicyFromPermissionSet" [
+export def "x-amz-target-swb-external-service-delete-inline-policy-from-permission-set delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,24 +376,24 @@ export def "x-amz-target-swb-external-service-delete-inline-policy-from-permissi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  InstanceArn: any
-  PermissionSetArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  instance_arn: any
+  permission_set_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DeleteInlinePolicyFromPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +404,7 @@ export def "x-amz-target-swb-external-service-delete-inline-policy-from-permissi
 #
 # POST /#X-Amz-Target=SWBExternalService.DeleteInstanceAccessControlAttributeConfiguration
 # operationId: DeleteInstanceAccessControlAttributeConfiguration
-export def "x-amz-target-swb-external-service-delete-instance-access-control-attribute-configuration DeleteInstanceAccessControlAttributeConfiguration" [
+export def "x-amz-target-swb-external-service-delete-instance-access-control-attribute-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,23 +413,23 @@ export def "x-amz-target-swb-external-service-delete-instance-access-control-att
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  InstanceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  instance_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DeleteInstanceAccessControlAttributeConfiguration")
-  let body = {InstanceArn: $InstanceArn} | compact
+  let body = {"InstanceArn": $instance_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -440,7 +440,7 @@ export def "x-amz-target-swb-external-service-delete-instance-access-control-att
 #
 # POST /#X-Amz-Target=SWBExternalService.DeletePermissionSet
 # operationId: DeletePermissionSet
-export def "x-amz-target-swb-external-service-delete-permission-set DeletePermissionSet" [
+export def "x-amz-target-swb-external-service-delete-permission-set delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,24 +449,24 @@ export def "x-amz-target-swb-external-service-delete-permission-set DeletePermis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  InstanceArn: any
-  PermissionSetArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  instance_arn: any
+  permission_set_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DeletePermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -477,7 +477,7 @@ export def "x-amz-target-swb-external-service-delete-permission-set DeletePermis
 #
 # POST /#X-Amz-Target=SWBExternalService.DeletePermissionsBoundaryFromPermissionSet
 # operationId: DeletePermissionsBoundaryFromPermissionSet
-export def "x-amz-target-swb-external-service-delete-permissions-boundary-from-permission-set DeletePermissionsBoundaryFromPermissionSet" [
+export def "x-amz-target-swb-external-service-delete-permissions-boundary-from-permission-set delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,24 +486,24 @@ export def "x-amz-target-swb-external-service-delete-permissions-boundary-from-p
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  InstanceArn: any
-  PermissionSetArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  instance_arn: any
+  permission_set_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DeletePermissionsBoundaryFromPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -514,7 +514,7 @@ export def "x-amz-target-swb-external-service-delete-permissions-boundary-from-p
 #
 # POST /#X-Amz-Target=SWBExternalService.DescribeAccountAssignmentCreationStatus
 # operationId: DescribeAccountAssignmentCreationStatus
-export def "x-amz-target-swb-external-service-describe-account-assignment-creation-status DescribeAccountAssignmentCreationStatus" [
+export def "x-amz-target-swb-external-service-describe-account-assignment-creation-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,24 +523,24 @@ export def "x-amz-target-swb-external-service-describe-account-assignment-creati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  InstanceArn: any
-  AccountAssignmentCreationRequestId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  instance_arn: any
+  account_assignment_creation_request_id: any
 ]: any -> record<AccountAssignmentCreationStatus: record<Status: record, RequestId: record, FailureReason: record, TargetId: record, TargetType: record, PermissionSetArn: record, PrincipalType: record, PrincipalId: record, CreatedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DescribeAccountAssignmentCreationStatus")
-  let body = {InstanceArn: $InstanceArn, AccountAssignmentCreationRequestId: $AccountAssignmentCreationRequestId} | compact
+  let body = {"InstanceArn": $instance_arn, "AccountAssignmentCreationRequestId": $account_assignment_creation_request_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -551,7 +551,7 @@ export def "x-amz-target-swb-external-service-describe-account-assignment-creati
 #
 # POST /#X-Amz-Target=SWBExternalService.DescribeAccountAssignmentDeletionStatus
 # operationId: DescribeAccountAssignmentDeletionStatus
-export def "x-amz-target-swb-external-service-describe-account-assignment-deletion-status DescribeAccountAssignmentDeletionStatus" [
+export def "x-amz-target-swb-external-service-describe-account-assignment-deletion-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,24 +560,24 @@ export def "x-amz-target-swb-external-service-describe-account-assignment-deleti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  InstanceArn: any
-  AccountAssignmentDeletionRequestId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  instance_arn: any
+  account_assignment_deletion_request_id: any
 ]: any -> record<AccountAssignmentDeletionStatus: record<Status: record, RequestId: record, FailureReason: record, TargetId: record, TargetType: record, PermissionSetArn: record, PrincipalType: record, PrincipalId: record, CreatedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DescribeAccountAssignmentDeletionStatus")
-  let body = {InstanceArn: $InstanceArn, AccountAssignmentDeletionRequestId: $AccountAssignmentDeletionRequestId} | compact
+  let body = {"InstanceArn": $instance_arn, "AccountAssignmentDeletionRequestId": $account_assignment_deletion_request_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -588,7 +588,7 @@ export def "x-amz-target-swb-external-service-describe-account-assignment-deleti
 #
 # POST /#X-Amz-Target=SWBExternalService.DescribeInstanceAccessControlAttributeConfiguration
 # operationId: DescribeInstanceAccessControlAttributeConfiguration
-export def "x-amz-target-swb-external-service-describe-instance-access-control-attribute-configuration DescribeInstanceAccessControlAttributeConfiguration" [
+export def "x-amz-target-swb-external-service-describe-instance-access-control-attribute-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,23 +597,23 @@ export def "x-amz-target-swb-external-service-describe-instance-access-control-a
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  InstanceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  instance_arn: any
 ]: any -> record<Status: record, StatusReason: record, InstanceAccessControlAttributeConfiguration: record<AccessControlAttributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DescribeInstanceAccessControlAttributeConfiguration")
-  let body = {InstanceArn: $InstanceArn} | compact
+  let body = {"InstanceArn": $instance_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -624,7 +624,7 @@ export def "x-amz-target-swb-external-service-describe-instance-access-control-a
 #
 # POST /#X-Amz-Target=SWBExternalService.DescribePermissionSet
 # operationId: DescribePermissionSet
-export def "x-amz-target-swb-external-service-describe-permission-set DescribePermissionSet" [
+export def "x-amz-target-swb-external-service-describe-permission-set post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,24 +633,24 @@ export def "x-amz-target-swb-external-service-describe-permission-set DescribePe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  InstanceArn: any
-  PermissionSetArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  instance_arn: any
+  permission_set_arn: any
 ]: any -> record<PermissionSet: record<Name: record, PermissionSetArn: record, Description: record, CreatedDate: record, SessionDuration: record, RelayState: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DescribePermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -661,7 +661,7 @@ export def "x-amz-target-swb-external-service-describe-permission-set DescribePe
 #
 # POST /#X-Amz-Target=SWBExternalService.DescribePermissionSetProvisioningStatus
 # operationId: DescribePermissionSetProvisioningStatus
-export def "x-amz-target-swb-external-service-describe-permission-set-provisioning-status DescribePermissionSetProvisioningStatus" [
+export def "x-amz-target-swb-external-service-describe-permission-set-provisioning-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,24 +670,24 @@ export def "x-amz-target-swb-external-service-describe-permission-set-provisioni
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  InstanceArn: any
-  ProvisionPermissionSetRequestId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  instance_arn: any
+  provision_permission_set_request_id: any
 ]: any -> record<PermissionSetProvisioningStatus: record<Status: record, RequestId: record, AccountId: record, PermissionSetArn: record, FailureReason: record, CreatedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DescribePermissionSetProvisioningStatus")
-  let body = {InstanceArn: $InstanceArn, ProvisionPermissionSetRequestId: $ProvisionPermissionSetRequestId} | compact
+  let body = {"InstanceArn": $instance_arn, "ProvisionPermissionSetRequestId": $provision_permission_set_request_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -698,7 +698,7 @@ export def "x-amz-target-swb-external-service-describe-permission-set-provisioni
 #
 # POST /#X-Amz-Target=SWBExternalService.DetachCustomerManagedPolicyReferenceFromPermissionSet
 # operationId: DetachCustomerManagedPolicyReferenceFromPermissionSet
-export def "x-amz-target-swb-external-service-detach-customer-managed-policy-reference-from-permission-set DetachCustomerManagedPolicyReferenceFromPermissionSet" [
+export def "x-amz-target-swb-external-service-detach-customer-managed-policy-reference-from-permission-set post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,25 +707,25 @@ export def "x-amz-target-swb-external-service-detach-customer-managed-policy-ref
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  InstanceArn: any
-  PermissionSetArn: any
-  CustomerManagedPolicyReference: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  instance_arn: any
+  permission_set_arn: any
+  customer_managed_policy_reference: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DetachCustomerManagedPolicyReferenceFromPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, CustomerManagedPolicyReference: $CustomerManagedPolicyReference} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "CustomerManagedPolicyReference": $customer_managed_policy_reference} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -736,7 +736,7 @@ export def "x-amz-target-swb-external-service-detach-customer-managed-policy-ref
 #
 # POST /#X-Amz-Target=SWBExternalService.DetachManagedPolicyFromPermissionSet
 # operationId: DetachManagedPolicyFromPermissionSet
-export def "x-amz-target-swb-external-service-detach-managed-policy-from-permission-set DetachManagedPolicyFromPermissionSet" [
+export def "x-amz-target-swb-external-service-detach-managed-policy-from-permission-set post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,25 +745,25 @@ export def "x-amz-target-swb-external-service-detach-managed-policy-from-permiss
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  InstanceArn: any
-  PermissionSetArn: any
-  ManagedPolicyArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  instance_arn: any
+  permission_set_arn: any
+  managed_policy_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.DetachManagedPolicyFromPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, ManagedPolicyArn: $ManagedPolicyArn} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "ManagedPolicyArn": $managed_policy_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -774,7 +774,7 @@ export def "x-amz-target-swb-external-service-detach-managed-policy-from-permiss
 #
 # POST /#X-Amz-Target=SWBExternalService.GetInlinePolicyForPermissionSet
 # operationId: GetInlinePolicyForPermissionSet
-export def "x-amz-target-swb-external-service-get-inline-policy-for-permission-set GetInlinePolicyForPermissionSet" [
+export def "x-amz-target-swb-external-service-get-inline-policy-for-permission-set get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,24 +783,24 @@ export def "x-amz-target-swb-external-service-get-inline-policy-for-permission-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  InstanceArn: any
-  PermissionSetArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  instance_arn: any
+  permission_set_arn: any
 ]: any -> record<InlinePolicy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.GetInlinePolicyForPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -811,7 +811,7 @@ export def "x-amz-target-swb-external-service-get-inline-policy-for-permission-s
 #
 # POST /#X-Amz-Target=SWBExternalService.GetPermissionsBoundaryForPermissionSet
 # operationId: GetPermissionsBoundaryForPermissionSet
-export def "x-amz-target-swb-external-service-get-permissions-boundary-for-permission-set GetPermissionsBoundaryForPermissionSet" [
+export def "x-amz-target-swb-external-service-get-permissions-boundary-for-permission-set get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -820,24 +820,24 @@ export def "x-amz-target-swb-external-service-get-permissions-boundary-for-permi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  InstanceArn: any
-  PermissionSetArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  instance_arn: any
+  permission_set_arn: any
 ]: any -> record<PermissionsBoundary: record<CustomerManagedPolicyReference: record<Name: record, Path: record>, ManagedPolicyArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.GetPermissionsBoundaryForPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -848,7 +848,7 @@ export def "x-amz-target-swb-external-service-get-permissions-boundary-for-permi
 #
 # POST /#X-Amz-Target=SWBExternalService.ListAccountAssignmentCreationStatus
 # operationId: ListAccountAssignmentCreationStatus
-export def "x-amz-target-swb-external-service-list-account-assignment-creation-status ListAccountAssignmentCreationStatus" [
+export def "x-amz-target-swb-external-service-list-account-assignment-creation-status list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -857,29 +857,29 @@ export def "x-amz-target-swb-external-service-list-account-assignment-creation-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  InstanceArn: any
-  --MaxResults: any
-  --NextToken: any
-  --Filter: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  instance_arn: any
+  --max-results: any
+  --next-token: any
+  --filter: any
 ]: any -> record<AccountAssignmentsCreationStatus: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListAccountAssignmentCreationStatus" $qp)
-  let body = {InstanceArn: $InstanceArn, MaxResults: $MaxResults, NextToken: $NextToken, Filter: $Filter} | compact
+  let body = {"InstanceArn": $instance_arn, "MaxResults": $max_results, "NextToken": $next_token, "Filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -890,7 +890,7 @@ export def "x-amz-target-swb-external-service-list-account-assignment-creation-s
 #
 # POST /#X-Amz-Target=SWBExternalService.ListAccountAssignmentDeletionStatus
 # operationId: ListAccountAssignmentDeletionStatus
-export def "x-amz-target-swb-external-service-list-account-assignment-deletion-status ListAccountAssignmentDeletionStatus" [
+export def "x-amz-target-swb-external-service-list-account-assignment-deletion-status list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,29 +899,29 @@ export def "x-amz-target-swb-external-service-list-account-assignment-deletion-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  InstanceArn: any
-  --MaxResults: any
-  --NextToken: any
-  --Filter: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  instance_arn: any
+  --max-results: any
+  --next-token: any
+  --filter: any
 ]: any -> record<AccountAssignmentsDeletionStatus: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListAccountAssignmentDeletionStatus" $qp)
-  let body = {InstanceArn: $InstanceArn, MaxResults: $MaxResults, NextToken: $NextToken, Filter: $Filter} | compact
+  let body = {"InstanceArn": $instance_arn, "MaxResults": $max_results, "NextToken": $next_token, "Filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -932,7 +932,7 @@ export def "x-amz-target-swb-external-service-list-account-assignment-deletion-s
 #
 # POST /#X-Amz-Target=SWBExternalService.ListAccountAssignments
 # operationId: ListAccountAssignments
-export def "x-amz-target-swb-external-service-list-account-assignments ListAccountAssignments" [
+export def "x-amz-target-swb-external-service-list-account-assignments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -941,30 +941,30 @@ export def "x-amz-target-swb-external-service-list-account-assignments ListAccou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  InstanceArn: any
-  AccountId: any
-  PermissionSetArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  instance_arn: any
+  account_id: any
+  permission_set_arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<AccountAssignments: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListAccountAssignments" $qp)
-  let body = {InstanceArn: $InstanceArn, AccountId: $AccountId, PermissionSetArn: $PermissionSetArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"InstanceArn": $instance_arn, "AccountId": $account_id, "PermissionSetArn": $permission_set_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -975,7 +975,7 @@ export def "x-amz-target-swb-external-service-list-account-assignments ListAccou
 #
 # POST /#X-Amz-Target=SWBExternalService.ListAccountsForProvisionedPermissionSet
 # operationId: ListAccountsForProvisionedPermissionSet
-export def "x-amz-target-swb-external-service-list-accounts-for-provisioned-permission-set ListAccountsForProvisionedPermissionSet" [
+export def "x-amz-target-swb-external-service-list-accounts-for-provisioned-permission-set list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,30 +984,30 @@ export def "x-amz-target-swb-external-service-list-accounts-for-provisioned-perm
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  InstanceArn: any
-  PermissionSetArn: any
-  --ProvisioningStatus: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  instance_arn: any
+  permission_set_arn: any
+  --provisioning-status: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<AccountIds: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListAccountsForProvisionedPermissionSet" $qp)
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, ProvisioningStatus: $ProvisioningStatus, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "ProvisioningStatus": $provisioning_status, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1018,7 +1018,7 @@ export def "x-amz-target-swb-external-service-list-accounts-for-provisioned-perm
 #
 # POST /#X-Amz-Target=SWBExternalService.ListCustomerManagedPolicyReferencesInPermissionSet
 # operationId: ListCustomerManagedPolicyReferencesInPermissionSet
-export def "x-amz-target-swb-external-service-list-customer-managed-policy-references-in-permission-set ListCustomerManagedPolicyReferencesInPermissionSet" [
+export def "x-amz-target-swb-external-service-list-customer-managed-policy-references-in-permission-set list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1027,29 +1027,29 @@ export def "x-amz-target-swb-external-service-list-customer-managed-policy-refer
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  InstanceArn: any
-  PermissionSetArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  instance_arn: any
+  permission_set_arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<CustomerManagedPolicyReferences: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListCustomerManagedPolicyReferencesInPermissionSet" $qp)
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1060,7 +1060,7 @@ export def "x-amz-target-swb-external-service-list-customer-managed-policy-refer
 #
 # POST /#X-Amz-Target=SWBExternalService.ListInstances
 # operationId: ListInstances
-export def "x-amz-target-swb-external-service-list-instances ListInstances" [
+export def "x-amz-target-swb-external-service-list-instances list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1069,27 +1069,27 @@ export def "x-amz-target-swb-external-service-list-instances ListInstances" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --max-results: any
+  --next-token: any
 ]: any -> record<Instances: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListInstances" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1100,7 +1100,7 @@ export def "x-amz-target-swb-external-service-list-instances ListInstances" [
 #
 # POST /#X-Amz-Target=SWBExternalService.ListManagedPoliciesInPermissionSet
 # operationId: ListManagedPoliciesInPermissionSet
-export def "x-amz-target-swb-external-service-list-managed-policies-in-permission-set ListManagedPoliciesInPermissionSet" [
+export def "x-amz-target-swb-external-service-list-managed-policies-in-permission-set list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,29 +1109,29 @@ export def "x-amz-target-swb-external-service-list-managed-policies-in-permissio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  InstanceArn: any
-  PermissionSetArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  instance_arn: any
+  permission_set_arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<AttachedManagedPolicies: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListManagedPoliciesInPermissionSet" $qp)
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1142,7 +1142,7 @@ export def "x-amz-target-swb-external-service-list-managed-policies-in-permissio
 #
 # POST /#X-Amz-Target=SWBExternalService.ListPermissionSetProvisioningStatus
 # operationId: ListPermissionSetProvisioningStatus
-export def "x-amz-target-swb-external-service-list-permission-set-provisioning-status ListPermissionSetProvisioningStatus" [
+export def "x-amz-target-swb-external-service-list-permission-set-provisioning-status list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1151,29 +1151,29 @@ export def "x-amz-target-swb-external-service-list-permission-set-provisioning-s
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  InstanceArn: any
-  --MaxResults: any
-  --NextToken: any
-  --Filter: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  instance_arn: any
+  --max-results: any
+  --next-token: any
+  --filter: any
 ]: any -> record<PermissionSetsProvisioningStatus: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListPermissionSetProvisioningStatus" $qp)
-  let body = {InstanceArn: $InstanceArn, MaxResults: $MaxResults, NextToken: $NextToken, Filter: $Filter} | compact
+  let body = {"InstanceArn": $instance_arn, "MaxResults": $max_results, "NextToken": $next_token, "Filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1184,7 +1184,7 @@ export def "x-amz-target-swb-external-service-list-permission-set-provisioning-s
 #
 # POST /#X-Amz-Target=SWBExternalService.ListPermissionSets
 # operationId: ListPermissionSets
-export def "x-amz-target-swb-external-service-list-permission-sets ListPermissionSets" [
+export def "x-amz-target-swb-external-service-list-permission-sets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,28 +1193,28 @@ export def "x-amz-target-swb-external-service-list-permission-sets ListPermissio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  InstanceArn: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  instance_arn: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<PermissionSets: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListPermissionSets" $qp)
-  let body = {InstanceArn: $InstanceArn, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"InstanceArn": $instance_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1225,7 +1225,7 @@ export def "x-amz-target-swb-external-service-list-permission-sets ListPermissio
 #
 # POST /#X-Amz-Target=SWBExternalService.ListPermissionSetsProvisionedToAccount
 # operationId: ListPermissionSetsProvisionedToAccount
-export def "x-amz-target-swb-external-service-list-permission-sets-provisioned-to-account ListPermissionSetsProvisionedToAccount" [
+export def "x-amz-target-swb-external-service-list-permission-sets-provisioned-to-account list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1234,30 +1234,30 @@ export def "x-amz-target-swb-external-service-list-permission-sets-provisioned-t
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  InstanceArn: any
-  AccountId: any
-  --ProvisioningStatus: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  instance_arn: any
+  account_id: any
+  --provisioning-status: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<NextToken: record, PermissionSets: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListPermissionSetsProvisionedToAccount" $qp)
-  let body = {InstanceArn: $InstanceArn, AccountId: $AccountId, ProvisioningStatus: $ProvisioningStatus, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"InstanceArn": $instance_arn, "AccountId": $account_id, "ProvisioningStatus": $provisioning_status, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1268,7 +1268,7 @@ export def "x-amz-target-swb-external-service-list-permission-sets-provisioned-t
 #
 # POST /#X-Amz-Target=SWBExternalService.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-swb-external-service-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-swb-external-service-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1277,27 +1277,27 @@ export def "x-amz-target-swb-external-service-list-tags-for-resource ListTagsFor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  InstanceArn: any
-  ResourceArn: any
-  --NextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  instance_arn: any
+  resource_arn: any
+  --next-token: any
 ]: any -> record<Tags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ListTagsForResource" $qp)
-  let body = {InstanceArn: $InstanceArn, ResourceArn: $ResourceArn, NextToken: $NextToken} | compact
+  let body = {"InstanceArn": $instance_arn, "ResourceArn": $resource_arn, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1308,7 +1308,7 @@ export def "x-amz-target-swb-external-service-list-tags-for-resource ListTagsFor
 #
 # POST /#X-Amz-Target=SWBExternalService.ProvisionPermissionSet
 # operationId: ProvisionPermissionSet
-export def "x-amz-target-swb-external-service-provision-permission-set ProvisionPermissionSet" [
+export def "x-amz-target-swb-external-service-provision-permission-set post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,26 +1317,26 @@ export def "x-amz-target-swb-external-service-provision-permission-set Provision
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  InstanceArn: any
-  PermissionSetArn: any
-  --TargetId: any
-  TargetType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  instance_arn: any
+  permission_set_arn: any
+  --target-id: any
+  target_type: any
 ]: any -> record<PermissionSetProvisioningStatus: record<Status: record, RequestId: record, AccountId: record, PermissionSetArn: record, FailureReason: record, CreatedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.ProvisionPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, TargetId: $TargetId, TargetType: $TargetType} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "TargetId": $target_id, "TargetType": $target_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1347,7 +1347,7 @@ export def "x-amz-target-swb-external-service-provision-permission-set Provision
 #
 # POST /#X-Amz-Target=SWBExternalService.PutInlinePolicyToPermissionSet
 # operationId: PutInlinePolicyToPermissionSet
-export def "x-amz-target-swb-external-service-put-inline-policy-to-permission-set PutInlinePolicyToPermissionSet" [
+export def "x-amz-target-swb-external-service-put-inline-policy-to-permission-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1356,25 +1356,25 @@ export def "x-amz-target-swb-external-service-put-inline-policy-to-permission-se
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  InstanceArn: any
-  PermissionSetArn: any
-  InlinePolicy: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  instance_arn: any
+  permission_set_arn: any
+  inline_policy: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.PutInlinePolicyToPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, InlinePolicy: $InlinePolicy} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "InlinePolicy": $inline_policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1385,7 +1385,7 @@ export def "x-amz-target-swb-external-service-put-inline-policy-to-permission-se
 #
 # POST /#X-Amz-Target=SWBExternalService.PutPermissionsBoundaryToPermissionSet
 # operationId: PutPermissionsBoundaryToPermissionSet
-export def "x-amz-target-swb-external-service-put-permissions-boundary-to-permission-set PutPermissionsBoundaryToPermissionSet" [
+export def "x-amz-target-swb-external-service-put-permissions-boundary-to-permission-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1394,25 +1394,25 @@ export def "x-amz-target-swb-external-service-put-permissions-boundary-to-permis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  InstanceArn: any
-  PermissionSetArn: any
-  PermissionsBoundary: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  instance_arn: any
+  permission_set_arn: any
+  permissions_boundary: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.PutPermissionsBoundaryToPermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, PermissionsBoundary: $PermissionsBoundary} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "PermissionsBoundary": $permissions_boundary} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1423,7 +1423,7 @@ export def "x-amz-target-swb-external-service-put-permissions-boundary-to-permis
 #
 # POST /#X-Amz-Target=SWBExternalService.TagResource
 # operationId: TagResource
-export def "x-amz-target-swb-external-service-tag-resource TagResource" [
+export def "x-amz-target-swb-external-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1432,25 +1432,25 @@ export def "x-amz-target-swb-external-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  InstanceArn: any
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  instance_arn: any
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.TagResource")
-  let body = {InstanceArn: $InstanceArn, ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"InstanceArn": $instance_arn, "ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1461,7 +1461,7 @@ export def "x-amz-target-swb-external-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=SWBExternalService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-swb-external-service-untag-resource UntagResource" [
+export def "x-amz-target-swb-external-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,25 +1470,25 @@ export def "x-amz-target-swb-external-service-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  InstanceArn: any
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  instance_arn: any
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.UntagResource")
-  let body = {InstanceArn: $InstanceArn, ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"InstanceArn": $instance_arn, "ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1499,7 +1499,7 @@ export def "x-amz-target-swb-external-service-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=SWBExternalService.UpdateInstanceAccessControlAttributeConfiguration
 # operationId: UpdateInstanceAccessControlAttributeConfiguration
-export def "x-amz-target-swb-external-service-update-instance-access-control-attribute-configuration UpdateInstanceAccessControlAttributeConfiguration" [
+export def "x-amz-target-swb-external-service-update-instance-access-control-attribute-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1508,24 +1508,24 @@ export def "x-amz-target-swb-external-service-update-instance-access-control-att
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  InstanceArn: any
-  InstanceAccessControlAttributeConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  instance_arn: any
+  instance_access_control_attribute_configuration: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.UpdateInstanceAccessControlAttributeConfiguration")
-  let body = {InstanceArn: $InstanceArn, InstanceAccessControlAttributeConfiguration: $InstanceAccessControlAttributeConfiguration} | compact
+  let body = {"InstanceArn": $instance_arn, "InstanceAccessControlAttributeConfiguration": $instance_access_control_attribute_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1536,7 +1536,7 @@ export def "x-amz-target-swb-external-service-update-instance-access-control-att
 #
 # POST /#X-Amz-Target=SWBExternalService.UpdatePermissionSet
 # operationId: UpdatePermissionSet
-export def "x-amz-target-swb-external-service-update-permission-set UpdatePermissionSet" [
+export def "x-amz-target-swb-external-service-update-permission-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1545,27 +1545,27 @@ export def "x-amz-target-swb-external-service-update-permission-set UpdatePermis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  InstanceArn: any
-  PermissionSetArn: any
-  --Description: any
-  --SessionDuration: any
-  --RelayState: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  instance_arn: any
+  permission_set_arn: any
+  --description: any
+  --session-duration: any
+  --relay-state: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=SWBExternalService.UpdatePermissionSet")
-  let body = {InstanceArn: $InstanceArn, PermissionSetArn: $PermissionSetArn, Description: $Description, SessionDuration: $SessionDuration, RelayState: $RelayState} | compact
+  let body = {"InstanceArn": $instance_arn, "PermissionSetArn": $permission_set_arn, "Description": $description, "SessionDuration": $session_duration, "RelayState": $relay_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

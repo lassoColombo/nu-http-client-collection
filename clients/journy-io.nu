@@ -108,7 +108,7 @@ export def "accounts delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let body = {identification: $identification} | compact
+  let body = {"identification": $identification} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "accounts delete" [
 # POST /accounts/upsert
 # operationId: upsertAccount
 # --identification shape: {accountId?: string, domain?: string}
-export def "accounts-upsert upsertAccount" [
+export def "accounts-upsert update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +136,7 @@ export def "accounts-upsert upsertAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/upsert")
-  let body = {identification: $identification, properties: $properties} | compact
+  let body = {"identification": $identification, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,7 +149,7 @@ export def "accounts-upsert upsertAccount" [
 # operationId: addUserToAccount
 # --account shape: {accountId?: string, domain?: string}
 # --users item shape: {identification: record}
-export def "accounts-users-add addUserToAccount" [
+export def "accounts-users-add create-user-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "accounts-users-add addUserToAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/users/add")
-  let body = {account: $account, users: $users} | compact
+  let body = {"account": $account, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,7 +178,7 @@ export def "accounts-users-add addUserToAccount" [
 # operationId: removeUserFromAccount
 # --account shape: {accountId?: string, domain?: string}
 # --users item shape: {identification: record}
-export def "accounts-users-remove removeUserFromAccount" [
+export def "accounts-users-remove delete-user-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "accounts-users-remove removeUserFromAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/users/remove")
-  let body = {account: $account, users: $users} | compact
+  let body = {"account": $account, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -242,13 +242,13 @@ export def "events trackJourneyEvent" [
   identification: record # Event identification requires a user, account or both — shape: {account?: record, user?: record}
   --metadata: record # Event metadata, possible values are strings, booleans, numbers and datetimes (ISO 8601)
   name: string # format: event-name
-  --triggeredAt: string # If left blank this defaults to the current datetime (format: datetime)
+  --triggered-at: string # If left blank this defaults to the current datetime (format: datetime)
 ]: any -> record<meta: record<requestId: string, status: float>, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/events")
-  let body = {identification: $identification, metadata: $metadata, name: $name, triggeredAt: $triggeredAt} | compact
+  let body = {"identification": $identification, "metadata": $metadata, "name": $name, "triggeredAt": $triggered_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -260,7 +260,7 @@ export def "events trackJourneyEvent" [
 # POST /link
 # operationId: link
 # --identification shape: {email?: string, userId?: string}
-export def "link link" [
+export def "link post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,14 +269,14 @@ export def "link link" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  deviceId: string # format: non-empty-string
+  device_id: string # format: non-empty-string
   identification: record # User identification requires a userId, email or both — shape: {email?: string, userId?: string}
 ]: any -> record<meta: record<requestId: string, status: float>, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link")
-  let body = {deviceId: $deviceId, identification: $identification} | compact
+  let body = {"deviceId": $device_id, "identification": $identification} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -388,13 +388,13 @@ export def "track trackEvent" [
   identification: record # Event identification requires a user, account or both — shape: {account?: record, user?: record}
   --metadata: record # Event metadata, possible values are strings, booleans, numbers and datetimes (ISO 8601)
   name: string # format: event-name
-  --triggeredAt: string # If left blank this defaults to the current datetime (format: datetime)
+  --triggered-at: string # If left blank this defaults to the current datetime (format: datetime)
 ]: any -> record<meta: record<requestId: string, status: float>, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/track")
-  let body = {identification: $identification, metadata: $metadata, name: $name, triggeredAt: $triggeredAt} | compact
+  let body = {"identification": $identification, "metadata": $metadata, "name": $name, "triggeredAt": $triggered_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -445,7 +445,7 @@ export def "users delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {identification: $identification} | compact
+  let body = {"identification": $identification} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,7 +457,7 @@ export def "users delete" [
 # POST /users/upsert
 # operationId: upsertUser
 # --identification shape: {email?: string, userId?: string}
-export def "users-upsert upsertUser" [
+export def "users-upsert update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,7 +473,7 @@ export def "users-upsert upsertUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/upsert")
-  let body = {identification: $identification, properties: $properties} | compact
+  let body = {"identification": $identification, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -484,7 +484,7 @@ export def "users-upsert upsertUser" [
 #
 # GET /validate
 # operationId: getValidity
-export def "validate get" [
+export def "validate get-validity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

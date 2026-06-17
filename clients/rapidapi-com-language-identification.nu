@@ -100,17 +100,17 @@ export def "recognize-language post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-RapidAPI-Host: string
-  --X-RapidAPI-Key: string
+  --x-rapid-api-host: string
+  --x-rapid-api-key: string
   text: string # text
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recognize-language/")
-  let body = {text: $text} | compact
+  let body = {"text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-RapidAPI-Host": $X_RapidAPI_Host, "X-RapidAPI-Key": $X_RapidAPI_Key} | compact
+  let extra_headers = {"X-RapidAPI-Host": $x_rapid_api_host, "X-RapidAPI-Key": $x_rapid_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

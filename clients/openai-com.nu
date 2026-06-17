@@ -71,7 +71,7 @@ def size-completer [] { ["1024x1024" "256x256" "512x512"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "answers createAnswer" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "answers create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: createAnswer
 @deprecated
-export def "answers createAnswer" [
+export def "answers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,7 +129,7 @@ export def "answers createAnswer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/answers")
-  let body = {documents: $documents, examples: $examples, examples_context: $examples_context, expand: $expand, file: $file, logit_bias: $logit_bias, logprobs: $logprobs, max_rerank: $max_rerank, max_tokens: $max_tokens, model: $model, n: $n, question: $question, return_metadata: $return_metadata, return_prompt: $return_prompt, search_model: $search_model, stop: $stop, temperature: $temperature, user: $user} | compact
+  let body = {"documents": $documents, "examples": $examples, "examples_context": $examples_context, "expand": $expand, "file": $file, "logit_bias": $logit_bias, "logprobs": $logprobs, "max_rerank": $max_rerank, "max_tokens": $max_tokens, "model": $model, "n": $n, "question": $question, "return_metadata": $return_metadata, "return_prompt": $return_prompt, "search_model": $search_model, "stop": $stop, "temperature": $temperature, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -140,7 +140,7 @@ export def "answers createAnswer" [
 #
 # POST /audio/transcriptions
 # operationId: createTranscription
-export def "audio-transcriptions createTranscription" [
+export def "audio-transcriptions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "audio-transcriptions createTranscription" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/audio/transcriptions")
-  let body = {file: $file, language: $language, model: $model, prompt: $prompt, response_format: $response_format, temperature: $temperature} | compact
+  let body = {"file": $file, "language": $language, "model": $model, "prompt": $prompt, "response_format": $response_format, "temperature": $temperature} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -171,7 +171,7 @@ export def "audio-transcriptions createTranscription" [
 #
 # POST /audio/translations
 # operationId: createTranslation
-export def "audio-translations createTranslation" [
+export def "audio-translations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "audio-translations createTranslation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/audio/translations")
-  let body = {file: $file, model: $model, prompt: $prompt, response_format: $response_format, temperature: $temperature} | compact
+  let body = {"file": $file, "model": $model, "prompt": $prompt, "response_format": $response_format, "temperature": $temperature} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -202,7 +202,7 @@ export def "audio-translations createTranslation" [
 # POST /chat/completions
 # operationId: createChatCompletion
 # --messages item shape: {content: string, name?: string, role: "system"|"user"|"assistant"}
-export def "chat-completions createChatCompletion" [
+export def "chat-completions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "chat-completions createChatCompletion" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chat/completions")
-  let body = {frequency_penalty: $frequency_penalty, logit_bias: $logit_bias, max_tokens: $max_tokens, messages: $messages, model: $model, n: $n, presence_penalty: $presence_penalty, stop: $stop, stream: $stream, temperature: $temperature, top_p: $top_p, user: $user} | compact
+  let body = {"frequency_penalty": $frequency_penalty, "logit_bias": $logit_bias, "max_tokens": $max_tokens, "messages": $messages, "model": $model, "n": $n, "presence_penalty": $presence_penalty, "stop": $stop, "stream": $stream, "temperature": $temperature, "top_p": $top_p, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -241,7 +241,7 @@ export def "chat-completions createChatCompletion" [
 # DEPRECATED
 # operationId: createClassification
 @deprecated
-export def "classifications createClassification" [
+export def "classifications create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "classifications createClassification" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/classifications")
-  let body = {examples: $examples, expand: $expand, file: $file, labels: $labels, logit_bias: $logit_bias, logprobs: $logprobs, max_examples: $max_examples, model: $model, query: $query, return_metadata: $return_metadata, return_prompt: $return_prompt, search_model: $search_model, temperature: $temperature, user: $user} | compact
+  let body = {"examples": $examples, "expand": $expand, "file": $file, "labels": $labels, "logit_bias": $logit_bias, "logprobs": $logprobs, "max_examples": $max_examples, "model": $model, "query": $query, "return_metadata": $return_metadata, "return_prompt": $return_prompt, "search_model": $search_model, "temperature": $temperature, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -280,7 +280,7 @@ export def "classifications createClassification" [
 #
 # POST /completions
 # operationId: createCompletion
-export def "completions createCompletion" [
+export def "completions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +310,7 @@ export def "completions createCompletion" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/completions")
-  let body = {best_of: $best_of, echo: $echo, frequency_penalty: $frequency_penalty, logit_bias: $logit_bias, logprobs: $logprobs, max_tokens: $max_tokens, model: $model, n: $n, presence_penalty: $presence_penalty, prompt: $prompt, stop: $stop, stream: $stream, suffix: $suffix, temperature: $temperature, top_p: $top_p, user: $user} | compact
+  let body = {"best_of": $best_of, "echo": $echo, "frequency_penalty": $frequency_penalty, "logit_bias": $logit_bias, "logprobs": $logprobs, "max_tokens": $max_tokens, "model": $model, "n": $n, "presence_penalty": $presence_penalty, "prompt": $prompt, "stop": $stop, "stream": $stream, "suffix": $suffix, "temperature": $temperature, "top_p": $top_p, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -321,7 +321,7 @@ export def "completions createCompletion" [
 #
 # POST /edits
 # operationId: createEdit
-export def "edits createEdit" [
+export def "edits create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "edits createEdit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/edits")
-  let body = {input: $input, instruction: $instruction, model: $model, n: $n, temperature: $temperature, top_p: $top_p} | compact
+  let body = {"input": $input, "instruction": $instruction, "model": $model, "n": $n, "temperature": $temperature, "top_p": $top_p} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -352,7 +352,7 @@ export def "edits createEdit" [
 #
 # POST /embeddings
 # operationId: createEmbedding
-export def "embeddings createEmbedding" [
+export def "embeddings create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "embeddings createEmbedding" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/embeddings")
-  let body = {input: $input, model: $model, user: $user} | compact
+  let body = {"input": $input, "model": $model, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -382,7 +382,7 @@ export def "embeddings createEmbedding" [
 # DEPRECATED
 # operationId: listEngines
 @deprecated
-export def "engines listEngines" [
+export def "engines list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +406,7 @@ export def "engines listEngines" [
 # DEPRECATED
 # operationId: retrieveEngine
 @deprecated
-export def "engines retrieveEngine" [
+export def "engines retrieve" [
   engine_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +419,7 @@ export def "engines retrieveEngine" [
 ]: nothing -> record<created: int, id: string, object: string, ready: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/engines/($engine_id)")
+  let full_url = (build-url $base ({engine_id: $engine_id} | format pattern "/engines/{engine_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -431,7 +431,7 @@ export def "engines retrieveEngine" [
 # DEPRECATED
 # operationId: createSearch
 @deprecated
-export def "engines-search createSearch" [
+export def "engines-search create" [
   engine_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,8 +451,8 @@ export def "engines-search createSearch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/engines/($engine_id)/search")
-  let body = {documents: $documents, file: $file, max_rerank: $max_rerank, query: $query, return_metadata: $return_metadata, user: $user} | compact
+  let full_url = (build-url $base ({engine_id: $engine_id} | format pattern "/engines/{engine_id}/search"))
+  let body = {"documents": $documents, "file": $file, "max_rerank": $max_rerank, "query": $query, "return_metadata": $return_metadata, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -463,7 +463,7 @@ export def "engines-search createSearch" [
 #
 # GET /files
 # operationId: listFiles
-export def "files listFiles" [
+export def "files list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "files listFiles" [
 #
 # POST /files
 # operationId: createFile
-export def "files createFile" [
+export def "files create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "files createFile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files")
-  let body = {file: $file, purpose: $purpose} | compact
+  let body = {"file": $file, "purpose": $purpose} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -525,7 +525,7 @@ export def "files delete" [
 ]: nothing -> record<deleted: bool, id: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/($file_id)")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -535,7 +535,7 @@ export def "files delete" [
 #
 # GET /files/{file_id}
 # operationId: retrieveFile
-export def "files retrieveFile" [
+export def "files retrieve" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,7 +548,7 @@ export def "files retrieveFile" [
 ]: nothing -> record<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/($file_id)")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,7 +558,7 @@ export def "files retrieveFile" [
 #
 # GET /files/{file_id}/content
 # operationId: downloadFile
-export def "files-content downloadFile" [
+export def "files-content download" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -571,7 +571,7 @@ export def "files-content downloadFile" [
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/($file_id)/content")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/{file_id}/content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -581,7 +581,7 @@ export def "files-content downloadFile" [
 #
 # GET /fine-tunes
 # operationId: listFineTunes
-export def "fine-tunes listFineTunes" [
+export def "fine-tunes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "fine-tunes listFineTunes" [
 #
 # POST /fine-tunes
 # operationId: createFineTune
-export def "fine-tunes createFineTune" [
+export def "fine-tunes create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,7 +629,7 @@ export def "fine-tunes createFineTune" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fine-tunes")
-  let body = {batch_size: $batch_size, classification_betas: $classification_betas, classification_n_classes: $classification_n_classes, classification_positive_class: $classification_positive_class, compute_classification_metrics: $compute_classification_metrics, learning_rate_multiplier: $learning_rate_multiplier, model: $model, n_epochs: $n_epochs, prompt_loss_weight: $prompt_loss_weight, suffix: $suffix, training_file: $training_file, validation_file: $validation_file} | compact
+  let body = {"batch_size": $batch_size, "classification_betas": $classification_betas, "classification_n_classes": $classification_n_classes, "classification_positive_class": $classification_positive_class, "compute_classification_metrics": $compute_classification_metrics, "learning_rate_multiplier": $learning_rate_multiplier, "model": $model, "n_epochs": $n_epochs, "prompt_loss_weight": $prompt_loss_weight, "suffix": $suffix, "training_file": $training_file, "validation_file": $validation_file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -640,7 +640,7 @@ export def "fine-tunes createFineTune" [
 #
 # GET /fine-tunes/{fine_tune_id}
 # operationId: retrieveFineTune
-export def "fine-tunes retrieveFineTune" [
+export def "fine-tunes retrieve" [
   fine_tune_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -653,7 +653,7 @@ export def "fine-tunes retrieveFineTune" [
 ]: nothing -> record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fine-tunes/($fine_tune_id)")
+  let full_url = (build-url $base ({fine_tune_id: $fine_tune_id} | format pattern "/fine-tunes/{fine_tune_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -663,7 +663,7 @@ export def "fine-tunes retrieveFineTune" [
 #
 # POST /fine-tunes/{fine_tune_id}/cancel
 # operationId: cancelFineTune
-export def "fine-tunes-cancel cancelFineTune" [
+export def "fine-tunes-cancel cancel" [
   fine_tune_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,7 +676,7 @@ export def "fine-tunes-cancel cancelFineTune" [
 ]: nothing -> record<created_at: int, events: table<created_at: int, level: string, message: string, object: string>, fine_tuned_model: string, hyperparams: record, id: string, model: string, object: string, organization_id: string, result_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, status: string, training_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>, updated_at: int, validation_files: table<bytes: int, created_at: int, filename: string, id: string, object: string, purpose: string, status: string, status_details: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/fine-tunes/($fine_tune_id)/cancel")
+  let full_url = (build-url $base ({fine_tune_id: $fine_tune_id} | format pattern "/fine-tunes/{fine_tune_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -686,7 +686,7 @@ export def "fine-tunes-cancel cancelFineTune" [
 #
 # GET /fine-tunes/{fine_tune_id}/events
 # operationId: listFineTuneEvents
-export def "fine-tunes-events listFineTuneEvents" [
+export def "fine-tunes-events list" [
   fine_tune_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,7 +701,7 @@ export def "fine-tunes-events listFineTuneEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stream" $stream "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fine-tunes/($fine_tune_id)/events" $qp)
+  let full_url = (build-url $base ({fine_tune_id: $fine_tune_id} | format pattern "/fine-tunes/{fine_tune_id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -711,7 +711,7 @@ export def "fine-tunes-events listFineTuneEvents" [
 #
 # POST /images/edits
 # operationId: createImageEdit
-export def "images-edits createImageEdit" [
+export def "images-edits create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,7 +732,7 @@ export def "images-edits createImageEdit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images/edits")
-  let body = {image: $image, mask: $mask, n: $n, prompt: $prompt, response_format: $response_format, size: $size, user: $user} | compact
+  let body = {"image": $image, "mask": $mask, "n": $n, "prompt": $prompt, "response_format": $response_format, "size": $size, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -743,7 +743,7 @@ export def "images-edits createImageEdit" [
 #
 # POST /images/generations
 # operationId: createImage
-export def "images-generations createImage" [
+export def "images-generations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,7 +762,7 @@ export def "images-generations createImage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images/generations")
-  let body = {n: $n, prompt: $prompt, response_format: $response_format, size: $size, user: $user} | compact
+  let body = {"n": $n, "prompt": $prompt, "response_format": $response_format, "size": $size, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -773,7 +773,7 @@ export def "images-generations createImage" [
 #
 # POST /images/variations
 # operationId: createImageVariation
-export def "images-variations createImageVariation" [
+export def "images-variations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -792,7 +792,7 @@ export def "images-variations createImageVariation" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/images/variations")
-  let body = {image: $image, n: $n, response_format: $response_format, size: $size, user: $user} | compact
+  let body = {"image": $image, "n": $n, "response_format": $response_format, "size": $size, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -803,7 +803,7 @@ export def "images-variations createImageVariation" [
 #
 # GET /models
 # operationId: listModels
-export def "models listModels" [
+export def "models list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "models delete" [
 ]: nothing -> record<deleted: bool, id: string, object: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/models/($model)")
+  let full_url = (build-url $base ({model: $model} | format pattern "/models/{model}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -848,7 +848,7 @@ export def "models delete" [
 #
 # GET /models/{model}
 # operationId: retrieveModel
-export def "models retrieveModel" [
+export def "models retrieve" [
   model: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,7 +861,7 @@ export def "models retrieveModel" [
 ]: nothing -> record<created: int, id: string, object: string, owned_by: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/models/($model)")
+  let full_url = (build-url $base ({model: $model} | format pattern "/models/{model}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -871,7 +871,7 @@ export def "models retrieveModel" [
 #
 # POST /moderations
 # operationId: createModeration
-export def "moderations createModeration" [
+export def "moderations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "moderations createModeration" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/moderations")
-  let body = {input: $input, model: $model} | compact
+  let body = {"input": $input, "model": $model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

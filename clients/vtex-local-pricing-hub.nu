@@ -103,27 +103,27 @@ export def "pricing-hub-prices post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountName: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Describes the type of the content being sent
-  --X-VTEX-API-AppKey: string # The AppKey configured by the merchant
-  --X-VTEX-API-AppToken: string # The AppToken configured by the merchant
-  --UtmCampaign: string # Campaign name, represented by the `utm_campaign` value in the URL that led to the order. If there is no value, use `null` (default: summer)
-  --UtmInternalCampaign: string # Internal campaign name, represented by the `utmi_cp` value in the URL that led to the order. If there is no value, use `null` (default: sale)
-  --UtmMedium: string # Medium that indicates what type of traffic the customer originated from, represented by the `utm_medium` value in the URL that led to the order. If there is no value, use `null` (default: social)
-  --UtmSource: string # Traffic source, indicates where the traffic originated from according to the `utm_source` value in the URL that led to the order. If there is no value, use `null` (default: facebook)
+  --account-name: string # Name of the VTEX account. Used as part of the URL (default: apiexamples)
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent
+  --x-vtex-api-app-key: string # The AppKey configured by the merchant
+  --x-vtex-api-app-token: string # The AppToken configured by the merchant
+  --utm-campaign: string # Campaign name, represented by the `utm_campaign` value in the URL that led to the order. If there is no value, use `null` (default: summer)
+  --utm-internal-campaign: string # Internal campaign name, represented by the `utmi_cp` value in the URL that led to the order. If there is no value, use `null` (default: sale)
+  --utm-medium: string # Medium that indicates what type of traffic the customer originated from, represented by the `utm_medium` value in the URL that led to the order. If there is no value, use `null` (default: social)
+  --utm-source: string # Traffic source, indicates where the traffic originated from according to the `utm_source` value in the URL that led to the order. If there is no value, use `null` (default: facebook)
   email: string # The customer's email address. If there is no value, use an empty string (default: customer@email.com)
   items: list # The list of items that are to be priced by Pricing Hub — item shape: {brandId: string, categoriesIds: list, index: int, priceTableIds: list, quantity: int, sellerId: string, skuId: string}
-  salesChannel: string # Represents Checkout's sales channel (default: 1)
+  sales_channel: string # Represents Checkout's sales channel (default: 1)
 ]: any -> record<items: table<costPrice: float, index: int, listPrice: float, price: float, priceTable: string, priceValidUntil: string, skuId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountName" $accountName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountName" $account_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/pricing-hub/prices" $qp)
-  let body = {UtmCampaign: $UtmCampaign, UtmInternalCampaign: $UtmInternalCampaign, UtmMedium: $UtmMedium, UtmSource: $UtmSource, email: $email, items: $items, salesChannel: $salesChannel} | compact
+  let body = {"UtmCampaign": $utm_campaign, "UtmInternalCampaign": $utm_internal_campaign, "UtmMedium": $utm_medium, "UtmSource": $utm_source, "email": $email, "items": $items, "salesChannel": $sales_channel} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type, "X-VTEX-API-AppKey": $X_VTEX_API_AppKey, "X-VTEX-API-AppToken": $X_VTEX_API_AppToken} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -134,7 +134,7 @@ export def "pricing-hub-prices post" [
 #
 # PUT /config
 # operationId: ConfigExternalPriceSource
-export def "config ConfigExternalPriceSource" [
+export def "config put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,21 +144,21 @@ export def "config ConfigExternalPriceSource" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --an: string # Name of the VTEX account (e.g. apiexamples)
-  --Accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
-  --Content-Type: string # Describes the type of the content being sent
-  --X-VTEX-API-AppKey: string # The AppKey configured by the merchant
-  --X-VTEX-API-AppToken: string # The AppToken configured by the merchant
+  --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand
+  --content-type: string # Describes the type of the content being sent
+  --x-vtex-api-app-key: string # The AppKey configured by the merchant
+  --x-vtex-api-app-token: string # The AppToken configured by the merchant
   --active: oneof<nothing, bool> # Defines if the external price source is active (`true`) or not (`false`). If not set, the default value will be `false`. (default: false)
-  appName: string # Name of the app that communicates with the external pricing source
+  app_name: string # Name of the app that communicates with the external pricing source
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "an" $an "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/config" $qp)
-  let body = {active: $active, appName: $appName} | compact
+  let body = {"active": $active, "appName": $app_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type, "X-VTEX-API-AppKey": $X_VTEX_API_AppKey, "X-VTEX-API-AppToken": $X_VTEX_API_AppToken} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

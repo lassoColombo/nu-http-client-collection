@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections ListByServer" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/privateEndpointConnections
 # operationId: PrivateEndpointConnections_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections ListByServer" [
-  resourceGroupName: string
-  serverName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMariaDB/servers/($serverName)/privateEndpointConnections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMariaDB/servers/{server_name}/privateEndpointConnections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,11 +120,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections Delete" [
-  resourceGroupName: string
-  serverName: string
-  privateEndpointConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections delete" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  private_endpoint_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMariaDB/servers/($serverName)/privateEndpointConnections/($privateEndpointConnectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, private_endpoint_connection_name: $private_endpoint_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMariaDB/servers/{server_name}/privateEndpointConnections/{private_endpoint_connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,11 +148,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections Get" [
-  resourceGroupName: string
-  serverName: string
-  privateEndpointConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  private_endpoint_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMariaDB/servers/($serverName)/privateEndpointConnections/($privateEndpointConnectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, private_endpoint_connection_name: $private_endpoint_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMariaDB/servers/{server_name}/privateEndpointConnections/{private_endpoint_connection_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,11 +176,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections UpdateTags" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  privateEndpointConnectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections update-tags" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  private_endpoint_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,8 +196,8 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMariaDB/servers/($serverName)/privateEndpointConnections/($privateEndpointConnectionName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, private_endpoint_connection_name: $private_endpoint_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMariaDB/servers/{server_name}/privateEndpointConnections/{private_endpoint_connection_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -209,11 +209,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_CreateOrUpdate
 # --properties shape: {privateEndpoint?: record, privateLinkServiceConnectionState?: record}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections CreateOrUpdate" [
-  resourceGroupName: string
-  serverName: string
-  privateEndpointConnectionName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-private-endpoint-connections create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  private_endpoint_connection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,8 +229,8 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMariaDB/servers/($serverName)/privateEndpointConnections/($privateEndpointConnectionName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, private_endpoint_connection_name: $private_endpoint_connection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMariaDB/servers/{server_name}/privateEndpointConnections/{private_endpoint_connection_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

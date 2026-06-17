@@ -85,7 +85,7 @@ def type-completer-2 [] { ["issues" "pulls"] }
 def state-completer-2 [] { ["closed" "open"] }
 def sort-completer-1 [] { ["leastcomment" "leastupdate" "mostcomment" "oldest" "priority" "recentupdate"] }
 def whitespace-completer [] { ["ignore-all" "ignore-change" "ignore-eol" "show-all"] }
-def Do-completer [] { ["manually-merged" "merge" "rebase" "rebase-merge" "squash"] }
+def do-completer [] { ["manually-merged" "merge" "rebase" "rebase-merge" "squash"] }
 def style-completer [] { ["merge" "rebase"] }
 
 # List all available API commands with their parameters
@@ -128,7 +128,7 @@ export def "activitypub-user activitypubPerson" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/activitypub/user/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/activitypub/user/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,7 +151,7 @@ export def "activitypub-user-inbox activitypubPersonInbox" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/activitypub/user/($username)/inbox")
+  let full_url = (build-url $base ({username: $username} | format pattern "/activitypub/user/{username}/inbox"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,7 +199,7 @@ export def "admin-cron adminCronRun" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/cron/($task)")
+  let full_url = (build-url $base ({task: $task} | format pattern "/admin/cron/{task}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,7 +254,7 @@ export def "admin-hooks adminCreateHook" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/hooks")
-  let body = {active: $active, authorization_header: $authorization_header, branch_filter: $branch_filter, config: $config, events: $events, type: $type} | compact
+  let body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -278,7 +278,7 @@ export def "admin-hooks adminGetHook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/hooks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/admin/hooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -307,8 +307,8 @@ export def "admin-hooks adminEditHook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/hooks/($id)")
-  let body = {active: $active, authorization_header: $authorization_header, branch_filter: $branch_filter, config: $config, events: $events} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/admin/hooks/{id}"))
+  let body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,7 +384,7 @@ export def "admin-unadopted adminDeleteUnadoptedRepository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/unadopted/($owner)/($repo)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/admin/unadopted/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -408,7 +408,7 @@ export def "admin-unadopted adminAdoptRepository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/unadopted/($owner)/($repo)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/admin/unadopted/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -468,7 +468,7 @@ export def "admin-users adminCreateUser" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/users")
-  let body = {created_at: $created_at, email: $email, full_name: $full_name, login_name: $login_name, must_change_password: $must_change_password, password: $password, restricted: $restricted, send_notify: $send_notify, source_id: $source_id, username: $username, visibility: $visibility} | compact
+  let body = {"created_at": $created_at, "email": $email, "full_name": $full_name, "login_name": $login_name, "must_change_password": $must_change_password, "password": $password, "restricted": $restricted, "send_notify": $send_notify, "source_id": $source_id, "username": $username, "visibility": $visibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -492,7 +492,7 @@ export def "admin-users adminDeleteUser" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/users/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/admin/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -534,8 +534,8 @@ export def "admin-users adminEditUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/users/($username)")
-  let body = {active: $active, admin: $admin, allow_create_organization: $allow_create_organization, allow_git_hook: $allow_git_hook, allow_import_local: $allow_import_local, description: $description, email: $email, full_name: $full_name, location: $location, login_name: $login_name, max_repo_creation: $max_repo_creation, must_change_password: $must_change_password, password: $password, prohibit_login: $prohibit_login, restricted: $restricted, source_id: $source_id, visibility: $visibility, website: $website} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/admin/users/{username}"))
+  let body = {"active": $active, "admin": $admin, "allow_create_organization": $allow_create_organization, "allow_git_hook": $allow_git_hook, "allow_import_local": $allow_import_local, "description": $description, "email": $email, "full_name": $full_name, "location": $location, "login_name": $login_name, "max_repo_creation": $max_repo_creation, "must_change_password": $must_change_password, "password": $password, "prohibit_login": $prohibit_login, "restricted": $restricted, "source_id": $source_id, "visibility": $visibility, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -563,8 +563,8 @@ export def "admin-users-keys adminCreatePublicKey" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/users/($username)/keys")
-  let body = {key: $key, read_only: $read_only, title: $title} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/admin/users/{username}/keys"))
+  let body = {"key": $key, "read_only": $read_only, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -589,7 +589,7 @@ export def "admin-users-keys adminDeleteUserPublicKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/users/($username)/keys/($id)")
+  let full_url = (build-url $base ({username: $username, id: $id} | format pattern "/admin/users/{username}/keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -620,8 +620,8 @@ export def "admin-users-orgs adminCreateOrg" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/users/($username)/orgs")
-  let body = {description: $description, full_name: $full_name, location: $location, repo_admin_change_team_access: $repo_admin_change_team_access, username: $body_username, visibility: $visibility, website: $website} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/admin/users/{username}/orgs"))
+  let body = {"description": $description, "full_name": $full_name, "location": $location, "repo_admin_change_team_access": $repo_admin_change_team_access, "username": $body_username, "visibility": $visibility, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -657,8 +657,8 @@ export def "admin-users-repos adminCreateRepo" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/admin/users/($username)/repos")
-  let body = {auto_init: $auto_init, default_branch: $default_branch, description: $description, gitignores: $gitignores, issue_labels: $issue_labels, license: $license, name: $name, private: $private, readme: $readme, template: $template, trust_model: $trust_model} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/admin/users/{username}/repos"))
+  let body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -682,7 +682,7 @@ export def "amdin-hooks adminDeleteHook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/amdin/hooks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/amdin/hooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -701,16 +701,16 @@ export def "markdown renderMarkdown" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Context: string # Context to render  in: body
-  --Mode: string # Mode to render  in: body
-  --Text: string # Text markdown to render  in: body
-  --Wiki: oneof<nothing, bool> # Is it a wiki page ?  in: body
+  --context: string # Context to render  in: body
+  --mode: string # Mode to render  in: body
+  --text: string # Text markdown to render  in: body
+  --wiki: oneof<nothing, bool> # Is it a wiki page ?  in: body
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/markdown")
-  let body = {Context: $Context, Mode: $Mode, Text: $Text, Wiki: $Wiki} | compact
+  let body = {"Context": $context, "Mode": $mode, "Text": $text, "Wiki": $wiki} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -860,7 +860,7 @@ export def "notifications-threads notifyGetThread" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notifications/threads/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/notifications/threads/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -885,7 +885,7 @@ export def "notifications-threads notifyReadThread" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "to-status" $to_status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/notifications/threads/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/notifications/threads/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -897,7 +897,7 @@ export def "notifications-threads notifyReadThread" [
 # DEPRECATED
 # operationId: createOrgRepoDeprecated
 @deprecated
-export def "org-repos createOrgRepoDeprecated" [
+export def "org-repos create-repo-deprecated" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -922,8 +922,8 @@ export def "org-repos createOrgRepoDeprecated" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/org/($org)/repos")
-  let body = {auto_init: $auto_init, default_branch: $default_branch, description: $description, gitignores: $gitignores, issue_labels: $issue_labels, license: $license, name: $name, private: $private, readme: $readme, template: $template, trust_model: $trust_model} | compact
+  let full_url = (build-url $base ({org: $org} | format pattern "/org/{org}/repos"))
+  let body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -980,7 +980,7 @@ export def "orgs orgCreate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orgs")
-  let body = {description: $description, full_name: $full_name, location: $location, repo_admin_change_team_access: $repo_admin_change_team_access, username: $username, visibility: $visibility, website: $website} | compact
+  let body = {"description": $description, "full_name": $full_name, "location": $location, "repo_admin_change_team_access": $repo_admin_change_team_access, "username": $username, "visibility": $visibility, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1004,7 +1004,7 @@ export def "orgs orgDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)")
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1027,7 +1027,7 @@ export def "orgs orgGet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)")
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1057,8 +1057,8 @@ export def "orgs orgEdit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)")
-  let body = {description: $description, full_name: $full_name, location: $location, repo_admin_change_team_access: $repo_admin_change_team_access, visibility: $visibility, website: $website} | compact
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}"))
+  let body = {"description": $description, "full_name": $full_name, "location": $location, "repo_admin_change_team_access": $repo_admin_change_team_access, "visibility": $visibility, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1085,7 +1085,7 @@ export def "orgs-hooks orgListHooks" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orgs/($org)/hooks" $qp)
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/hooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1115,8 +1115,8 @@ export def "orgs-hooks orgCreateHook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/hooks")
-  let body = {active: $active, authorization_header: $authorization_header, branch_filter: $branch_filter, config: $config, events: $events, type: $type} | compact
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/hooks"))
+  let body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1141,7 +1141,7 @@ export def "orgs-hooks orgDeleteHook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/hooks/($id)")
+  let full_url = (build-url $base ({org: $org, id: $id} | format pattern "/orgs/{org}/hooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1165,7 +1165,7 @@ export def "orgs-hooks orgGetHook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/hooks/($id)")
+  let full_url = (build-url $base ({org: $org, id: $id} | format pattern "/orgs/{org}/hooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1195,8 +1195,8 @@ export def "orgs-hooks orgEditHook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/hooks/($id)")
-  let body = {active: $active, authorization_header: $authorization_header, branch_filter: $branch_filter, config: $config, events: $events} | compact
+  let full_url = (build-url $base ({org: $org, id: $id} | format pattern "/orgs/{org}/hooks/{id}"))
+  let body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1223,7 +1223,7 @@ export def "orgs-labels orgListLabels" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orgs/($org)/labels" $qp)
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1251,8 +1251,8 @@ export def "orgs-labels orgCreateLabel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/labels")
-  let body = {color: $color, description: $description, exclusive: $exclusive, name: $name} | compact
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/labels"))
+  let body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1277,7 +1277,7 @@ export def "orgs-labels orgDeleteLabel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/labels/($id)")
+  let full_url = (build-url $base ({org: $org, id: $id} | format pattern "/orgs/{org}/labels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1301,7 +1301,7 @@ export def "orgs-labels orgGetLabel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/labels/($id)")
+  let full_url = (build-url $base ({org: $org, id: $id} | format pattern "/orgs/{org}/labels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1330,8 +1330,8 @@ export def "orgs-labels orgEditLabel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/labels/($id)")
-  let body = {color: $color, description: $description, exclusive: $exclusive, name: $name} | compact
+  let full_url = (build-url $base ({org: $org, id: $id} | format pattern "/orgs/{org}/labels/{id}"))
+  let body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1358,7 +1358,7 @@ export def "orgs-members orgListMembers" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orgs/($org)/members" $qp)
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1382,7 +1382,7 @@ export def "orgs-members orgDeleteMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/members/($username)")
+  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1406,7 +1406,7 @@ export def "orgs-members orgIsMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/members/($username)")
+  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1432,7 +1432,7 @@ export def "orgs-public-members orgListPublicMembers" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orgs/($org)/public_members" $qp)
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/public_members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1456,7 +1456,7 @@ export def "orgs-public-members orgConcealMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/public_members/($username)")
+  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/public_members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1480,7 +1480,7 @@ export def "orgs-public-members orgIsPublicMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/public_members/($username)")
+  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/public_members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1504,7 +1504,7 @@ export def "orgs-public-members orgPublicizeMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/public_members/($username)")
+  let full_url = (build-url $base ({org: $org, username: $username} | format pattern "/orgs/{org}/public_members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1530,7 +1530,7 @@ export def "orgs-repos orgListRepos" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orgs/($org)/repos" $qp)
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/repos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1540,7 +1540,7 @@ export def "orgs-repos orgListRepos" [
 #
 # POST /orgs/{org}/repos
 # operationId: createOrgRepo
-export def "orgs-repos createOrgRepo" [
+export def "orgs-repos create" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1565,8 +1565,8 @@ export def "orgs-repos createOrgRepo" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/repos")
-  let body = {auto_init: $auto_init, default_branch: $default_branch, description: $description, gitignores: $gitignores, issue_labels: $issue_labels, license: $license, name: $name, private: $private, readme: $readme, template: $template, trust_model: $trust_model} | compact
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/repos"))
+  let body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1593,7 +1593,7 @@ export def "orgs-teams orgListTeams" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orgs/($org)/teams" $qp)
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/teams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1624,8 +1624,8 @@ export def "orgs-teams orgCreateTeam" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orgs/($org)/teams")
-  let body = {can_create_org_repo: $can_create_org_repo, description: $description, includes_all_repositories: $includes_all_repositories, name: $name, permission: $permission, units: $units, units_map: $units_map} | compact
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/teams"))
+  let body = {"can_create_org_repo": $can_create_org_repo, "description": $description, "includes_all_repositories": $includes_all_repositories, "name": $name, "permission": $permission, "units": $units, "units_map": $units_map} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1654,7 +1654,7 @@ export def "orgs-teams-search teamSearch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "include_desc" $include_desc "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orgs/($org)/teams/search" $qp)
+  let full_url = (build-url $base ({org: $org} | format pattern "/orgs/{org}/teams/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1664,7 +1664,7 @@ export def "orgs-teams-search teamSearch" [
 #
 # GET /packages/{owner}
 # operationId: listPackages
-export def "packages listPackages" [
+export def "packages list" [
   owner: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1682,7 +1682,7 @@ export def "packages listPackages" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/packages/($owner)" $qp)
+  let full_url = (build-url $base ({owner: $owner} | format pattern "/packages/{owner}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1708,7 +1708,7 @@ export def "packages delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/packages/($owner)/($type)/($name)/($version)")
+  let full_url = (build-url $base ({owner: $owner, type: $type, name: $name, version: $version} | format pattern "/packages/{owner}/{type}/{name}/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1734,7 +1734,7 @@ export def "packages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/packages/($owner)/($type)/($name)/($version)")
+  let full_url = (build-url $base ({owner: $owner, type: $type, name: $name, version: $version} | format pattern "/packages/{owner}/{type}/{name}/{version}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1744,7 +1744,7 @@ export def "packages get" [
 #
 # GET /packages/{owner}/{type}/{name}/{version}/files
 # operationId: listPackageFiles
-export def "packages-files listPackageFiles" [
+export def "packages-files list" [
   owner: string
   type: string
   name: string
@@ -1760,7 +1760,7 @@ export def "packages-files listPackageFiles" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/packages/($owner)/($type)/($name)/($version)/files")
+  let full_url = (build-url $base ({owner: $owner, type: $type, name: $name, version: $version} | format pattern "/packages/{owner}/{type}/{name}/{version}/files"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1844,7 +1844,7 @@ export def "repos-migrate repoMigrate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/repos/migrate")
-  let body = {auth_password: $auth_password, auth_token: $auth_token, auth_username: $auth_username, clone_addr: $clone_addr, description: $description, issues: $issues, labels: $labels, lfs: $lfs, lfs_endpoint: $lfs_endpoint, milestones: $milestones, mirror: $mirror, mirror_interval: $mirror_interval, private: $private, pull_requests: $pull_requests, releases: $releases, repo_name: $repo_name, repo_owner: $repo_owner, service: $service, uid: $uid, wiki: $wiki} | compact
+  let body = {"auth_password": $auth_password, "auth_token": $auth_token, "auth_username": $auth_username, "clone_addr": $clone_addr, "description": $description, "issues": $issues, "labels": $labels, "lfs": $lfs, "lfs_endpoint": $lfs_endpoint, "milestones": $milestones, "mirror": $mirror, "mirror_interval": $mirror_interval, "private": $private, "pull_requests": $pull_requests, "releases": $releases, "repo_name": $repo_name, "repo_owner": $repo_owner, "service": $service, "uid": $uid, "wiki": $wiki} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1866,11 +1866,11 @@ export def "repos-search repoSearch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # keyword
   --topic: oneof<nothing, bool> # Limit search to repositories with keyword as topic
-  --includeDesc: oneof<nothing, bool> # include search of keyword within repository description
+  --include-desc: oneof<nothing, bool> # include search of keyword within repository description
   --uid: int # search only for repos that the user with the given id owns or contributes to (format: int64)
   --priority-owner-id: int # repo owner to prioritize in the results (format: int64)
   --team-id: int # search only for repos that belong to the given team id (format: int64)
-  --starredBy: int # search only for repos that the user with the given id has starred (format: int64)
+  --starred-by: int # search only for repos that the user with the given id has starred (format: int64)
   --private: oneof<nothing, bool> # include private repositories this user has access to (defaults to true)
   --is-private: oneof<nothing, bool> # show only pubic, private or all repositories (defaults to all)
   --template: oneof<nothing, bool> # include template repositories this user has access to (defaults to true)
@@ -1884,7 +1884,7 @@ export def "repos-search repoSearch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "topic" $topic "scalar") (serialize-qp "includeDesc" $includeDesc "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "priority_owner_id" $priority_owner_id "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "starredBy" $starredBy "scalar") (serialize-qp "private" $private "scalar") (serialize-qp "is_private" $is_private "scalar") (serialize-qp "template" $template "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "exclusive" $exclusive "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "topic" $topic "scalar") (serialize-qp "includeDesc" $include_desc "scalar") (serialize-qp "uid" $uid "scalar") (serialize-qp "priority_owner_id" $priority_owner_id "scalar") (serialize-qp "team_id" $team_id "scalar") (serialize-qp "starredBy" $starred_by "scalar") (serialize-qp "private" $private "scalar") (serialize-qp "is_private" $is_private "scalar") (serialize-qp "template" $template "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "mode" $mode "scalar") (serialize-qp "exclusive" $exclusive "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repos/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1909,7 +1909,7 @@ export def "repos repoDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1933,7 +1933,7 @@ export def "repos repoGet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1988,8 +1988,8 @@ export def "repos repoEdit" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)")
-  let body = {allow_manual_merge: $allow_manual_merge, allow_merge_commits: $allow_merge_commits, allow_rebase: $allow_rebase, allow_rebase_explicit: $allow_rebase_explicit, allow_rebase_update: $allow_rebase_update, allow_squash_merge: $allow_squash_merge, archived: $archived, autodetect_manual_merge: $autodetect_manual_merge, default_allow_maintainer_edit: $default_allow_maintainer_edit, default_branch: $default_branch, default_delete_branch_after_merge: $default_delete_branch_after_merge, default_merge_style: $default_merge_style, description: $description, enable_prune: $enable_prune, external_tracker: $external_tracker, external_wiki: $external_wiki, has_issues: $has_issues, has_projects: $has_projects, has_pull_requests: $has_pull_requests, has_wiki: $has_wiki, ignore_whitespace_conflicts: $ignore_whitespace_conflicts, internal_tracker: $internal_tracker, mirror_interval: $mirror_interval, name: $name, private: $private, template: $template, website: $website} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}"))
+  let body = {"allow_manual_merge": $allow_manual_merge, "allow_merge_commits": $allow_merge_commits, "allow_rebase": $allow_rebase, "allow_rebase_explicit": $allow_rebase_explicit, "allow_rebase_update": $allow_rebase_update, "allow_squash_merge": $allow_squash_merge, "archived": $archived, "autodetect_manual_merge": $autodetect_manual_merge, "default_allow_maintainer_edit": $default_allow_maintainer_edit, "default_branch": $default_branch, "default_delete_branch_after_merge": $default_delete_branch_after_merge, "default_merge_style": $default_merge_style, "description": $description, "enable_prune": $enable_prune, "external_tracker": $external_tracker, "external_wiki": $external_wiki, "has_issues": $has_issues, "has_projects": $has_projects, "has_pull_requests": $has_pull_requests, "has_wiki": $has_wiki, "ignore_whitespace_conflicts": $ignore_whitespace_conflicts, "internal_tracker": $internal_tracker, "mirror_interval": $mirror_interval, "name": $name, "private": $private, "template": $template, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2015,7 +2015,7 @@ export def "repos-archive repoGetArchive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/archive/($archive)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, archive: $archive} | format pattern "/repos/{owner}/{repo}/archive/{archive}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2039,7 +2039,7 @@ export def "repos-assignees repoGetAssignees" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/assignees")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/assignees"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2063,7 +2063,7 @@ export def "repos-branch-protections repoListBranchProtection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/branch_protections")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/branch_protections"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2111,8 +2111,8 @@ export def "repos-branch-protections repoCreateBranchProtection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/branch_protections")
-  let body = {approvals_whitelist_teams: $approvals_whitelist_teams, approvals_whitelist_username: $approvals_whitelist_username, block_on_official_review_requests: $block_on_official_review_requests, block_on_outdated_branch: $block_on_outdated_branch, block_on_rejected_reviews: $block_on_rejected_reviews, branch_name: $branch_name, dismiss_stale_approvals: $dismiss_stale_approvals, enable_approvals_whitelist: $enable_approvals_whitelist, enable_merge_whitelist: $enable_merge_whitelist, enable_push: $enable_push, enable_push_whitelist: $enable_push_whitelist, enable_status_check: $enable_status_check, merge_whitelist_teams: $merge_whitelist_teams, merge_whitelist_usernames: $merge_whitelist_usernames, protected_file_patterns: $protected_file_patterns, push_whitelist_deploy_keys: $push_whitelist_deploy_keys, push_whitelist_teams: $push_whitelist_teams, push_whitelist_usernames: $push_whitelist_usernames, require_signed_commits: $require_signed_commits, required_approvals: $required_approvals, rule_name: $rule_name, status_check_contexts: $status_check_contexts, unprotected_file_patterns: $unprotected_file_patterns} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/branch_protections"))
+  let body = {"approvals_whitelist_teams": $approvals_whitelist_teams, "approvals_whitelist_username": $approvals_whitelist_username, "block_on_official_review_requests": $block_on_official_review_requests, "block_on_outdated_branch": $block_on_outdated_branch, "block_on_rejected_reviews": $block_on_rejected_reviews, "branch_name": $branch_name, "dismiss_stale_approvals": $dismiss_stale_approvals, "enable_approvals_whitelist": $enable_approvals_whitelist, "enable_merge_whitelist": $enable_merge_whitelist, "enable_push": $enable_push, "enable_push_whitelist": $enable_push_whitelist, "enable_status_check": $enable_status_check, "merge_whitelist_teams": $merge_whitelist_teams, "merge_whitelist_usernames": $merge_whitelist_usernames, "protected_file_patterns": $protected_file_patterns, "push_whitelist_deploy_keys": $push_whitelist_deploy_keys, "push_whitelist_teams": $push_whitelist_teams, "push_whitelist_usernames": $push_whitelist_usernames, "require_signed_commits": $require_signed_commits, "required_approvals": $required_approvals, "rule_name": $rule_name, "status_check_contexts": $status_check_contexts, "unprotected_file_patterns": $unprotected_file_patterns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2138,7 +2138,7 @@ export def "repos-branch-protections repoDeleteBranchProtection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/branch_protections/($name)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, name: $name} | format pattern "/repos/{owner}/{repo}/branch_protections/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2163,7 +2163,7 @@ export def "repos-branch-protections repoGetBranchProtection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/branch_protections/($name)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, name: $name} | format pattern "/repos/{owner}/{repo}/branch_protections/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2210,8 +2210,8 @@ export def "repos-branch-protections repoEditBranchProtection" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/branch_protections/($name)")
-  let body = {approvals_whitelist_teams: $approvals_whitelist_teams, approvals_whitelist_username: $approvals_whitelist_username, block_on_official_review_requests: $block_on_official_review_requests, block_on_outdated_branch: $block_on_outdated_branch, block_on_rejected_reviews: $block_on_rejected_reviews, dismiss_stale_approvals: $dismiss_stale_approvals, enable_approvals_whitelist: $enable_approvals_whitelist, enable_merge_whitelist: $enable_merge_whitelist, enable_push: $enable_push, enable_push_whitelist: $enable_push_whitelist, enable_status_check: $enable_status_check, merge_whitelist_teams: $merge_whitelist_teams, merge_whitelist_usernames: $merge_whitelist_usernames, protected_file_patterns: $protected_file_patterns, push_whitelist_deploy_keys: $push_whitelist_deploy_keys, push_whitelist_teams: $push_whitelist_teams, push_whitelist_usernames: $push_whitelist_usernames, require_signed_commits: $require_signed_commits, required_approvals: $required_approvals, status_check_contexts: $status_check_contexts, unprotected_file_patterns: $unprotected_file_patterns} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, name: $name} | format pattern "/repos/{owner}/{repo}/branch_protections/{name}"))
+  let body = {"approvals_whitelist_teams": $approvals_whitelist_teams, "approvals_whitelist_username": $approvals_whitelist_username, "block_on_official_review_requests": $block_on_official_review_requests, "block_on_outdated_branch": $block_on_outdated_branch, "block_on_rejected_reviews": $block_on_rejected_reviews, "dismiss_stale_approvals": $dismiss_stale_approvals, "enable_approvals_whitelist": $enable_approvals_whitelist, "enable_merge_whitelist": $enable_merge_whitelist, "enable_push": $enable_push, "enable_push_whitelist": $enable_push_whitelist, "enable_status_check": $enable_status_check, "merge_whitelist_teams": $merge_whitelist_teams, "merge_whitelist_usernames": $merge_whitelist_usernames, "protected_file_patterns": $protected_file_patterns, "push_whitelist_deploy_keys": $push_whitelist_deploy_keys, "push_whitelist_teams": $push_whitelist_teams, "push_whitelist_usernames": $push_whitelist_usernames, "require_signed_commits": $require_signed_commits, "required_approvals": $required_approvals, "status_check_contexts": $status_check_contexts, "unprotected_file_patterns": $unprotected_file_patterns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2239,7 +2239,7 @@ export def "repos-branches repoListBranches" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/branches" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/branches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2266,8 +2266,8 @@ export def "repos-branches repoCreateBranch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/branches")
-  let body = {new_branch_name: $new_branch_name, old_branch_name: $old_branch_name} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/branches"))
+  let body = {"new_branch_name": $new_branch_name, "old_branch_name": $old_branch_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2293,7 +2293,7 @@ export def "repos-branches repoDeleteBranch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/branches/($branch)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2318,7 +2318,7 @@ export def "repos-branches repoGetBranch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/branches/($branch)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, branch: $branch} | format pattern "/repos/{owner}/{repo}/branches/{branch}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2345,7 +2345,7 @@ export def "repos-collaborators repoListCollaborators" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/collaborators" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/collaborators") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2370,7 +2370,7 @@ export def "repos-collaborators repoDeleteCollaborator" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/collaborators/($collaborator)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, collaborator: $collaborator} | format pattern "/repos/{owner}/{repo}/collaborators/{collaborator}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2395,7 +2395,7 @@ export def "repos-collaborators repoCheckCollaborator" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/collaborators/($collaborator)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, collaborator: $collaborator} | format pattern "/repos/{owner}/{repo}/collaborators/{collaborator}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2422,8 +2422,8 @@ export def "repos-collaborators repoAddCollaborator" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/collaborators/($collaborator)")
-  let body = {permission: $permission} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, collaborator: $collaborator} | format pattern "/repos/{owner}/{repo}/collaborators/{collaborator}"))
+  let body = {"permission": $permission} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2449,7 +2449,7 @@ export def "repos-collaborators-permission repoGetRepoPermissions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/collaborators/($collaborator)/permission")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, collaborator: $collaborator} | format pattern "/repos/{owner}/{repo}/collaborators/{collaborator}/permission"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2479,7 +2479,7 @@ export def "repos-commits repoGetAllCommits" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sha" $sha "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "stat" $stat "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/commits" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/commits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2507,7 +2507,7 @@ export def "repos-commits-status repoGetCombinedStatusByRef" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/commits/($ref)/status" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/commits/{ref}/status") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2537,7 +2537,7 @@ export def "repos-commits-statuses repoListStatusesByRef" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/commits/($ref)/statuses" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/commits/{ref}/statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2563,7 +2563,7 @@ export def "repos-contents repoGetContentsList" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/contents" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/contents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2600,8 +2600,8 @@ export def "repos-contents repoDeleteFile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/contents/($filepath)")
-  let body = {author: $author, branch: $branch, committer: $committer, dates: $dates, message: $message, new_branch: $new_branch, sha: $sha, signoff: $signoff} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, filepath: $filepath} | format pattern "/repos/{owner}/{repo}/contents/{filepath}"))
+  let body = {"author": $author, "branch": $branch, "committer": $committer, "dates": $dates, "message": $message, "new_branch": $new_branch, "sha": $sha, "signoff": $signoff} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2629,7 +2629,7 @@ export def "repos-contents repoGetContents" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/contents/($filepath)" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, filepath: $filepath} | format pattern "/repos/{owner}/{repo}/contents/{filepath}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2666,8 +2666,8 @@ export def "repos-contents repoCreateFile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/contents/($filepath)")
-  let body = {author: $author, branch: $branch, committer: $committer, content: $content, dates: $dates, message: $message, new_branch: $new_branch, signoff: $signoff} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, filepath: $filepath} | format pattern "/repos/{owner}/{repo}/contents/{filepath}"))
+  let body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "dates": $dates, "message": $message, "new_branch": $new_branch, "signoff": $signoff} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2707,8 +2707,8 @@ export def "repos-contents repoUpdateFile" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/contents/($filepath)")
-  let body = {author: $author, branch: $branch, committer: $committer, content: $content, dates: $dates, from_path: $from_path, message: $message, new_branch: $new_branch, sha: $sha, signoff: $signoff} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, filepath: $filepath} | format pattern "/repos/{owner}/{repo}/contents/{filepath}"))
+  let body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "dates": $dates, "from_path": $from_path, "message": $message, "new_branch": $new_branch, "sha": $sha, "signoff": $signoff} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2747,8 +2747,8 @@ export def "repos-diffpatch repoApplyDiffPatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/diffpatch")
-  let body = {author: $author, branch: $branch, committer: $committer, content: $content, dates: $dates, from_path: $from_path, message: $message, new_branch: $new_branch, sha: $sha, signoff: $signoff} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/diffpatch"))
+  let body = {"author": $author, "branch": $branch, "committer": $committer, "content": $content, "dates": $dates, "from_path": $from_path, "message": $message, "new_branch": $new_branch, "sha": $sha, "signoff": $signoff} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2776,7 +2776,7 @@ export def "repos-editorconfig repoGetEditorConfig" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/editorconfig/($filepath)" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, filepath: $filepath} | format pattern "/repos/{owner}/{repo}/editorconfig/{filepath}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2786,7 +2786,7 @@ export def "repos-editorconfig repoGetEditorConfig" [
 #
 # GET /repos/{owner}/{repo}/forks
 # operationId: listForks
-export def "repos-forks listForks" [
+export def "repos-forks list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2803,7 +2803,7 @@ export def "repos-forks listForks" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/forks" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/forks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2813,7 +2813,7 @@ export def "repos-forks listForks" [
 #
 # POST /repos/{owner}/{repo}/forks
 # operationId: createFork
-export def "repos-forks createFork" [
+export def "repos-forks create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2830,8 +2830,8 @@ export def "repos-forks createFork" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/forks")
-  let body = {name: $name, organization: $organization} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/forks"))
+  let body = {"name": $name, "organization": $organization} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2842,7 +2842,7 @@ export def "repos-forks createFork" [
 #
 # GET /repos/{owner}/{repo}/git/blobs/{sha}
 # operationId: GetBlob
-export def "repos-git-blobs GetBlob" [
+export def "repos-git-blobs get" [
   owner: string
   repo: string
   sha: string
@@ -2857,7 +2857,7 @@ export def "repos-git-blobs GetBlob" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/git/blobs/($sha)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, sha: $sha} | format pattern "/repos/{owner}/{repo}/git/blobs/{sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2882,7 +2882,7 @@ export def "repos-git-commits repoGetSingleCommit" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/git/commits/($sha)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, sha: $sha} | format pattern "/repos/{owner}/{repo}/git/commits/{sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2896,7 +2896,7 @@ export def "repos-git-commits repoDownloadCommitDiffOrPatch" [
   owner: string
   repo: string
   sha: string
-  diffType: string
+  diff_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2908,7 +2908,7 @@ export def "repos-git-commits repoDownloadCommitDiffOrPatch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/git/commits/($sha).($diffType)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, sha: $sha, diff_type: $diff_type} | format pattern "/repos/{owner}/{repo}/git/commits/{sha}.{diff_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2933,7 +2933,7 @@ export def "repos-git-notes repoGetNote" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/git/notes/($sha)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, sha: $sha} | format pattern "/repos/{owner}/{repo}/git/notes/{sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2957,7 +2957,7 @@ export def "repos-git-refs repoListAllGitRefs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/git/refs")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/git/refs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2982,7 +2982,7 @@ export def "repos-git-refs repoListGitRefs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/git/refs/($ref)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, ref: $ref} | format pattern "/repos/{owner}/{repo}/git/refs/{ref}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2992,7 +2992,7 @@ export def "repos-git-refs repoListGitRefs" [
 #
 # GET /repos/{owner}/{repo}/git/tags/{sha}
 # operationId: GetAnnotatedTag
-export def "repos-git-tags GetAnnotatedTag" [
+export def "repos-git-tags get-annotated" [
   owner: string
   repo: string
   sha: string
@@ -3007,7 +3007,7 @@ export def "repos-git-tags GetAnnotatedTag" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/git/tags/($sha)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, sha: $sha} | format pattern "/repos/{owner}/{repo}/git/tags/{sha}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3017,7 +3017,7 @@ export def "repos-git-tags GetAnnotatedTag" [
 #
 # GET /repos/{owner}/{repo}/git/trees/{sha}
 # operationId: GetTree
-export def "repos-git-trees GetTree" [
+export def "repos-git-trees get" [
   owner: string
   repo: string
   sha: string
@@ -3036,7 +3036,7 @@ export def "repos-git-trees GetTree" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recursive" $recursive "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/git/trees/($sha)" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, sha: $sha} | format pattern "/repos/{owner}/{repo}/git/trees/{sha}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3063,7 +3063,7 @@ export def "repos-hooks repoListHooks" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/hooks" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/hooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3094,8 +3094,8 @@ export def "repos-hooks repoCreateHook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/hooks")
-  let body = {active: $active, authorization_header: $authorization_header, branch_filter: $branch_filter, config: $config, events: $events, type: $type} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/hooks"))
+  let body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3120,7 +3120,7 @@ export def "repos-hooks-git repoListGitHooks" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/hooks/git")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/hooks/git"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3145,7 +3145,7 @@ export def "repos-hooks-git repoDeleteGitHook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/hooks/git/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/hooks/git/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3170,7 +3170,7 @@ export def "repos-hooks-git repoGetGitHook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/hooks/git/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/hooks/git/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3197,8 +3197,8 @@ export def "repos-hooks-git repoEditGitHook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/hooks/git/($id)")
-  let body = {content: $content} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/hooks/git/{id}"))
+  let body = {"content": $content} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3224,7 +3224,7 @@ export def "repos-hooks repoDeleteHook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/hooks/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/hooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3249,7 +3249,7 @@ export def "repos-hooks repoGetHook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/hooks/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/hooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3280,8 +3280,8 @@ export def "repos-hooks repoEditHook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/hooks/($id)")
-  let body = {active: $active, authorization_header: $authorization_header, branch_filter: $branch_filter, config: $config, events: $events} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/hooks/{id}"))
+  let body = {"active": $active, "authorization_header": $authorization_header, "branch_filter": $branch_filter, "config": $config, "events": $events} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3309,7 +3309,7 @@ export def "repos-hooks-tests repoTestHook" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/hooks/($id)/tests" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/hooks/{id}/tests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3333,7 +3333,7 @@ export def "repos-issue-templates repoGetIssueTemplates" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issue_templates")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/issue_templates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3370,7 +3370,7 @@ export def "repos-issues issueListIssues" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "milestones" $milestones "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "created_by" $created_by "scalar") (serialize-qp "assigned_by" $assigned_by "scalar") (serialize-qp "mentioned_by" $mentioned_by "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/issues") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3404,8 +3404,8 @@ export def "repos-issues issueCreateIssue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues")
-  let body = {assignee: $assignee, assignees: $assignees, body: $body_body, closed: $closed, due_date: $due_date, labels: $labels, milestone: $milestone, ref: $ref, title: $title} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/issues"))
+  let body = {"assignee": $assignee, "assignees": $assignees, "body": $body_body, "closed": $closed, "due_date": $due_date, "labels": $labels, "milestone": $milestone, "ref": $ref, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3435,7 +3435,7 @@ export def "repos-issues-comments issueGetRepoComments" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/issues/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3460,7 +3460,7 @@ export def "repos-issues-comments issueDeleteComment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3485,7 +3485,7 @@ export def "repos-issues-comments issueGetComment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3512,8 +3512,8 @@ export def "repos-issues-comments issueEditComment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)")
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}"))
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3539,7 +3539,7 @@ export def "repos-issues-comments-assets issueListIssueCommentAttachments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)/assets")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3568,8 +3568,8 @@ export def "repos-issues-comments-assets issueCreateIssueCommentAttachment" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)/assets" $qp)
-  let body = {attachment: $attachment} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets") $qp)
+  let body = {"attachment": $attachment} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3596,7 +3596,7 @@ export def "repos-issues-comments-assets issueDeleteIssueCommentAttachment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)/assets/($attachment_id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id, attachment_id: $attachment_id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3622,7 +3622,7 @@ export def "repos-issues-comments-assets issueGetIssueCommentAttachment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)/assets/($attachment_id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id, attachment_id: $attachment_id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3650,8 +3650,8 @@ export def "repos-issues-comments-assets issueEditIssueCommentAttachment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)/assets/($attachment_id)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id, attachment_id: $attachment_id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3679,8 +3679,8 @@ export def "repos-issues-comments-reactions issueDeleteCommentReaction" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)/reactions")
-  let body = {content: $content} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/reactions"))
+  let body = {"content": $content} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3706,7 +3706,7 @@ export def "repos-issues-comments-reactions issueGetCommentReactions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)/reactions")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/reactions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3733,8 +3733,8 @@ export def "repos-issues-comments-reactions issuePostCommentReaction" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/comments/($id)/reactions")
-  let body = {content: $content} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/issues/comments/{id}/reactions"))
+  let body = {"content": $content} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3760,7 +3760,7 @@ export def "repos-issues issueDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3785,7 +3785,7 @@ export def "repos-issues issueGetIssue" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3820,8 +3820,8 @@ export def "repos-issues issueEditIssue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)")
-  let body = {assignee: $assignee, assignees: $assignees, body: $body_body, due_date: $due_date, milestone: $milestone, ref: $ref, state: $state, title: $title, unset_due_date: $unset_due_date} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}"))
+  let body = {"assignee": $assignee, "assignees": $assignees, "body": $body_body, "due_date": $due_date, "milestone": $milestone, "ref": $ref, "state": $state, "title": $title, "unset_due_date": $unset_due_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3847,7 +3847,7 @@ export def "repos-issues-assets issueListIssueAttachments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/assets")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3876,8 +3876,8 @@ export def "repos-issues-assets issueCreateIssueAttachment" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/assets" $qp)
-  let body = {attachment: $attachment} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets") $qp)
+  let body = {"attachment": $attachment} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3904,7 +3904,7 @@ export def "repos-issues-assets issueDeleteIssueAttachment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/assets/($attachment_id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, attachment_id: $attachment_id} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3930,7 +3930,7 @@ export def "repos-issues-assets issueGetIssueAttachment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/assets/($attachment_id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, attachment_id: $attachment_id} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3958,8 +3958,8 @@ export def "repos-issues-assets issueEditIssueAttachment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/assets/($attachment_id)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, attachment_id: $attachment_id} | format pattern "/repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3988,7 +3988,7 @@ export def "repos-issues-comments issueGetComments" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/comments" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4015,8 +4015,8 @@ export def "repos-issues-comments issueCreateComment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/comments")
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments"))
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4045,7 +4045,7 @@ export def "repos-issues-comments issueDeleteCommentDeprecated" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/comments/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, id: $id} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4075,8 +4075,8 @@ export def "repos-issues-comments issueEditCommentDeprecated" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/comments/($id)")
-  let body = {body: $body_body} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, id: $id} | format pattern "/repos/{owner}/{repo}/issues/{index}/comments/{id}"))
+  let body = {"body": $body_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4104,8 +4104,8 @@ export def "repos-issues-deadline issueEditIssueDeadline" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/deadline")
-  let body = {due_date: $due_date} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/deadline"))
+  let body = {"due_date": $due_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4131,7 +4131,7 @@ export def "repos-issues-labels issueClearLabels" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/labels")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4156,7 +4156,7 @@ export def "repos-issues-labels issueGetLabels" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/labels")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4183,8 +4183,8 @@ export def "repos-issues-labels issueAddLabel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/labels")
-  let body = {labels: $labels} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels"))
+  let body = {"labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4212,8 +4212,8 @@ export def "repos-issues-labels issueReplaceLabels" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/labels")
-  let body = {labels: $labels} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels"))
+  let body = {"labels": $labels} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4240,7 +4240,7 @@ export def "repos-issues-labels issueRemoveLabel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/labels/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, id: $id} | format pattern "/repos/{owner}/{repo}/issues/{index}/labels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4267,8 +4267,8 @@ export def "repos-issues-reactions issueDeleteIssueReaction" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/reactions")
-  let body = {content: $content} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/reactions"))
+  let body = {"content": $content} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4297,7 +4297,7 @@ export def "repos-issues-reactions issueGetIssueReactions" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/reactions" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/reactions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4324,8 +4324,8 @@ export def "repos-issues-reactions issuePostIssueReaction" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/reactions")
-  let body = {content: $content} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/reactions"))
+  let body = {"content": $content} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4351,7 +4351,7 @@ export def "repos-issues-stopwatch-delete issueDeleteStopWatch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/stopwatch/delete")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/stopwatch/delete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4376,7 +4376,7 @@ export def "repos-issues-stopwatch-start issueStartStopWatch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/stopwatch/start")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/stopwatch/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4401,7 +4401,7 @@ export def "repos-issues-stopwatch-stop issueStopStopWatch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/stopwatch/stop")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/stopwatch/stop"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4429,7 +4429,7 @@ export def "repos-issues-subscriptions issueSubscriptions" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/subscriptions" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/subscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4454,7 +4454,7 @@ export def "repos-issues-subscriptions-check issueCheckSubscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/subscriptions/check")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/subscriptions/check"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4480,7 +4480,7 @@ export def "repos-issues-subscriptions issueDeleteSubscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/subscriptions/($user)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, user: $user} | format pattern "/repos/{owner}/{repo}/issues/{index}/subscriptions/{user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4506,7 +4506,7 @@ export def "repos-issues-subscriptions issueAddSubscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/subscriptions/($user)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, user: $user} | format pattern "/repos/{owner}/{repo}/issues/{index}/subscriptions/{user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4536,7 +4536,7 @@ export def "repos-issues-timeline issueGetCommentsAndTimeline" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/timeline" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/timeline") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4561,7 +4561,7 @@ export def "repos-issues-times issueResetTime" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/times")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/times"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4592,7 +4592,7 @@ export def "repos-issues-times issueTrackedTimes" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/times" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/times") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4621,8 +4621,8 @@ export def "repos-issues-times issueAddTime" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/times")
-  let body = {created: $created, time: $time, user_name: $user_name} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/issues/{index}/times"))
+  let body = {"created": $created, "time": $time, "user_name": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4649,7 +4649,7 @@ export def "repos-issues-times issueDeleteTime" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/issues/($index)/times/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, id: $id} | format pattern "/repos/{owner}/{repo}/issues/{index}/times/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4678,7 +4678,7 @@ export def "repos-keys repoListKeys" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key_id" $key_id "scalar") (serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/keys" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4706,8 +4706,8 @@ export def "repos-keys repoCreateKey" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/keys")
-  let body = {key: $key, read_only: $read_only, title: $title} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/keys"))
+  let body = {"key": $key, "read_only": $read_only, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4733,7 +4733,7 @@ export def "repos-keys repoDeleteKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/keys/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4758,7 +4758,7 @@ export def "repos-keys repoGetKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/keys/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4785,7 +4785,7 @@ export def "repos-labels issueListLabels" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/labels" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/labels") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4814,8 +4814,8 @@ export def "repos-labels issueCreateLabel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/labels")
-  let body = {color: $color, description: $description, exclusive: $exclusive, name: $name} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/labels"))
+  let body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4841,7 +4841,7 @@ export def "repos-labels issueDeleteLabel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/labels/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/labels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4866,7 +4866,7 @@ export def "repos-labels issueGetLabel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/labels/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/labels/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4896,8 +4896,8 @@ export def "repos-labels issueEditLabel" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/labels/($id)")
-  let body = {color: $color, description: $description, exclusive: $exclusive, name: $name} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/labels/{id}"))
+  let body = {"color": $color, "description": $description, "exclusive": $exclusive, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4922,7 +4922,7 @@ export def "repos-languages repoGetLanguages" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/languages")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/languages"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4949,7 +4949,7 @@ export def "repos-media repoGetRawFileOrLFS" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/media/($filepath)" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, filepath: $filepath} | format pattern "/repos/{owner}/{repo}/media/{filepath}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4978,7 +4978,7 @@ export def "repos-milestones issueGetMilestonesList" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/milestones" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/milestones") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5007,8 +5007,8 @@ export def "repos-milestones issueCreateMilestone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/milestones")
-  let body = {description: $description, due_on: $due_on, state: $state, title: $title} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/milestones"))
+  let body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5034,7 +5034,7 @@ export def "repos-milestones issueDeleteMilestone" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/milestones/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/milestones/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5059,7 +5059,7 @@ export def "repos-milestones issueGetMilestone" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/milestones/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/milestones/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5089,8 +5089,8 @@ export def "repos-milestones issueEditMilestone" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/milestones/($id)")
-  let body = {description: $description, due_on: $due_on, state: $state, title: $title} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/milestones/{id}"))
+  let body = {"description": $description, "due_on": $due_on, "state": $state, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5115,7 +5115,7 @@ export def "repos-mirror-sync repoMirrorSync" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/mirror-sync")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/mirror-sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5147,7 +5147,7 @@ export def "repos-notifications notifyGetRepoList" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "status-types" $status_types "multi") (serialize-qp "subject-type" $subject_type "multi") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/notifications" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/notifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5176,7 +5176,7 @@ export def "repos-notifications notifyReadRepoList" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "status-types" $status_types "multi") (serialize-qp "to-status" $to_status "scalar") (serialize-qp "last_read_at" $last_read_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/notifications" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/notifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5207,7 +5207,7 @@ export def "repos-pulls repoListPullRequests" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pulls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5241,8 +5241,8 @@ export def "repos-pulls repoCreatePullRequest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls")
-  let body = {assignee: $assignee, assignees: $assignees, base: $body_base, body: $body_body, due_date: $due_date, head: $head, labels: $labels, milestone: $milestone, title: $title} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/pulls"))
+  let body = {"assignee": $assignee, "assignees": $assignees, "base": $body_base, "body": $body_body, "due_date": $due_date, "head": $head, "labels": $labels, "milestone": $milestone, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5268,7 +5268,7 @@ export def "repos-pulls repoGetPullRequest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5305,8 +5305,8 @@ export def "repos-pulls repoEditPullRequest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)")
-  let body = {allow_maintainer_edit: $allow_maintainer_edit, assignee: $assignee, assignees: $assignees, base: $body_base, body: $body_body, due_date: $due_date, labels: $labels, milestone: $milestone, state: $state, title: $title, unset_due_date: $unset_due_date} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}"))
+  let body = {"allow_maintainer_edit": $allow_maintainer_edit, "assignee": $assignee, "assignees": $assignees, "base": $body_base, "body": $body_body, "due_date": $due_date, "labels": $labels, "milestone": $milestone, "state": $state, "title": $title, "unset_due_date": $unset_due_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5321,7 +5321,7 @@ export def "repos-pulls repoDownloadPullDiffOrPatch" [
   owner: string
   repo: string
   index: int
-  diffType: string
+  diff_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5335,7 +5335,7 @@ export def "repos-pulls repoDownloadPullDiffOrPatch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "binary" $binary "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index).($diffType)" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, diff_type: $diff_type} | format pattern "/repos/{owner}/{repo}/pulls/{index}.{diff_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5363,7 +5363,7 @@ export def "repos-pulls-commits repoGetPullRequestCommits" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/commits" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}/commits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5393,7 +5393,7 @@ export def "repos-pulls-files repoGetPullRequestFiles" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "skip-to" $skip_to "scalar") (serialize-qp "whitespace" $whitespace "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/files" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}/files") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5418,7 +5418,7 @@ export def "repos-pulls-merge repoCancelScheduledAutoMerge" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/merge")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}/merge"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5443,7 +5443,7 @@ export def "repos-pulls-merge repoPullRequestIsMerged" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/merge")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}/merge"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5465,10 +5465,10 @@ export def "repos-pulls-merge repoMergePullRequest" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Do: string@Do-completer
-  --MergeCommitID: string
-  --MergeMessageField: string
-  --MergeTitleField: string
+  --body-do: string@do-completer
+  --merge-commit-id: string
+  --merge-message-field: string
+  --merge-title-field: string
   --delete-branch-after-merge: oneof<nothing, bool>
   --force-merge: oneof<nothing, bool>
   --head-commit-id: string
@@ -5477,8 +5477,8 @@ export def "repos-pulls-merge repoMergePullRequest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/merge")
-  let body = {Do: $Do, MergeCommitID: $MergeCommitID, MergeMessageField: $MergeMessageField, MergeTitleField: $MergeTitleField, delete_branch_after_merge: $delete_branch_after_merge, force_merge: $force_merge, head_commit_id: $head_commit_id, merge_when_checks_succeed: $merge_when_checks_succeed} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}/merge"))
+  let body = {"Do": $body_do, "MergeCommitID": $merge_commit_id, "MergeMessageField": $merge_message_field, "MergeTitleField": $merge_title_field, "delete_branch_after_merge": $delete_branch_after_merge, "force_merge": $force_merge, "head_commit_id": $head_commit_id, "merge_when_checks_succeed": $merge_when_checks_succeed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5507,8 +5507,8 @@ export def "repos-pulls-requested-reviewers repoDeletePullReviewRequests" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/requested_reviewers")
-  let body = {reviewers: $reviewers, team_reviewers: $team_reviewers} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}/requested_reviewers"))
+  let body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5537,8 +5537,8 @@ export def "repos-pulls-requested-reviewers repoCreatePullReviewRequests" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/requested_reviewers")
-  let body = {reviewers: $reviewers, team_reviewers: $team_reviewers} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}/requested_reviewers"))
+  let body = {"reviewers": $reviewers, "team_reviewers": $team_reviewers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5567,7 +5567,7 @@ export def "repos-pulls-reviews repoListPullReviews" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/reviews" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5598,8 +5598,8 @@ export def "repos-pulls-reviews repoCreatePullReview" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/reviews")
-  let body = {body: $body_body, comments: $comments, commit_id: $commit_id, event: $event} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews"))
+  let body = {"body": $body_body, "comments": $comments, "commit_id": $commit_id, "event": $event} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5626,7 +5626,7 @@ export def "repos-pulls-reviews repoDeletePullReview" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/reviews/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, id: $id} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5652,7 +5652,7 @@ export def "repos-pulls-reviews repoGetPullReview" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/reviews/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, id: $id} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5681,8 +5681,8 @@ export def "repos-pulls-reviews repoSubmitPullReview" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/reviews/($id)")
-  let body = {body: $body_body, event: $event} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, id: $id} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}"))
+  let body = {"body": $body_body, "event": $event} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5709,7 +5709,7 @@ export def "repos-pulls-reviews-comments repoGetPullReviewComments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/reviews/($id)/comments")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, id: $id} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5738,8 +5738,8 @@ export def "repos-pulls-reviews-dismissals repoDismissPullReview" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/reviews/($id)/dismissals")
-  let body = {message: $message, priors: $priors} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, id: $id} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/dismissals"))
+  let body = {"message": $message, "priors": $priors} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5766,7 +5766,7 @@ export def "repos-pulls-reviews-undismissals repoUnDismissPullReview" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/reviews/($id)/undismissals")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index, id: $id} | format pattern "/repos/{owner}/{repo}/pulls/{index}/reviews/{id}/undismissals"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5793,7 +5793,7 @@ export def "repos-pulls-update repoUpdatePullRequest" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "style" $style "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/pulls/($index)/update" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, index: $index} | format pattern "/repos/{owner}/{repo}/pulls/{index}/update") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5820,7 +5820,7 @@ export def "repos-push-mirrors repoListPushMirrors" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/push_mirrors" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/push_mirrors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5850,8 +5850,8 @@ export def "repos-push-mirrors repoAddPushMirror" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/push_mirrors")
-  let body = {interval: $interval, remote_address: $remote_address, remote_password: $remote_password, remote_username: $remote_username, sync_on_commit: $sync_on_commit} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/push_mirrors"))
+  let body = {"interval": $interval, "remote_address": $remote_address, "remote_password": $remote_password, "remote_username": $remote_username, "sync_on_commit": $sync_on_commit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5876,7 +5876,7 @@ export def "repos-push-mirrors-sync repoPushMirrorSync" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/push_mirrors-sync")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/push_mirrors-sync"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5901,7 +5901,7 @@ export def "repos-push-mirrors repoDeletePushMirror" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/push_mirrors/($name)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, name: $name} | format pattern "/repos/{owner}/{repo}/push_mirrors/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5926,7 +5926,7 @@ export def "repos-push-mirrors repoGetPushMirrorByRemoteName" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/push_mirrors/($name)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, name: $name} | format pattern "/repos/{owner}/{repo}/push_mirrors/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5953,7 +5953,7 @@ export def "repos-raw repoGetRawFile" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ref" $ref "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/raw/($filepath)" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, filepath: $filepath} | format pattern "/repos/{owner}/{repo}/raw/{filepath}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5983,7 +5983,7 @@ export def "repos-releases repoListReleases" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "draft" $draft "scalar") (serialize-qp "pre-release" $pre_release "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/releases") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6014,8 +6014,8 @@ export def "repos-releases repoCreateRelease" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases")
-  let body = {body: $body_body, draft: $draft, name: $name, prerelease: $prerelease, tag_name: $tag_name, target_commitish: $target_commitish} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/releases"))
+  let body = {"body": $body_body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6040,7 +6040,7 @@ export def "repos-releases-latest repoGetLatestRelease" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/latest")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/releases/latest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6065,7 +6065,7 @@ export def "repos-releases-tags repoDeleteReleaseByTag" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/tags/($tag)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, tag: $tag} | format pattern "/repos/{owner}/{repo}/releases/tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6090,7 +6090,7 @@ export def "repos-releases-tags repoGetReleaseByTag" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/tags/($tag)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, tag: $tag} | format pattern "/repos/{owner}/{repo}/releases/tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6115,7 +6115,7 @@ export def "repos-releases repoDeleteRelease" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/releases/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6140,7 +6140,7 @@ export def "repos-releases repoGetRelease" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/($id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/releases/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6172,8 +6172,8 @@ export def "repos-releases repoEditRelease" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/($id)")
-  let body = {body: $body_body, draft: $draft, name: $name, prerelease: $prerelease, tag_name: $tag_name, target_commitish: $target_commitish} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/releases/{id}"))
+  let body = {"body": $body_body, "draft": $draft, "name": $name, "prerelease": $prerelease, "tag_name": $tag_name, "target_commitish": $target_commitish} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6199,7 +6199,7 @@ export def "repos-releases-assets repoListReleaseAttachments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/($id)/assets")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6228,8 +6228,8 @@ export def "repos-releases-assets repoCreateReleaseAttachment" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/($id)/assets" $qp)
-  let body = {attachment: $attachment} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets") $qp)
+  let body = {"attachment": $attachment} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6256,7 +6256,7 @@ export def "repos-releases-assets repoDeleteReleaseAttachment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/($id)/assets/($attachment_id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id, attachment_id: $attachment_id} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6282,7 +6282,7 @@ export def "repos-releases-assets repoGetReleaseAttachment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/($id)/assets/($attachment_id)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id, attachment_id: $attachment_id} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6310,8 +6310,8 @@ export def "repos-releases-assets repoEditReleaseAttachment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/releases/($id)/assets/($attachment_id)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, id: $id, attachment_id: $attachment_id} | format pattern "/repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6336,7 +6336,7 @@ export def "repos-reviewers repoGetReviewers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/reviewers")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6360,7 +6360,7 @@ export def "repos-signing-keygpg repoSigningKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/signing-key.gpg")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/signing-key.gpg"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6387,7 +6387,7 @@ export def "repos-stargazers repoListStargazers" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/stargazers" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/stargazers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6417,7 +6417,7 @@ export def "repos-statuses repoListStatuses" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/statuses/($sha)" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, sha: $sha} | format pattern "/repos/{owner}/{repo}/statuses/{sha}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6447,8 +6447,8 @@ export def "repos-statuses repoCreateStatus" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/statuses/($sha)")
-  let body = {context: $context, description: $description, state: $state, target_url: $target_url} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, sha: $sha} | format pattern "/repos/{owner}/{repo}/statuses/{sha}"))
+  let body = {"context": $context, "description": $description, "state": $state, "target_url": $target_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6476,7 +6476,7 @@ export def "repos-subscribers repoListSubscribers" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/subscribers" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/subscribers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6500,7 +6500,7 @@ export def "repos-subscription userCurrentDeleteSubscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/subscription")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6524,7 +6524,7 @@ export def "repos-subscription userCurrentCheckSubscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/subscription")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6548,7 +6548,7 @@ export def "repos-subscription userCurrentPutSubscription" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/subscription")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/subscription"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6575,7 +6575,7 @@ export def "repos-tags repoListTags" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/tags" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6603,8 +6603,8 @@ export def "repos-tags repoCreateTag" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/tags")
-  let body = {message: $message, tag_name: $tag_name, target: $target} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/tags"))
+  let body = {"message": $message, "tag_name": $tag_name, "target": $target} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6630,7 +6630,7 @@ export def "repos-tags repoDeleteTag" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/tags/($tag)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, tag: $tag} | format pattern "/repos/{owner}/{repo}/tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6655,7 +6655,7 @@ export def "repos-tags repoGetTag" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/tags/($tag)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, tag: $tag} | format pattern "/repos/{owner}/{repo}/tags/{tag}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6679,7 +6679,7 @@ export def "repos-teams repoListTeams" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/teams")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/teams"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6704,7 +6704,7 @@ export def "repos-teams repoDeleteTeam" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/teams/($team)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, team: $team} | format pattern "/repos/{owner}/{repo}/teams/{team}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6729,7 +6729,7 @@ export def "repos-teams repoCheckTeam" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/teams/($team)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, team: $team} | format pattern "/repos/{owner}/{repo}/teams/{team}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6754,7 +6754,7 @@ export def "repos-teams repoAddTeam" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/teams/($team)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, team: $team} | format pattern "/repos/{owner}/{repo}/teams/{team}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6784,7 +6784,7 @@ export def "repos-times repoTrackedTimes" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/times" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/times") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6811,7 +6811,7 @@ export def "repos-times userTrackedTimes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/times/($user)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, user: $user} | format pattern "/repos/{owner}/{repo}/times/{user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6838,7 +6838,7 @@ export def "repos-topics repoListTopics" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/topics" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/topics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6864,8 +6864,8 @@ export def "repos-topics repoUpdateTopics" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/topics")
-  let body = {topics: $topics} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/topics"))
+  let body = {"topics": $topics} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6891,7 +6891,7 @@ export def "repos-topics repoDeleteTopic" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/topics/($topic)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, topic: $topic} | format pattern "/repos/{owner}/{repo}/topics/{topic}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6916,7 +6916,7 @@ export def "repos-topics repoAddTopic" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/topics/($topic)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, topic: $topic} | format pattern "/repos/{owner}/{repo}/topics/{topic}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6943,8 +6943,8 @@ export def "repos-transfer repoTransfer" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/transfer")
-  let body = {new_owner: $new_owner, team_ids: $team_ids} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/transfer"))
+  let body = {"new_owner": $new_owner, "team_ids": $team_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6969,7 +6969,7 @@ export def "repos-transfer-accept acceptRepoTransfer" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/transfer/accept")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/transfer/accept"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6979,7 +6979,7 @@ export def "repos-transfer-accept acceptRepoTransfer" [
 #
 # POST /repos/{owner}/{repo}/transfer/reject
 # operationId: rejectRepoTransfer
-export def "repos-transfer-reject rejectRepoTransfer" [
+export def "repos-transfer-reject reject" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6993,7 +6993,7 @@ export def "repos-transfer-reject rejectRepoTransfer" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/transfer/reject")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/transfer/reject"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7021,8 +7021,8 @@ export def "repos-wiki-new repoCreateWikiPage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/wiki/new")
-  let body = {content_base64: $content_base64, message: $message, title: $title} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/wiki/new"))
+  let body = {"content_base64": $content_base64, "message": $message, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7036,7 +7036,7 @@ export def "repos-wiki-new repoCreateWikiPage" [
 export def "repos-wiki-page repoDeleteWikiPage" [
   owner: string
   repo: string
-  pageName: string
+  page_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7048,7 +7048,7 @@ export def "repos-wiki-page repoDeleteWikiPage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/wiki/page/($pageName)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, page_name: $page_name} | format pattern "/repos/{owner}/{repo}/wiki/page/{page_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7061,7 +7061,7 @@ export def "repos-wiki-page repoDeleteWikiPage" [
 export def "repos-wiki-page repoGetWikiPage" [
   owner: string
   repo: string
-  pageName: string
+  page_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7073,7 +7073,7 @@ export def "repos-wiki-page repoGetWikiPage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/wiki/page/($pageName)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, page_name: $page_name} | format pattern "/repos/{owner}/{repo}/wiki/page/{page_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7086,7 +7086,7 @@ export def "repos-wiki-page repoGetWikiPage" [
 export def "repos-wiki-page repoEditWikiPage" [
   owner: string
   repo: string
-  pageName: string
+  page_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7102,8 +7102,8 @@ export def "repos-wiki-page repoEditWikiPage" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/wiki/page/($pageName)")
-  let body = {content_base64: $content_base64, message: $message, title: $title} | compact
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, page_name: $page_name} | format pattern "/repos/{owner}/{repo}/wiki/page/{page_name}"))
+  let body = {"content_base64": $content_base64, "message": $message, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7131,7 +7131,7 @@ export def "repos-wiki-pages repoGetWikiPages" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/wiki/pages" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/repos/{owner}/{repo}/wiki/pages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7144,7 +7144,7 @@ export def "repos-wiki-pages repoGetWikiPages" [
 export def "repos-wiki-revisions repoGetWikiPageRevisions" [
   owner: string
   repo: string
-  pageName: string
+  page_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7158,7 +7158,7 @@ export def "repos-wiki-revisions repoGetWikiPageRevisions" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repos/($owner)/($repo)/wiki/revisions/($pageName)" $qp)
+  let full_url = (build-url $base ({owner: $owner, repo: $repo, page_name: $page_name} | format pattern "/repos/{owner}/{repo}/wiki/revisions/{page_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7194,8 +7194,8 @@ export def "repos-generate generateRepo" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repos/($template_owner)/($template_repo)/generate")
-  let body = {avatar: $avatar, default_branch: $default_branch, description: $description, git_content: $git_content, git_hooks: $git_hooks, labels: $labels, name: $name, owner: $owner, private: $private, topics: $topics, webhooks: $webhooks} | compact
+  let full_url = (build-url $base ({template_owner: $template_owner, template_repo: $template_repo} | format pattern "/repos/{template_owner}/{template_repo}/generate"))
+  let body = {"avatar": $avatar, "default_branch": $default_branch, "description": $description, "git_content": $git_content, "git_hooks": $git_hooks, "labels": $labels, "name": $name, "owner": $owner, "private": $private, "topics": $topics, "webhooks": $webhooks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7219,7 +7219,7 @@ export def "repositories repoGetByID" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/repositories/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7229,7 +7229,7 @@ export def "repositories repoGetByID" [
 #
 # GET /settings/api
 # operationId: getGeneralAPISettings
-export def "settings get" [
+export def "settings get-general-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7251,7 +7251,7 @@ export def "settings get" [
 #
 # GET /settings/attachment
 # operationId: getGeneralAttachmentSettings
-export def "settings-attachment get" [
+export def "settings-attachment get-general" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7273,7 +7273,7 @@ export def "settings-attachment get" [
 #
 # GET /settings/repository
 # operationId: getGeneralRepositorySettings
-export def "settings-repository get" [
+export def "settings-repository get-general" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7295,7 +7295,7 @@ export def "settings-repository get" [
 #
 # GET /settings/ui
 # operationId: getGeneralUISettings
-export def "settings-ui get" [
+export def "settings-ui get-general" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7317,7 +7317,7 @@ export def "settings-ui get" [
 #
 # GET /signing-key.gpg
 # operationId: getSigningKey
-export def "signing-keygpg get" [
+export def "signing-keygpg get-signing-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7352,7 +7352,7 @@ export def "teams orgDeleteTeam" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/teams/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7375,7 +7375,7 @@ export def "teams orgGetTeam" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/teams/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7406,8 +7406,8 @@ export def "teams orgEditTeam" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($id)")
-  let body = {can_create_org_repo: $can_create_org_repo, description: $description, includes_all_repositories: $includes_all_repositories, name: $name, permission: $permission, units: $units, units_map: $units_map} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/teams/{id}"))
+  let body = {"can_create_org_repo": $can_create_org_repo, "description": $description, "includes_all_repositories": $includes_all_repositories, "name": $name, "permission": $permission, "units": $units, "units_map": $units_map} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7434,7 +7434,7 @@ export def "teams-members orgListTeamMembers" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($id)/members" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/teams/{id}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7458,7 +7458,7 @@ export def "teams-members orgRemoveTeamMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($id)/members/($username)")
+  let full_url = (build-url $base ({id: $id, username: $username} | format pattern "/teams/{id}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7482,7 +7482,7 @@ export def "teams-members orgListTeamMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($id)/members/($username)")
+  let full_url = (build-url $base ({id: $id, username: $username} | format pattern "/teams/{id}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7506,7 +7506,7 @@ export def "teams-members orgAddTeamMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($id)/members/($username)")
+  let full_url = (build-url $base ({id: $id, username: $username} | format pattern "/teams/{id}/members/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7532,7 +7532,7 @@ export def "teams-repos orgListTeamRepos" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($id)/repos" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/teams/{id}/repos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7557,7 +7557,7 @@ export def "teams-repos orgRemoveTeamRepository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($id)/repos/($org)/($repo)")
+  let full_url = (build-url $base ({id: $id, org: $org, repo: $repo} | format pattern "/teams/{id}/repos/{org}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7582,7 +7582,7 @@ export def "teams-repos orgListTeamRepo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($id)/repos/($org)/($repo)")
+  let full_url = (build-url $base ({id: $id, org: $org, repo: $repo} | format pattern "/teams/{id}/repos/{org}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7607,7 +7607,7 @@ export def "teams-repos orgAddTeamRepository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($id)/repos/($org)/($repo)")
+  let full_url = (build-url $base ({id: $id, org: $org, repo: $repo} | format pattern "/teams/{id}/repos/{org}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7617,7 +7617,7 @@ export def "teams-repos orgAddTeamRepository" [
 #
 # GET /topics/search
 # operationId: topicSearch
-export def "topics-search topicSearch" [
+export def "topics-search top-ic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7707,7 +7707,7 @@ export def "user-applications-oauth2 userCreateOAuth2Application" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/applications/oauth2")
-  let body = {confidential_client: $confidential_client, name: $name, redirect_uris: $redirect_uris} | compact
+  let body = {"confidential_client": $confidential_client, "name": $name, "redirect_uris": $redirect_uris} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7731,7 +7731,7 @@ export def "user-applications-oauth2 userDeleteOAuth2Application" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/applications/oauth2/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/user/applications/oauth2/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7754,7 +7754,7 @@ export def "user-applications-oauth2 userGetOAuth2Application" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/applications/oauth2/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/user/applications/oauth2/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7781,8 +7781,8 @@ export def "user-applications-oauth2 userUpdateOAuth2Application" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/applications/oauth2/($id)")
-  let body = {confidential_client: $confidential_client, name: $name, redirect_uris: $redirect_uris} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/user/applications/oauth2/{id}"))
+  let body = {"confidential_client": $confidential_client, "name": $name, "redirect_uris": $redirect_uris} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7808,7 +7808,7 @@ export def "user-emails userDeleteEmail" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails")
-  let body = {emails: $emails} | compact
+  let body = {"emails": $emails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7856,7 +7856,7 @@ export def "user-emails userAddEmail" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/emails")
-  let body = {emails: $emails} | compact
+  let body = {"emails": $emails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7930,7 +7930,7 @@ export def "user-following userCurrentDeleteFollow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/following/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/user/following/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7953,7 +7953,7 @@ export def "user-following userCurrentCheckFollowing" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/following/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/user/following/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7976,7 +7976,7 @@ export def "user-following userCurrentPutFollow" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/following/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/user/following/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7986,7 +7986,7 @@ export def "user-following userCurrentPutFollow" [
 #
 # GET /user/gpg_key_token
 # operationId: getVerificationToken
-export def "user-gpg-key-token get" [
+export def "user-gpg-key-token get-verification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8071,7 +8071,7 @@ export def "user-gpg-keys userCurrentPostGPGKey" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/gpg_keys")
-  let body = {armored_public_key: $armored_public_key, armored_signature: $armored_signature} | compact
+  let body = {"armored_public_key": $armored_public_key, "armored_signature": $armored_signature} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8095,7 +8095,7 @@ export def "user-gpg-keys userCurrentDeleteGPGKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/gpg_keys/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/user/gpg_keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8118,7 +8118,7 @@ export def "user-gpg-keys userCurrentGetGPGKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/gpg_keys/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/user/gpg_keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8171,7 +8171,7 @@ export def "user-keys userCurrentPostKey" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/keys")
-  let body = {key: $key, read_only: $read_only, title: $title} | compact
+  let body = {"key": $key, "read_only": $read_only, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8195,7 +8195,7 @@ export def "user-keys userCurrentDeleteKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/keys/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/user/keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8218,7 +8218,7 @@ export def "user-keys userCurrentGetKey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/keys/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/user/keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8278,7 +8278,7 @@ export def "user-repos userCurrentListRepos" [
 #
 # POST /user/repos
 # operationId: createCurrentUserRepo
-export def "user-repos createCurrentUserRepo" [
+export def "user-repos create-current" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8303,7 +8303,7 @@ export def "user-repos createCurrentUserRepo" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/repos")
-  let body = {auto_init: $auto_init, default_branch: $default_branch, description: $description, gitignores: $gitignores, issue_labels: $issue_labels, license: $license, name: $name, private: $private, readme: $readme, template: $template, trust_model: $trust_model} | compact
+  let body = {"auto_init": $auto_init, "default_branch": $default_branch, "description": $description, "gitignores": $gitignores, "issue_labels": $issue_labels, "license": $license, "name": $name, "private": $private, "readme": $readme, "template": $template, "trust_model": $trust_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8336,7 +8336,7 @@ export def "user-settings get" [
 #
 # PATCH /user/settings
 # operationId: updateUserSettings
-export def "user-settings updateUserSettings" [
+export def "user-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8359,7 +8359,7 @@ export def "user-settings updateUserSettings" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/settings")
-  let body = {description: $description, diff_view_style: $diff_view_style, full_name: $full_name, hide_activity: $hide_activity, hide_email: $hide_email, language: $language, location: $location, theme: $theme, website: $website} | compact
+  let body = {"description": $description, "diff_view_style": $diff_view_style, "full_name": $full_name, "hide_activity": $hide_activity, "hide_email": $hide_email, "language": $language, "location": $location, "theme": $theme, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8409,7 +8409,7 @@ export def "user-starred userCurrentDeleteStar" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/starred/($owner)/($repo)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/user/starred/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8433,7 +8433,7 @@ export def "user-starred userCurrentCheckStarring" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/starred/($owner)/($repo)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/user/starred/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8457,7 +8457,7 @@ export def "user-starred userCurrentPutStar" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/starred/($owner)/($repo)")
+  let full_url = (build-url $base ({owner: $owner, repo: $repo} | format pattern "/user/starred/{owner}/{repo}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8609,7 +8609,7 @@ export def "users userGet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8635,7 +8635,7 @@ export def "users-followers userListFollowers" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($username)/followers" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/followers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8661,7 +8661,7 @@ export def "users-following userListFollowing" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($username)/following" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/following") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8685,7 +8685,7 @@ export def "users-following userCheckFollowing" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($username)/following/($target)")
+  let full_url = (build-url $base ({username: $username, target: $target} | format pattern "/users/{username}/following/{target}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8711,7 +8711,7 @@ export def "users-gpg-keys userListGPGKeys" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($username)/gpg_keys" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/gpg_keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8734,7 +8734,7 @@ export def "users-heatmap userGetHeatmapData" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($username)/heatmap")
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/heatmap"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8761,7 +8761,7 @@ export def "users-keys userListKeys" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fingerprint" $fingerprint "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($username)/keys" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8787,7 +8787,7 @@ export def "users-orgs orgListUserOrgs" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($username)/orgs" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/orgs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8811,7 +8811,7 @@ export def "users-orgs-permissions orgGetUserPermissions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($username)/orgs/($org)/permissions")
+  let full_url = (build-url $base ({username: $username, org: $org} | format pattern "/users/{username}/orgs/{org}/permissions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8837,7 +8837,7 @@ export def "users-repos userListRepos" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($username)/repos" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/repos") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8863,7 +8863,7 @@ export def "users-starred userListStarred" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($username)/starred" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/starred") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8889,7 +8889,7 @@ export def "users-subscriptions userListSubscriptions" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($username)/subscriptions" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/subscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8915,7 +8915,7 @@ export def "users-tokens userGetTokens" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($username)/tokens" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/tokens") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8941,8 +8941,8 @@ export def "users-tokens userCreateToken" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($username)/tokens")
-  let body = {name: $name, scopes: $scopes} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}/tokens"))
+  let body = {"name": $name, "scopes": $scopes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8955,7 +8955,7 @@ export def "users-tokens userCreateToken" [
 # operationId: userDeleteAccessToken
 export def "users-tokens userDeleteAccessToken" [
   username: string
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8967,7 +8967,7 @@ export def "users-tokens userDeleteAccessToken" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($username)/tokens/($token)")
+  let full_url = (build-url $base ({username: $username, token_arg: $token_arg} | format pattern "/users/{username}/tokens/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

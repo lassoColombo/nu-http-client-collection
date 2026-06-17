@@ -71,7 +71,7 @@ def sort-order-completer [] { ["ASC" "DESC"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lists-format lists-format" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "lists-format list-s" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /lists.{format}
 # operationId: GET_lists-format
-export def "lists-format lists-format" [
+export def "lists-format list-s" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -119,7 +119,7 @@ export def "lists-format lists-format" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "list" $list "scalar") (serialize-qp "weeks-on-list" $weeks_on_list "scalar") (serialize-qp "bestsellers-date" $bestsellers_date "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "isbn" $isbn "scalar") (serialize-qp "published-date" $published_date "scalar") (serialize-qp "rank" $rank "scalar") (serialize-qp "rank-last-week" $rank_last_week "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort-order" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists.($format)" $qp)
+  let full_url = (build-url $base ({format: $format} | format pattern "/lists.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -129,7 +129,7 @@ export def "lists-format lists-format" [
 #
 # GET /lists/best-sellers/history.json
 # operationId: GET_lists-best-sellers-history-json
-export def "lists-best-sellers-historyjson lists-best-sellers-history-json" [
+export def "lists-best-sellers-historyjson list-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "lists-best-sellers-historyjson lists-best-sellers-history-json" [
 #
 # GET /lists/names.{format}
 # operationId: GET_lists-names-format
-export def "lists-names-format lists-names-format" [
+export def "lists-names-format list-s" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +174,7 @@ export def "lists-names-format lists-names-format" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/names.($format)" $qp)
+  let full_url = (build-url $base ({format: $format} | format pattern "/lists/names.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,7 +184,7 @@ export def "lists-names-format lists-names-format" [
 #
 # GET /lists/overview.{format}
 # operationId: GET_lists-overview-format
-export def "lists-overview-format lists-overview-format" [
+export def "lists-overview-format list-s" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -200,7 +200,7 @@ export def "lists-overview-format lists-overview-format" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "published_date" $published_date "scalar") (serialize-qp "api-key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/overview.($format)" $qp)
+  let full_url = (build-url $base ({format: $format} | format pattern "/lists/overview.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,7 +210,7 @@ export def "lists-overview-format lists-overview-format" [
 #
 # GET /lists/{date}/{list}.json
 # operationId: GET_lists-date-list-json
-export def "lists lists-date-list-json" [
+export def "lists list-s-json" [
   date: string
   list: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -234,7 +234,7 @@ export def "lists lists-date-list-json" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isbn" $isbn "scalar") (serialize-qp "list-name" $list_name "scalar") (serialize-qp "published-date" $published_date "scalar") (serialize-qp "bestsellers-date" $bestsellers_date "scalar") (serialize-qp "weeks-on-list" $weeks_on_list "scalar") (serialize-qp "rank" $rank "scalar") (serialize-qp "rank-last-week" $rank_last_week "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort-order" $sort_order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/lists/($date)/($list).json" $qp)
+  let full_url = (build-url $base ({date: $date, list: $list} | format pattern "/lists/{date}/{list}.json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +244,7 @@ export def "lists lists-date-list-json" [
 #
 # GET /reviews.{format}
 # operationId: GET_reviews-format
-export def "reviews-format reviews-format" [
+export def "reviews-format get" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "reviews-format reviews-format" [
   let auth = (build-auth $token ($auth_scheme | default "query-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "isbn" $isbn "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "api-key" $api_key "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/reviews.($format)" $qp)
+  let full_url = (build-url $base ({format: $format} | format pattern "/reviews.{format}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

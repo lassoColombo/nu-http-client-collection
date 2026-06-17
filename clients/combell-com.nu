@@ -74,7 +74,7 @@ def file-format-completer [] { ["pfx"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts GetAccounts" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +98,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts
 # operationId: GetAccounts
-export def "accounts GetAccounts" [
+export def "accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -125,7 +125,7 @@ export def "accounts GetAccounts" [
 #
 # POST /accounts
 # operationId: CreateAccount
-export def "accounts CreateAccount" [
+export def "accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,7 +142,7 @@ export def "accounts CreateAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let body = {ftp_password: $ftp_password, identifier: $identifier, servicepack_id: $servicepack_id} | compact
+  let body = {"ftp_password": $ftp_password, "identifier": $identifier, "servicepack_id": $servicepack_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -153,8 +153,8 @@ export def "accounts CreateAccount" [
 #
 # GET /accounts/{accountId}
 # operationId: GetAccount
-export def "accounts GetAccount" [
-  accountId: string
+export def "accounts get" [
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "accounts GetAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "account_id" $account_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($accountId)" $qp)
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +178,7 @@ export def "accounts GetAccount" [
 #
 # GET /dns/{domainName}/records
 export def "dns-records list" [
-  domainName: string
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "dns-records list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "record_name" $record_name "scalar") (serialize-qp "service" $service "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/($domainName)/records" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/dns/{domain_name}/records") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +207,7 @@ export def "dns-records list" [
 #
 # POST /dns/{domainName}/records
 export def "dns-records post" [
-  domainName: string
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,8 +233,8 @@ export def "dns-records post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/($domainName)/records" $qp)
-  let body = {content: $content, id: $id, port: $port, priority: $priority, protocol: $protocol, record_name: $record_name, service: $service, target: $target, ttl: $ttl, type: $type, weight: $weight} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/dns/{domain_name}/records") $qp)
+  let body = {"content": $content, "id": $id, "port": $port, "priority": $priority, "protocol": $protocol, "record_name": $record_name, "service": $service, "target": $target, "ttl": $ttl, "type": $type, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,8 +245,8 @@ export def "dns-records post" [
 #
 # DELETE /dns/{domainName}/records/{recordId}
 export def "dns-records delete" [
-  domainName: string
-  recordId: string
+  domain_name: string
+  record_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "dns-records delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/($domainName)/records/($recordId)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name, record_id: $record_id} | format pattern "/dns/{domain_name}/records/{record_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -271,8 +271,8 @@ export def "dns-records delete" [
 #
 # GET /dns/{domainName}/records/{recordId}
 export def "dns-records get" [
-  domainName: string
-  recordId: string
+  domain_name: string
+  record_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "dns-records get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/($domainName)/records/($recordId)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name, record_id: $record_id} | format pattern "/dns/{domain_name}/records/{record_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,8 +297,8 @@ export def "dns-records get" [
 #
 # PUT /dns/{domainName}/records/{recordId}
 export def "dns-records put" [
-  domainName: string
-  recordId: string
+  domain_name: string
+  record_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,8 +325,8 @@ export def "dns-records put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns/($domainName)/records/($recordId)" $qp)
-  let body = {content: $content, id: $id, port: $port, priority: $priority, protocol: $protocol, record_name: $record_name, service: $service, target: $target, ttl: $ttl, type: $type, weight: $weight} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, record_id: $record_id} | format pattern "/dns/{domain_name}/records/{record_id}") $qp)
+  let body = {"content": $content, "id": $id, "port": $port, "priority": $priority, "protocol": $protocol, "record_name": $record_name, "service": $service, "target": $target, "ttl": $ttl, "type": $type, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -337,7 +337,7 @@ export def "dns-records put" [
 #
 # GET /domains
 # operationId: GetDomains
-export def "domains GetDomains" [
+export def "domains list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "domains GetDomains" [
 # POST /domains/registrations
 # operationId: Register
 # --registrant shape: {address?: string, city?: string, company_name?: string, country_code?: string, email?: string, enterprise_number?: string, extra_fields?: list, fax?: string, first_name?: string, language_code?: string, last_name?: string, phone?: string, postal_code?: string}
-export def "domains-registrations Register" [
+export def "domains-registrations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "domains-registrations Register" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains/registrations")
-  let body = {domain_name: $domain_name, name_servers: $name_servers, registrant: $registrant} | compact
+  let body = {"domain_name": $domain_name, "name_servers": $name_servers, "registrant": $registrant} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -392,7 +392,7 @@ export def "domains-registrations Register" [
 # POST /domains/transfers
 # operationId: Transfer
 # --registrant shape: {address?: string, city?: string, company_name?: string, country_code?: string, email?: string, enterprise_number?: string, extra_fields?: list, fax?: string, first_name?: string, language_code?: string, last_name?: string, phone?: string, postal_code?: string}
-export def "domains-transfers Transfer" [
+export def "domains-transfers post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "domains-transfers Transfer" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/domains/transfers")
-  let body = {auth_code: $auth_code, domain_name: $domain_name, name_servers: $name_servers, registrant: $registrant} | compact
+  let body = {"auth_code": $auth_code, "domain_name": $domain_name, "name_servers": $name_servers, "registrant": $registrant} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -421,8 +421,8 @@ export def "domains-transfers Transfer" [
 #
 # GET /domains/{domainName}
 # operationId: GetDomain
-export def "domains GetDomain" [
-  domainName: string
+export def "domains get" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,7 +436,7 @@ export def "domains GetDomain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($domainName)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,8 +446,8 @@ export def "domains GetDomain" [
 #
 # PUT /domains/{domainName}/nameservers
 # operationId: EditNameServers
-export def "domains-nameservers EditNameServers" [
-  domainName: string
+export def "domains-nameservers put" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -457,15 +457,15 @@ export def "domains-nameservers EditNameServers" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name
-  --domain-name: string # The domain name to register.
+  --body-domain-name: string # The domain name to register.
   --name-servers: list # List of name servers.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($domainName)/nameservers" $qp)
-  let body = {domain_name: $domain_name, name_servers: $name_servers} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/nameservers") $qp)
+  let body = {"domain_name": $body_domain_name, "name_servers": $name_servers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -476,8 +476,8 @@ export def "domains-nameservers EditNameServers" [
 #
 # PUT /domains/{domainName}/renew
 # operationId: ConfigureDomain
-export def "domains-renew ConfigureDomain" [
-  domainName: string
+export def "domains-renew put" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,8 +493,8 @@ export def "domains-renew ConfigureDomain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/domains/($domainName)/renew" $qp)
-  let body = {will_renew: $will_renew} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/domains/{domain_name}/renew") $qp)
+  let body = {"will_renew": $will_renew} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,7 +505,7 @@ export def "domains-renew ConfigureDomain" [
 #
 # GET /linuxhostings
 # operationId: GetLinuxHostings
-export def "linuxhostings GetLinuxHostings" [
+export def "linuxhostings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,8 +530,8 @@ export def "linuxhostings GetLinuxHostings" [
 #
 # GET /linuxhostings/{domainName}
 # operationId: GetLinuxHosting
-export def "linuxhostings GetLinuxHosting" [
-  domainName: string
+export def "linuxhostings get" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,7 +545,7 @@ export def "linuxhostings GetLinuxHosting" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -555,8 +555,8 @@ export def "linuxhostings GetLinuxHosting" [
 #
 # PUT /linuxhostings/{domainName}/ftp/configuration
 # operationId: ConfigureFtp
-export def "linuxhostings-ftp-configuration ConfigureFtp" [
-  domainName: string
+export def "linuxhostings-ftp-configuration put" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,8 +572,8 @@ export def "linuxhostings-ftp-configuration ConfigureFtp" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/ftp/configuration" $qp)
-  let body = {enabled: $enabled} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/ftp/configuration") $qp)
+  let body = {"enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -584,8 +584,8 @@ export def "linuxhostings-ftp-configuration ConfigureFtp" [
 #
 # PUT /linuxhostings/{domainName}/phpsettings/apcu
 # operationId: ChangeApcu
-export def "linuxhostings-phpsettings-apcu ChangeApcu" [
-  domainName: string
+export def "linuxhostings-phpsettings-apcu put" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,8 +602,8 @@ export def "linuxhostings-phpsettings-apcu ChangeApcu" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/phpsettings/apcu" $qp)
-  let body = {apcu_size: $apcu_size, enabled: $enabled} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/phpsettings/apcu") $qp)
+  let body = {"apcu_size": $apcu_size, "enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -614,8 +614,8 @@ export def "linuxhostings-phpsettings-apcu ChangeApcu" [
 #
 # GET /linuxhostings/{domainName}/phpsettings/availableversions
 # operationId: GetAvailablePhpVersions
-export def "linuxhostings-phpsettings-availableversions GetAvailablePhpVersions" [
-  domainName: string
+export def "linuxhostings-phpsettings-availableversions get-available-php-versions" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,7 +629,7 @@ export def "linuxhostings-phpsettings-availableversions GetAvailablePhpVersions"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/phpsettings/availableversions" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/phpsettings/availableversions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -639,8 +639,8 @@ export def "linuxhostings-phpsettings-availableversions GetAvailablePhpVersions"
 #
 # PUT /linuxhostings/{domainName}/phpsettings/memorylimit
 # operationId: ChangePhpMemoryLimit
-export def "linuxhostings-phpsettings-memorylimit ChangePhpMemoryLimit" [
-  domainName: string
+export def "linuxhostings-phpsettings-memorylimit put" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,8 +656,8 @@ export def "linuxhostings-phpsettings-memorylimit ChangePhpMemoryLimit" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/phpsettings/memorylimit" $qp)
-  let body = {memory_limit: $memory_limit} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/phpsettings/memorylimit") $qp)
+  let body = {"memory_limit": $memory_limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -668,8 +668,8 @@ export def "linuxhostings-phpsettings-memorylimit ChangePhpMemoryLimit" [
 #
 # PUT /linuxhostings/{domainName}/phpsettings/version
 # operationId: ChangePhpVersion
-export def "linuxhostings-phpsettings-version ChangePhpVersion" [
-  domainName: string
+export def "linuxhostings-phpsettings-version put" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,8 +685,8 @@ export def "linuxhostings-phpsettings-version ChangePhpVersion" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/phpsettings/version" $qp)
-  let body = {version: $version} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/phpsettings/version") $qp)
+  let body = {"version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -697,8 +697,8 @@ export def "linuxhostings-phpsettings-version ChangePhpVersion" [
 #
 # GET /linuxhostings/{domainName}/scheduledtasks
 # operationId: GetScheduledTasks
-export def "linuxhostings-scheduledtasks GetScheduledTasks" [
-  domainName: string
+export def "linuxhostings-scheduledtasks list" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +712,7 @@ export def "linuxhostings-scheduledtasks GetScheduledTasks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/scheduledtasks" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/scheduledtasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -722,8 +722,8 @@ export def "linuxhostings-scheduledtasks GetScheduledTasks" [
 #
 # POST /linuxhostings/{domainName}/scheduledtasks
 # operationId: AddScheduledTasks
-export def "linuxhostings-scheduledtasks AddScheduledTasks" [
-  domainName: string
+export def "linuxhostings-scheduledtasks create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,8 +742,8 @@ export def "linuxhostings-scheduledtasks AddScheduledTasks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/scheduledtasks" $qp)
-  let body = {cron_expression: $cron_expression, enabled: $enabled, id: $id, script_location: $script_location} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/scheduledtasks") $qp)
+  let body = {"cron_expression": $cron_expression, "enabled": $enabled, "id": $id, "script_location": $script_location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -754,9 +754,9 @@ export def "linuxhostings-scheduledtasks AddScheduledTasks" [
 #
 # DELETE /linuxhostings/{domainName}/scheduledtasks/{scheduledTaskId}
 # operationId: DeleteScheduledTask
-export def "linuxhostings-scheduledtasks DeleteScheduledTask" [
-  domainName: string
-  scheduledTaskId: string
+export def "linuxhostings-scheduledtasks delete" [
+  domain_name: string
+  scheduled_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,7 +771,7 @@ export def "linuxhostings-scheduledtasks DeleteScheduledTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/scheduledtasks/($scheduledTaskId)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name, scheduled_task_id: $scheduled_task_id} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -781,9 +781,9 @@ export def "linuxhostings-scheduledtasks DeleteScheduledTask" [
 #
 # GET /linuxhostings/{domainName}/scheduledtasks/{scheduledTaskId}
 # operationId: GetScheduledTask
-export def "linuxhostings-scheduledtasks GetScheduledTask" [
-  domainName: string
-  scheduledTaskId: string
+export def "linuxhostings-scheduledtasks get" [
+  domain_name: string
+  scheduled_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -798,7 +798,7 @@ export def "linuxhostings-scheduledtasks GetScheduledTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/scheduledtasks/($scheduledTaskId)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name, scheduled_task_id: $scheduled_task_id} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -808,9 +808,9 @@ export def "linuxhostings-scheduledtasks GetScheduledTask" [
 #
 # PUT /linuxhostings/{domainName}/scheduledtasks/{scheduledTaskId}
 # operationId: ConfigureScheduledTask
-export def "linuxhostings-scheduledtasks ConfigureScheduledTask" [
-  domainName: string
-  scheduledTaskId: string
+export def "linuxhostings-scheduledtasks put" [
+  domain_name: string
+  scheduled_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,8 +830,8 @@ export def "linuxhostings-scheduledtasks ConfigureScheduledTask" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/scheduledtasks/($scheduledTaskId)" $qp)
-  let body = {cron_expression: $cron_expression, enabled: $enabled, id: $id, script_location: $script_location} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, scheduled_task_id: $scheduled_task_id} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp)
+  let body = {"cron_expression": $cron_expression, "enabled": $enabled, "id": $id, "script_location": $script_location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -842,8 +842,8 @@ export def "linuxhostings-scheduledtasks ConfigureScheduledTask" [
 #
 # PUT /linuxhostings/{domainName}/settings/gzipcompression
 # operationId: ChangeGzipCompression
-export def "linuxhostings-settings-gzipcompression ChangeGzipCompression" [
-  domainName: string
+export def "linuxhostings-settings-gzipcompression put" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -859,8 +859,8 @@ export def "linuxhostings-settings-gzipcompression ChangeGzipCompression" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/settings/gzipcompression" $qp)
-  let body = {enabled: $enabled} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/settings/gzipcompression") $qp)
+  let body = {"enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -871,9 +871,9 @@ export def "linuxhostings-settings-gzipcompression ChangeGzipCompression" [
 #
 # POST /linuxhostings/{domainName}/sites/{siteName}/hostheaders
 # operationId: CreateHostHeader
-export def "linuxhostings-sites-hostheaders CreateHostHeader" [
-  domainName: string
-  siteName: string
+export def "linuxhostings-sites-hostheaders create" [
+  domain_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,14 +884,14 @@ export def "linuxhostings-sites-hostheaders CreateHostHeader" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
   --site-name: string # Name of the site on the linux hosting.
-  --domain-name: string # Host header domain name (e.g. alias.be or alias.site.be).
+  --body-domain-name: string # Host header domain name (e.g. alias.be or alias.site.be).
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/sites/($siteName)/hostheaders" $qp)
-  let body = {domain_name: $domain_name} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, site_name: $site_name} | format pattern "/linuxhostings/{domain_name}/sites/{site_name}/hostheaders") $qp)
+  let body = {"domain_name": $body_domain_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -902,9 +902,9 @@ export def "linuxhostings-sites-hostheaders CreateHostHeader" [
 #
 # PUT /linuxhostings/{domainName}/sites/{siteName}/http2/configuration
 # operationId: ConfigureHttp2
-export def "linuxhostings-sites-http2-configuration ConfigureHttp2" [
-  domainName: string
-  siteName: string
+export def "linuxhostings-sites-http2-configuration put" [
+  domain_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -921,8 +921,8 @@ export def "linuxhostings-sites-http2-configuration ConfigureHttp2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/sites/($siteName)/http2/configuration" $qp)
-  let body = {enabled: $enabled} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, site_name: $site_name} | format pattern "/linuxhostings/{domain_name}/sites/{site_name}/http2/configuration") $qp)
+  let body = {"enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -933,8 +933,8 @@ export def "linuxhostings-sites-http2-configuration ConfigureHttp2" [
 #
 # PUT /linuxhostings/{domainName}/ssh/configuration
 # operationId: ConfigureSsh
-export def "linuxhostings-ssh-configuration ConfigureSsh" [
-  domainName: string
+export def "linuxhostings-ssh-configuration put" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,8 +950,8 @@ export def "linuxhostings-ssh-configuration ConfigureSsh" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/ssh/configuration" $qp)
-  let body = {enabled: $enabled} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/ssh/configuration") $qp)
+  let body = {"enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -962,8 +962,8 @@ export def "linuxhostings-ssh-configuration ConfigureSsh" [
 #
 # GET /linuxhostings/{domainName}/ssh/keys
 # operationId: GetSshKeys
-export def "linuxhostings-ssh-keys GetSshKeys" [
-  domainName: string
+export def "linuxhostings-ssh-keys get" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -977,7 +977,7 @@ export def "linuxhostings-ssh-keys GetSshKeys" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/ssh/keys" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/ssh/keys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -987,8 +987,8 @@ export def "linuxhostings-ssh-keys GetSshKeys" [
 #
 # POST /linuxhostings/{domainName}/ssh/keys
 # operationId: AddSshKey
-export def "linuxhostings-ssh-keys AddSshKey" [
-  domainName: string
+export def "linuxhostings-ssh-keys create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,8 +1004,8 @@ export def "linuxhostings-ssh-keys AddSshKey" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/ssh/keys" $qp)
-  let body = {public_key: $public_key} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/ssh/keys") $qp)
+  let body = {"public_key": $public_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1016,9 +1016,9 @@ export def "linuxhostings-ssh-keys AddSshKey" [
 #
 # DELETE /linuxhostings/{domainName}/ssh/keys/{fingerprint}
 # operationId: DeleteSshKey
-export def "linuxhostings-ssh-keys DeleteSshKey" [
+export def "linuxhostings-ssh-keys delete" [
+  domain_name: string
   fingerprint: string
-  domainName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1032,7 +1032,7 @@ export def "linuxhostings-ssh-keys DeleteSshKey" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/ssh/keys/($fingerprint)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name, fingerprint: $fingerprint} | format pattern "/linuxhostings/{domain_name}/ssh/keys/{fingerprint}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1042,9 +1042,9 @@ export def "linuxhostings-ssh-keys DeleteSshKey" [
 #
 # PUT /linuxhostings/{domainName}/sslsettings/{hostname}/autoredirect
 # operationId: ChangeAutoRedirect
-export def "linuxhostings-sslsettings-autoredirect ChangeAutoRedirect" [
+export def "linuxhostings-sslsettings-autoredirect put" [
+  domain_name: string
   hostname: string
-  domainName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,8 +1060,8 @@ export def "linuxhostings-sslsettings-autoredirect ChangeAutoRedirect" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/sslsettings/($hostname)/autoredirect" $qp)
-  let body = {enabled: $enabled} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, hostname: $hostname} | format pattern "/linuxhostings/{domain_name}/sslsettings/{hostname}/autoredirect") $qp)
+  let body = {"enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1072,9 +1072,9 @@ export def "linuxhostings-sslsettings-autoredirect ChangeAutoRedirect" [
 #
 # PUT /linuxhostings/{domainName}/sslsettings/{hostname}/letsencrypt
 # operationId: ChangeLetsEncrypt
-export def "linuxhostings-sslsettings-letsencrypt ChangeLetsEncrypt" [
+export def "linuxhostings-sslsettings-letsencrypt put" [
+  domain_name: string
   hostname: string
-  domainName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,8 +1090,8 @@ export def "linuxhostings-sslsettings-letsencrypt ChangeLetsEncrypt" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/sslsettings/($hostname)/letsencrypt" $qp)
-  let body = {enabled: $enabled} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, hostname: $hostname} | format pattern "/linuxhostings/{domain_name}/sslsettings/{hostname}/letsencrypt") $qp)
+  let body = {"enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1102,8 +1102,8 @@ export def "linuxhostings-sslsettings-letsencrypt ChangeLetsEncrypt" [
 #
 # POST /linuxhostings/{domainName}/subsites
 # operationId: CreateSubsite
-export def "linuxhostings-subsites CreateSubsite" [
-  domainName: string
+export def "linuxhostings-subsites create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1113,15 +1113,15 @@ export def "linuxhostings-subsites CreateSubsite" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # Linux hosting domain name.
-  --domain-name: string # Subsite domain name (e.g. alias.be or subsite.site.be).
+  --body-domain-name: string # Subsite domain name (e.g. alias.be or subsite.site.be).
   --path: string # Folder location for the subsite (when empty we use /subsites/site (e.g. /subsites/subsite.site.be)<br /> The path MUST pre-exist on the server. It WILL NOT be created automatically.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/subsites" $qp)
-  let body = {domain_name: $domain_name, path: $path} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/linuxhostings/{domain_name}/subsites") $qp)
+  let body = {"domain_name": $body_domain_name, "path": $path} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1132,9 +1132,9 @@ export def "linuxhostings-subsites CreateSubsite" [
 #
 # DELETE /linuxhostings/{domainName}/subsites/{siteName}
 # operationId: DeleteSubsite
-export def "linuxhostings-subsites DeleteSubsite" [
-  domainName: string
-  siteName: string
+export def "linuxhostings-subsites delete" [
+  domain_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1149,7 +1149,7 @@ export def "linuxhostings-subsites DeleteSubsite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/linuxhostings/($domainName)/subsites/($siteName)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name, site_name: $site_name} | format pattern "/linuxhostings/{domain_name}/subsites/{site_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1159,7 +1159,7 @@ export def "linuxhostings-subsites DeleteSubsite" [
 #
 # GET /mailboxes
 # operationId: GetMailboxes
-export def "mailboxes GetMailboxes" [
+export def "mailboxes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,7 +1183,7 @@ export def "mailboxes GetMailboxes" [
 #
 # POST /mailboxes
 # operationId: CreateMailbox
-export def "mailboxes CreateMailbox" [
+export def "mailboxes create-mailbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1200,7 +1200,7 @@ export def "mailboxes CreateMailbox" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mailboxes")
-  let body = {account_id: $account_id, email_address: $email_address, password: $password} | compact
+  let body = {"account_id": $account_id, "email_address": $email_address, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1211,8 +1211,8 @@ export def "mailboxes CreateMailbox" [
 #
 # DELETE /mailboxes/{mailboxName}
 # operationId: DeleteMailbox
-export def "mailboxes DeleteMailbox" [
-  mailboxName: string
+export def "mailboxes delete-mailbox" [
+  mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,7 +1226,7 @@ export def "mailboxes DeleteMailbox" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailboxes/($mailboxName)" $qp)
+  let full_url = (build-url $base ({mailbox_name: $mailbox_name} | format pattern "/mailboxes/{mailbox_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1236,8 +1236,8 @@ export def "mailboxes DeleteMailbox" [
 #
 # GET /mailboxes/{mailboxName}
 # operationId: GetMailbox
-export def "mailboxes GetMailbox" [
-  mailboxName: string
+export def "mailboxes get-mailbox" [
+  mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1251,7 +1251,7 @@ export def "mailboxes GetMailbox" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailboxes/($mailboxName)" $qp)
+  let full_url = (build-url $base ({mailbox_name: $mailbox_name} | format pattern "/mailboxes/{mailbox_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1261,8 +1261,8 @@ export def "mailboxes GetMailbox" [
 #
 # PUT /mailboxes/{mailboxName}/autoforward
 # operationId: ConfigureMailboxAutoForward
-export def "mailboxes-autoforward ConfigureMailboxAutoForward" [
-  mailboxName: string
+export def "mailboxes-autoforward put" [
+  mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,8 +1280,8 @@ export def "mailboxes-autoforward ConfigureMailboxAutoForward" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailboxes/($mailboxName)/autoforward" $qp)
-  let body = {copy_to_myself: $copy_to_myself, email_addresses: $email_addresses, enabled: $enabled} | compact
+  let full_url = (build-url $base ({mailbox_name: $mailbox_name} | format pattern "/mailboxes/{mailbox_name}/autoforward") $qp)
+  let body = {"copy_to_myself": $copy_to_myself, "email_addresses": $email_addresses, "enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1292,8 +1292,8 @@ export def "mailboxes-autoforward ConfigureMailboxAutoForward" [
 #
 # PUT /mailboxes/{mailboxName}/autoreply
 # operationId: ConfigureMailboxAutoReply
-export def "mailboxes-autoreply ConfigureMailboxAutoReply" [
-  mailboxName: string
+export def "mailboxes-autoreply put" [
+  mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,8 +1311,8 @@ export def "mailboxes-autoreply ConfigureMailboxAutoReply" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailboxes/($mailboxName)/autoreply" $qp)
-  let body = {enabled: $enabled, message: $message, subject: $subject} | compact
+  let full_url = (build-url $base ({mailbox_name: $mailbox_name} | format pattern "/mailboxes/{mailbox_name}/autoreply") $qp)
+  let body = {"enabled": $enabled, "message": $message, "subject": $subject} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1323,8 +1323,8 @@ export def "mailboxes-autoreply ConfigureMailboxAutoReply" [
 #
 # PUT /mailboxes/{mailboxName}/password
 # operationId: ChangeMailboxPassword
-export def "mailboxes-password ChangeMailboxPassword" [
-  mailboxName: string
+export def "mailboxes-password put" [
+  mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1340,8 +1340,8 @@ export def "mailboxes-password ChangeMailboxPassword" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailboxes/($mailboxName)/password" $qp)
-  let body = {password: $password} | compact
+  let full_url = (build-url $base ({mailbox_name: $mailbox_name} | format pattern "/mailboxes/{mailbox_name}/password") $qp)
+  let body = {"password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1352,8 +1352,8 @@ export def "mailboxes-password ChangeMailboxPassword" [
 #
 # GET /mailzones/{domainName}
 # operationId: GetMailZone
-export def "mailzones GetMailZone" [
-  domainName: string
+export def "mailzones get" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1367,7 +1367,7 @@ export def "mailzones GetMailZone" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/mailzones/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1377,8 +1377,8 @@ export def "mailzones GetMailZone" [
 #
 # POST /mailzones/{domainName}/aliases
 # operationId: CreateAlias
-export def "mailzones-aliases CreateAlias" [
-  domainName: string
+export def "mailzones-aliases create-alias" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1395,8 +1395,8 @@ export def "mailzones-aliases CreateAlias" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/aliases" $qp)
-  let body = {destinations: $destinations, email_address: $email_address} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/mailzones/{domain_name}/aliases") $qp)
+  let body = {"destinations": $destinations, "email_address": $email_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1407,9 +1407,9 @@ export def "mailzones-aliases CreateAlias" [
 #
 # DELETE /mailzones/{domainName}/aliases/{emailAddress}
 # operationId: DeleteAlias
-export def "mailzones-aliases DeleteAlias" [
-  domainName: string
-  emailAddress: string
+export def "mailzones-aliases delete-alias" [
+  domain_name: string
+  email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1424,7 +1424,7 @@ export def "mailzones-aliases DeleteAlias" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/aliases/($emailAddress)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name, email_address: $email_address} | format pattern "/mailzones/{domain_name}/aliases/{email_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1434,9 +1434,9 @@ export def "mailzones-aliases DeleteAlias" [
 #
 # PUT /mailzones/{domainName}/aliases/{emailAddress}
 # operationId: ConfigureAlias
-export def "mailzones-aliases ConfigureAlias" [
-  domainName: string
-  emailAddress: string
+export def "mailzones-aliases put" [
+  domain_name: string
+  email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1453,8 +1453,8 @@ export def "mailzones-aliases ConfigureAlias" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/aliases/($emailAddress)" $qp)
-  let body = {destinations: $destinations} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, email_address: $email_address} | format pattern "/mailzones/{domain_name}/aliases/{email_address}") $qp)
+  let body = {"destinations": $destinations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1465,8 +1465,8 @@ export def "mailzones-aliases ConfigureAlias" [
 #
 # PUT /mailzones/{domainName}/antispam
 # operationId: ConfigureAntiSpam
-export def "mailzones-antispam ConfigureAntiSpam" [
-  domainName: string
+export def "mailzones-antispam put" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1482,8 +1482,8 @@ export def "mailzones-antispam ConfigureAntiSpam" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/antispam" $qp)
-  let body = {type: $type} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/mailzones/{domain_name}/antispam") $qp)
+  let body = {"type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1494,8 +1494,8 @@ export def "mailzones-antispam ConfigureAntiSpam" [
 #
 # POST /mailzones/{domainName}/catchall
 # operationId: CreateCatchAll
-export def "mailzones-catchall CreateCatchAll" [
-  domainName: string
+export def "mailzones-catchall create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1511,8 +1511,8 @@ export def "mailzones-catchall CreateCatchAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/catchall" $qp)
-  let body = {email_address: $email_address} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/mailzones/{domain_name}/catchall") $qp)
+  let body = {"email_address": $email_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1523,9 +1523,9 @@ export def "mailzones-catchall CreateCatchAll" [
 #
 # DELETE /mailzones/{domainName}/catchall/{emailAddress}
 # operationId: DeleteCatchAll
-export def "mailzones-catchall DeleteCatchAll" [
-  domainName: string
-  emailAddress: string
+export def "mailzones-catchall delete" [
+  domain_name: string
+  email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1540,7 +1540,7 @@ export def "mailzones-catchall DeleteCatchAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/catchall/($emailAddress)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name, email_address: $email_address} | format pattern "/mailzones/{domain_name}/catchall/{email_address}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1550,8 +1550,8 @@ export def "mailzones-catchall DeleteCatchAll" [
 #
 # POST /mailzones/{domainName}/smtpdomains
 # operationId: CreateSmtpDomain
-export def "mailzones-smtpdomains CreateSmtpDomain" [
-  domainName: string
+export def "mailzones-smtpdomains create" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1567,8 +1567,8 @@ export def "mailzones-smtpdomains CreateSmtpDomain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/smtpdomains" $qp)
-  let body = {hostname: $hostname} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/mailzones/{domain_name}/smtpdomains") $qp)
+  let body = {"hostname": $hostname} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1579,9 +1579,9 @@ export def "mailzones-smtpdomains CreateSmtpDomain" [
 #
 # DELETE /mailzones/{domainName}/smtpdomains/{hostname}
 # operationId: DeleteSmtpDomain
-export def "mailzones-smtpdomains DeleteSmtpDomain" [
+export def "mailzones-smtpdomains delete" [
+  domain_name: string
   hostname: string
-  domainName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1595,7 +1595,7 @@ export def "mailzones-smtpdomains DeleteSmtpDomain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/smtpdomains/($hostname)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name, hostname: $hostname} | format pattern "/mailzones/{domain_name}/smtpdomains/{hostname}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1605,9 +1605,9 @@ export def "mailzones-smtpdomains DeleteSmtpDomain" [
 #
 # PUT /mailzones/{domainName}/smtpdomains/{hostname}
 # operationId: ConfigureSmtpDomain
-export def "mailzones-smtpdomains ConfigureSmtpDomain" [
+export def "mailzones-smtpdomains put" [
+  domain_name: string
   hostname: string
-  domainName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1623,8 +1623,8 @@ export def "mailzones-smtpdomains ConfigureSmtpDomain" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mailzones/($domainName)/smtpdomains/($hostname)" $qp)
-  let body = {enabled: $enabled} | compact
+  let full_url = (build-url $base ({domain_name: $domain_name, hostname: $hostname} | format pattern "/mailzones/{domain_name}/smtpdomains/{hostname}") $qp)
+  let body = {"enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1635,7 +1635,7 @@ export def "mailzones-smtpdomains ConfigureSmtpDomain" [
 #
 # GET /mysqldatabases
 # operationId: GetMySqlDatabases
-export def "mysqldatabases GetMySqlDatabases" [
+export def "mysqldatabases get-my-sql-databases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1660,7 +1660,7 @@ export def "mysqldatabases GetMySqlDatabases" [
 #
 # POST /mysqldatabases
 # operationId: CreateMySqlDatabase
-export def "mysqldatabases CreateMySqlDatabase" [
+export def "mysqldatabases create-my-sql-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1677,7 +1677,7 @@ export def "mysqldatabases CreateMySqlDatabase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mysqldatabases")
-  let body = {account_id: $account_id, database_name: $database_name, password: $password} | compact
+  let body = {"account_id": $account_id, "database_name": $database_name, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1688,8 +1688,8 @@ export def "mysqldatabases CreateMySqlDatabase" [
 #
 # DELETE /mysqldatabases/{databaseName}
 # operationId: DeleteDatabase
-export def "mysqldatabases DeleteDatabase" [
-  databaseName: string
+export def "mysqldatabases delete-database" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1703,7 +1703,7 @@ export def "mysqldatabases DeleteDatabase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/mysqldatabases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1713,8 +1713,8 @@ export def "mysqldatabases DeleteDatabase" [
 #
 # GET /mysqldatabases/{databaseName}
 # operationId: GetMySqlDatabase
-export def "mysqldatabases GetMySqlDatabase" [
-  databaseName: string
+export def "mysqldatabases get-my-sql-database" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,7 +1728,7 @@ export def "mysqldatabases GetMySqlDatabase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/mysqldatabases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1738,8 +1738,8 @@ export def "mysqldatabases GetMySqlDatabase" [
 #
 # GET /mysqldatabases/{databaseName}/users
 # operationId: GetDatabaseUsers
-export def "mysqldatabases-users GetDatabaseUsers" [
-  databaseName: string
+export def "mysqldatabases-users get-database" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1753,7 +1753,7 @@ export def "mysqldatabases-users GetDatabaseUsers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)/users" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/mysqldatabases/{database_name}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1763,8 +1763,8 @@ export def "mysqldatabases-users GetDatabaseUsers" [
 #
 # POST /mysqldatabases/{databaseName}/users
 # operationId: CreateMySqlUser
-export def "mysqldatabases-users CreateMySqlUser" [
-  databaseName: string
+export def "mysqldatabases-users create-my-sql" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1781,8 +1781,8 @@ export def "mysqldatabases-users CreateMySqlUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)/users" $qp)
-  let body = {name: $name, password: $password} | compact
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/mysqldatabases/{database_name}/users") $qp)
+  let body = {"name": $name, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1793,9 +1793,9 @@ export def "mysqldatabases-users CreateMySqlUser" [
 #
 # DELETE /mysqldatabases/{databaseName}/users/{userName}
 # operationId: DeleteDatabaseUser
-export def "mysqldatabases-users DeleteDatabaseUser" [
-  databaseName: string
-  userName: string
+export def "mysqldatabases-users delete-database" [
+  database_name: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1810,7 +1810,7 @@ export def "mysqldatabases-users DeleteDatabaseUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)/users/($userName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, user_name: $user_name} | format pattern "/mysqldatabases/{database_name}/users/{user_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1820,9 +1820,9 @@ export def "mysqldatabases-users DeleteDatabaseUser" [
 #
 # PUT /mysqldatabases/{databaseName}/users/{userName}/password
 # operationId: ChangeDatabaseUserPassword
-export def "mysqldatabases-users-password ChangeDatabaseUserPassword" [
-  databaseName: string
-  userName: string
+export def "mysqldatabases-users-password put" [
+  database_name: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1839,8 +1839,8 @@ export def "mysqldatabases-users-password ChangeDatabaseUserPassword" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)/users/($userName)/password" $qp)
-  let body = {password: $password} | compact
+  let full_url = (build-url $base ({database_name: $database_name, user_name: $user_name} | format pattern "/mysqldatabases/{database_name}/users/{user_name}/password") $qp)
+  let body = {"password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1851,9 +1851,9 @@ export def "mysqldatabases-users-password ChangeDatabaseUserPassword" [
 #
 # PUT /mysqldatabases/{databaseName}/users/{userName}/status
 # operationId: ChangeDatabaseUserStatus
-export def "mysqldatabases-users-status ChangeDatabaseUserStatus" [
-  databaseName: string
-  userName: string
+export def "mysqldatabases-users-status put" [
+  database_name: string
+  user_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1870,8 +1870,8 @@ export def "mysqldatabases-users-status ChangeDatabaseUserStatus" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/mysqldatabases/($databaseName)/users/($userName)/status" $qp)
-  let body = {enabled: $enabled} | compact
+  let full_url = (build-url $base ({database_name: $database_name, user_name: $user_name} | format pattern "/mysqldatabases/{database_name}/users/{user_name}/status") $qp)
+  let body = {"enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1882,7 +1882,7 @@ export def "mysqldatabases-users-status ChangeDatabaseUserStatus" [
 #
 # GET /provisioningjobs/{jobId}
 export def "provisioningjobs get" [
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1896,7 +1896,7 @@ export def "provisioningjobs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "job_id" $job_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/provisioningjobs/($jobId)" $qp)
+  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/provisioningjobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1906,7 +1906,7 @@ export def "provisioningjobs get" [
 #
 # GET /servicepacks
 # operationId: Servicepacks
-export def "servicepacks Servicepacks" [
+export def "servicepacks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1928,7 +1928,7 @@ export def "servicepacks Servicepacks" [
 #
 # GET /ssh
 # operationId: GetAllSshKeys
-export def "ssh GetAllSshKeys" [
+export def "ssh get-all-ssh-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1953,7 +1953,7 @@ export def "ssh GetAllSshKeys" [
 #
 # GET /sslcertificaterequests
 # operationId: GetSslCertificateRequests
-export def "sslcertificaterequests GetSslCertificateRequests" [
+export def "sslcertificaterequests get-ssl-certificate-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1979,7 +1979,7 @@ export def "sslcertificaterequests GetSslCertificateRequests" [
 # POST /sslcertificaterequests
 # operationId: AddSslCertificateRequest
 # --additional_validation_attributes item shape: {name?: string, value?: string}
-export def "sslcertificaterequests AddSslCertificateRequest" [
+export def "sslcertificaterequests create-ssl-certificate-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1997,7 +1997,7 @@ export def "sslcertificaterequests AddSslCertificateRequest" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sslcertificaterequests")
-  let body = {additional_validation_attributes: $additional_validation_attributes, certificate_type: $certificate_type, csr: $csr, validation_level: $validation_level} | compact
+  let body = {"additional_validation_attributes": $additional_validation_attributes, "certificate_type": $certificate_type, "csr": $csr, "validation_level": $validation_level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2008,7 +2008,7 @@ export def "sslcertificaterequests AddSslCertificateRequest" [
 #
 # GET /sslcertificaterequests/{id}
 # operationId: GetSslCertificateRequest
-export def "sslcertificaterequests GetSslCertificateRequest" [
+export def "sslcertificaterequests get-ssl-certificate-request" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2021,7 +2021,7 @@ export def "sslcertificaterequests GetSslCertificateRequest" [
 ]: nothing -> record<certificate_type: string, common_name: string, id: int, order_code: string, subject_alt_names: table<type: string, value: string>, validation_level: string, validations: table<auto_validated: bool, cname_validation_content: string, cname_validation_name: string, dns_name: string, email_addresses: list, file_validation_content: list, file_validation_url_http: string, file_validation_url_https: string, type: string>, vendor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sslcertificaterequests/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sslcertificaterequests/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2031,7 +2031,7 @@ export def "sslcertificaterequests GetSslCertificateRequest" [
 #
 # PUT /sslcertificaterequests/{id}
 # operationId: VerifySslCertificateRequestDomainValidations
-export def "sslcertificaterequests VerifySslCertificateRequestDomainValidations" [
+export def "sslcertificaterequests verify-ssl-certificate-request-domain-validations" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2044,7 +2044,7 @@ export def "sslcertificaterequests VerifySslCertificateRequestDomainValidations"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sslcertificaterequests/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sslcertificaterequests/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2054,7 +2054,7 @@ export def "sslcertificaterequests VerifySslCertificateRequestDomainValidations"
 #
 # GET /sslcertificates
 # operationId: GetSslCertificates
-export def "sslcertificates GetSslCertificates" [
+export def "sslcertificates list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,8 +2079,8 @@ export def "sslcertificates GetSslCertificates" [
 #
 # GET /sslcertificates/{sha1Fingerprint}
 # operationId: GetSslCertificate
-export def "sslcertificates GetSslCertificate" [
-  sha1Fingerprint: string
+export def "sslcertificates get" [
+  sha1_fingerprint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2094,7 +2094,7 @@ export def "sslcertificates GetSslCertificate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sha1_fingerprint" $sha1_fingerprint "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sslcertificates/($sha1Fingerprint)" $qp)
+  let full_url = (build-url $base ({sha1_fingerprint: $sha1_fingerprint} | format pattern "/sslcertificates/{sha1_fingerprint}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2104,8 +2104,8 @@ export def "sslcertificates GetSslCertificate" [
 #
 # GET /sslcertificates/{sha1Fingerprint}/download
 # operationId: DownloadCertificate
-export def "sslcertificates-download DownloadCertificate" [
-  sha1Fingerprint: string
+export def "sslcertificates-download download-certificate" [
+  sha1_fingerprint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2121,7 +2121,7 @@ export def "sslcertificates-download DownloadCertificate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sha1_fingerprint" $sha1_fingerprint "scalar") (serialize-qp "file_format" $file_format "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sslcertificates/($sha1Fingerprint)/download" $qp)
+  let full_url = (build-url $base ({sha1_fingerprint: $sha1_fingerprint} | format pattern "/sslcertificates/{sha1_fingerprint}/download") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2131,7 +2131,7 @@ export def "sslcertificates-download DownloadCertificate" [
 #
 # GET /windowshostings
 # operationId: GetWindowsHostings
-export def "windowshostings GetWindowsHostings" [
+export def "windowshostings get-windows-hostings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2156,8 +2156,8 @@ export def "windowshostings GetWindowsHostings" [
 #
 # GET /windowshostings/{domainName}
 # operationId: GetWindowsHosting
-export def "windowshostings GetWindowsHosting" [
-  domainName: string
+export def "windowshostings get-windows-hosting" [
+  domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2171,7 +2171,7 @@ export def "windowshostings GetWindowsHosting" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/windowshostings/($domainName)" $qp)
+  let full_url = (build-url $base ({domain_name: $domain_name} | format pattern "/windowshostings/{domain_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -114,19 +114,19 @@ export def "business-lines post-businessLines" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --capability: string # The capability for which you are creating the business line. For example, **receivePayments**. (DEPRECATED)
-  industryCode: string # A code that represents the industry of the legal entity. For example, **4431A** for computer software stores.
-  legalEntityId: string # Unique identifier of the [legal entity](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/legalEntities__resParam_id) that owns the business line.
-  --salesChannels: list # A list of channels where goods or services are sold.  Possible values: **pos**, **posMoto**, **eCommerce**, **ecomMoto**, **payByLink**.  Required only in combination with the `service` **paymentProcessing**.
+  industry_code: string # A code that represents the industry of the legal entity. For example, **4431A** for computer software stores.
+  legal_entity_id: string # Unique identifier of the [legal entity](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/legalEntities__resParam_id) that owns the business line.
+  --sales-channels: list # A list of channels where goods or services are sold.  Possible values: **pos**, **posMoto**, **eCommerce**, **ecomMoto**, **payByLink**.  Required only in combination with the `service` **paymentProcessing**.
   service: string@service-completer # The service for which you are creating the business line.  Possible values:**paymentProcessing**, **issuing**, **banking**
-  --sourceOfFunds: record # shape: {acquiringBusinessLineId?: string, adyenProcessedFunds?: bool, description?: string, type?: "business"}
-  --webData: list # List of website URLs where your user's goods or services are sold. When this is required for a service but your user does not have an online presence, provide the reason in the `webDataExemption` object. — item shape: {webAddress?: string}
-  --webDataExemption: record # shape: {reason?: "noOnlinePresence"}
+  --source-of-funds: record # shape: {acquiringBusinessLineId?: string, adyenProcessedFunds?: bool, description?: string, type?: "business"}
+  --web-data: list # List of website URLs where your user's goods or services are sold. When this is required for a service but your user does not have an online presence, provide the reason in the `webDataExemption` object. — item shape: {webAddress?: string}
+  --web-data-exemption: record # shape: {reason?: "noOnlinePresence"}
 ]: any -> record<capability: string, id: string, industryCode: string, legalEntityId: string, problems: table<entity: record, verificationErrors: list>, salesChannels: list<string>, service: string, sourceOfFunds: record<acquiringBusinessLineId: string, adyenProcessedFunds: bool, description: string, type: string>, webData: table<webAddress: string, webAddressId: string>, webDataExemption: record<reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/businessLines")
-  let body = {capability: $capability, industryCode: $industryCode, legalEntityId: $legalEntityId, salesChannels: $salesChannels, service: $service, sourceOfFunds: $sourceOfFunds, webData: $webData, webDataExemption: $webDataExemption} | compact
+  let body = {"capability": $capability, "industryCode": $industry_code, "legalEntityId": $legal_entity_id, "salesChannels": $sales_channels, "service": $service, "sourceOfFunds": $source_of_funds, "webData": $web_data, "webDataExemption": $web_data_exemption} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,7 +150,7 @@ export def "business-lines delete-businessLines-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/businessLines/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/businessLines/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +173,7 @@ export def "business-lines get-businessLines-id" [
 ]: nothing -> record<capability: string, id: string, industryCode: string, legalEntityId: string, problems: table<entity: record, verificationErrors: list>, salesChannels: list<string>, service: string, sourceOfFunds: record<acquiringBusinessLineId: string, adyenProcessedFunds: bool, description: string, type: string>, webData: table<webAddress: string, webAddressId: string>, webDataExemption: record<reason: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/businessLines/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/businessLines/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,19 +198,19 @@ export def "business-lines patch-businessLines-id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --capability: string # The capability for which you are creating the business line. For example, **receivePayments**. (DEPRECATED)
-  --industryCode: string # A code that represents the industry of your legal entity. For example, **4431A** for computer software stores.
-  --legalEntityId: string # Unique identifier of the [legal entity](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/legalEntities__resParam_id) that owns the business line.
-  --salesChannels: list # A list of channels where goods or services are sold.  Possible values: **pos**, **posMoto**, **eCommerce**, **ecomMoto**, **payByLink**.  Required only in combination with the `service` **paymentProcessing**.
+  --industry-code: string # A code that represents the industry of your legal entity. For example, **4431A** for computer software stores.
+  --legal-entity-id: string # Unique identifier of the [legal entity](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/legalEntities__resParam_id) that owns the business line.
+  --sales-channels: list # A list of channels where goods or services are sold.  Possible values: **pos**, **posMoto**, **eCommerce**, **ecomMoto**, **payByLink**.  Required only in combination with the `service` **paymentProcessing**.
   service: string@service-completer # The service for which you are creating the business line.  Possible values:**paymentProcessing**, **issuing**, **banking**
-  --sourceOfFunds: record # shape: {acquiringBusinessLineId?: string, adyenProcessedFunds?: bool, description?: string, type?: "business"}
-  --webData: list # List of website URLs where your user's goods or services are sold. When this is required for a service but your user does not have an online presence, provide the reason in the `webDataExemption` object. — item shape: {webAddress?: string}
-  --webDataExemption: record # shape: {reason?: "noOnlinePresence"}
+  --source-of-funds: record # shape: {acquiringBusinessLineId?: string, adyenProcessedFunds?: bool, description?: string, type?: "business"}
+  --web-data: list # List of website URLs where your user's goods or services are sold. When this is required for a service but your user does not have an online presence, provide the reason in the `webDataExemption` object. — item shape: {webAddress?: string}
+  --web-data-exemption: record # shape: {reason?: "noOnlinePresence"}
 ]: any -> record<capability: string, id: string, industryCode: string, legalEntityId: string, problems: table<entity: record, verificationErrors: list>, salesChannels: list<string>, service: string, sourceOfFunds: record<acquiringBusinessLineId: string, adyenProcessedFunds: bool, description: string, type: string>, webData: table<webAddress: string, webAddressId: string>, webDataExemption: record<reason: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/businessLines/($id)")
-  let body = {capability: $capability, industryCode: $industryCode, legalEntityId: $legalEntityId, salesChannels: $salesChannels, service: $service, sourceOfFunds: $sourceOfFunds, webData: $webData, webDataExemption: $webDataExemption} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/businessLines/{id}"))
+  let body = {"capability": $capability, "industryCode": $industry_code, "legalEntityId": $legal_entity_id, "salesChannels": $sales_channels, "service": $service, "sourceOfFunds": $source_of_funds, "webData": $web_data, "webDataExemption": $web_data_exemption} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -224,9 +224,9 @@ export def "business-lines patch-businessLines-id" [
 # --attachment shape: {content: string, contentType?: string, filename?: string, pageName?: string, pageType?: string}
 # --attachments item shape: {content: string, contentType?: string, filename?: string, pageName?: string, pageType?: string}
 # --owner shape: {id: string, type: string}
-@deprecated --flag expiryDate
-@deprecated --flag issuerCountry
-@deprecated --flag issuerState
+@deprecated --flag expiry-date
+@deprecated --flag issuer-country
+@deprecated --flag issuer-state
 export def "documents post-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -239,10 +239,10 @@ export def "documents post-documents" [
   --attachment: record # shape: {content: string, contentType?: string, filename?: string, pageName?: string, pageType?: string}
   attachments: list # Array that contains the document. The array supports multiple attachments for uploading different sides or pages of a document. — item shape: {content: string, contentType?: string, filename?: string, pageName?: string, pageType?: string}
   description: string # Your description for the document.
-  --expiryDate: string # The expiry date of the document, in YYYY-MM-DD format. (DEPRECATED)
-  --fileName: string # The filename of the document.
-  --issuerCountry: string # The two-character [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) country code where the document was issued. For example, **US**. (DEPRECATED)
-  --issuerState: string # The state or province where the document was issued (AU only). (DEPRECATED)
+  --expiry-date: string # The expiry date of the document, in YYYY-MM-DD format. (DEPRECATED)
+  --file-name: string # The filename of the document.
+  --issuer-country: string # The two-character [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) country code where the document was issued. For example, **US**. (DEPRECATED)
+  --issuer-state: string # The state or province where the document was issued (AU only). (DEPRECATED)
   --number: string # The number in the document.
   owner: record # shape: {id: string, type: string}
   type: string@type-completer # Type of document, used when providing an ID number or uploading a document. The possible values depend on the legal entity type.  When providing ID numbers: * For **individual**, the `type` values can be **driversLicense**, **identityCard**, **nationalIdNumber**, or **passport**.  When uploading photo IDs: * For **individual**, the `type` values can be **identityCard**, **driversLicense**, or **passport**.  When uploading other documents: * For **organization**, the `type` values can be **proofOfAddress**, **registrationDocument**, **vatDocument**, **proofOfOrganizationTaxInfo**, **proofOfOwnership**, or **proofOfIndustry**.   * For **individual**, the `type` values can be **identityCard**, **driversLicense**, **passport**, **proofOfNationalIdNumber**, **proofOfResidency**, **proofOfIndustry**, or **proofOfIndividualTaxId**.  * For **soleProprietorship**, the `type` values can be **constitutionalDocument**, **proofOfAddress**, or **proofOfIndustry**.  * Use **bankStatement** to upload documents for a [transfer instrument](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/transferInstruments__resParam_id).
@@ -251,7 +251,7 @@ export def "documents post-documents" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/documents")
-  let body = {attachment: $attachment, attachments: $attachments, description: $description, expiryDate: $expiryDate, fileName: $fileName, issuerCountry: $issuerCountry, issuerState: $issuerState, number: $number, owner: $owner, type: $type} | compact
+  let body = {"attachment": $attachment, "attachments": $attachments, "description": $description, "expiryDate": $expiry_date, "fileName": $file_name, "issuerCountry": $issuer_country, "issuerState": $issuer_state, "number": $number, "owner": $owner, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -275,7 +275,7 @@ export def "documents delete-documents-id" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -298,7 +298,7 @@ export def "documents get-documents-id" [
 ]: nothing -> record<attachment: record<content: string, contentType: string, filename: string, pageName: string, pageType: string>, attachments: table<content: string, contentType: string, filename: string, pageName: string, pageType: string>, creationDate: string, description: string, expiryDate: string, fileName: string, id: string, issuerCountry: string, issuerState: string, modificationDate: string, number: string, owner: record<id: string, type: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -311,9 +311,9 @@ export def "documents get-documents-id" [
 # --attachment shape: {content: string, contentType?: string, filename?: string, pageName?: string, pageType?: string}
 # --attachments item shape: {content: string, contentType?: string, filename?: string, pageName?: string, pageType?: string}
 # --owner shape: {id: string, type: string}
-@deprecated --flag expiryDate
-@deprecated --flag issuerCountry
-@deprecated --flag issuerState
+@deprecated --flag expiry-date
+@deprecated --flag issuer-country
+@deprecated --flag issuer-state
 export def "documents patch-documents-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -327,10 +327,10 @@ export def "documents patch-documents-id" [
   --attachment: record # shape: {content: string, contentType?: string, filename?: string, pageName?: string, pageType?: string}
   attachments: list # Array that contains the document. The array supports multiple attachments for uploading different sides or pages of a document. — item shape: {content: string, contentType?: string, filename?: string, pageName?: string, pageType?: string}
   description: string # Your description for the document.
-  --expiryDate: string # The expiry date of the document, in YYYY-MM-DD format. (DEPRECATED)
-  --fileName: string # The filename of the document.
-  --issuerCountry: string # The two-character [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) country code where the document was issued. For example, **US**. (DEPRECATED)
-  --issuerState: string # The state or province where the document was issued (AU only). (DEPRECATED)
+  --expiry-date: string # The expiry date of the document, in YYYY-MM-DD format. (DEPRECATED)
+  --file-name: string # The filename of the document.
+  --issuer-country: string # The two-character [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) country code where the document was issued. For example, **US**. (DEPRECATED)
+  --issuer-state: string # The state or province where the document was issued (AU only). (DEPRECATED)
   --number: string # The number in the document.
   owner: record # shape: {id: string, type: string}
   type: string@type-completer # Type of document, used when providing an ID number or uploading a document. The possible values depend on the legal entity type.  When providing ID numbers: * For **individual**, the `type` values can be **driversLicense**, **identityCard**, **nationalIdNumber**, or **passport**.  When uploading photo IDs: * For **individual**, the `type` values can be **identityCard**, **driversLicense**, or **passport**.  When uploading other documents: * For **organization**, the `type` values can be **proofOfAddress**, **registrationDocument**, **vatDocument**, **proofOfOrganizationTaxInfo**, **proofOfOwnership**, or **proofOfIndustry**.   * For **individual**, the `type` values can be **identityCard**, **driversLicense**, **passport**, **proofOfNationalIdNumber**, **proofOfResidency**, **proofOfIndustry**, or **proofOfIndividualTaxId**.  * For **soleProprietorship**, the `type` values can be **constitutionalDocument**, **proofOfAddress**, or **proofOfIndustry**.  * Use **bankStatement** to upload documents for a [transfer instrument](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/transferInstruments__resParam_id).
@@ -338,8 +338,8 @@ export def "documents patch-documents-id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)")
-  let body = {attachment: $attachment, attachments: $attachments, description: $description, expiryDate: $expiryDate, fileName: $fileName, issuerCountry: $issuerCountry, issuerState: $issuerState, number: $number, owner: $owner, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}"))
+  let body = {"attachment": $attachment, "attachments": $attachments, "description": $description, "expiryDate": $expiry_date, "fileName": $file_name, "issuerCountry": $issuer_country, "issuerState": $issuer_state, "number": $number, "owner": $owner, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -363,18 +363,18 @@ export def "legal-entities post-legalEntities" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entityAssociations: list # List of legal entities associated with the current legal entity. For example, ultimate beneficial owners associated with an organization through ownership or control, or as signatories. — item shape: {jobTitle?: string, legalEntityId: string, type: "pciSignatory"|"signatory"|"soleProprietorship"|"uboThroughControl"|"uboThroughOwnership"|"ultimateParentCompany"}
+  --entity-associations: list # List of legal entities associated with the current legal entity. For example, ultimate beneficial owners associated with an organization through ownership or control, or as signatories. — item shape: {jobTitle?: string, legalEntityId: string, type: "pciSignatory"|"signatory"|"soleProprietorship"|"uboThroughControl"|"uboThroughOwnership"|"ultimateParentCompany"}
   --individual: record # shape: {birthData?: record, email?: string, identificationData?: record, name: record, nationality?: string, phone?: record, residentialAddress: record, taxInformation?: list, webData?: record}
   --organization: record # shape: {dateOfIncorporation?: string, description?: string, doingBusinessAs?: string, email?: string, legalName: string, phone?: record, principalPlaceOfBusiness?: record, registeredAddress: record, registrationNumber?: string, stockData?: record, taxInformation?: list, taxReportingClassification?: record, type?: "associationIncorporated"|"governmentalOrganization"|"listedPublicCompany"|"nonProfit"|"partnershipIncorporated"|"privateCompany", vatAbsenceReason?: "industryExemption"|"belowTaxThreshold", vatNumber?: string, webData?: record}
   --reference: string # Your reference for the legal entity, maximum 150 characters.
-  --soleProprietorship: record # shape: {countryOfGoverningLaw: string, dateOfIncorporation?: string, doingBusinessAs?: string, name: string, principalPlaceOfBusiness?: record, registeredAddress: record, registrationNumber?: string, vatAbsenceReason?: "industryExemption"|"belowTaxThreshold", vatNumber?: string}
+  --sole-proprietorship: record # shape: {countryOfGoverningLaw: string, dateOfIncorporation?: string, doingBusinessAs?: string, name: string, principalPlaceOfBusiness?: record, registeredAddress: record, registrationNumber?: string, vatAbsenceReason?: "industryExemption"|"belowTaxThreshold", vatNumber?: string}
   type: string@type-completer-1 # The type of legal entity.   Possible values: **individual**, **organization**, or **soleProprietorship**.
 ]: any -> record<capabilities: record, documentDetails: table<active: bool, description: string, fileName: string, id: string, modificationDate: string, type: string>, documents: table<id: string>, entityAssociations: table<associatorId: string, entityType: string, jobTitle: string, legalEntityId: string, name: string, type: string>, id: string, individual: record<birthData: record<dateOfBirth: string>, email: string, identificationData: record<cardNumber: string, expiryDate: string, issuerCountry: string, issuerState: string, nationalIdExempt: bool, number: string, type: string>, name: record<firstName: string, infix: string, lastName: string>, nationality: string, phone: record<number: string, type: string>, residentialAddress: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, taxInformation: list<record>, webData: record<webAddress: string, webAddressId: string>>, organization: record<dateOfIncorporation: string, description: string, doingBusinessAs: string, email: string, legalName: string, phone: record<number: string, type: string>, principalPlaceOfBusiness: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registeredAddress: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registrationNumber: string, stockData: record<marketIdentifier: string, stockNumber: string, tickerSymbol: string>, taxInformation: list<record>, taxReportingClassification: record<businessType: string, financialInstitutionNumber: string, mainSourceOfIncome: string, type: string>, type: string, vatAbsenceReason: string, vatNumber: string, webData: record<webAddress: string, webAddressId: string>>, problems: table<entity: record, verificationErrors: list>, reference: string, soleProprietorship: record<countryOfGoverningLaw: string, dateOfIncorporation: string, doingBusinessAs: string, name: string, principalPlaceOfBusiness: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registeredAddress: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registrationNumber: string, vatAbsenceReason: string, vatNumber: string>, transferInstruments: table<accountIdentifier: string, id: string, realLastFour: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/legalEntities")
-  let body = {entityAssociations: $entityAssociations, individual: $individual, organization: $organization, reference: $reference, soleProprietorship: $soleProprietorship, type: $type} | compact
+  let body = {"entityAssociations": $entity_associations, "individual": $individual, "organization": $organization, "reference": $reference, "soleProprietorship": $sole_proprietorship, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -398,7 +398,7 @@ export def "legal-entities get-legalEntities-id" [
 ]: nothing -> record<capabilities: record, documentDetails: table<active: bool, description: string, fileName: string, id: string, modificationDate: string, type: string>, documents: table<id: string>, entityAssociations: table<associatorId: string, entityType: string, jobTitle: string, legalEntityId: string, name: string, type: string>, id: string, individual: record<birthData: record<dateOfBirth: string>, email: string, identificationData: record<cardNumber: string, expiryDate: string, issuerCountry: string, issuerState: string, nationalIdExempt: bool, number: string, type: string>, name: record<firstName: string, infix: string, lastName: string>, nationality: string, phone: record<number: string, type: string>, residentialAddress: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, taxInformation: list<record>, webData: record<webAddress: string, webAddressId: string>>, organization: record<dateOfIncorporation: string, description: string, doingBusinessAs: string, email: string, legalName: string, phone: record<number: string, type: string>, principalPlaceOfBusiness: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registeredAddress: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registrationNumber: string, stockData: record<marketIdentifier: string, stockNumber: string, tickerSymbol: string>, taxInformation: list<record>, taxReportingClassification: record<businessType: string, financialInstitutionNumber: string, mainSourceOfIncome: string, type: string>, type: string, vatAbsenceReason: string, vatNumber: string, webData: record<webAddress: string, webAddressId: string>>, problems: table<entity: record, verificationErrors: list>, reference: string, soleProprietorship: record<countryOfGoverningLaw: string, dateOfIncorporation: string, doingBusinessAs: string, name: string, principalPlaceOfBusiness: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registeredAddress: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registrationNumber: string, vatAbsenceReason: string, vatNumber: string>, transferInstruments: table<accountIdentifier: string, id: string, realLastFour: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/legalEntities/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -422,18 +422,18 @@ export def "legal-entities patch-legalEntities-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entityAssociations: list # List of legal entities associated with the current legal entity. For example, ultimate beneficial owners associated with an organization through ownership or control, or as signatories. — item shape: {jobTitle?: string, legalEntityId: string, type: "pciSignatory"|"signatory"|"soleProprietorship"|"uboThroughControl"|"uboThroughOwnership"|"ultimateParentCompany"}
+  --entity-associations: list # List of legal entities associated with the current legal entity. For example, ultimate beneficial owners associated with an organization through ownership or control, or as signatories. — item shape: {jobTitle?: string, legalEntityId: string, type: "pciSignatory"|"signatory"|"soleProprietorship"|"uboThroughControl"|"uboThroughOwnership"|"ultimateParentCompany"}
   --individual: record # shape: {birthData?: record, email?: string, identificationData?: record, name: record, nationality?: string, phone?: record, residentialAddress: record, taxInformation?: list, webData?: record}
   --organization: record # shape: {dateOfIncorporation?: string, description?: string, doingBusinessAs?: string, email?: string, legalName: string, phone?: record, principalPlaceOfBusiness?: record, registeredAddress: record, registrationNumber?: string, stockData?: record, taxInformation?: list, taxReportingClassification?: record, type?: "associationIncorporated"|"governmentalOrganization"|"listedPublicCompany"|"nonProfit"|"partnershipIncorporated"|"privateCompany", vatAbsenceReason?: "industryExemption"|"belowTaxThreshold", vatNumber?: string, webData?: record}
   --reference: string # Your reference for the legal entity, maximum 150 characters.
-  --soleProprietorship: record # shape: {countryOfGoverningLaw: string, dateOfIncorporation?: string, doingBusinessAs?: string, name: string, principalPlaceOfBusiness?: record, registeredAddress: record, registrationNumber?: string, vatAbsenceReason?: "industryExemption"|"belowTaxThreshold", vatNumber?: string}
+  --sole-proprietorship: record # shape: {countryOfGoverningLaw: string, dateOfIncorporation?: string, doingBusinessAs?: string, name: string, principalPlaceOfBusiness?: record, registeredAddress: record, registrationNumber?: string, vatAbsenceReason?: "industryExemption"|"belowTaxThreshold", vatNumber?: string}
   --type: string@type-completer-1 # The type of legal entity.   Possible values: **individual**, **organization**, or **soleProprietorship**.
 ]: any -> record<capabilities: record, documentDetails: table<active: bool, description: string, fileName: string, id: string, modificationDate: string, type: string>, documents: table<id: string>, entityAssociations: table<associatorId: string, entityType: string, jobTitle: string, legalEntityId: string, name: string, type: string>, id: string, individual: record<birthData: record<dateOfBirth: string>, email: string, identificationData: record<cardNumber: string, expiryDate: string, issuerCountry: string, issuerState: string, nationalIdExempt: bool, number: string, type: string>, name: record<firstName: string, infix: string, lastName: string>, nationality: string, phone: record<number: string, type: string>, residentialAddress: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, taxInformation: list<record>, webData: record<webAddress: string, webAddressId: string>>, organization: record<dateOfIncorporation: string, description: string, doingBusinessAs: string, email: string, legalName: string, phone: record<number: string, type: string>, principalPlaceOfBusiness: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registeredAddress: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registrationNumber: string, stockData: record<marketIdentifier: string, stockNumber: string, tickerSymbol: string>, taxInformation: list<record>, taxReportingClassification: record<businessType: string, financialInstitutionNumber: string, mainSourceOfIncome: string, type: string>, type: string, vatAbsenceReason: string, vatNumber: string, webData: record<webAddress: string, webAddressId: string>>, problems: table<entity: record, verificationErrors: list>, reference: string, soleProprietorship: record<countryOfGoverningLaw: string, dateOfIncorporation: string, doingBusinessAs: string, name: string, principalPlaceOfBusiness: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registeredAddress: record<city: string, country: string, postalCode: string, stateOrProvince: string, street: string, street2: string>, registrationNumber: string, vatAbsenceReason: string, vatNumber: string>, transferInstruments: table<accountIdentifier: string, id: string, realLastFour: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)")
-  let body = {entityAssociations: $entityAssociations, individual: $individual, organization: $organization, reference: $reference, soleProprietorship: $soleProprietorship, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/legalEntities/{id}"))
+  let body = {"entityAssociations": $entity_associations, "individual": $individual, "organization": $organization, "reference": $reference, "soleProprietorship": $sole_proprietorship, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,7 +457,7 @@ export def "legal-entities-business-lines get-legalEntities-id-businessLines" [
 ]: nothing -> record<businessLines: table<capability: string, id: string, industryCode: string, legalEntityId: string, problems: list, salesChannels: list, service: string, sourceOfFunds: record, webData: list, webDataExemption: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)/businessLines")
+  let full_url = (build-url $base ({id: $id} | format pattern "/legalEntities/{id}/businessLines"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,7 +480,7 @@ export def "legal-entities-check-verification-errors post-legalEntities-id-check
 ]: nothing -> record<problems: table<entity: record, verificationErrors: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)/checkVerificationErrors")
+  let full_url = (build-url $base ({id: $id} | format pattern "/legalEntities/{id}/checkVerificationErrors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -501,15 +501,15 @@ export def "legal-entities-onboarding-links post-legalEntities-id-onboardingLink
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --locale: string # The language that will be used for the page, specified by a combination of two letter [ISO 639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) language and [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) country codes. See [possible values](https://docs.adyen.com/marketplaces-and-platforms/collect-verification-details/hosted#supported-languages).   If not specified in the request or if the language is not supported, the page uses the browser language. If the browser language is not supported, the page uses **en-US** by default.
-  --redirectUrl: string # The URL where the user is redirected after they complete hosted onboarding.
+  --redirect-url: string # The URL where the user is redirected after they complete hosted onboarding.
   --settings: record # Boolean key-value pairs indicating the settings for the hosted onboarding page. The keys are the settings. By default, the values are set to **true**. Set to **false** to not allow the action.  Possible keys:  - **changeLegalEntityType**: The user can change their legal entity type.  - **editPrefilledCountry**: The user can change the country of their legal entity's address, for example the registered address of an organization. 
-  --themeId: string # The unique identifier of the hosted onboarding theme.
+  --theme-id: string # The unique identifier of the hosted onboarding theme.
 ]: any -> record<url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)/onboardingLinks")
-  let body = {locale: $locale, redirectUrl: $redirectUrl, settings: $settings, themeId: $themeId} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/legalEntities/{id}/onboardingLinks"))
+  let body = {"locale": $locale, "redirectUrl": $redirect_url, "settings": $settings, "themeId": $theme_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -533,7 +533,7 @@ export def "legal-entities-pci-questionnaires get-legalEntities-id-pciQuestionna
 ]: nothing -> record<data: table<createdAt: string, id: string, validUntil: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)/pciQuestionnaires")
+  let full_url = (build-url $base ({id: $id} | format pattern "/legalEntities/{id}/pciQuestionnaires"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,8 +558,8 @@ export def "legal-entities-pci-questionnaires-generate-pci-templates post-legalE
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)/pciQuestionnaires/generatePciTemplates")
-  let body = {language: $language} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/legalEntities/{id}/pciQuestionnaires/generatePciTemplates"))
+  let body = {"language": $language} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -580,14 +580,14 @@ export def "legal-entities-pci-questionnaires-sign-pci-templates post-legalEntit
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  pciTemplateReferences: list # The array of Adyen-generated unique identifiers for the questionnaires.
-  signedBy: string # The [legal entity ID](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/legalEntities__resParam_id) of the individual who signs the PCI questionnaire.
+  pci_template_references: list # The array of Adyen-generated unique identifiers for the questionnaires.
+  signed_by: string # The [legal entity ID](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/legalEntities__resParam_id) of the individual who signs the PCI questionnaire.
 ]: any -> record<pciQuestionnaireIds: list<string>, signedBy: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)/pciQuestionnaires/signPciTemplates")
-  let body = {pciTemplateReferences: $pciTemplateReferences, signedBy: $signedBy} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/legalEntities/{id}/pciQuestionnaires/signPciTemplates"))
+  let body = {"pciTemplateReferences": $pci_template_references, "signedBy": $signed_by} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -612,7 +612,7 @@ export def "legal-entities-pci-questionnaires get-legalEntities-id-pciQuestionna
 ]: nothing -> record<content: string, createdAt: string, id: string, validUntil: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)/pciQuestionnaires/($pciid)")
+  let full_url = (build-url $base ({id: $id, pciid: $pciid} | format pattern "/legalEntities/{id}/pciQuestionnaires/{pciid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -638,8 +638,8 @@ export def "legal-entities-terms-of-service post-legalEntities-id-termsOfService
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)/termsOfService")
-  let body = {language: $language, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/legalEntities/{id}/termsOfService"))
+  let body = {"language": $language, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -661,14 +661,14 @@ export def "legal-entities-terms-of-service patch-legalEntities-id-termsOfServic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --acceptedBy: string # The unique identifier of the user accepting the Terms of Service.
-  --ipAddress: string # The IP address of the user accepting the Terms of Service.
+  --accepted-by: string # The unique identifier of the user accepting the Terms of Service.
+  --ip-address: string # The IP address of the user accepting the Terms of Service.
 ]: any -> record<acceptedBy: string, id: string, ipAddress: string, language: string, termsOfServiceDocumentId: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)/termsOfService/($termsofservicedocumentid)")
-  let body = {acceptedBy: $acceptedBy, ipAddress: $ipAddress} | compact
+  let full_url = (build-url $base ({id: $id, termsofservicedocumentid: $termsofservicedocumentid} | format pattern "/legalEntities/{id}/termsOfService/{termsofservicedocumentid}"))
+  let body = {"acceptedBy": $accepted_by, "ipAddress": $ip_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -692,7 +692,7 @@ export def "legal-entities-terms-of-service-acceptance-infos get-legalEntities-i
 ]: nothing -> record<data: table<acceptedBy: string, acceptedFor: string, createdAt: string, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/legalEntities/($id)/termsOfServiceAcceptanceInfos")
+  let full_url = (build-url $base ({id: $id} | format pattern "/legalEntities/{id}/termsOfServiceAcceptanceInfos"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -737,7 +737,7 @@ export def "themes get-themes-id" [
 ]: nothing -> record<createdAt: string, description: string, id: string, properties: record, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/themes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/themes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -757,15 +757,15 @@ export def "transfer-instruments post-transferInstruments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  bankAccount: record # shape: {accountIdentification?: any, accountType?: string, countryCode?: string}
-  legalEntityId: string # The unique identifier of the [legal entity](https://docs.adyen.com/api-explorer/legalentity/latest/post/legalEntities#responses-200-id) that owns the transfer instrument.
+  bank_account: record # shape: {accountIdentification?: any, accountType?: string, countryCode?: string}
+  legal_entity_id: string # The unique identifier of the [legal entity](https://docs.adyen.com/api-explorer/legalentity/latest/post/legalEntities#responses-200-id) that owns the transfer instrument.
   type: string@type-completer-3 # The type of transfer instrument.  Possible value: **bankAccount**.
 ]: any -> record<bankAccount: record<accountIdentification: any, accountType: string, countryCode: string>, capabilities: record, documentDetails: table<active: bool, description: string, fileName: string, id: string, modificationDate: string, type: string>, id: string, legalEntityId: string, problems: table<entity: record, verificationErrors: list>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transferInstruments")
-  let body = {bankAccount: $bankAccount, legalEntityId: $legalEntityId, type: $type} | compact
+  let body = {"bankAccount": $bank_account, "legalEntityId": $legal_entity_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -789,7 +789,7 @@ export def "transfer-instruments delete-transferInstruments-id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transferInstruments/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transferInstruments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -812,7 +812,7 @@ export def "transfer-instruments get-transferInstruments-id" [
 ]: nothing -> record<bankAccount: record<accountIdentification: any, accountType: string, countryCode: string>, capabilities: record, documentDetails: table<active: bool, description: string, fileName: string, id: string, modificationDate: string, type: string>, id: string, legalEntityId: string, problems: table<entity: record, verificationErrors: list>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transferInstruments/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/transferInstruments/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -833,15 +833,15 @@ export def "transfer-instruments patch-transferInstruments-id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  bankAccount: record # shape: {accountIdentification?: any, accountType?: string, countryCode?: string}
-  legalEntityId: string # The unique identifier of the [legal entity](https://docs.adyen.com/api-explorer/legalentity/latest/post/legalEntities#responses-200-id) that owns the transfer instrument.
+  bank_account: record # shape: {accountIdentification?: any, accountType?: string, countryCode?: string}
+  legal_entity_id: string # The unique identifier of the [legal entity](https://docs.adyen.com/api-explorer/legalentity/latest/post/legalEntities#responses-200-id) that owns the transfer instrument.
   type: string@type-completer-3 # The type of transfer instrument.  Possible value: **bankAccount**.
 ]: any -> record<bankAccount: record<accountIdentification: any, accountType: string, countryCode: string>, capabilities: record, documentDetails: table<active: bool, description: string, fileName: string, id: string, modificationDate: string, type: string>, id: string, legalEntityId: string, problems: table<entity: record, verificationErrors: list>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/transferInstruments/($id)")
-  let body = {bankAccount: $bankAccount, legalEntityId: $legalEntityId, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/transferInstruments/{id}"))
+  let body = {"bankAccount": $bank_account, "legalEntityId": $legal_entity_id, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

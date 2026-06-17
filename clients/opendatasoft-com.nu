@@ -153,7 +153,7 @@ export def "pages get" [
 ]: nothing -> record<links: table<href: string, rel: string>, page: record<description: string, slug: string, title: record<en: string, fr: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pages/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/pages/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,7 +176,7 @@ export def "catalog get" [
 ]: nothing -> record<links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($source)")
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,7 +209,7 @@ export def "aggregates aggregateDatasets" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/aggregates" $qp)
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/aggregates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,7 +247,7 @@ export def "datasets list" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets" $qp)
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/datasets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -276,7 +276,7 @@ export def "datasets get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -310,7 +310,7 @@ export def "datasets-aggregates aggregateRecords" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/aggregates" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/aggregates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,7 +320,7 @@ export def "datasets-aggregates aggregateRecords" [
 #
 # GET /{source}/datasets/{dataset_id}/attachments
 # operationId: getDatasetAttachements
-export def "datasets-attachments get" [
+export def "datasets-attachments get-dataset-attachements" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -334,7 +334,7 @@ export def "datasets-attachments get" [
 ]: nothing -> record<attachments: table<href: string, metas: record>, links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/attachments")
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,7 +344,7 @@ export def "datasets-attachments get" [
 #
 # GET /{source}/datasets/{dataset_id}/attachments/{attachment_id}
 # operationId: downloadDatasetAttachement
-export def "datasets-attachments downloadDatasetAttachement" [
+export def "datasets-attachments download-dataset-attachement" [
   source: string
   dataset_id: string
   attachment_id: string
@@ -359,7 +359,7 @@ export def "datasets-attachments downloadDatasetAttachement" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/attachments/($attachment_id)")
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id, attachment_id: $attachment_id} | format pattern "/{source}/datasets/{dataset_id}/attachments/{attachment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,7 +369,7 @@ export def "datasets-attachments downloadDatasetAttachement" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/csv
 # operationId: exportRecordsCSV
-export def "datasets-exports-csv exportRecordsCSV" [
+export def "datasets-exports-csv export-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -395,7 +395,7 @@ export def "datasets-exports-csv exportRecordsCSV" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/exports/csv" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/csv") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -405,7 +405,7 @@ export def "datasets-exports-csv exportRecordsCSV" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/geojson
 # operationId: exportRecordsGEOJSON
-export def "datasets-exports-geojson exportRecordsGEOJSON" [
+export def "datasets-exports-geojson export-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -432,7 +432,7 @@ export def "datasets-exports-geojson exportRecordsGEOJSON" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "pretty" $pretty "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/exports/geojson" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/geojson") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -442,7 +442,7 @@ export def "datasets-exports-geojson exportRecordsGEOJSON" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/ical
 # operationId: exportRecordsICAL
-export def "datasets-exports-ical exportRecordsICAL" [
+export def "datasets-exports-ical export-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -468,7 +468,7 @@ export def "datasets-exports-ical exportRecordsICAL" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/exports/ical" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/ical") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -478,7 +478,7 @@ export def "datasets-exports-ical exportRecordsICAL" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/json
 # operationId: exportRecordsJSON
-export def "datasets-exports-json exportRecordsJSON" [
+export def "datasets-exports-json export-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -505,7 +505,7 @@ export def "datasets-exports-json exportRecordsJSON" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/exports/json" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -515,7 +515,7 @@ export def "datasets-exports-json exportRecordsJSON" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/ov2
 # operationId: exportRecordsOV2
-export def "datasets-exports-ov2 exportRecordsOV2" [
+export def "datasets-exports-ov2 export-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -541,7 +541,7 @@ export def "datasets-exports-ov2 exportRecordsOV2" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/exports/ov2" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/ov2") $qp)
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -551,7 +551,7 @@ export def "datasets-exports-ov2 exportRecordsOV2" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/shp
 # operationId: exportRecordsSHP
-export def "datasets-exports-shp exportRecordsSHP" [
+export def "datasets-exports-shp export-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -577,7 +577,7 @@ export def "datasets-exports-shp exportRecordsSHP" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/exports/shp" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/shp") $qp)
   let accept_val = "application/zip"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -587,7 +587,7 @@ export def "datasets-exports-shp exportRecordsSHP" [
 #
 # GET /{source}/datasets/{dataset_id}/exports/xls
 # operationId: exportRecordsXLS
-export def "datasets-exports-xls exportRecordsXLS" [
+export def "datasets-exports-xls export-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -613,7 +613,7 @@ export def "datasets-exports-xls exportRecordsXLS" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/exports/xls" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/exports/xls") $qp)
   let accept_val = "xls"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -623,7 +623,7 @@ export def "datasets-exports-xls exportRecordsXLS" [
 #
 # GET /{source}/datasets/{dataset_id}/facets
 # operationId: getRecordsFacets
-export def "datasets-facets get" [
+export def "datasets-facets get-records" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -644,7 +644,7 @@ export def "datasets-facets get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/facets" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/facets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -654,7 +654,7 @@ export def "datasets-facets get" [
 #
 # PUT /{source}/datasets/{dataset_id}/feedback
 # operationId: sendDatasetFeedback
-export def "datasets-feedback sendDatasetFeedback" [
+export def "datasets-feedback send" [
   source: string
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -666,15 +666,15 @@ export def "datasets-feedback sendDatasetFeedback" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --comment: string
-  --newValues: record # New record value
+  --new-values: record # New record value
   --recordid: string # Feedback entry's recordid
   --schema: record # Record schema
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/feedback")
-  let body = {comment: $comment, newValues: $newValues, recordid: $recordid, schema: $schema} | compact
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/feedback"))
+  let body = {"comment": $comment, "newValues": $new_values, "recordid": $recordid, "schema": $schema} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -702,7 +702,7 @@ export def "datasets-files get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thumbnail_size" $thumbnail_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/files/($file_id)" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id, file_id: $file_id} | format pattern "/{source}/datasets/{dataset_id}/files/{file_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -740,7 +740,7 @@ export def "datasets-records list" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "where" $qp_where "multi") (serialize-qp "group_by" $group_by "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "order_by" $order_by "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/records" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/records") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -769,7 +769,7 @@ export def "datasets-records get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/records/($record_id)" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id, record_id: $record_id} | format pattern "/{source}/datasets/{dataset_id}/records/{record_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -797,7 +797,7 @@ export def "datasets-reuses list" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/reuses" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/reuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -824,7 +824,7 @@ export def "datasets-reuses get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/reuses/($reuse_id)" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id, reuse_id: $reuse_id} | format pattern "/{source}/datasets/{dataset_id}/reuses/{reuse_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -850,7 +850,7 @@ export def "datasets-snapshots get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/snapshots" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id} | format pattern "/{source}/datasets/{dataset_id}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -860,7 +860,7 @@ export def "datasets-snapshots get" [
 #
 # GET /{source}/datasets/{dataset_id}/snapshots/{snapshot_id}
 # operationId: downloadDatasetSnapshot
-export def "datasets-snapshots downloadDatasetSnapshot" [
+export def "datasets-snapshots download" [
   source: string
   dataset_id: string
   snapshot_id: string
@@ -877,7 +877,7 @@ export def "datasets-snapshots downloadDatasetSnapshot" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/datasets/($dataset_id)/snapshots/($snapshot_id)" $qp)
+  let full_url = (build-url $base ({source: $source, dataset_id: $dataset_id, snapshot_id: $snapshot_id} | format pattern "/{source}/datasets/{dataset_id}/snapshots/{snapshot_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -887,7 +887,7 @@ export def "datasets-snapshots downloadDatasetSnapshot" [
 #
 # GET /{source}/exports/csv
 # operationId: exportDatasetsCSV
-export def "exports-csv exportDatasetsCSV" [
+export def "exports-csv export-datasets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -911,7 +911,7 @@ export def "exports-csv exportDatasetsCSV" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar") (serialize-qp "delimiter" $delimiter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/exports/csv" $qp)
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/csv") $qp)
   let accept_val = "text/csv"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -921,7 +921,7 @@ export def "exports-csv exportDatasetsCSV" [
 #
 # GET /{source}/exports/json
 # operationId: exportDatasetsJson
-export def "exports-json exportDatasetsJson" [
+export def "exports-json export-datasets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -945,7 +945,7 @@ export def "exports-json exportDatasetsJson" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "pretty" $pretty "scalar") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/exports/json" $qp)
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/json") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -955,7 +955,7 @@ export def "exports-json exportDatasetsJson" [
 #
 # GET /{source}/exports/rdf
 # operationId: exportDatasetsRDF
-export def "exports-rdf exportDatasetsRDF" [
+export def "exports-rdf export-datasets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -978,7 +978,7 @@ export def "exports-rdf exportDatasetsRDF" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/exports/rdf" $qp)
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/rdf") $qp)
   let accept_val = "application/rdf+xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -988,7 +988,7 @@ export def "exports-rdf exportDatasetsRDF" [
 #
 # GET /{source}/exports/rss
 # operationId: exportDatasetsRSS
-export def "exports-rss exportDatasetsRSS" [
+export def "exports-rss export-datasets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,7 +1011,7 @@ export def "exports-rss exportDatasetsRSS" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/exports/rss" $qp)
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/rss") $qp)
   let accept_val = "text/xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1021,7 +1021,7 @@ export def "exports-rss exportDatasetsRSS" [
 #
 # GET /{source}/exports/ttl
 # operationId: exportDatasetsTTL
-export def "exports-ttl exportDatasetsTTL" [
+export def "exports-ttl export-datasets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1044,7 +1044,7 @@ export def "exports-ttl exportDatasetsTTL" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/exports/ttl" $qp)
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/ttl") $qp)
   let accept_val = "text/turtle"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1054,7 +1054,7 @@ export def "exports-ttl exportDatasetsTTL" [
 #
 # GET /{source}/exports/xls
 # operationId: exportDatasetsXLS
-export def "exports-xls exportDatasetsXLS" [
+export def "exports-xls export-datasets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1077,7 +1077,7 @@ export def "exports-xls exportDatasetsXLS" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "where" $qp_where "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "multi") (serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "timezone" $timezone "scalar") (serialize-qp "include_app_metas" $include_app_metas "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/exports/xls" $qp)
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/exports/xls") $qp)
   let accept_val = "xls"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1087,7 +1087,7 @@ export def "exports-xls exportDatasetsXLS" [
 #
 # GET /{source}/facets
 # operationId: getDatasetsFacets
-export def "facets get" [
+export def "facets get-datasets" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1107,7 +1107,7 @@ export def "facets get" [
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "facet" $facet "multi") (serialize-qp "refine" $refine "multi") (serialize-qp "exclude" $exclude "multi") (serialize-qp "where" $qp_where "multi") (serialize-qp "search" $search "multi") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($source)/facets" $qp)
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/facets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1117,7 +1117,7 @@ export def "facets get" [
 #
 # GET /{source}/metadata_templates
 # operationId: getMetadataTemplatesTypes
-export def "metadata-templates get-by-source" [
+export def "metadata-templates get-metadata-templates-types" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,7 +1130,7 @@ export def "metadata-templates get-by-source" [
 ]: nothing -> record<links: table<href: string, rel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($source)/metadata_templates")
+  let full_url = (build-url $base ({source: $source} | format pattern "/{source}/metadata_templates"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1140,7 +1140,7 @@ export def "metadata-templates get-by-source" [
 #
 # GET /{source}/metadata_templates/{metadata_template_type}
 # operationId: getMetadataTemplatesType
-export def "metadata-templates get-by-source-metadata_template_type" [
+export def "metadata-templates get-metadata-templates-type" [
   source: string
   metadata_template_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1154,7 +1154,7 @@ export def "metadata-templates get-by-source-metadata_template_type" [
 ]: nothing -> record<links: table<href: string, rel: string>, metadata_templates: table<links: list, metadata_template: record>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($source)/metadata_templates/($metadata_template_type)")
+  let full_url = (build-url $base ({source: $source, metadata_template_type: $metadata_template_type} | format pattern "/{source}/metadata_templates/{metadata_template_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1164,7 +1164,7 @@ export def "metadata-templates get-by-source-metadata_template_type" [
 #
 # GET /{source}/metadata_templates/{metadata_template_type}/{metadata_template_name}
 # operationId: getMetadataTemplate
-export def "metadata-templates get-by-source-metadata_template_type-metadata_template_name" [
+export def "metadata-templates get" [
   source: string
   metadata_template_type: string
   metadata_template_name: string
@@ -1179,7 +1179,7 @@ export def "metadata-templates get-by-source-metadata_template_type-metadata_tem
 ]: nothing -> record<links: table<href: string, rel: string>, metadata_template: record<name: string, schema: list<record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($source)/metadata_templates/($metadata_template_type)/($metadata_template_name)")
+  let full_url = (build-url $base ({source: $source, metadata_template_type: $metadata_template_type, metadata_template_name: $metadata_template_name} | format pattern "/{source}/metadata_templates/{metadata_template_type}/{metadata_template_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

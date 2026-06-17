@@ -103,13 +103,13 @@ export def "travel-analytics-air-traffic-busiest-period get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cityCode: string # Code for the city following IATA standard. [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx) - e.g. BOS for Boston (e.g. MAD)
+  --city-code: string # Code for the city following IATA standard. [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx) - e.g. BOS for Boston (e.g. MAD)
   --period: string # time period (year) of the statistics.  Year for which the statistic are requested following [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601)  (e.g. 2017)
   --direction: string@direction-completer # Use ARRIVING to have statistics on travelers coming to the city or DEPARTING for statistics on travelers leaving the city.  By default, statistics are given on travelers ARRIVING the city.  (default: ARRIVING, e.g. ARRIVING)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cityCode" $cityCode "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cityCode" $city_code "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/travel/analytics/air-traffic/busiest-period" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

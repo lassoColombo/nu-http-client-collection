@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "asset listAssets" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "asset list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /asset
 # operationId: listAssets
-export def "asset listAssets" [
+export def "asset list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,13 +102,13 @@ export def "asset listAssets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updatedAfter: string # Updated After (default: 2015-05-05T00:00:00.000Z)
+  --updated-after: string # Updated After (default: 2015-05-05T00:00:00.000Z)
   --limit: int # Limit the the number of items to be returned per page. For example: 5. (format: int32, default: 100)
   --aliases: oneof<nothing, bool> # Flag to display Legacy and Provider Ids. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updatedAfter" $updatedAfter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "updatedAfter" $updated_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/asset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "asset listAssets" [
 # GET /asset/{assetId}
 # operationId: getAsset
 export def "asset get" [
-  assetId: string
+  asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "asset get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/asset/($assetId)" $qp)
+  let full_url = (build-url $base ({asset_id: $asset_id} | format pattern "/asset/{asset_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,7 +145,7 @@ export def "asset get" [
 # GET /asset/{assetId}/contributor
 # operationId: getAssetContributors
 export def "asset-contributor get" [
-  assetId: string
+  asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "asset-contributor get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/asset/($assetId)/contributor" $qp)
+  let full_url = (build-url $base ({asset_id: $asset_id} | format pattern "/asset/{asset_id}/contributor") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,7 +169,7 @@ export def "asset-contributor get" [
 #
 # GET /catalogue
 # operationId: listCatalogues
-export def "catalogue listCatalogues" [
+export def "catalogue list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "catalogue listCatalogues" [
 # GET /catalogue/{catalogueId}
 # operationId: getCatalogue
 export def "catalogue get" [
-  catalogueId: string
+  catalogue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "catalogue get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/catalogue/($catalogueId)")
+  let full_url = (build-url $base ({catalogue_id: $catalogue_id} | format pattern "/catalogue/{catalogue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -214,8 +214,8 @@ export def "catalogue get" [
 #
 # GET /catalogue/{catalogueId}/asset
 # operationId: getCatalogueAsset
-export def "catalogue-asset list" [
-  catalogueId: string
+export def "catalogue-asset get" [
+  catalogue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,14 +227,14 @@ export def "catalogue-asset list" [
   --title: string # The query string for a title search
   --start: string # The Start Date for the catalogue date range. (default: 2015-05-05T00:00:00)
   --end: string # The End Date for the catalogue date range. (default: 2015-05-06T00:00:00)
-  --updatedAfter: string # Retrieve items only that have been updated after this point. (default: 2015-05-06T00:00:00)
+  --updated-after: string # Retrieve items only that have been updated after this point. (default: 2015-05-06T00:00:00)
   --limit: float # Restrict number of returned items Min = 1, Max = 500. (default: 500)
   --aliases: oneof<nothing, bool> # Flag to display Legacy and Provider Ids. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "updatedAfter" $updatedAfter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalogue/($catalogueId)/asset" $qp)
+  let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "updatedAfter" $updated_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({catalogue_id: $catalogue_id} | format pattern "/catalogue/{catalogue_id}/asset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,9 +244,9 @@ export def "catalogue-asset list" [
 #
 # GET /catalogue/{catalogueId}/asset/{assetId}
 # operationId: getCatalogueAssetDetail
-export def "catalogue-asset get" [
-  catalogueId: string
-  assetId: string
+export def "catalogue-asset get-catalogue-asset-detail" [
+  catalogue_id: string
+  asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "catalogue-asset get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/catalogue/($catalogueId)/asset/($assetId)")
+  let full_url = (build-url $base ({catalogue_id: $catalogue_id, asset_id: $asset_id} | format pattern "/catalogue/{catalogue_id}/asset/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,7 +268,7 @@ export def "catalogue-asset get" [
 #
 # GET /channel
 # operationId: listChannels
-export def "channel listChannels" [
+export def "channel list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,17 +277,17 @@ export def "channel listChannels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --platformId: string # The identifier for the selected platform. Multiple platforms can be passed to the API without a region Id. Passing multiple platforms without a region will not return epg numbers as these are linked to a platform and region. (default: d3b26caa-8c7d-5f97-9eff-40fcf1a6f8d3)
-  --regionId: string # The platform region ID for the channel selection. (default: afa4f624-da9b-54ce-b514-570345dbbdce)
+  --platform-id: string # The identifier for the selected platform. Multiple platforms can be passed to the API without a region Id. Passing multiple platforms without a region will not return epg numbers as these are linked to a platform and region. (default: d3b26caa-8c7d-5f97-9eff-40fcf1a6f8d3)
+  --region-id: string # The platform region ID for the channel selection. (default: afa4f624-da9b-54ce-b514-570345dbbdce)
   --aliases: oneof<nothing, bool> # Flag to display Legacy and Provider Ids. (default: true)
   --date: string # Date of the Channel State to select, this will display channel names and attributes in the future or past. (default: 2018-09-15)
-  --scheduleStart: string # The Start Date for the schedule. (default: 2015-05-05T00:00:00)
-  --scheduleEnd: string # The End Date for the schedule. (default: 2015-05-06T00:00:00)
-  --scheduleUpdatedSince: string # Schedule Updated Since (default: 2015-05-05T00:00:00)
+  --schedule-start: string # The Start Date for the schedule. (default: 2015-05-05T00:00:00)
+  --schedule-end: string # The End Date for the schedule. (default: 2015-05-06T00:00:00)
+  --schedule-updated-since: string # Schedule Updated Since (default: 2015-05-05T00:00:00)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "platformId" $platformId "scalar") (serialize-qp "regionId" $regionId "scalar") (serialize-qp "aliases" $aliases "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "scheduleStart" $scheduleStart "scalar") (serialize-qp "scheduleEnd" $scheduleEnd "scalar") (serialize-qp "scheduleUpdatedSince" $scheduleUpdatedSince "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "platformId" $platform_id "scalar") (serialize-qp "regionId" $region_id "scalar") (serialize-qp "aliases" $aliases "scalar") (serialize-qp "date" $date "scalar") (serialize-qp "scheduleStart" $schedule_start "scalar") (serialize-qp "scheduleEnd" $schedule_end "scalar") (serialize-qp "scheduleUpdatedSince" $schedule_updated_since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -299,7 +299,7 @@ export def "channel listChannels" [
 # GET /channel/{channelId}
 # operationId: getChannel
 export def "channel get" [
-  channelId: string
+  channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -313,7 +313,7 @@ export def "channel get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/channel/($channelId)" $qp)
+  let full_url = (build-url $base ({channel_id: $channel_id} | format pattern "/channel/{channel_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,7 +323,7 @@ export def "channel get" [
 #
 # GET /contributor
 # operationId: listContributor
-export def "contributor listContributor" [
+export def "contributor list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,13 +332,13 @@ export def "contributor listContributor" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updatedAfter: string # Updated After (default: 2015-05-05T00:00:00.000Z)
+  --updated-after: string # Updated After (default: 2015-05-05T00:00:00.000Z)
   --limit: int # Limit the the number of items to be returned per page. For example: 5. (format: int32, default: 100)
   --aliases: oneof<nothing, bool> # Flag to display Legacy and Provider Ids. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updatedAfter" $updatedAfter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "updatedAfter" $updated_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contributor" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -350,7 +350,7 @@ export def "contributor listContributor" [
 # GET /contributor/{contributorId}
 # operationId: getContributor
 export def "contributor get" [
-  contributorId: string
+  contributor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "contributor get" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contributor/($contributorId)" $qp)
+  let full_url = (build-url $base ({contributor_id: $contributor_id} | format pattern "/contributor/{contributor_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,7 +374,7 @@ export def "contributor get" [
 #
 # GET /feature
 # operationId: listFeatures
-export def "feature listFeatures" [
+export def "feature list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "feature listFeatures" [
 #
 # GET /feature-type
 # operationId: listFeatureTypes
-export def "feature-type listFeatureTypes" [
+export def "feature-type list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "feature-type listFeatureTypes" [
 # GET /feature/{featureId}
 # operationId: getFeature
 export def "feature get" [
-  featureId: string
+  feature_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,7 +436,7 @@ export def "feature get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/feature/($featureId)")
+  let full_url = (build-url $base ({feature_id: $feature_id} | format pattern "/feature/{feature_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,7 +446,7 @@ export def "feature get" [
 #
 # GET /platform
 # operationId: listPlatforms
-export def "platform listPlatforms" [
+export def "platform list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "platform listPlatforms" [
 # GET /platform/{platformId}
 # operationId: getPlatform
 export def "platform get" [
-  platformId: string
+  platform_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "platform get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/platform/($platformId)")
+  let full_url = (build-url $base ({platform_id: $platform_id} | format pattern "/platform/{platform_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -493,8 +493,8 @@ export def "platform get" [
 #
 # GET /platform/{platformId}/region
 # operationId: listPlatformRegions
-export def "platform-region listPlatformRegions" [
-  platformId: string
+export def "platform-region list" [
+  platform_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "platform-region listPlatformRegions" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/platform/($platformId)/region" $qp)
+  let full_url = (build-url $base ({platform_id: $platform_id} | format pattern "/platform/{platform_id}/region") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,7 +518,7 @@ export def "platform-region listPlatformRegions" [
 #
 # GET /schedule
 # operationId: listSchedule
-export def "schedule listSchedule" [
+export def "schedule list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,14 +527,14 @@ export def "schedule listSchedule" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --channelId: string # The identifier for the selected channel.
+  --channel-id: string # The identifier for the selected channel.
   --start: string # The Start Date for the schedule. (default: 2015-05-05T00:00:00)
   --end: string # The End Date for the schedule. (default: 2015-05-06T00:00:00)
   --aliases: oneof<nothing, bool> # Flag to display Legacy and Provider Ids. (default: true)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "channelId" $channelId "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "channelId" $channel_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "aliases" $aliases "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/schedule" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

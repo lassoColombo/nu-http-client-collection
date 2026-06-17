@@ -138,7 +138,7 @@ export def "app post" [
   --idempotency-key: string # The request's idempotency key
   --metadata: record # nullable
   name: string # e.g. My first application
-  --rateLimit: int # nullable, e.g. 1000
+  --rate-limit: int # nullable, e.g. 1000
   --uid: string # Optional unique identifier for the application (nullable, e.g. unique-app-identifier)
 ]: any -> record<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string> {
   let input = $in
@@ -146,7 +146,7 @@ export def "app post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "get_if_exists" $get_if_exists "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/app/" $qp)
-  let body = {metadata: $metadata, name: $name, rateLimit: $rateLimit, uid: $uid} | compact
+  let body = {"metadata": $metadata, "name": $name, "rateLimit": $rate_limit, "uid": $uid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -173,7 +173,7 @@ export def "app delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/app/{app_id}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -199,7 +199,7 @@ export def "app get" [
 ]: nothing -> record<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/app/{app_id}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -224,14 +224,14 @@ export def "app put" [
   --idempotency-key: string # The request's idempotency key
   --metadata: record # nullable
   name: string # e.g. My first application
-  --rateLimit: int # nullable, e.g. 1000
+  --rate-limit: int # nullable, e.g. 1000
   --uid: string # Optional unique identifier for the application (nullable, e.g. unique-app-identifier)
 ]: any -> record<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/")
-  let body = {metadata: $metadata, name: $name, rateLimit: $rateLimit, uid: $uid} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/app/{app_id}/"))
+  let body = {"metadata": $metadata, "name": $name, "rateLimit": $rate_limit, "uid": $uid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -268,7 +268,7 @@ export def "app-attempt-endpoint get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "status_code_class" $status_code_class "scalar") (serialize-qp "event_types" $event_types "multi") (serialize-qp "channel" $channel "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/attempt/endpoint/($endpoint_id)/" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/attempt/endpoint/{endpoint_id}/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -305,7 +305,7 @@ export def "app-attempt-msg get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "endpoint_id" $endpoint_id "scalar") (serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "status_code_class" $status_code_class "scalar") (serialize-qp "event_types" $event_types "multi") (serialize-qp "channel" $channel "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/attempt/msg/($msg_id)/" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, msg_id: $msg_id} | format pattern "/api/v1/app/{app_id}/attempt/msg/{msg_id}/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -335,7 +335,7 @@ export def "app-endpoint list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/" $qp)
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/app/{app_id}/endpoint/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -361,9 +361,9 @@ export def "app-endpoint post" [
   --channels: list # List of message channels this endpoint listens to (omit for all) (nullable, e.g. [project_123, group_2])
   --description: string # default: , e.g. An example endpoint name
   --disabled: oneof<nothing, bool> # default: false, e.g. false
-  --filterTypes: list # nullable, e.g. [user.signup, user.deleted]
+  --filter-types: list # nullable, e.g. [user.signup, user.deleted]
   --metadata: record # nullable
-  --rateLimit: int # nullable, e.g. 1000
+  --rate-limit: int # nullable, e.g. 1000
   --secret: string # The endpoint's verification secret. If `null` is passed, a secret is automatically generated. Format: `base64` encoded random bytes optionally prefixed with `whsec_`. Recommended size: 24. (nullable, e.g. whsec_C2FVsBQIhrscChlQIMV+b5sSYspob7oD)
   --uid: string # Optional unique identifier for the endpoint (nullable, e.g. unique-endpoint-identifier)
   --body-url: string # format: uri, e.g. https://example.com/webhook/
@@ -372,8 +372,8 @@ export def "app-endpoint post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/")
-  let body = {channels: $channels, description: $description, disabled: $disabled, filterTypes: $filterTypes, metadata: $metadata, rateLimit: $rateLimit, secret: $secret, uid: $uid, url: $body_url, version: $version} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/app/{app_id}/endpoint/"))
+  let body = {"channels": $channels, "description": $description, "disabled": $disabled, "filterTypes": $filter_types, "metadata": $metadata, "rateLimit": $rate_limit, "secret": $secret, "uid": $uid, "url": $body_url, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -387,8 +387,8 @@ export def "app-endpoint post" [
 # DELETE /api/v1/app/{app_id}/endpoint/{endpoint_id}/
 # operationId: delete_endpoint_api_v1_app__app_id__endpoint__endpoint_id___delete
 export def "app-endpoint delete" [
-  endpoint_id: string
   app_id: string
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "app-endpoint delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/")
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -414,8 +414,8 @@ export def "app-endpoint delete" [
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/
 # operationId: get_endpoint_api_v1_app__app_id__endpoint__endpoint_id___get
 export def "app-endpoint get" [
-  endpoint_id: string
   app_id: string
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,7 +428,7 @@ export def "app-endpoint get" [
 ]: nothing -> record<channels: list<string>, createdAt: string, description: string, disabled: bool, filterTypes: list<string>, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/")
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -441,8 +441,8 @@ export def "app-endpoint get" [
 # PUT /api/v1/app/{app_id}/endpoint/{endpoint_id}/
 # operationId: update_endpoint_api_v1_app__app_id__endpoint__endpoint_id___put
 export def "app-endpoint put" [
-  endpoint_id: string
   app_id: string
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,9 +455,9 @@ export def "app-endpoint put" [
   --channels: list # List of message channels this endpoint listens to (omit for all) (nullable, e.g. [project_123, group_2])
   --description: string # default: , e.g. An example endpoint name
   --disabled: oneof<nothing, bool> # default: false, e.g. false
-  --filterTypes: list # nullable, e.g. [user.signup, user.deleted]
+  --filter-types: list # nullable, e.g. [user.signup, user.deleted]
   --metadata: record # nullable
-  --rateLimit: int # nullable, e.g. 1000
+  --rate-limit: int # nullable, e.g. 1000
   --uid: string # Optional unique identifier for the endpoint (nullable, e.g. unique-endpoint-identifier)
   --body-url: string # format: uri, e.g. https://example.com/webhook/
   version: int # e.g. 1
@@ -465,8 +465,8 @@ export def "app-endpoint put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/")
-  let body = {channels: $channels, description: $description, disabled: $disabled, filterTypes: $filterTypes, metadata: $metadata, rateLimit: $rateLimit, uid: $uid, url: $body_url, version: $version} | compact
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/"))
+  let body = {"channels": $channels, "description": $description, "disabled": $disabled, "filterTypes": $filter_types, "metadata": $metadata, "rateLimit": $rate_limit, "uid": $uid, "url": $body_url, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -480,8 +480,8 @@ export def "app-endpoint put" [
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/headers/
 # operationId: get_endpoint_headers_api_v1_app__app_id__endpoint__endpoint_id__headers__get
 export def "app-endpoint-headers get" [
-  endpoint_id: string
   app_id: string
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,7 +494,7 @@ export def "app-endpoint-headers get" [
 ]: nothing -> record<headers: record, sensitive: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/headers/")
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/headers/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -523,8 +523,8 @@ export def "app-endpoint-headers patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/headers/")
-  let body = {headers: $headers} | compact
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/headers/"))
+  let body = {"headers": $headers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -554,8 +554,8 @@ export def "app-endpoint-headers put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/headers/")
-  let body = {headers: $headers} | compact
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/headers/"))
+  let body = {"headers": $headers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -569,8 +569,8 @@ export def "app-endpoint-headers put" [
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/msg/
 # operationId: list_attempted_messages_api_v1_app__app_id__endpoint__endpoint_id__msg__get
 export def "app-endpoint-msg get" [
-  endpoint_id: string
   app_id: string
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "app-endpoint-msg get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/msg/" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/msg/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -620,8 +620,8 @@ export def "app-endpoint-recover post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/recover/")
-  let body = {since: $since, until: $until} | compact
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/recover/"))
+  let body = {"since": $since, "until": $until} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -652,8 +652,8 @@ export def "app-endpoint-replay-missing post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/replay-missing/")
-  let body = {since: $since, until: $until} | compact
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/replay-missing/"))
+  let body = {"since": $since, "until": $until} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -667,8 +667,8 @@ export def "app-endpoint-replay-missing post" [
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/secret/
 # operationId: get_endpoint_secret_api_v1_app__app_id__endpoint__endpoint_id__secret__get
 export def "app-endpoint-secret get" [
-  endpoint_id: string
   app_id: string
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "app-endpoint-secret get" [
 ]: nothing -> record<key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/secret/")
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/secret/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -694,8 +694,8 @@ export def "app-endpoint-secret get" [
 # POST /api/v1/app/{app_id}/endpoint/{endpoint_id}/secret/rotate/
 # operationId: rotate_endpoint_secret_api_v1_app__app_id__endpoint__endpoint_id__secret_rotate__post
 export def "app-endpoint-secret-rotate post" [
-  endpoint_id: string
   app_id: string
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,8 +710,8 @@ export def "app-endpoint-secret-rotate post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/secret/rotate/")
-  let body = {key: $key} | compact
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/secret/rotate/"))
+  let body = {"key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -725,8 +725,8 @@ export def "app-endpoint-secret-rotate post" [
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/stats/
 # operationId: get_endpoint_stats_api_v1_app__app_id__endpoint__endpoint_id__stats__get
 export def "app-endpoint-stats get" [
-  endpoint_id: string
   app_id: string
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +742,7 @@ export def "app-endpoint-stats get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/stats/" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/stats/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -755,8 +755,8 @@ export def "app-endpoint-stats get" [
 # GET /api/v1/app/{app_id}/endpoint/{endpoint_id}/transformation/
 # operationId: get_endpoint_transformation_api_v1_app__app_id__endpoint__endpoint_id__transformation__get
 export def "app-endpoint-transformation get" [
-  endpoint_id: string
   app_id: string
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "app-endpoint-transformation get" [
 ]: nothing -> record<code: string, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/transformation/")
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/transformation/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -799,8 +799,8 @@ export def "app-endpoint-transformation patch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/endpoint/($endpoint_id)/transformation/")
-  let body = {code: $code, enabled: $enabled} | compact
+  let full_url = (build-url $base ({app_id: $app_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/endpoint/{endpoint_id}/transformation/"))
+  let body = {"code": $code, "enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -830,7 +830,7 @@ export def "app-integration list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/integration/" $qp)
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/app/{app_id}/integration/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -858,8 +858,8 @@ export def "app-integration post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/integration/")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/app/{app_id}/integration/"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -873,8 +873,8 @@ export def "app-integration post" [
 # DELETE /api/v1/app/{app_id}/integration/{integ_id}/
 # operationId: delete_integration_api_v1_app__app_id__integration__integ_id___delete
 export def "app-integration delete" [
-  integ_id: string
   app_id: string
+  integ_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "app-integration delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/integration/($integ_id)/")
+  let full_url = (build-url $base ({app_id: $app_id, integ_id: $integ_id} | format pattern "/api/v1/app/{app_id}/integration/{integ_id}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -900,8 +900,8 @@ export def "app-integration delete" [
 # GET /api/v1/app/{app_id}/integration/{integ_id}/
 # operationId: get_integration_api_v1_app__app_id__integration__integ_id___get
 export def "app-integration get" [
-  integ_id: string
   app_id: string
+  integ_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "app-integration get" [
 ]: nothing -> record<createdAt: string, id: string, name: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/integration/($integ_id)/")
+  let full_url = (build-url $base ({app_id: $app_id, integ_id: $integ_id} | format pattern "/api/v1/app/{app_id}/integration/{integ_id}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -927,8 +927,8 @@ export def "app-integration get" [
 # PUT /api/v1/app/{app_id}/integration/{integ_id}/
 # operationId: update_integration_api_v1_app__app_id__integration__integ_id___put
 export def "app-integration put" [
-  integ_id: string
   app_id: string
+  integ_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,8 +943,8 @@ export def "app-integration put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/integration/($integ_id)/")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({app_id: $app_id, integ_id: $integ_id} | format pattern "/api/v1/app/{app_id}/integration/{integ_id}/"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -958,8 +958,8 @@ export def "app-integration put" [
 # GET /api/v1/app/{app_id}/integration/{integ_id}/key/
 # operationId: get_integration_key_api_v1_app__app_id__integration__integ_id__key__get
 export def "app-integration-key get" [
-  integ_id: string
   app_id: string
+  integ_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,7 +972,7 @@ export def "app-integration-key get" [
 ]: nothing -> record<key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/integration/($integ_id)/key/")
+  let full_url = (build-url $base ({app_id: $app_id, integ_id: $integ_id} | format pattern "/api/v1/app/{app_id}/integration/{integ_id}/key/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -985,8 +985,8 @@ export def "app-integration-key get" [
 # POST /api/v1/app/{app_id}/integration/{integ_id}/key/rotate/
 # operationId: rotate_integration_key_api_v1_app__app_id__integration__integ_id__key_rotate__post
 export def "app-integration-key-rotate post" [
-  integ_id: string
   app_id: string
+  integ_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -999,7 +999,7 @@ export def "app-integration-key-rotate post" [
 ]: nothing -> record<key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/integration/($integ_id)/key/rotate/")
+  let full_url = (build-url $base ({app_id: $app_id, integ_id: $integ_id} | format pattern "/api/v1/app/{app_id}/integration/{integ_id}/key/rotate/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1032,7 +1032,7 @@ export def "app-msg list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "event_types" $event_types "multi") (serialize-qp "channel" $channel "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/msg/" $qp)
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/app/{app_id}/msg/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1059,17 +1059,17 @@ export def "app-msg post" [
   --idempotency-key: string # The request's idempotency key
   --application: record # shape: {metadata?: record, name: string, rateLimit?: int, uid?: string}
   --channels: list # List of free-form identifiers that endpoints can filter by (nullable, e.g. [project_123, group_2])
-  --eventId: string # Optional unique identifier for the message (nullable, e.g. evt_pNZKtWg8Azow)
-  eventType: string # e.g. user.signup
+  --event-id: string # Optional unique identifier for the message (nullable, e.g. evt_pNZKtWg8Azow)
+  event_type: string # e.g. user.signup
   payload: record # e.g. {email: test@example.com, username: test_user}
-  --payloadRetentionPeriod: int # The retention period for the payload (in days). (default: 90, e.g. 90)
+  --payload-retention-period: int # The retention period for the payload (in days). (default: 90, e.g. 90)
 ]: any -> record<channels: list<string>, eventId: string, eventType: string, id: string, payload: record, timestamp: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_content" $with_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/msg/" $qp)
-  let body = {application: $application, channels: $channels, eventId: $eventId, eventType: $eventType, payload: $payload, payloadRetentionPeriod: $payloadRetentionPeriod} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/app/{app_id}/msg/") $qp)
+  let body = {"application": $application, "channels": $channels, "eventId": $event_id, "eventType": $event_type, "payload": $payload, "payloadRetentionPeriod": $payload_retention_period} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1083,8 +1083,8 @@ export def "app-msg post" [
 # GET /api/v1/app/{app_id}/msg/{msg_id}/
 # operationId: get_message_api_v1_app__app_id__msg__msg_id___get
 export def "app-msg get" [
-  msg_id: string
   app_id: string
+  msg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1097,7 +1097,7 @@ export def "app-msg get" [
 ]: nothing -> record<channels: list<string>, eventId: string, eventType: string, id: string, payload: record, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/msg/($msg_id)/")
+  let full_url = (build-url $base ({app_id: $app_id, msg_id: $msg_id} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1135,7 +1135,7 @@ export def "app-msg-attempt list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "endpoint_id" $endpoint_id "scalar") (serialize-qp "event_types" $event_types "multi") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/msg/($msg_id)/attempt/" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, msg_id: $msg_id} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/attempt/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1148,9 +1148,9 @@ export def "app-msg-attempt list" [
 # GET /api/v1/app/{app_id}/msg/{msg_id}/attempt/{attempt_id}/
 # operationId: get_attempt_api_v1_app__app_id__msg__msg_id__attempt__attempt_id___get
 export def "app-msg-attempt get" [
-  attempt_id: string
-  msg_id: string
   app_id: string
+  msg_id: string
+  attempt_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,7 +1163,7 @@ export def "app-msg-attempt get" [
 ]: nothing -> record<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/msg/($msg_id)/attempt/($attempt_id)/")
+  let full_url = (build-url $base ({app_id: $app_id, msg_id: $msg_id, attempt_id: $attempt_id} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/attempt/{attempt_id}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1176,9 +1176,9 @@ export def "app-msg-attempt get" [
 # DELETE /api/v1/app/{app_id}/msg/{msg_id}/attempt/{attempt_id}/content/
 # operationId: expunge_attempt_content_api_v1_app__app_id__msg__msg_id__attempt__attempt_id__content__delete
 export def "app-msg-attempt-content delete" [
-  attempt_id: string
-  msg_id: string
   app_id: string
+  msg_id: string
+  attempt_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1191,7 +1191,7 @@ export def "app-msg-attempt-content delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/msg/($msg_id)/attempt/($attempt_id)/content/")
+  let full_url = (build-url $base ({app_id: $app_id, msg_id: $msg_id, attempt_id: $attempt_id} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/attempt/{attempt_id}/content/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1204,8 +1204,8 @@ export def "app-msg-attempt-content delete" [
 # DELETE /api/v1/app/{app_id}/msg/{msg_id}/content/
 # operationId: expunge_message_payload_api_v1_app__app_id__msg__msg_id__content__delete
 export def "app-msg-content delete" [
-  msg_id: string
   app_id: string
+  msg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1218,7 +1218,7 @@ export def "app-msg-content delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/msg/($msg_id)/content/")
+  let full_url = (build-url $base ({app_id: $app_id, msg_id: $msg_id} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/content/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1231,8 +1231,8 @@ export def "app-msg-content delete" [
 # GET /api/v1/app/{app_id}/msg/{msg_id}/endpoint/
 # operationId: list_attempted_destinations_api_v1_app__app_id__msg__msg_id__endpoint__get
 export def "app-msg-endpoint get" [
-  msg_id: string
   app_id: string
+  msg_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,7 +1248,7 @@ export def "app-msg-endpoint get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/msg/($msg_id)/endpoint/" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, msg_id: $msg_id} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/endpoint/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1263,8 +1263,8 @@ export def "app-msg-endpoint get" [
 # operationId: list_attempts_for_endpoint_api_v1_app__app_id__msg__msg_id__endpoint__endpoint_id__attempt__get
 @deprecated
 export def "app-msg-endpoint-attempt get" [
-  msg_id: string
   app_id: string
+  msg_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1286,7 +1286,7 @@ export def "app-msg-endpoint-attempt get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "event_types" $event_types "multi") (serialize-qp "channel" $channel "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/msg/($msg_id)/endpoint/($endpoint_id)/attempt/" $qp)
+  let full_url = (build-url $base ({app_id: $app_id, msg_id: $msg_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/endpoint/{endpoint_id}/attempt/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1299,9 +1299,9 @@ export def "app-msg-endpoint-attempt get" [
 # POST /api/v1/app/{app_id}/msg/{msg_id}/endpoint/{endpoint_id}/resend/
 # operationId: resend_webhook_api_v1_app__app_id__msg__msg_id__endpoint__endpoint_id__resend__post
 export def "app-msg-endpoint-resend post" [
-  endpoint_id: string
-  msg_id: string
   app_id: string
+  msg_id: string
+  endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1314,7 +1314,7 @@ export def "app-msg-endpoint-resend post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/app/($app_id)/msg/($msg_id)/endpoint/($endpoint_id)/resend/")
+  let full_url = (build-url $base ({app_id: $app_id, msg_id: $msg_id, endpoint_id: $endpoint_id} | format pattern "/api/v1/app/{app_id}/msg/{msg_id}/endpoint/{endpoint_id}/resend/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1337,13 +1337,13 @@ export def "auth-app-portal-access post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key
-  --featureFlags: list # default: [], e.g. []
+  --feature-flags: list # default: [], e.g. []
 ]: any -> record<token: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/auth/app-portal-access/($app_id)/")
-  let body = {featureFlags: $featureFlags} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/auth/app-portal-access/{app_id}/"))
+  let body = {"featureFlags": $feature_flags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1372,8 +1372,8 @@ export def "auth-app-expire-all post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/auth/app/($app_id)/expire-all/")
-  let body = {expiry: $expiry} | compact
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/auth/app/{app_id}/expire-all/"))
+  let body = {"expiry": $expiry} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1402,7 +1402,7 @@ export def "auth-dashboard-access post" [
 ]: nothing -> record<token: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/auth/dashboard-access/($app_id)/")
+  let full_url = (build-url $base ({app_id: $app_id} | format pattern "/api/v1/auth/dashboard-access/{app_id}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1482,7 +1482,7 @@ export def "background-task get" [
 ]: nothing -> record<data: record, id: string, status: string, task: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/background-task/($task_id)/")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/api/v1/background-task/{task_id}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1536,7 +1536,7 @@ export def "event-type post" [
   --idempotency-key: string # The request's idempotency key
   --archived: oneof<nothing, bool> # default: false, e.g. false
   description: string # e.g. A user has signed up
-  --featureFlag: string # nullable, e.g. cool-new-feature
+  --feature-flag: string # nullable, e.g. cool-new-feature
   name: string # e.g. user.signup
   --schemas: record # The schema for the event type for a specific version as a JSON schema. (nullable, e.g. {1: {description: An invoice was paid by a user, properties: {invoiceId: {description: The invoice id, type: string}, userId: {description: The user id, type: string}}, required: [invoiceId, userId], title: Invoice Paid Event, type: object}})
 ]: any -> record<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string> {
@@ -1544,7 +1544,7 @@ export def "event-type post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/event-type/")
-  let body = {archived: $archived, description: $description, featureFlag: $featureFlag, name: $name, schemas: $schemas} | compact
+  let body = {"archived": $archived, "description": $description, "featureFlag": $feature_flag, "name": $name, "schemas": $schemas} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1573,7 +1573,7 @@ export def "event-type delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expunge" $expunge "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/event-type/($event_type_name)/" $qp)
+  let full_url = (build-url $base ({event_type_name: $event_type_name} | format pattern "/api/v1/event-type/{event_type_name}/") $qp)
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1599,7 +1599,7 @@ export def "event-type get" [
 ]: nothing -> record<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/event-type/($event_type_name)/")
+  let full_url = (build-url $base ({event_type_name: $event_type_name} | format pattern "/api/v1/event-type/{event_type_name}/"))
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1624,14 +1624,14 @@ export def "event-type put" [
   --idempotency-key: string # The request's idempotency key
   --archived: oneof<nothing, bool> # default: false, e.g. false
   description: string # e.g. A user has signed up
-  --featureFlag: string # nullable, e.g. cool-new-feature
+  --feature-flag: string # nullable, e.g. cool-new-feature
   --schemas: record # The schema for the event type for a specific version as a JSON schema. (nullable, e.g. {1: {description: An invoice was paid by a user, properties: {invoiceId: {description: The invoice id, type: string}, userId: {description: The user id, type: string}}, required: [invoiceId, userId], title: Invoice Paid Event, type: object}})
 ]: any -> record<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/event-type/($event_type_name)/")
-  let body = {archived: $archived, description: $description, featureFlag: $featureFlag, schemas: $schemas} | compact
+  let full_url = (build-url $base ({event_type_name: $event_type_name} | format pattern "/api/v1/event-type/{event_type_name}/"))
+  let body = {"archived": $archived, "description": $description, "featureFlag": $feature_flag, "schemas": $schemas} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"idempotency-key": $idempotency_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

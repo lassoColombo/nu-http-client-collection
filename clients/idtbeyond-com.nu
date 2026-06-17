@@ -329,7 +329,7 @@ export def "iatu-topups post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/iatu/topups")
-  let body = {amount: $amount, carrier_code: $carrier_code, client_transaction_id: $client_transaction_id, country_code: $country_code, mobile_number: $mobile_number, plan: $plan, product_code: $product_code, terminal_id: $terminal_id} | compact
+  let body = {"amount": $amount, "carrier_code": $carrier_code, "client_transaction_id": $client_transaction_id, "country_code": $country_code, "mobile_number": $mobile_number, "plan": $plan, "product_code": $product_code, "terminal_id": $terminal_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -362,7 +362,7 @@ export def "iatu-topups-reports post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/iatu/topups/reports")
-  let body = {client_transaction_id: $client_transaction_id, date_from: $date_from, date_to: $date_to, to_service_number: $to_service_number, type_of_report: $type_of_report} | compact
+  let body = {"client_transaction_id": $client_transaction_id, "date_from": $date_from, "date_to": $date_to, "to_service_number": $to_service_number, "type_of_report": $type_of_report} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -476,7 +476,7 @@ export def "iatu-topups-reverse post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/iatu/topups/reverse")
-  let body = {client_transaction_id: $client_transaction_id, to_service_number: $to_service_number} | compact
+  let body = {"client_transaction_id": $client_transaction_id, "to_service_number": $to_service_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-idt-beyond-app-id": $x_idt_beyond_app_id, "x-idt-beyond-app-key": $x_idt_beyond_app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

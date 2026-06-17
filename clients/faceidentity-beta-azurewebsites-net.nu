@@ -102,16 +102,16 @@ export def "authentication-customer-registration register" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --city: string # The city of address
-  --companyDescription: string # The company Description
-  companyName: string # The company name of customer
+  --company-description: string # The company Description
+  company_name: string # The company name of customer
   --country: string # The country of address
-  faceRecognitionType: string # The facial recognition type of customer (e.g. AWS or AZURE)
-  --firstName: string # The first name of customer
-  --lastName: string # The last name of customer
+  face_recognition_type: string # The facial recognition type of customer (e.g. AWS or AZURE)
+  --first-name: string # The first name of customer
+  --last-name: string # The last name of customer
   password: string # The password of customer
   --phone: string # The mobile number
   --state: string # The state of customer
-  --streetAddress: string # The street of address
+  --street-address: string # The street of address
   username: string # The username of customer nothing but an email
   --zip: string # The zip code of address
 ]: any -> record<code: string, message: string> {
@@ -119,7 +119,7 @@ export def "authentication-customer-registration register" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication/customer/registration")
-  let body = {city: $city, companyDescription: $companyDescription, companyName: $companyName, country: $country, faceRecognitionType: $faceRecognitionType, firstName: $firstName, lastName: $lastName, password: $password, phone: $phone, state: $state, streetAddress: $streetAddress, username: $username, zip: $zip} | compact
+  let body = {"city": $city, "companyDescription": $company_description, "companyName": $company_name, "country": $country, "faceRecognitionType": $face_recognition_type, "firstName": $first_name, "lastName": $last_name, "password": $password, "phone": $phone, "state": $state, "streetAddress": $street_address, "username": $username, "zip": $zip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +146,7 @@ export def "authentication-customer-token authenticateUser" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication/customer/token")
-  let body = {password: $password, username: $username} | compact
+  let body = {"password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

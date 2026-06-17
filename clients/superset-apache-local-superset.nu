@@ -161,7 +161,7 @@ export def "annotation-layer post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/annotation_layer/")
-  let body = {descr: $descr, name: $name} | compact
+  let body = {"descr": $descr, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,7 +207,7 @@ export def "annotation-layer-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/annotation_layer/related/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/annotation_layer/related/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,7 +229,7 @@ export def "annotation-layer delete-by-pk" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotation_layer/($pk)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/annotation_layer/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +253,7 @@ export def "annotation-layer get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/annotation_layer/($pk)" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/annotation_layer/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -278,8 +278,8 @@ export def "annotation-layer put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotation_layer/($pk)")
-  let body = {descr: $descr, name: $name} | compact
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/annotation_layer/{pk}"))
+  let body = {"descr": $descr, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -304,7 +304,7 @@ export def "annotation-layer-annotation delete-by-pk" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/annotation_layer/($pk)/annotation/" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/annotation_layer/{pk}/annotation/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -328,7 +328,7 @@ export def "annotation-layer-annotation list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/annotation_layer/($pk)/annotation/" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/annotation_layer/{pk}/annotation/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -356,8 +356,8 @@ export def "annotation-layer-annotation post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotation_layer/($pk)/annotation/")
-  let body = {end_dttm: $end_dttm, json_metadata: $json_metadata, long_descr: $long_descr, short_descr: $short_descr, start_dttm: $start_dttm} | compact
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/annotation_layer/{pk}/annotation/"))
+  let body = {"end_dttm": $end_dttm, "json_metadata": $json_metadata, "long_descr": $long_descr, "short_descr": $short_descr, "start_dttm": $start_dttm} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,7 +381,7 @@ export def "annotation-layer-annotation delete-by-pk-annotation_id" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotation_layer/($pk)/annotation/($annotation_id)")
+  let full_url = (build-url $base ({pk: $pk, annotation_id: $annotation_id} | format pattern "/annotation_layer/{pk}/annotation/{annotation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -406,7 +406,7 @@ export def "annotation-layer-annotation get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/annotation_layer/($pk)/annotation/($annotation_id)" $qp)
+  let full_url = (build-url $base ({pk: $pk, annotation_id: $annotation_id} | format pattern "/annotation_layer/{pk}/annotation/{annotation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -435,8 +435,8 @@ export def "annotation-layer-annotation put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/annotation_layer/($pk)/annotation/($annotation_id)")
-  let body = {end_dttm: $end_dttm, json_metadata: $json_metadata, long_descr: $long_descr, short_descr: $short_descr, start_dttm: $start_dttm} | compact
+  let full_url = (build-url $base ({pk: $pk, annotation_id: $annotation_id} | format pattern "/annotation_layer/{pk}/annotation/{annotation_id}"))
+  let body = {"end_dttm": $end_dttm, "json_metadata": $json_metadata, "long_descr": $long_descr, "short_descr": $short_descr, "start_dttm": $start_dttm} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -486,7 +486,7 @@ export def "cachekey-invalidate post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cachekey/invalidate")
-  let body = {datasource_uids: $datasource_uids, datasources: $datasources} | compact
+  let body = {"datasource_uids": $datasource_uids, "datasources": $datasources} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -567,7 +567,7 @@ export def "chart post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chart/")
-  let body = {cache_timeout: $cache_timeout, dashboards: $dashboards, datasource_id: $datasource_id, datasource_name: $datasource_name, datasource_type: $datasource_type, description: $description, owners: $owners, params: $params, query_context: $query_context, slice_name: $slice_name, viz_type: $viz_type} | compact
+  let body = {"cache_timeout": $cache_timeout, "dashboards": $dashboards, "datasource_id": $datasource_id, "datasource_name": $datasource_name, "datasource_type": $datasource_type, "description": $description, "owners": $owners, "params": $params, "query_context": $query_context, "slice_name": $slice_name, "viz_type": $viz_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -621,7 +621,7 @@ export def "chart-data post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chart/data")
-  let body = {datasource: $datasource, force: $force, queries: $queries, result_format: $result_format, result_type: $result_type} | compact
+  let body = {"datasource": $datasource, "force": $force, "queries": $queries, "result_format": $result_format, "result_type": $result_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -644,7 +644,7 @@ export def "chart-data get-by-cache_key" [
 ]: nothing -> record<result: table<annotation_data: list, applied_filters: list, cache_key: string, cache_timeout: int, cached_dttm: string, data: list, error: string, is_cached: bool, query: string, rejected_filters: list, rowcount: int, stacktrace: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/chart/data/($cache_key)")
+  let full_url = (build-url $base ({cache_key: $cache_key} | format pattern "/chart/data/{cache_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -706,7 +706,7 @@ export def "chart-import post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --formData: string # upload file (ZIP) (format: binary)
+  --form-data: string # upload file (ZIP) (format: binary)
   --overwrite: oneof<nothing, bool> # overwrite existing databases?
   --passwords: string # JSON map of passwords for each file
 ]: any -> record<message: string> {
@@ -714,7 +714,7 @@ export def "chart-import post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chart/import/")
-  let body = {formData: $formData, overwrite: $overwrite, passwords: $passwords} | compact
+  let body = {"formData": $form_data, "overwrite": $overwrite, "passwords": $passwords} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -739,7 +739,7 @@ export def "chart-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/chart/related/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/chart/related/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -761,7 +761,7 @@ export def "chart delete-by-pk" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/chart/($pk)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/chart/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -785,7 +785,7 @@ export def "chart get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/chart/($pk)" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/chart/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -818,8 +818,8 @@ export def "chart put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/chart/($pk)")
-  let body = {cache_timeout: $cache_timeout, dashboards: $dashboards, datasource_id: $datasource_id, datasource_type: $datasource_type, description: $description, owners: $owners, params: $params, query_context: $query_context, slice_name: $slice_name, viz_type: $viz_type} | compact
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/chart/{pk}"))
+  let body = {"cache_timeout": $cache_timeout, "dashboards": $dashboards, "datasource_id": $datasource_id, "datasource_type": $datasource_type, "description": $description, "owners": $owners, "params": $params, "query_context": $query_context, "slice_name": $slice_name, "viz_type": $viz_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -844,7 +844,7 @@ export def "chart-cache-screenshot get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/chart/($pk)/cache_screenshot/" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/chart/{pk}/cache_screenshot/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -869,7 +869,7 @@ export def "chart-data get-by-pk" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/chart/($pk)/data/" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/chart/{pk}/data/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -892,7 +892,7 @@ export def "chart-screenshot get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/chart/($pk)/screenshot/($digest)/")
+  let full_url = (build-url $base ({pk: $pk, digest: $digest} | format pattern "/chart/{pk}/screenshot/{digest}/"))
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -915,7 +915,7 @@ export def "chart-thumbnail get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/chart/($pk)/thumbnail/($digest)/")
+  let full_url = (build-url $base ({pk: $pk, digest: $digest} | format pattern "/chart/{pk}/thumbnail/{digest}/"))
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -986,7 +986,7 @@ export def "css-template post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/css_template/")
-  let body = {css: $css, template_name: $template_name} | compact
+  let body = {"css": $css, "template_name": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1032,7 +1032,7 @@ export def "css-template-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/css_template/related/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/css_template/related/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1054,7 +1054,7 @@ export def "css-template delete-by-pk" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/css_template/($pk)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/css_template/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1078,7 +1078,7 @@ export def "css-template get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/css_template/($pk)" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/css_template/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1103,8 +1103,8 @@ export def "css-template put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/css_template/($pk)")
-  let body = {css: $css, template_name: $template_name} | compact
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/css_template/{pk}"))
+  let body = {"css": $css, "template_name": $template_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1182,7 +1182,7 @@ export def "dashboard post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboard/")
-  let body = {css: $css, dashboard_title: $dashboard_title, json_metadata: $json_metadata, owners: $owners, position_json: $position_json, published: $published, roles: $roles, slug: $slug} | compact
+  let body = {"css": $css, "dashboard_title": $dashboard_title, "json_metadata": $json_metadata, "owners": $owners, "position_json": $position_json, "published": $published, "roles": $roles, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1268,7 +1268,7 @@ export def "dashboard-import post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --formData: string # upload file (ZIP or JSON) (format: binary)
+  --form-data: string # upload file (ZIP or JSON) (format: binary)
   --overwrite: oneof<nothing, bool> # overwrite existing databases?
   --passwords: string # JSON map of passwords for each file
 ]: any -> record<message: string> {
@@ -1276,7 +1276,7 @@ export def "dashboard-import post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboard/import/")
-  let body = {formData: $formData, overwrite: $overwrite, passwords: $passwords} | compact
+  let body = {"formData": $form_data, "overwrite": $overwrite, "passwords": $passwords} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1301,7 +1301,7 @@ export def "dashboard-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dashboard/related/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/dashboard/related/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1323,7 +1323,7 @@ export def "dashboard get" [
 ]: nothing -> record<result: record<changed_by: record<first_name: string, id: int, last_name: string, username: string>, changed_by_name: string, changed_by_url: string, changed_on: string, changed_on_delta_humanized: string, charts: list<string>, css: string, dashboard_title: string, id: int, json_metadata: string, owners: list<record>, position_json: string, published: bool, roles: list<record>, slug: string, table_names: string, thumbnail_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboard/($id_or_slug)")
+  let full_url = (build-url $base ({id_or_slug: $id_or_slug} | format pattern "/dashboard/{id_or_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1345,7 +1345,7 @@ export def "dashboard-charts get" [
 ]: nothing -> record<result: table<cache_timeout: int, changed_on: string, datasource: string, description: string, description_markeddown: string, form_data: record, modified: string, slice_id: int, slice_name: string, slice_url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboard/($id_or_slug)/charts")
+  let full_url = (build-url $base ({id_or_slug: $id_or_slug} | format pattern "/dashboard/{id_or_slug}/charts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1367,7 +1367,7 @@ export def "dashboard-datasets get" [
 ]: nothing -> record<result: table<cache_timeout: int, column_formats: record, column_types: list, columns: list, database: record, datasource_name: string, default_endpoint: string, edit_url: string, fetch_values_predicate: string, filter_select: bool, filter_select_enabled: bool, granularity_sqla: list, health_check_message: string, id: int, is_sqllab_view: bool, main_dttm_col: string, metrics: list, name: string, offset: int, order_by_choices: list, owners: list, params: string, perm: string, schema: string, select_star: string, sql: string, table_name: string, template_params: string, time_grain_sqla: list, type: string, uid: string, verbose_map: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboard/($id_or_slug)/datasets")
+  let full_url = (build-url $base ({id_or_slug: $id_or_slug} | format pattern "/dashboard/{id_or_slug}/datasets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1389,7 +1389,7 @@ export def "dashboard delete-by-pk" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboard/($pk)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/dashboard/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1420,8 +1420,8 @@ export def "dashboard put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dashboard/($pk)")
-  let body = {css: $css, dashboard_title: $dashboard_title, json_metadata: $json_metadata, owners: $owners, position_json: $position_json, published: $published, roles: $roles, slug: $slug} | compact
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/dashboard/{pk}"))
+  let body = {"css": $css, "dashboard_title": $dashboard_title, "json_metadata": $json_metadata, "owners": $owners, "position_json": $position_json, "published": $published, "roles": $roles, "slug": $slug} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1448,7 +1448,7 @@ export def "dashboard-thumbnail get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dashboard/($pk)/thumbnail/($digest)/" $qp)
+  let full_url = (build-url $base ({pk: $pk, digest: $digest} | format pattern "/dashboard/{pk}/thumbnail/{digest}/") $qp)
   let accept_val = ($accept | default "image/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1512,7 +1512,7 @@ export def "database post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/database/")
-  let body = {allow_csv_upload: $allow_csv_upload, allow_ctas: $allow_ctas, allow_cvas: $allow_cvas, allow_dml: $allow_dml, allow_multi_schema_metadata_fetch: $allow_multi_schema_metadata_fetch, allow_run_async: $allow_run_async, cache_timeout: $cache_timeout, configuration_method: $configuration_method, database_name: $database_name, encrypted_extra: $encrypted_extra, engine: $engine, expose_in_sqllab: $expose_in_sqllab, extra: $extra, force_ctas_schema: $force_ctas_schema, impersonate_user: $impersonate_user, parameters: $parameters, server_cert: $server_cert, sqlalchemy_uri: $sqlalchemy_uri} | compact
+  let body = {"allow_csv_upload": $allow_csv_upload, "allow_ctas": $allow_ctas, "allow_cvas": $allow_cvas, "allow_dml": $allow_dml, "allow_multi_schema_metadata_fetch": $allow_multi_schema_metadata_fetch, "allow_run_async": $allow_run_async, "cache_timeout": $cache_timeout, "configuration_method": $configuration_method, "database_name": $database_name, "encrypted_extra": $encrypted_extra, "engine": $engine, "expose_in_sqllab": $expose_in_sqllab, "extra": $extra, "force_ctas_schema": $force_ctas_schema, "impersonate_user": $impersonate_user, "parameters": $parameters, "server_cert": $server_cert, "sqlalchemy_uri": $sqlalchemy_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1596,7 +1596,7 @@ export def "database-import post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --formData: string # upload file (ZIP) (format: binary)
+  --form-data: string # upload file (ZIP) (format: binary)
   --overwrite: oneof<nothing, bool> # overwrite existing databases?
   --passwords: string # JSON map of passwords for each file
 ]: any -> record<message: string> {
@@ -1604,7 +1604,7 @@ export def "database-import post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/database/import/")
-  let body = {formData: $formData, overwrite: $overwrite, passwords: $passwords} | compact
+  let body = {"formData": $form_data, "overwrite": $overwrite, "passwords": $passwords} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1637,7 +1637,7 @@ export def "database-test-connection post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/database/test_connection")
-  let body = {configuration_method: $configuration_method, database_name: $database_name, encrypted_extra: $encrypted_extra, engine: $engine, extra: $extra, impersonate_user: $impersonate_user, parameters: $parameters, server_cert: $server_cert, sqlalchemy_uri: $sqlalchemy_uri} | compact
+  let body = {"configuration_method": $configuration_method, "database_name": $database_name, "encrypted_extra": $encrypted_extra, "engine": $engine, "extra": $extra, "impersonate_user": $impersonate_user, "parameters": $parameters, "server_cert": $server_cert, "sqlalchemy_uri": $sqlalchemy_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1669,7 +1669,7 @@ export def "database-validate-parameters post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/database/validate_parameters")
-  let body = {configuration_method: $configuration_method, database_name: $database_name, encrypted_extra: $encrypted_extra, engine: $engine, extra: $extra, impersonate_user: $impersonate_user, parameters: $parameters, server_cert: $server_cert} | compact
+  let body = {"configuration_method": $configuration_method, "database_name": $database_name, "encrypted_extra": $encrypted_extra, "engine": $engine, "extra": $extra, "impersonate_user": $impersonate_user, "parameters": $parameters, "server_cert": $server_cert} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1692,7 +1692,7 @@ export def "database delete" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/database/($pk)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/database/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1716,7 +1716,7 @@ export def "database get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/database/($pk)" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/database/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1757,8 +1757,8 @@ export def "database put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/database/($pk)")
-  let body = {allow_csv_upload: $allow_csv_upload, allow_ctas: $allow_ctas, allow_cvas: $allow_cvas, allow_dml: $allow_dml, allow_multi_schema_metadata_fetch: $allow_multi_schema_metadata_fetch, allow_run_async: $allow_run_async, cache_timeout: $cache_timeout, configuration_method: $configuration_method, database_name: $database_name, encrypted_extra: $encrypted_extra, engine: $engine, expose_in_sqllab: $expose_in_sqllab, extra: $extra, force_ctas_schema: $force_ctas_schema, impersonate_user: $impersonate_user, parameters: $parameters, server_cert: $server_cert, sqlalchemy_uri: $sqlalchemy_uri} | compact
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/database/{pk}"))
+  let body = {"allow_csv_upload": $allow_csv_upload, "allow_ctas": $allow_ctas, "allow_cvas": $allow_cvas, "allow_dml": $allow_dml, "allow_multi_schema_metadata_fetch": $allow_multi_schema_metadata_fetch, "allow_run_async": $allow_run_async, "cache_timeout": $cache_timeout, "configuration_method": $configuration_method, "database_name": $database_name, "encrypted_extra": $encrypted_extra, "engine": $engine, "expose_in_sqllab": $expose_in_sqllab, "extra": $extra, "force_ctas_schema": $force_ctas_schema, "impersonate_user": $impersonate_user, "parameters": $parameters, "server_cert": $server_cert, "sqlalchemy_uri": $sqlalchemy_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1781,7 +1781,7 @@ export def "database-function-names get" [
 ]: nothing -> record<function_names: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/database/($pk)/function_names/")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/database/{pk}/function_names/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1803,7 +1803,7 @@ export def "database-related-objects get" [
 ]: nothing -> record<charts: record<count: int, result: list<record>>, dashboards: record<count: int, result: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/database/($pk)/related_objects/")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/database/{pk}/related_objects/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1827,7 +1827,7 @@ export def "database-schemas get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/database/($pk)/schemas/" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/database/{pk}/schemas/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1852,7 +1852,7 @@ export def "database-select-star list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "schema_name" $schema_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/database/($pk)/select_star/($table_name)/" $qp)
+  let full_url = (build-url $base ({pk: $pk, table_name: $table_name} | format pattern "/database/{pk}/select_star/{table_name}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1876,7 +1876,7 @@ export def "database-select-star get" [
 ]: nothing -> record<result: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/database/($pk)/select_star/($table_name)/($schema_name)/")
+  let full_url = (build-url $base ({pk: $pk, table_name: $table_name, schema_name: $schema_name} | format pattern "/database/{pk}/select_star/{table_name}/{schema_name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1900,7 +1900,7 @@ export def "database-table get" [
 ]: nothing -> record<columns: table<duplicates_constraint: string, keys: list, longType: string, name: string, type: string>, foreignKeys: table<column_names: list, name: string, options: record, referred_columns: list, referred_schema: string, referred_table: string, type: string>, indexes: table<column_names: list, name: string, options: record, referred_columns: list, referred_schema: string, referred_table: string, type: string>, name: string, primaryKey: record<column_names: list<string>, name: string, type: string>, selectStar: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/database/($pk)/table/($table_name)/($schema_name)/")
+  let full_url = (build-url $base ({pk: $pk, table_name: $table_name, schema_name: $schema_name} | format pattern "/database/{pk}/table/{table_name}/{schema_name}/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1973,7 +1973,7 @@ export def "dataset post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dataset/")
-  let body = {database: $database, owners: $owners, schema: $schema, table_name: $table_name} | compact
+  let body = {"database": $database, "owners": $owners, "schema": $schema, "table_name": $table_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2019,7 +2019,7 @@ export def "dataset-distinct get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dataset/distinct/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/dataset/distinct/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2058,7 +2058,7 @@ export def "dataset-import post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --formData: string # upload file (ZIP or YAML) (format: binary)
+  --form-data: string # upload file (ZIP or YAML) (format: binary)
   --overwrite: oneof<nothing, bool> # overwrite existing datasets?
   --passwords: string # JSON map of passwords for each file
 ]: any -> record<message: string> {
@@ -2066,7 +2066,7 @@ export def "dataset-import post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dataset/import/")
-  let body = {formData: $formData, overwrite: $overwrite, passwords: $passwords} | compact
+  let body = {"formData": $form_data, "overwrite": $overwrite, "passwords": $passwords} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2089,7 +2089,7 @@ export def "dataset-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dataset/related/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/dataset/related/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2111,7 +2111,7 @@ export def "dataset delete-by-pk" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dataset/($pk)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/dataset/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2135,7 +2135,7 @@ export def "dataset get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dataset/($pk)" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/dataset/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2179,8 +2179,8 @@ export def "dataset put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "override_columns" $override_columns "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dataset/($pk)" $qp)
-  let body = {cache_timeout: $cache_timeout, columns: $columns, database_id: $database_id, default_endpoint: $default_endpoint, description: $description, extra: $extra, fetch_values_predicate: $fetch_values_predicate, filter_select_enabled: $filter_select_enabled, is_sqllab_view: $is_sqllab_view, main_dttm_col: $main_dttm_col, metrics: $metrics, offset: $offset, owners: $owners, schema: $schema, sql: $sql, table_name: $table_name, template_params: $template_params} | compact
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/dataset/{pk}") $qp)
+  let body = {"cache_timeout": $cache_timeout, "columns": $columns, "database_id": $database_id, "default_endpoint": $default_endpoint, "description": $description, "extra": $extra, "fetch_values_predicate": $fetch_values_predicate, "filter_select_enabled": $filter_select_enabled, "is_sqllab_view": $is_sqllab_view, "main_dttm_col": $main_dttm_col, "metrics": $metrics, "offset": $offset, "owners": $owners, "schema": $schema, "sql": $sql, "table_name": $table_name, "template_params": $template_params} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2204,7 +2204,7 @@ export def "dataset-column delete" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dataset/($pk)/column/($column_id)")
+  let full_url = (build-url $base ({pk: $pk, column_id: $column_id} | format pattern "/dataset/{pk}/column/{column_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2227,7 +2227,7 @@ export def "dataset-metric delete" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dataset/($pk)/metric/($metric_id)")
+  let full_url = (build-url $base ({pk: $pk, metric_id: $metric_id} | format pattern "/dataset/{pk}/metric/{metric_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2249,7 +2249,7 @@ export def "dataset-refresh put" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dataset/($pk)/refresh")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/dataset/{pk}/refresh"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2271,7 +2271,7 @@ export def "dataset-related-objects get" [
 ]: nothing -> record<charts: record<count: int, result: list<record>>, dashboards: record<count: int, result: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dataset/($pk)/related_objects")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/dataset/{pk}/related_objects"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2316,7 +2316,7 @@ export def "log post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/log/")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2341,7 +2341,7 @@ export def "log get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/log/($pk)" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/log/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2384,7 +2384,7 @@ export def "openapi-openapi get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/openapi/($version)/_openapi")
+  let full_url = (build-url $base ({version: $version} | format pattern "/openapi/{version}/_openapi"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2429,7 +2429,7 @@ export def "query-distinct get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/query/distinct/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/query/distinct/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2451,7 +2451,7 @@ export def "query-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/query/related/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/query/related/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2475,7 +2475,7 @@ export def "query get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/query/($pk)" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/query/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2566,7 +2566,7 @@ export def "report post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/report/")
-  let body = {active: $active, chart: $chart, context_markdown: $context_markdown, creation_method: $creation_method, crontab: $crontab, dashboard: $dashboard, database: $database, description: $description, grace_period: $grace_period, log_retention: $log_retention, name: $name, owners: $owners, recipients: $recipients, report_format: $report_format, sql: $sql, timezone: $timezone, type: $type, validator_config_json: $validator_config_json, validator_type: $validator_type, working_timeout: $working_timeout} | compact
+  let body = {"active": $active, "chart": $chart, "context_markdown": $context_markdown, "creation_method": $creation_method, "crontab": $crontab, "dashboard": $dashboard, "database": $database, "description": $description, "grace_period": $grace_period, "log_retention": $log_retention, "name": $name, "owners": $owners, "recipients": $recipients, "report_format": $report_format, "sql": $sql, "timezone": $timezone, "type": $type, "validator_config_json": $validator_config_json, "validator_type": $validator_type, "working_timeout": $working_timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2612,7 +2612,7 @@ export def "report-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/report/related/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/report/related/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2634,7 +2634,7 @@ export def "report delete-by-pk" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/report/($pk)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/report/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2658,7 +2658,7 @@ export def "report get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/report/($pk)" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/report/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2703,8 +2703,8 @@ export def "report put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/report/($pk)")
-  let body = {active: $active, chart: $chart, context_markdown: $context_markdown, creation_method: $creation_method, crontab: $crontab, dashboard: $dashboard, database: $database, description: $description, grace_period: $grace_period, log_retention: $log_retention, name: $name, owners: $owners, recipients: $recipients, report_format: $report_format, sql: $sql, timezone: $timezone, type: $type, validator_config_json: $validator_config_json, validator_type: $validator_type, working_timeout: $working_timeout} | compact
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/report/{pk}"))
+  let body = {"active": $active, "chart": $chart, "context_markdown": $context_markdown, "creation_method": $creation_method, "crontab": $crontab, "dashboard": $dashboard, "database": $database, "description": $description, "grace_period": $grace_period, "log_retention": $log_retention, "name": $name, "owners": $owners, "recipients": $recipients, "report_format": $report_format, "sql": $sql, "timezone": $timezone, "type": $type, "validator_config_json": $validator_config_json, "validator_type": $validator_type, "working_timeout": $working_timeout} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2729,7 +2729,7 @@ export def "report-log list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/report/($pk)/log/" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/report/{pk}/log/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2754,7 +2754,7 @@ export def "report-log get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/report/($pk)/log/($log_id)" $qp)
+  let full_url = (build-url $base ({pk: $pk, log_id: $log_id} | format pattern "/report/{pk}/log/{log_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2828,7 +2828,7 @@ export def "saved-query post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/saved_query/")
-  let body = {db_id: $db_id, description: $description, label: $label, schema: $schema, sql: $sql} | compact
+  let body = {"db_id": $db_id, "description": $description, "label": $label, "schema": $schema, "sql": $sql} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2874,7 +2874,7 @@ export def "saved-query-distinct get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/saved_query/distinct/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/saved_query/distinct/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2913,7 +2913,7 @@ export def "saved-query-import post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --formData: string # upload file (ZIP) (format: binary)
+  --form-data: string # upload file (ZIP) (format: binary)
   --overwrite: oneof<nothing, bool> # overwrite existing saved queries?
   --passwords: string # JSON map of passwords for each file
 ]: any -> record<message: string> {
@@ -2921,7 +2921,7 @@ export def "saved-query-import post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/saved_query/import/")
-  let body = {formData: $formData, overwrite: $overwrite, passwords: $passwords} | compact
+  let body = {"formData": $form_data, "overwrite": $overwrite, "passwords": $passwords} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2944,7 +2944,7 @@ export def "saved-query-related get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/saved_query/related/($column_name)" $qp)
+  let full_url = (build-url $base ({column_name: $column_name} | format pattern "/saved_query/related/{column_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2966,7 +2966,7 @@ export def "saved-query delete-by-pk" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/saved_query/($pk)")
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/saved_query/{pk}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2990,7 +2990,7 @@ export def "saved-query get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/saved_query/($pk)" $qp)
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/saved_query/{pk}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3018,8 +3018,8 @@ export def "saved-query put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/saved_query/($pk)")
-  let body = {db_id: $db_id, description: $description, label: $label, schema: $schema, sql: $sql} | compact
+  let full_url = (build-url $base ({pk: $pk} | format pattern "/saved_query/{pk}"))
+  let body = {"db_id": $db_id, "description": $description, "label": $label, "schema": $schema, "sql": $sql} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3068,7 +3068,7 @@ export def "security-login post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/security/login")
-  let body = {password: $password, provider: $provider, refresh: $refresh, username: $username} | compact
+  let body = {"password": $password, "provider": $provider, "refresh": $refresh, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

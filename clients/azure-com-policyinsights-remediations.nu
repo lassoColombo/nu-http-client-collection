@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-management-groups-providers-microsoft-policy-insights-remediations ListForManagementGroup" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-management-groups-providers-microsoft-policy-insights-remediations list-for" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,9 +93,9 @@ export def commands []: nothing -> table {
 #
 # GET /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations
 # operationId: Remediations_ListForManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations ListForManagementGroup" [
-  managementGroupsNamespace: string
-  managementGroupId: string
+export def "providers-management-groups-providers-microsoft-policy-insights-remediations list-for" [
+  management_groups_namespace: string
+  management_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,7 +111,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/($managementGroupsNamespace)/managementGroups/($managementGroupId)/providers/Microsoft.PolicyInsights/remediations" $qp)
+  let full_url = (build-url $base ({management_groups_namespace: $management_groups_namespace, management_group_id: $management_group_id} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -121,10 +121,10 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 #
 # DELETE /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_DeleteAtManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations DeleteAtManagementGroup" [
-  managementGroupsNamespace: string
-  managementGroupId: string
-  remediationName: string
+export def "providers-management-groups-providers-microsoft-policy-insights-remediations delete-at" [
+  management_groups_namespace: string
+  management_group_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/($managementGroupsNamespace)/managementGroups/($managementGroupId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
+  let full_url = (build-url $base ({management_groups_namespace: $management_groups_namespace, management_group_id: $management_group_id, remediation_name: $remediation_name} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,10 +148,10 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 #
 # GET /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_GetAtManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations GetAtManagementGroup" [
-  managementGroupsNamespace: string
-  managementGroupId: string
-  remediationName: string
+export def "providers-management-groups-providers-microsoft-policy-insights-remediations get-at" [
+  management_groups_namespace: string
+  management_group_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/($managementGroupsNamespace)/managementGroups/($managementGroupId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
+  let full_url = (build-url $base ({management_groups_namespace: $management_groups_namespace, management_group_id: $management_group_id, remediation_name: $remediation_name} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,10 +176,10 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 # PUT /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_CreateOrUpdateAtManagementGroup
 # --properties shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations CreateOrUpdateAtManagementGroup" [
-  managementGroupsNamespace: string
-  managementGroupId: string
-  remediationName: string
+export def "providers-management-groups-providers-microsoft-policy-insights-remediations create-or-update-at" [
+  management_groups_namespace: string
+  management_group_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,8 +195,8 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/($managementGroupsNamespace)/managementGroups/($managementGroupId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({management_groups_namespace: $management_groups_namespace, management_group_id: $management_group_id, remediation_name: $remediation_name} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,10 +207,10 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/cancel
 # operationId: Remediations_CancelAtManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations-cancel CancelAtManagementGroup" [
-  managementGroupsNamespace: string
-  managementGroupId: string
-  remediationName: string
+export def "providers-management-groups-providers-microsoft-policy-insights-remediations-cancel cancel-at" [
+  management_groups_namespace: string
+  management_group_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/($managementGroupsNamespace)/managementGroups/($managementGroupId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)/cancel" $qp)
+  let full_url = (build-url $base ({management_groups_namespace: $management_groups_namespace, management_group_id: $management_group_id, remediation_name: $remediation_name} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -234,10 +234,10 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/listDeployments
 # operationId: Remediations_ListDeploymentsAtManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-remediations-list-deployments ListDeploymentsAtManagementGroup" [
-  managementGroupsNamespace: string
-  managementGroupId: string
-  remediationName: string
+export def "providers-management-groups-providers-microsoft-policy-insights-remediations-list-deployments list-deployments-at" [
+  management_groups_namespace: string
+  management_group_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/($managementGroupsNamespace)/managementGroups/($managementGroupId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)/listDeployments" $qp)
+  let full_url = (build-url $base ({management_groups_namespace: $management_groups_namespace, management_group_id: $management_group_id, remediation_name: $remediation_name} | format pattern "/providers/{management_groups_namespace}/managementGroups/{management_group_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/listDeployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -262,8 +262,8 @@ export def "providers-management-groups-providers-microsoft-policy-insights-reme
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations
 # operationId: Remediations_ListForSubscription
-export def "subscriptions-providers-microsoft-policy-insights-remediations ListForSubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-policy-insights-remediations list-for" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations ListF
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PolicyInsights/remediations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,9 +289,9 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations ListF
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_DeleteAtSubscription
-export def "subscriptions-providers-microsoft-policy-insights-remediations DeleteAtSubscription" [
-  subscriptionId: string
-  remediationName: string
+export def "subscriptions-providers-microsoft-policy-insights-remediations delete-at" [
+  subscription_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations Delet
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, remediation_name: $remediation_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -315,9 +315,9 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations Delet
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_GetAtSubscription
-export def "subscriptions-providers-microsoft-policy-insights-remediations GetAtSubscription" [
-  subscriptionId: string
-  remediationName: string
+export def "subscriptions-providers-microsoft-policy-insights-remediations get-at" [
+  subscription_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations GetAt
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, remediation_name: $remediation_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,9 +342,9 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations GetAt
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_CreateOrUpdateAtSubscription
 # --properties shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
-export def "subscriptions-providers-microsoft-policy-insights-remediations CreateOrUpdateAtSubscription" [
-  subscriptionId: string
-  remediationName: string
+export def "subscriptions-providers-microsoft-policy-insights-remediations create-or-update-at" [
+  subscription_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,8 +360,8 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations Creat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, remediation_name: $remediation_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -372,9 +372,9 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations Creat
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/cancel
 # operationId: Remediations_CancelAtSubscription
-export def "subscriptions-providers-microsoft-policy-insights-remediations-cancel CancelAtSubscription" [
-  subscriptionId: string
-  remediationName: string
+export def "subscriptions-providers-microsoft-policy-insights-remediations-cancel cancel-at" [
+  subscription_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,7 +388,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations-cance
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)/cancel" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, remediation_name: $remediation_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -398,9 +398,9 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations-cance
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/listDeployments
 # operationId: Remediations_ListDeploymentsAtSubscription
-export def "subscriptions-providers-microsoft-policy-insights-remediations-list-deployments ListDeploymentsAtSubscription" [
-  subscriptionId: string
-  remediationName: string
+export def "subscriptions-providers-microsoft-policy-insights-remediations-list-deployments list-deployments-at" [
+  subscription_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations-list-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)/listDeployments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, remediation_name: $remediation_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/listDeployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -425,9 +425,9 @@ export def "subscriptions-providers-microsoft-policy-insights-remediations-list-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations
 # operationId: Remediations_ListForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations ListForResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations list-for" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PolicyInsights/remediations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -453,10 +453,10 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_DeleteAtResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations DeleteAtResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  remediationName: string
+export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations delete-at" [
+  subscription_id: string
+  resource_group_name: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, remediation_name: $remediation_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,10 +480,10 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_GetAtResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations GetAtResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  remediationName: string
+export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations get-at" [
+  subscription_id: string
+  resource_group_name: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,7 +497,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, remediation_name: $remediation_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -508,10 +508,10 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_CreateOrUpdateAtResourceGroup
 # --properties shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations CreateOrUpdateAtResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  remediationName: string
+export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations create-or-update-at" [
+  subscription_id: string
+  resource_group_name: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,8 +527,8 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, remediation_name: $remediation_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -539,10 +539,10 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/cancel
 # operationId: Remediations_CancelAtResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations-cancel CancelAtResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  remediationName: string
+export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations-cancel cancel-at" [
+  subscription_id: string
+  resource_group_name: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -556,7 +556,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PolicyInsights/remediations/($remediationName)/cancel" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, remediation_name: $remediation_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -566,10 +566,10 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/listDeployments
 # operationId: Remediations_ListDeploymentsAtResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations-list-deployments ListDeploymentsAtResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
-  remediationName: string
+export def "subscriptions-resource-groups-providers-microsoft-policy-insights-remediations-list-deployments list-deployments-at" [
+  subscription_id: string
+  resource_group_name: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.PolicyInsights/remediations/($remediationName)/listDeployments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, remediation_name: $remediation_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/listDeployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -594,8 +594,8 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-re
 #
 # GET /{resourceId}/providers/Microsoft.PolicyInsights/remediations
 # operationId: Remediations_ListForResource
-export def "providers-microsoft-policy-insights-remediations ListForResource" [
-  resourceId: string
+export def "providers-microsoft-policy-insights-remediations list-for-resource" [
+  resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "providers-microsoft-policy-insights-remediations ListForResource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.PolicyInsights/remediations" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -621,9 +621,9 @@ export def "providers-microsoft-policy-insights-remediations ListForResource" [
 #
 # DELETE /{resourceId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_DeleteAtResource
-export def "providers-microsoft-policy-insights-remediations DeleteAtResource" [
-  resourceId: string
-  remediationName: string
+export def "providers-microsoft-policy-insights-remediations delete-at-resource" [
+  resource_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "providers-microsoft-policy-insights-remediations DeleteAtResource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id, remediation_name: $remediation_name} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -647,9 +647,9 @@ export def "providers-microsoft-policy-insights-remediations DeleteAtResource" [
 #
 # GET /{resourceId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_GetAtResource
-export def "providers-microsoft-policy-insights-remediations GetAtResource" [
-  resourceId: string
-  remediationName: string
+export def "providers-microsoft-policy-insights-remediations get-at-resource" [
+  resource_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "providers-microsoft-policy-insights-remediations GetAtResource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id, remediation_name: $remediation_name} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,9 +674,9 @@ export def "providers-microsoft-policy-insights-remediations GetAtResource" [
 # PUT /{resourceId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}
 # operationId: Remediations_CreateOrUpdateAtResource
 # --properties shape: {deploymentStatus?: any, filters?: any, policyAssignmentId?: string, policyDefinitionReferenceId?: string, resourceDiscoveryMode?: "ExistingNonCompliant"|"ReEvaluateCompliance"}
-export def "providers-microsoft-policy-insights-remediations CreateOrUpdateAtResource" [
-  resourceId: string
-  remediationName: string
+export def "providers-microsoft-policy-insights-remediations create-or-update-at-resource" [
+  resource_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,8 +692,8 @@ export def "providers-microsoft-policy-insights-remediations CreateOrUpdateAtRes
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({resource_id: $resource_id, remediation_name: $remediation_name} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -704,9 +704,9 @@ export def "providers-microsoft-policy-insights-remediations CreateOrUpdateAtRes
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/cancel
 # operationId: Remediations_CancelAtResource
-export def "providers-microsoft-policy-insights-remediations-cancel CancelAtResource" [
-  resourceId: string
-  remediationName: string
+export def "providers-microsoft-policy-insights-remediations-cancel cancel-at-resource" [
+  resource_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,7 +720,7 @@ export def "providers-microsoft-policy-insights-remediations-cancel CancelAtReso
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)/cancel" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id, remediation_name: $remediation_name} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -730,9 +730,9 @@ export def "providers-microsoft-policy-insights-remediations-cancel CancelAtReso
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/remediations/{remediationName}/listDeployments
 # operationId: Remediations_ListDeploymentsAtResource
-export def "providers-microsoft-policy-insights-remediations-list-deployments ListDeploymentsAtResource" [
-  resourceId: string
-  remediationName: string
+export def "providers-microsoft-policy-insights-remediations-list-deployments list-deployments-at-resource" [
+  resource_id: string
+  remediation_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,7 +747,7 @@ export def "providers-microsoft-policy-insights-remediations-list-deployments Li
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceId)/providers/Microsoft.PolicyInsights/remediations/($remediationName)/listDeployments" $qp)
+  let full_url = (build-url $base ({resource_id: $resource_id, remediation_name: $remediation_name} | format pattern "/{resource_id}/providers/Microsoft.PolicyInsights/remediations/{remediation_name}/listDeployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -67,7 +67,7 @@ def auth-scheme-completer [] { ["query-api_key"] }
 
 # Completers for enum parameters
 def output-completer [] { ["buffer" "file"] }
-def paperSize-completer [] { ["A3" "A4" "A5" "A6" "Legal" "Letter" "Tabloid"] }
+def paper-size-completer [] { ["A3" "A4" "A5" "A6" "Legal" "Letter" "Tabloid"] }
 def accept-completer [] { ["application/pdf" "text/plain; charset=utf-8"] }
 def format-completer [] { ["jpeg" "png"] }
 def accept-completer-1 [] { ["image/jpeg" "image/png" "text/plain; charset=utf-8"] }
@@ -115,28 +115,28 @@ export def "convert-url-pdf url-to-pdf" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --actions: list # Use actions to automate manual workflows while rendering web pages. They simulate real-world human interaction with pages. (default: [])
-  --ignoreHTTPStatusErrCodes: oneof<nothing, bool> # The HTTP 200 OK success status response code indicates that the request has succeeded. Sometimes a server returns normal HTML content even with an erroneous Non-200 HTTP response status code. The IgnoreHTTPStatusCode option is useful when you need to force the return of HTML content. Defaults to "false."
-  --initialCookies: list # The "Initial Cookies" option is useful for crawling websites that require a login. The simplest solution to get an array of cookies for specific websites is to use a web browser "EditThisCookie" extension. Copy a cookie array with "EditThisCookie" and paste it into the "Initial cookie" field. (default: []) — item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
+  --ignore-http-status-err-codes: oneof<nothing, bool> # The HTTP 200 OK success status response code indicates that the request has succeeded. Sometimes a server returns normal HTML content even with an erroneous Non-200 HTTP response status code. The IgnoreHTTPStatusCode option is useful when you need to force the return of HTML content. Defaults to "false."
+  --initial-cookies: list # The "Initial Cookies" option is useful for crawling websites that require a login. The simplest solution to get an array of cookies for specific websites is to use a web browser "EditThisCookie" extension. Copy a cookie array with "EditThisCookie" and paste it into the "Initial cookie" field. (default: []) — item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
   --landscape: oneof<nothing, bool> # Paper orientation. Parameter landscape = false means portrait orientation. Set landscape to true for landscape page oriantation. (default: false)
-  --marginBottom: float # Bottom Margin of the PDF (in inches) (default: 0.4)
-  --marginLeft: float # Left Margin of the PDF (in inches) (default: 0.4)
-  --marginRight: float # Right Margin of the PDF (in inches) (default: 0.4)
-  --marginTop: float # Top Margin of the PDF (in inches) (default: 0.4)
+  --margin-bottom: float # Bottom Margin of the PDF (in inches) (default: 0.4)
+  --margin-left: float # Left Margin of the PDF (in inches) (default: 0.4)
+  --margin-right: float # Right Margin of the PDF (in inches) (default: 0.4)
+  --margin-top: float # Top Margin of the PDF (in inches) (default: 0.4)
   --output: string@output-completer # If set to _file_, the resulted PDF is uploaded to Dataflow Kit Storage first. Then the link to this file is returned. Overwise, PDF content is returned in the response body. (default: buffer)
-  --pageRanges: string # Specify page ranges to convert. Defaults to the empty value, which means convert all pages. (e.g. 1-4, 6, 10-12)
-  --paperSize: string@paperSize-completer # Page size parameter consists of the most popular page formats. (default: A4)
-  --printBackground: oneof<nothing, bool> # Print background graphics in the PDF. (default: false)
-  --printHeaderFooter: oneof<nothing, bool> # printHeaderFooter  parameter consists of the date, name of the web page, the page URL, and how many pages the document you are printing. (default: false)
+  --page-ranges: string # Specify page ranges to convert. Defaults to the empty value, which means convert all pages. (e.g. 1-4, 6, 10-12)
+  --paper-size: string@paper-size-completer # Page size parameter consists of the most popular page formats. (default: A4)
+  --print-background: oneof<nothing, bool> # Print background graphics in the PDF. (default: false)
+  --print-header-footer: oneof<nothing, bool> # printHeaderFooter  parameter consists of the date, name of the web page, the page URL, and how many pages the document you are printing. (default: false)
   --proxy: string # Specify proxy by adding [country ISO code](https://en.wikipedia.org/wiki/ISO_3166-2) to `country-` value to send requests through a proxy in the specified country. Use `country-any` to use random geo-targets. (e.g. country-any)
   --scale: float # By default, PDF document content is generated according to dimensions of the original web page content. Using the `scale` parameter, you can specify a custom zoom factor from 0.1 to 5.0 of the webpage rendering. (default: 1)
   --body-url: string # The full URL address (including HTTP/HTTPS) of a web page that you want to save as PDF
-  --waitDelay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. (default: 0.5)
+  --wait-delay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. (default: 0.5)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/convert/url/pdf")
-  let body = {actions: $actions, ignoreHTTPStatusErrCodes: $ignoreHTTPStatusErrCodes, initialCookies: $initialCookies, landscape: $landscape, marginBottom: $marginBottom, marginLeft: $marginLeft, marginRight: $marginRight, marginTop: $marginTop, output: $output, pageRanges: $pageRanges, paperSize: $paperSize, printBackground: $printBackground, printHeaderFooter: $printHeaderFooter, proxy: $proxy, scale: $scale, url: $body_url, waitDelay: $waitDelay} | compact
+  let body = {"actions": $actions, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "landscape": $landscape, "marginBottom": $margin_bottom, "marginLeft": $margin_left, "marginRight": $margin_right, "marginTop": $margin_top, "output": $output, "pageRanges": $page_ranges, "paperSize": $paper_size, "printBackground": $print_background, "printHeaderFooter": $print_header_footer, "proxy": $proxy, "scale": $scale, "url": $body_url, "waitDelay": $wait_delay} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -159,28 +159,28 @@ export def "convert-url-screenshot url-to-screenshot" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --actions: list # Use actions to automate manual workflows while rendering web pages. They simulate real-world human interaction with pages. (default: [])
-  --clipSelector: string # Captures a screenshot of specified CSS element on a web page. (e.g. #css-element)
+  --clip-selector: string # Captures a screenshot of specified CSS element on a web page. (e.g. #css-element)
   --format: string@format-completer # Sets the Format of output image (default: png)
-  --fullPage: oneof<nothing, bool> # takes a screenshot of a full web page. It ignores offsetX, offsety, width and height argument values. (default: false)
+  --full-page: oneof<nothing, bool> # takes a screenshot of a full web page. It ignores offsetX, offsety, width and height argument values. (default: false)
   --height: int # Rectangle height in device independent pixels (dip). (default: 600)
-  --ignoreHTTPStatusErrCodes: oneof<nothing, bool> # The HTTP 200 OK success status response code indicates that the request has succeeded. Sometimes a server returns normal HTML content even with an erroneous Non-200 HTTP response status code. The IgnoreHTTPStatusCode option is useful when you need to force the return of HTML content. Defaults to "false."
-  --initialCookies: list # The "Initial Cookies" option is useful for crawling websites that require a login. The simplest solution to get an array of cookies for specific websites is to use a web browser "EditThisCookie" extension. Copy a cookie array with "EditThisCookie" and paste it into the "Initial cookie" field. (default: []) — item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
+  --ignore-http-status-err-codes: oneof<nothing, bool> # The HTTP 200 OK success status response code indicates that the request has succeeded. Sometimes a server returns normal HTML content even with an erroneous Non-200 HTTP response status code. The IgnoreHTTPStatusCode option is useful when you need to force the return of HTML content. Defaults to "false."
+  --initial-cookies: list # The "Initial Cookies" option is useful for crawling websites that require a login. The simplest solution to get an array of cookies for specific websites is to use a web browser "EditThisCookie" extension. Copy a cookie array with "EditThisCookie" and paste it into the "Initial cookie" field. (default: []) — item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
   --offsetx: int # X offset in device independent pixels (dip). (default: 0)
   --offsety: int # Y offset in device independent pixels (dip). (default: 0)
   --output: string@output-completer # If set to _file_, the resulted screenshot is uploaded to Dataflow Kit Storage first. Then the link to this file is returned. Overwise, web site screenshot is returned in the response body. (default: buffer)
-  --printBackground: oneof<nothing, bool> # Print background graphics in the PDF. (default: false)
+  --print-background: oneof<nothing, bool> # Print background graphics in the PDF. (default: false)
   --proxy: string # Specify proxy by adding [country ISO code](https://en.wikipedia.org/wiki/ISO_3166-2) to `country-` value to send requests through a proxy in the specified country. Use `country-any` to use random geo-targets. (e.g. country-any)
   --quality: int # Sets the Quality of output image. Compression quality from range [0..100] (jpeg only). (default: 80)
   --scale: float # Image scale factor. range [0.1 .. 3] (default: 1)
   --body-url: string # The full URL address (including HTTP/HTTPS) of a web page that you want to capture
-  --waitDelay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. (default: 0.5)
+  --wait-delay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. (default: 0.5)
   --width: int # Rectangle width in device independent pixels (dip). (default: 800)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/convert/url/screenshot")
-  let body = {actions: $actions, clipSelector: $clipSelector, format: $format, fullPage: $fullPage, height: $height, ignoreHTTPStatusErrCodes: $ignoreHTTPStatusErrCodes, initialCookies: $initialCookies, offsetx: $offsetx, offsety: $offsety, output: $output, printBackground: $printBackground, proxy: $proxy, quality: $quality, scale: $scale, url: $body_url, waitDelay: $waitDelay, width: $width} | compact
+  let body = {"actions": $actions, "clipSelector": $clip_selector, "format": $format, "fullPage": $full_page, "height": $height, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "offsetx": $offsetx, "offsety": $offsety, "output": $output, "printBackground": $print_background, "proxy": $proxy, "quality": $quality, "scale": $scale, "url": $body_url, "waitDelay": $wait_delay, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -192,7 +192,7 @@ export def "convert-url-screenshot url-to-screenshot" [
 # POST /fetch
 # operationId: fetch
 # --initialCookies item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
-export def "fetch fetch" [
+export def "fetch post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,19 +203,19 @@ export def "fetch fetch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
   --actions: list # Use actions to automate manual workflows while rendering web pages. They simulate real-world human interaction with pages. _(Chrome fetcher type only)_ (default: [])
-  --ignoreHTTPStatusErrCodes: oneof<nothing, bool> # The HTTP 200 OK success status response code indicates that the request has succeeded. Sometimes a server returns normal HTML content even with an erroneous Non-200 HTTP response status code. The IgnoreHTTPStatusCode option is useful when you need to force the return of HTML content. Defaults to "false."
-  --initialCookies: list # The "Initial Cookies" option is useful for crawling websites that require a login. The simplest solution to get an array of cookies for specific websites is to use a web browser "EditThisCookie" extension. Copy a cookie array with "EditThisCookie" and paste it into the "Initial cookie" field. (default: []) — item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
+  --ignore-http-status-err-codes: oneof<nothing, bool> # The HTTP 200 OK success status response code indicates that the request has succeeded. Sometimes a server returns normal HTML content even with an erroneous Non-200 HTTP response status code. The IgnoreHTTPStatusCode option is useful when you need to force the return of HTML content. Defaults to "false."
+  --initial-cookies: list # The "Initial Cookies" option is useful for crawling websites that require a login. The simplest solution to get an array of cookies for specific websites is to use a web browser "EditThisCookie" extension. Copy a cookie array with "EditThisCookie" and paste it into the "Initial cookie" field. (default: []) — item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
   --output: string@output-completer # If set to _file_, the content of downloaded HTML is uploaded to Dataflow Kit Storage first. Then the link to this file is returned. Overwise, downloaded content is returned in the response body. (default: buffer)
   --proxy: string # Specify proxy by adding [country ISO code](https://en.wikipedia.org/wiki/ISO_3166-2) to `country-` value to send requests through a proxy in the specified country. Use `country-any` to use random geo-targets. (e.g. country-sk)
   type: string@type-completer # If set to `base`, the Base fetcher is used for downloading web page content. Use `chrome` for fetching content with a Headless chrome browser. If omitted `base` fetcher is used by default.
   --body-url: string # Specify URL to download.
-  --waitDelay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. _(Chrome fetcher type only)_
+  --wait-delay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. _(Chrome fetcher type only)_
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fetch")
-  let body = {actions: $actions, ignoreHTTPStatusErrCodes: $ignoreHTTPStatusErrCodes, initialCookies: $initialCookies, output: $output, proxy: $proxy, type: $type, url: $body_url, waitDelay: $waitDelay} | compact
+  let body = {"actions": $actions, "ignoreHTTPStatusErrCodes": $ignore_http_status_err_codes, "initialCookies": $initial_cookies, "output": $output, "proxy": $proxy, "type": $type, "url": $body_url, "waitDelay": $wait_delay} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "text/html; charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,7 +229,7 @@ export def "fetch fetch" [
 # --fields item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
 # --paginator shape: {nextPageSelector?: string, pageNum?: int}
 # --request shape: {actions?: list, ignoreHTTPStatusErrCodes?: bool, initialCookies?: list, output?: "buffer"|"file", proxy?: string, type: "base"|"chrome", url: string, waitDelay?: float}
-export def "parse parse" [
+export def "parse post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "parse parse" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --commonParent: string # Specifies common ancestor block for a set of fields used to extract data from a web page. _(CSS Selector)_ (e.g. .common-block)
+  --common-parent: string # Specifies common ancestor block for a set of fields used to extract data from a web page. _(CSS Selector)_ (e.g. .common-block)
   fields: list # Define a  set of fields used to extract data from a web page. A Field represents a given chunk of extracted data from every block on each page. — item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
   format: string@format-completer-1 # Extracted data is returned either in CSV, MS Excel, JSON, JSON(Lines) or XML format.
   name: string # Collection name.
@@ -250,7 +250,7 @@ export def "parse parse" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/parse")
-  let body = {commonParent: $commonParent, fields: $fields, format: $format, name: $name, paginator: $paginator, path: $path, request: $request} | compact
+  let body = {"commonParent": $common_parent, "fields": $fields, "format": $format, "name": $name, "paginator": $paginator, "path": $path, "request": $request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -262,7 +262,7 @@ export def "parse parse" [
 # POST /serp
 # operationId: serp
 # --fields item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
-export def "serp serp" [
+export def "serp post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,7 +275,7 @@ export def "serp serp" [
   --fields: list # Specify CSS selectors (patterns) used to gather data from Search Engine Result Pages.  Ready-to-use payloads for collecting search results from the most popular Search Engines are available. These payloads are customizable, though. — item shape: {attrs: list, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
   format: string@format-completer-1 # Extracted data is returned either in CSV, MS Excel, JSON, JSON(Lines) or XML format.
   name: string # Collection name.
-  --pageNum: int # Specify number of pages to crawl. (default: 1)
+  --page-num: int # Specify number of pages to crawl. (default: 1)
   proxy: string # Always specify proxy for sending SERP requests. Add choosen [country ISO code](https://en.wikipedia.org/wiki/ISO_3166-2) to `country-` value to send requests through a proxy in the specified country. Use `country-any` to use random geo-targets. (e.g. country-any)
   type: string # For SERP requests you should _always_ use `chrome` type to fetch content with a Headless chrome browser (e.g. chrome)
   --body-url: string # url holds the link to a Search Engine to use, and other optional parameters like languages or country.
@@ -284,7 +284,7 @@ export def "serp serp" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/serp")
-  let body = {fields: $fields, format: $format, name: $name, pageNum: $pageNum, proxy: $proxy, type: $type, url: $body_url} | compact
+  let body = {"fields": $fields, "format": $format, "name": $name, "pageNum": $page_num, "proxy": $proxy, "type": $type, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

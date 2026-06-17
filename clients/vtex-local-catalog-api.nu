@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addon-pvt-giftlist-get GetGiftList" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addon-pvt-giftlist-get get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,8 +94,8 @@ export def commands []: nothing -> table {
 #
 # GET /api/addon/pvt/giftlist/get/{listId}
 # operationId: GetGiftList
-export def "addon-pvt-giftlist-get GetGiftList" [
-  listId: int
+export def "addon-pvt-giftlist-get get" [
+  list_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,13 +104,13 @@ export def "addon-pvt-giftlist-get GetGiftList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<IsPublic: bool, address: string, dateCreated: string, eventCity: string, eventDate: string, eventLocation: string, eventState: string, fileId: int, fileUrl: string, giftCardId: int, giftCardRechargeSkuId: int, giftListId: int, giftListMembers: table<clientId: string, giftListId: int, giftListMemberId: int, isActive: bool, isAdmin: bool, name: string, surname: string, text1: string, text2: string, title: string, userId: string>, giftListSkuIds: list<string>, giftListTypeId: int, giftListTypeName: string, isActive: bool, isAddressOk: bool, memberNames: string, message: string, name: string, profileSystemUserAddressName: string, profileSystemUserId: string, shipsToOwner: bool, telemarketingId: int, telemarketingObservation: string, urlFolder: string, userId: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/addon/pvt/giftlist/get/($listId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({list_id: $list_id} | format pattern "/api/addon/pvt/giftlist/get/{list_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,8 +121,8 @@ export def "addon-pvt-giftlist-get GetGiftList" [
 #
 # GET /api/addon/pvt/review/GetProductRate/{productId}
 # operationId: ReviewRateProduct
-export def "addon-pvt-review-get-product-rate ReviewRateProduct" [
-  productId: int
+export def "addon-pvt-review-get-product-rate get" [
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,13 +131,13 @@ export def "addon-pvt-review-get-product-rate ReviewRateProduct" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> float {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/addon/pvt/review/GetProductRate/($productId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/addon/pvt/review/GetProductRate/{product_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -157,20 +157,20 @@ export def "catalog-pvt-attachment post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  Domains: list # List of characteristics related to the attachment. — item shape: {DomainValues?: string, FieldName?: string, MaxCaracters?: string}
-  --IsActive: oneof<nothing, bool> # Defines if the attachment is active or not. (e.g. false)
-  --IsRequired: oneof<nothing, bool> # Defines if the attachment is required or not. (e.g. false)
-  Name: string # Attachment Name. (e.g. Shirt customization)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  domains: list # List of characteristics related to the attachment. — item shape: {DomainValues?: string, FieldName?: string, MaxCaracters?: string}
+  --is-active: oneof<nothing, bool> # Defines if the attachment is active or not. (e.g. false)
+  --is-required: oneof<nothing, bool> # Defines if the attachment is required or not. (e.g. false)
+  name: string # Attachment Name. (e.g. Shirt customization)
 ]: any -> record<Domains: table<DomainValues: string, FieldName: string, MaxCaracters: string>, Id: int, IsActive: bool, IsRequired: bool, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/attachment")
-  let body = {Domains: $Domains, IsActive: $IsActive, IsRequired: $IsRequired, Name: $Name} | compact
+  let body = {"Domains": $domains, "IsActive": $is_active, "IsRequired": $is_required, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -190,13 +190,13 @@ export def "catalog-pvt-attachment delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/attachment/($attachmentid)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({attachmentid: $attachmentid} | format pattern "/api/catalog/pvt/attachment/{attachmentid}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,13 +216,13 @@ export def "catalog-pvt-attachment get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<Domains: table<DomainValues: string, FieldName: string, MaxCaracters: string>, Id: int, IsActive: bool, IsRequired: bool, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/attachment/($attachmentid)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({attachmentid: $attachmentid} | format pattern "/api/catalog/pvt/attachment/{attachmentid}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -243,20 +243,20 @@ export def "catalog-pvt-attachment put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  Domains: list # List of characteristics related to the attachment. — item shape: {DomainValues?: string, FieldName?: string, MaxCaracters?: string}
-  --IsActive: oneof<nothing, bool> # Defines if the attachment is active or not. (e.g. false)
-  --IsRequired: oneof<nothing, bool> # Defines if the attachment is required or not. (e.g. false)
-  Name: string # Attachment Name. (e.g. Shirt customization)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  domains: list # List of characteristics related to the attachment. — item shape: {DomainValues?: string, FieldName?: string, MaxCaracters?: string}
+  --is-active: oneof<nothing, bool> # Defines if the attachment is active or not. (e.g. false)
+  --is-required: oneof<nothing, bool> # Defines if the attachment is required or not. (e.g. false)
+  name: string # Attachment Name. (e.g. Shirt customization)
 ]: any -> record<Domains: table<DomainValues: string, FieldName: string, MaxCaracters: string>, Id: int, IsActive: bool, IsRequired: bool, Name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/attachment/($attachmentid)")
-  let body = {Domains: $Domains, IsActive: $IsActive, IsRequired: $IsRequired, Name: $Name} | compact
+  let full_url = (build-url $base ({attachmentid: $attachmentid} | format pattern "/api/catalog/pvt/attachment/{attachmentid}"))
+  let body = {"Domains": $domains, "IsActive": $is_active, "IsRequired": $is_required, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -275,13 +275,13 @@ export def "catalog-pvt-attachments get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<Data: table<Domains: list, Id: int, IsActive: bool, IsRequired: bool, Name: string>, Page: int, Size: int, TotalPage: int, TotalRows: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/attachments")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -291,8 +291,8 @@ export def "catalog-pvt-attachments get" [
 # Create Brand
 #
 # POST /api/catalog/pvt/brand
-@deprecated --flag AdWordsRemarketingCode
-@deprecated --flag LomadeeCampaignCode
+@deprecated --flag ad-words-remarketing-code
+@deprecated --flag lomadee-campaign-code
 export def "catalog-pvt-brand post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,27 +302,27 @@ export def "catalog-pvt-brand post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --Active: oneof<nothing, bool> # Defines if the brand is active (`true`) or not (`false`). (e.g. true)
-  --AdWordsRemarketingCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
-  Id: int # Brand's unique numerical identifier. (e.g. 2000003)
-  --Keywords: string # Store Framework - Deprecated. Legacy CMS Portal - Alternative search terms that will lead to the specific brand. The user can find the desired brand even when misspelling it. Used especially when words are of foreign origin and have a distinct spelling that is transcribed into a generic one, or when small spelling mistakes occur.  (e.g. adidas)
-  --LinkId: string # Brand page slug. Only lowercase letters and hyphens (`-`) are allowed. (nullable, e.g. adidas-sports)
-  --LomadeeCampaignCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
-  --MenuHome: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - Defines if the Brand appears in the Department Menu control (`<vtex.cmc:departmentNavigator/>`).  (e.g. true)
-  Name: string # Brand name. (e.g. Adidas)
-  --Score: int # Store Framework - Deprecated Legacy CMS Portal - Value used to set the priority on the search result page.  (nullable, e.g. 10)
-  --SiteTitle: string # Meta Title for the Brand page. (e.g. Adidas)
-  --Text: string # Meta Description for the Brand page. A brief description of the brand, displayed by search engines. Since search engines can only display less than 150 characters, we recommend not exceeding this character limit when creating the description. (e.g. Adidas)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --active: oneof<nothing, bool> # Defines if the brand is active (`true`) or not (`false`). (e.g. true)
+  --ad-words-remarketing-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
+  id: int # Brand's unique numerical identifier. (e.g. 2000003)
+  --keywords: string # Store Framework - Deprecated. Legacy CMS Portal - Alternative search terms that will lead to the specific brand. The user can find the desired brand even when misspelling it. Used especially when words are of foreign origin and have a distinct spelling that is transcribed into a generic one, or when small spelling mistakes occur.  (e.g. adidas)
+  --link-id: string # Brand page slug. Only lowercase letters and hyphens (`-`) are allowed. (nullable, e.g. adidas-sports)
+  --lomadee-campaign-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
+  --menu-home: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - Defines if the Brand appears in the Department Menu control (`<vtex.cmc:departmentNavigator/>`).  (e.g. true)
+  name: string # Brand name. (e.g. Adidas)
+  --score: int # Store Framework - Deprecated Legacy CMS Portal - Value used to set the priority on the search result page.  (nullable, e.g. 10)
+  --site-title: string # Meta Title for the Brand page. (e.g. Adidas)
+  --text: string # Meta Description for the Brand page. A brief description of the brand, displayed by search engines. Since search engines can only display less than 150 characters, we recommend not exceeding this character limit when creating the description. (e.g. Adidas)
 ]: any -> record<Active: bool, AdWordsRemarketingCode: string, Id: int, Keywords: string, LinkId: string, LomadeeCampaignCode: string, MenuHome: bool, Name: string, Score: int, SiteTitle: string, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/brand")
-  let body = {Active: $Active, AdWordsRemarketingCode: $AdWordsRemarketingCode, Id: $Id, Keywords: $Keywords, LinkId: $LinkId, LomadeeCampaignCode: $LomadeeCampaignCode, MenuHome: $MenuHome, Name: $Name, Score: $Score, SiteTitle: $SiteTitle, Text: $Text} | compact
+  let body = {"Active": $active, "AdWordsRemarketingCode": $ad_words_remarketing_code, "Id": $id, "Keywords": $keywords, "LinkId": $link_id, "LomadeeCampaignCode": $lomadee_campaign_code, "MenuHome": $menu_home, "Name": $name, "Score": $score, "SiteTitle": $site_title, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -333,7 +333,7 @@ export def "catalog-pvt-brand post" [
 #
 # DELETE /api/catalog/pvt/brand/{brandId}
 export def "catalog-pvt-brand delete" [
-  brandId: string
+  brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,13 +342,13 @@ export def "catalog-pvt-brand delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/brand/($brandId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({brand_id: $brand_id} | format pattern "/api/catalog/pvt/brand/{brand_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -359,7 +359,7 @@ export def "catalog-pvt-brand delete" [
 #
 # GET /api/catalog/pvt/brand/{brandId}
 export def "catalog-pvt-brand get" [
-  brandId: string
+  brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,13 +368,13 @@ export def "catalog-pvt-brand get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<Active: bool, AdWordsRemarketingCode: string, Id: int, Keywords: string, LinkId: string, LomadeeCampaignCode: string, MenuHome: bool, Name: string, Score: int, SiteTitle: string, Text: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/brand/($brandId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({brand_id: $brand_id} | format pattern "/api/catalog/pvt/brand/{brand_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,10 +384,10 @@ export def "catalog-pvt-brand get" [
 # Update Brand
 #
 # PUT /api/catalog/pvt/brand/{brandId}
-@deprecated --flag AdWordsRemarketingCode
-@deprecated --flag LomadeeCampaignCode
+@deprecated --flag ad-words-remarketing-code
+@deprecated --flag lomadee-campaign-code
 export def "catalog-pvt-brand put" [
-  brandId: string
+  brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,27 +396,27 @@ export def "catalog-pvt-brand put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --Active: oneof<nothing, bool> # Defines if the brand is active (`true`) or not (`false`). (e.g. true)
-  --AdWordsRemarketingCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
-  Id: int # Brand's unique numerical identifier. (e.g. 2000003)
-  --Keywords: string # Store Framework - Deprecated. Legacy CMS Portal - Alternative search terms that will lead to the specific brand. The user can find the desired brand even when misspelling it. Used especially when words are of foreign origin and have a distinct spelling that is transcribed into a generic one, or when small spelling mistakes occur.  (e.g. adidas)
-  --LinkId: string # Brand page slug. Only lowercase letters and hyphens (`-`) are allowed. (nullable, e.g. adidas-sports)
-  --LomadeeCampaignCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
-  --MenuHome: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - Defines if the Brand appears in the Department Menu control (`<vtex.cmc:departmentNavigator/>`).  (e.g. true)
-  Name: string # Brand name. (e.g. Adidas)
-  --Score: int # Store Framework - Deprecated Legacy CMS Portal - Value used to set the priority on the search result page.  (nullable, e.g. 10)
-  --SiteTitle: string # Meta Title for the Brand page. (e.g. Adidas)
-  --Text: string # Meta Description for the Brand page. A brief description of the brand, displayed by search engines. Since search engines can only display less than 150 characters, we recommend not exceeding this character limit when creating the description. (e.g. Adidas)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --active: oneof<nothing, bool> # Defines if the brand is active (`true`) or not (`false`). (e.g. true)
+  --ad-words-remarketing-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
+  id: int # Brand's unique numerical identifier. (e.g. 2000003)
+  --keywords: string # Store Framework - Deprecated. Legacy CMS Portal - Alternative search terms that will lead to the specific brand. The user can find the desired brand even when misspelling it. Used especially when words are of foreign origin and have a distinct spelling that is transcribed into a generic one, or when small spelling mistakes occur.  (e.g. adidas)
+  --link-id: string # Brand page slug. Only lowercase letters and hyphens (`-`) are allowed. (nullable, e.g. adidas-sports)
+  --lomadee-campaign-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
+  --menu-home: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - Defines if the Brand appears in the Department Menu control (`<vtex.cmc:departmentNavigator/>`).  (e.g. true)
+  name: string # Brand name. (e.g. Adidas)
+  --score: int # Store Framework - Deprecated Legacy CMS Portal - Value used to set the priority on the search result page.  (nullable, e.g. 10)
+  --site-title: string # Meta Title for the Brand page. (e.g. Adidas)
+  --text: string # Meta Description for the Brand page. A brief description of the brand, displayed by search engines. Since search engines can only display less than 150 characters, we recommend not exceeding this character limit when creating the description. (e.g. Adidas)
 ]: any -> record<Active: bool, AdWordsRemarketingCode: string, Id: int, Keywords: string, LinkId: string, LomadeeCampaignCode: string, MenuHome: bool, Name: string, Score: int, SiteTitle: string, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/brand/($brandId)")
-  let body = {Active: $Active, AdWordsRemarketingCode: $AdWordsRemarketingCode, Id: $Id, Keywords: $Keywords, LinkId: $LinkId, LomadeeCampaignCode: $LomadeeCampaignCode, MenuHome: $MenuHome, Name: $Name, Score: $Score, SiteTitle: $SiteTitle, Text: $Text} | compact
+  let full_url = (build-url $base ({brand_id: $brand_id} | format pattern "/api/catalog/pvt/brand/{brand_id}"))
+  let body = {"Active": $active, "AdWordsRemarketingCode": $ad_words_remarketing_code, "Id": $id, "Keywords": $keywords, "LinkId": $link_id, "LomadeeCampaignCode": $lomadee_campaign_code, "MenuHome": $menu_home, "Name": $name, "Score": $score, "SiteTitle": $site_title, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -426,8 +426,8 @@ export def "catalog-pvt-brand put" [
 # Create Category
 #
 # POST /api/catalog/pvt/category
-@deprecated --flag AdWordsRemarketingCode
-@deprecated --flag LomadeeCampaignCode
+@deprecated --flag ad-words-remarketing-code
+@deprecated --flag lomadee-campaign-code
 export def "catalog-pvt-category post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,31 +437,31 @@ export def "catalog-pvt-category post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --ActiveStoreFrontLink: oneof<nothing, bool> # If true, the Category link becomes active in store. (e.g. true)
-  --AdWordsRemarketingCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED, nullable, e.g. Sale)
-  Description: string # Text used in meta description tag for Category page. (e.g. Discover our range of home appliances. Find smart vacuums, kitchen and laundry appliances to suit your needs. Order online now.)
-  --FatherCategoryId: int # ID of the parent category, apply in case of category and subcategory. (nullable, e.g. 2)
-  GlobalCategoryId: int # Google Global Category ID. (e.g. 222)
-  --Id: int # Category unique identifier. If not informed, it will be automatically generated by VTEX. (e.g. 1)
-  --IsActive: oneof<nothing, bool> # If true, the Category page becomes available in store. (e.g. true)
-  Keywords: string # Substitute words for the Category. (e.g. Kitchen, Laundry, Appliances)
-  --LomadeeCampaignCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED, nullable, e.g. Sale)
-  Name: string # Category name. (e.g. Home Appliances)
-  --Score: int # Score for search sorting order. (nullable, e.g. 3)
-  --ShowBrandFilter: oneof<nothing, bool> # If true, the Category page displays a Brand filter. (e.g. true)
-  --ShowInStoreFront: oneof<nothing, bool> # If true, the Category is shown in the top and side menu. (e.g. true)
-  StockKeepingUnitSelectionMode: string # Defines how the SKU will be exhibited (e.g. SPECIFICATION)
-  Title: string # Text used in title tag for Category page. (e.g. Home Appliances)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --active-store-front-link: oneof<nothing, bool> # If true, the Category link becomes active in store. (e.g. true)
+  --ad-words-remarketing-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED, nullable, e.g. Sale)
+  description: string # Text used in meta description tag for Category page. (e.g. Discover our range of home appliances. Find smart vacuums, kitchen and laundry appliances to suit your needs. Order online now.)
+  --father-category-id: int # ID of the parent category, apply in case of category and subcategory. (nullable, e.g. 2)
+  global_category_id: int # Google Global Category ID. (e.g. 222)
+  --id: int # Category unique identifier. If not informed, it will be automatically generated by VTEX. (e.g. 1)
+  --is-active: oneof<nothing, bool> # If true, the Category page becomes available in store. (e.g. true)
+  keywords: string # Substitute words for the Category. (e.g. Kitchen, Laundry, Appliances)
+  --lomadee-campaign-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED, nullable, e.g. Sale)
+  name: string # Category name. (e.g. Home Appliances)
+  --score: int # Score for search sorting order. (nullable, e.g. 3)
+  --show-brand-filter: oneof<nothing, bool> # If true, the Category page displays a Brand filter. (e.g. true)
+  --show-in-store-front: oneof<nothing, bool> # If true, the Category is shown in the top and side menu. (e.g. true)
+  stock_keeping_unit_selection_mode: string # Defines how the SKU will be exhibited (e.g. SPECIFICATION)
+  title: string # Text used in title tag for Category page. (e.g. Home Appliances)
 ]: any -> record<ActiveStoreFrontLink: bool, AdWordsRemarketingCode: string, Description: string, FatherCategoryId: int, GlobalCategoryId: int, HasChildren: bool, Id: int, IsActive: bool, Keywords: string, LinkId: string, LomadeeCampaignCode: string, Name: string, Score: int, ShowBrandFilter: bool, ShowInStoreFront: bool, StockKeepingUnitSelectionMode: string, Title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/category")
-  let body = {ActiveStoreFrontLink: $ActiveStoreFrontLink, AdWordsRemarketingCode: $AdWordsRemarketingCode, Description: $Description, FatherCategoryId: $FatherCategoryId, GlobalCategoryId: $GlobalCategoryId, Id: $Id, IsActive: $IsActive, Keywords: $Keywords, LomadeeCampaignCode: $LomadeeCampaignCode, Name: $Name, Score: $Score, ShowBrandFilter: $ShowBrandFilter, ShowInStoreFront: $ShowInStoreFront, StockKeepingUnitSelectionMode: $StockKeepingUnitSelectionMode, Title: $Title} | compact
+  let body = {"ActiveStoreFrontLink": $active_store_front_link, "AdWordsRemarketingCode": $ad_words_remarketing_code, "Description": $description, "FatherCategoryId": $father_category_id, "GlobalCategoryId": $global_category_id, "Id": $id, "IsActive": $is_active, "Keywords": $keywords, "LomadeeCampaignCode": $lomadee_campaign_code, "Name": $name, "Score": $score, "ShowBrandFilter": $show_brand_filter, "ShowInStoreFront": $show_in_store_front, "StockKeepingUnitSelectionMode": $stock_keeping_unit_selection_mode, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -472,7 +472,7 @@ export def "catalog-pvt-category post" [
 #
 # GET /api/catalog/pvt/category/{categoryId}
 export def "catalog-pvt-category get" [
-  categoryId: int
+  category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,13 +481,13 @@ export def "catalog-pvt-category get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<ActiveStoreFrontLink: bool, AdWordsRemarketingCode: string, Description: string, FatherCategoryId: int, GlobalCategoryId: int, HasChildren: bool, Id: int, IsActive: bool, Keywords: string, LinkId: string, LomadeeCampaignCode: string, Name: string, Score: int, ShowBrandFilter: bool, ShowInStoreFront: bool, StockKeepingUnitSelectionMode: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/category/($categoryId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/api/catalog/pvt/category/{category_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,7 +498,7 @@ export def "catalog-pvt-category get" [
 #
 # PUT /api/catalog/pvt/category/{categoryId}
 export def "catalog-pvt-category put" [
-  categoryId: int
+  category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,30 +507,30 @@ export def "catalog-pvt-category put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --ActiveStoreFrontLink: oneof<nothing, bool> # If true, the Category link becomes active in store. (e.g. true)
-  AdWordsRemarketingCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED, e.g. Sale)
-  Description: string # Text used in meta description tag for Category page. (e.g. Discover our range of home appliances. Find smart vacuums, kitchen and laundry appliances to suit your needs. Order online now.)
-  --FatherCategoryId: int # ID of the parent category, apply in case of category and subcategory. (nullable, e.g. 2)
-  GlobalCategoryId: int # Google Global Category ID. (e.g. 222)
-  --IsActive: oneof<nothing, bool> # If true, the Category page becomes available in store. (e.g. true)
-  Keywords: string # Substitute words for the Category. (e.g. Kitchen, Laundry, Appliances)
-  LomadeeCampaignCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED, e.g. Sale)
-  Name: string # Category name. (e.g. Home Appliances)
-  Score: int # Score for search sorting order. (e.g. 3)
-  --ShowBrandFilter: oneof<nothing, bool> # If true, the Category page displays a Brand filter. (e.g. true)
-  --ShowInStoreFront: oneof<nothing, bool> # If true, the Category is shown in the top and side menu. (e.g. true)
-  StockKeepingUnitSelectionMode: string # Defines how the SKU will be exhibited (e.g. SPECIFICATION)
-  Title: string # Text used in title tag for Category page. (e.g. Home Appliances)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --active-store-front-link: oneof<nothing, bool> # If true, the Category link becomes active in store. (e.g. true)
+  ad_words_remarketing_code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED, e.g. Sale)
+  description: string # Text used in meta description tag for Category page. (e.g. Discover our range of home appliances. Find smart vacuums, kitchen and laundry appliances to suit your needs. Order online now.)
+  --father-category-id: int # ID of the parent category, apply in case of category and subcategory. (nullable, e.g. 2)
+  global_category_id: int # Google Global Category ID. (e.g. 222)
+  --is-active: oneof<nothing, bool> # If true, the Category page becomes available in store. (e.g. true)
+  keywords: string # Substitute words for the Category. (e.g. Kitchen, Laundry, Appliances)
+  lomadee_campaign_code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED, e.g. Sale)
+  name: string # Category name. (e.g. Home Appliances)
+  score: int # Score for search sorting order. (e.g. 3)
+  --show-brand-filter: oneof<nothing, bool> # If true, the Category page displays a Brand filter. (e.g. true)
+  --show-in-store-front: oneof<nothing, bool> # If true, the Category is shown in the top and side menu. (e.g. true)
+  stock_keeping_unit_selection_mode: string # Defines how the SKU will be exhibited (e.g. SPECIFICATION)
+  title: string # Text used in title tag for Category page. (e.g. Home Appliances)
 ]: any -> record<ActiveStoreFrontLink: bool, AdWordsRemarketingCode: string, Description: string, FatherCategoryId: int, GlobalCategoryId: int, HasChildren: bool, Id: int, IsActive: bool, Keywords: string, LinkId: string, LomadeeCampaignCode: string, Name: string, Score: int, ShowBrandFilter: bool, ShowInStoreFront: bool, StockKeepingUnitSelectionMode: string, Title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/category/($categoryId)")
-  let body = {ActiveStoreFrontLink: $ActiveStoreFrontLink, AdWordsRemarketingCode: $AdWordsRemarketingCode, Description: $Description, FatherCategoryId: $FatherCategoryId, GlobalCategoryId: $GlobalCategoryId, IsActive: $IsActive, Keywords: $Keywords, LomadeeCampaignCode: $LomadeeCampaignCode, Name: $Name, Score: $Score, ShowBrandFilter: $ShowBrandFilter, ShowInStoreFront: $ShowInStoreFront, StockKeepingUnitSelectionMode: $StockKeepingUnitSelectionMode, Title: $Title} | compact
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/api/catalog/pvt/category/{category_id}"))
+  let body = {"ActiveStoreFrontLink": $active_store_front_link, "AdWordsRemarketingCode": $ad_words_remarketing_code, "Description": $description, "FatherCategoryId": $father_category_id, "GlobalCategoryId": $global_category_id, "IsActive": $is_active, "Keywords": $keywords, "LomadeeCampaignCode": $lomadee_campaign_code, "Name": $name, "Score": $score, "ShowBrandFilter": $show_brand_filter, "ShowInStoreFront": $show_in_store_front, "StockKeepingUnitSelectionMode": $stock_keeping_unit_selection_mode, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -549,21 +549,21 @@ export def "catalog-pvt-collection post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  DateFrom: string # Initial value date for the Collection. (e.g. 2017-09-27T10:47:00)
-  DateTo: string # Final value date for the Collection. (e.g. 2017-09-27T10:47:00)
-  --Highlight: oneof<nothing, bool> # Defines if the Collection is highlighted or not. (e.g. false)
-  Name: string # Collection Name. (e.g. Test)
-  --Searchable: oneof<nothing, bool> # Defines if the Collection is searchable or not. (e.g. true)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  date_from: string # Initial value date for the Collection. (e.g. 2017-09-27T10:47:00)
+  date_to: string # Final value date for the Collection. (e.g. 2017-09-27T10:47:00)
+  --highlight: oneof<nothing, bool> # Defines if the Collection is highlighted or not. (e.g. false)
+  name: string # Collection Name. (e.g. Test)
+  --searchable: oneof<nothing, bool> # Defines if the Collection is searchable or not. (e.g. true)
 ]: any -> record<DateFrom: string, DateTo: string, Description: string, Highlight: bool, Id: int, Name: string, Searchable: bool, TotalProducts: int, Type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/collection")
-  let body = {DateFrom: $DateFrom, DateTo: $DateTo, Highlight: $Highlight, Name: $Name, Searchable: $Searchable} | compact
+  let body = {"DateFrom": $date_from, "DateTo": $date_to, "Highlight": $highlight, "Name": $name, "Searchable": $searchable} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -574,7 +574,7 @@ export def "catalog-pvt-collection post" [
 #
 # POST /api/catalog/pvt/collection/
 # operationId: POST-CreateCollection
-export def "catalog-pvt-collection POST-CreateCollection" [
+export def "catalog-pvt-collection post-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,22 +583,22 @@ export def "catalog-pvt-collection POST-CreateCollection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  DateFrom: string # Collection start date and time. If a future date and time are set, the collection will have a scheduled status. (e.g. 2020-11-26T15:23:00)
-  DateTo: string # Collection end date and time. (e.g. 2069-11-26T15:23:00)
-  Description: string # Collection's description for internal use, with the collection's details. It will not be used for search engines. (e.g. HomeHalloween)
-  --Highlight: oneof<nothing, bool> # Option if you want the collection to highlight specific products using a tag. (e.g. false)
-  Name: string # Collection's Name. (e.g. Halloween costumes)
-  --Searchable: oneof<nothing, bool> # Option making the collection searchable in the store. (e.g. false)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  date_from: string # Collection start date and time. If a future date and time are set, the collection will have a scheduled status. (e.g. 2020-11-26T15:23:00)
+  date_to: string # Collection end date and time. (e.g. 2069-11-26T15:23:00)
+  description: string # Collection's description for internal use, with the collection's details. It will not be used for search engines. (e.g. HomeHalloween)
+  --highlight: oneof<nothing, bool> # Option if you want the collection to highlight specific products using a tag. (e.g. false)
+  name: string # Collection's Name. (e.g. Halloween costumes)
+  --searchable: oneof<nothing, bool> # Option making the collection searchable in the store. (e.g. false)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/collection/")
-  let body = {DateFrom: $DateFrom, DateTo: $DateTo, Description: $Description, Highlight: $Highlight, Name: $Name, Searchable: $Searchable} | compact
+  let body = {"DateFrom": $date_from, "DateTo": $date_to, "Description": $description, "Highlight": $highlight, "Name": $name, "Searchable": $searchable} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -609,7 +609,7 @@ export def "catalog-pvt-collection POST-CreateCollection" [
 #
 # GET /api/catalog/pvt/collection/inactive
 # operationId: GET-AllInactiveCollections
-export def "catalog-pvt-collection-inactive GET-AllInactiveCollections" [
+export def "catalog-pvt-collection-inactive get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,13 +618,13 @@ export def "catalog-pvt-collection-inactive GET-AllInactiveCollections" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/collection/inactive")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -635,7 +635,7 @@ export def "catalog-pvt-collection-inactive GET-AllInactiveCollections" [
 #
 # GET /api/catalog/pvt/collection/stockkeepingunit/importfileexample
 # operationId: GET-Importfileexample
-export def "catalog-pvt-collection-stockkeepingunit-importfileexample GET-Importfileexample" [
+export def "catalog-pvt-collection-stockkeepingunit-importfileexample get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,13 +644,13 @@ export def "catalog-pvt-collection-stockkeepingunit-importfileexample GET-Import
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/collection/stockkeepingunit/importfileexample")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -661,7 +661,7 @@ export def "catalog-pvt-collection-stockkeepingunit-importfileexample GET-Import
 #
 # DELETE /api/catalog/pvt/collection/{collectionId}
 export def "catalog-pvt-collection delete" [
-  collectionId: int
+  collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,13 +670,13 @@ export def "catalog-pvt-collection delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/collection/($collectionId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/catalog/pvt/collection/{collection_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -687,7 +687,7 @@ export def "catalog-pvt-collection delete" [
 #
 # GET /api/catalog/pvt/collection/{collectionId}
 export def "catalog-pvt-collection get" [
-  collectionId: int
+  collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,13 +696,13 @@ export def "catalog-pvt-collection get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<DateFrom: string, DateTo: string, Description: string, Highlight: bool, Id: int, Name: string, Searchable: bool, TotalProducts: int, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/collection/($collectionId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/catalog/pvt/collection/{collection_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -713,7 +713,7 @@ export def "catalog-pvt-collection get" [
 #
 # PUT /api/catalog/pvt/collection/{collectionId}
 export def "catalog-pvt-collection put" [
-  collectionId: int
+  collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,21 +722,21 @@ export def "catalog-pvt-collection put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  DateFrom: string # Initial value date for the Collection. (e.g. 2017-09-27T10:47:00)
-  DateTo: string # Final value date for the Collection. (e.g. 2017-09-27T10:47:00)
-  --Highlight: oneof<nothing, bool> # Defines if the Collection is highlighted or not (e.g. false)
-  Name: string # Collection Name. (e.g. Test)
-  --Searchable: oneof<nothing, bool> # Defines if the Collection is searchable or not. (e.g. true)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  date_from: string # Initial value date for the Collection. (e.g. 2017-09-27T10:47:00)
+  date_to: string # Final value date for the Collection. (e.g. 2017-09-27T10:47:00)
+  --highlight: oneof<nothing, bool> # Defines if the Collection is highlighted or not (e.g. false)
+  name: string # Collection Name. (e.g. Test)
+  --searchable: oneof<nothing, bool> # Defines if the Collection is searchable or not. (e.g. true)
 ]: any -> record<DateFrom: string, DateTo: string, Description: string, Highlight: bool, Id: int, Name: string, Searchable: bool, TotalProducts: int, Type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/collection/($collectionId)")
-  let body = {DateFrom: $DateFrom, DateTo: $DateTo, Highlight: $Highlight, Name: $Name, Searchable: $Searchable} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/catalog/pvt/collection/{collection_id}"))
+  let body = {"DateFrom": $date_from, "DateTo": $date_to, "Highlight": $highlight, "Name": $name, "Searchable": $searchable} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -747,7 +747,7 @@ export def "catalog-pvt-collection put" [
 #
 # POST /api/catalog/pvt/collection/{collectionId}/position
 export def "catalog-pvt-collection-position post" [
-  collectionId: int
+  collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,19 +756,19 @@ export def "catalog-pvt-collection-position post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   position: int # SKU position. (e.g. 1)
-  skuId: int # SKU ID. (e.g. 1)
-  subCollectionId: int # Subcollection ID. (e.g. 17)
+  sku_id: int # SKU ID. (e.g. 1)
+  sub_collection_id: int # Subcollection ID. (e.g. 17)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/collection/($collectionId)/position")
-  let body = {position: $position, skuId: $skuId, subCollectionId: $subCollectionId} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/catalog/pvt/collection/{collection_id}/position"))
+  let body = {"position": $position, "skuId": $sku_id, "subCollectionId": $sub_collection_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -779,8 +779,8 @@ export def "catalog-pvt-collection-position post" [
 #
 # GET /api/catalog/pvt/collection/{collectionId}/products
 # operationId: GET-Productsfromacollection
-export def "catalog-pvt-collection-products GET-Productsfromacollection" [
-  collectionId: int
+export def "catalog-pvt-collection-products get" [
+  collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,26 +790,26 @@ export def "catalog-pvt-collection-products GET-Productsfromacollection" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 2)
-  --pageSize: int # Number of the items of the page. (e.g. 15)
-  --Filter: string # Filter used to refine the Collection's products. (e.g. Pre launch)
-  --Active: oneof<nothing, bool> # Defines if the status of the product is active or not. (e.g. true)
-  --Visible: oneof<nothing, bool> # Defines if the product is visible on the store or not. (e.g. true)
-  --CategoryId: int # Product's Category unique identifier. (e.g. 12)
-  --BrandId: int # Product's Brand unique identifier. (e.g. 3)
-  --SupplierId: int # Product's Supplier unique identifier. (e.g. 1)
-  --SalesChannelId: int # Product's Trade Policy unique identifier. (e.g. 1)
-  --ReleaseFrom: string # Product past release date. (e.g. 2069-11-26T15:23:00)
-  --ReleaseTo: string # Product future release date. (e.g. 2069-11-26T15:23:00)
-  --SpecificationProduct: string # Product Specification Field Value. You must also fill in `SpecificationFieldId` to use this parameter. (e.g. M)
-  --SpecificationFieldId: int # Product Specification Field unique identifier. (e.g. 40)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --page-size: int # Number of the items of the page. (e.g. 15)
+  --filter: string # Filter used to refine the Collection's products. (e.g. Pre launch)
+  --active: oneof<nothing, bool> # Defines if the status of the product is active or not. (e.g. true)
+  --visible: oneof<nothing, bool> # Defines if the product is visible on the store or not. (e.g. true)
+  --category-id: int # Product's Category unique identifier. (e.g. 12)
+  --brand-id: int # Product's Brand unique identifier. (e.g. 3)
+  --supplier-id: int # Product's Supplier unique identifier. (e.g. 1)
+  --sales-channel-id: int # Product's Trade Policy unique identifier. (e.g. 1)
+  --release-from: string # Product past release date. (e.g. 2069-11-26T15:23:00)
+  --release-to: string # Product future release date. (e.g. 2069-11-26T15:23:00)
+  --specification-product: string # Product Specification Field Value. You must also fill in `SpecificationFieldId` to use this parameter. (e.g. M)
+  --specification-field-id: int # Product Specification Field unique identifier. (e.g. 40)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "Filter" $Filter "scalar") (serialize-qp "Active" $Active "scalar") (serialize-qp "Visible" $Visible "scalar") (serialize-qp "CategoryId" $CategoryId "scalar") (serialize-qp "BrandId" $BrandId "scalar") (serialize-qp "SupplierId" $SupplierId "scalar") (serialize-qp "SalesChannelId" $SalesChannelId "scalar") (serialize-qp "ReleaseFrom" $ReleaseFrom "scalar") (serialize-qp "ReleaseTo" $ReleaseTo "scalar") (serialize-qp "SpecificationProduct" $SpecificationProduct "scalar") (serialize-qp "SpecificationFieldId" $SpecificationFieldId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/catalog/pvt/collection/($collectionId)/products" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "Filter" $filter "scalar") (serialize-qp "Active" $active "scalar") (serialize-qp "Visible" $visible "scalar") (serialize-qp "CategoryId" $category_id "scalar") (serialize-qp "BrandId" $brand_id "scalar") (serialize-qp "SupplierId" $supplier_id "scalar") (serialize-qp "SalesChannelId" $sales_channel_id "scalar") (serialize-qp "ReleaseFrom" $release_from "scalar") (serialize-qp "ReleaseTo" $release_to "scalar") (serialize-qp "SpecificationProduct" $specification_product "scalar") (serialize-qp "SpecificationFieldId" $specification_field_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/catalog/pvt/collection/{collection_id}/products") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -820,8 +820,8 @@ export def "catalog-pvt-collection-products GET-Productsfromacollection" [
 #
 # POST /api/catalog/pvt/collection/{collectionId}/stockkeepingunit/importexclude
 # operationId: POST-Removeproductsbyimportfile
-export def "catalog-pvt-collection-stockkeepingunit-importexclude POST-Removeproductsbyimportfile" [
-  collectionId: int
+export def "catalog-pvt-collection-stockkeepingunit-importexclude post" [
+  collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,17 +830,17 @@ export def "catalog-pvt-collection-stockkeepingunit-importexclude POST-Removepro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --file: any # XLS file with information about products to be added to a Collection. The file must be an imported template from [Import Collection file example](https://developers.vtex.com/vtex-developer-docs/reference/get-importfileexample) endpoint. (format: binary)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/collection/($collectionId)/stockkeepingunit/importexclude")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/catalog/pvt/collection/{collection_id}/stockkeepingunit/importexclude"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,8 +851,8 @@ export def "catalog-pvt-collection-stockkeepingunit-importexclude POST-Removepro
 #
 # POST /api/catalog/pvt/collection/{collectionId}/stockkeepingunit/importinsert
 # operationId: POST-Addproductsbyimportfile
-export def "catalog-pvt-collection-stockkeepingunit-importinsert POST-Addproductsbyimportfile" [
-  collectionId: int
+export def "catalog-pvt-collection-stockkeepingunit-importinsert post" [
+  collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,17 +861,17 @@ export def "catalog-pvt-collection-stockkeepingunit-importinsert POST-Addproduct
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --file: any # XLS file with information about products to be added to a Collection. The file must be an imported template from [Import Collection file example](https://developers.vtex.com/vtex-developer-docs/reference/get-importfileexample) endpoint. (format: binary)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/collection/($collectionId)/stockkeepingunit/importinsert")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/catalog/pvt/collection/{collection_id}/stockkeepingunit/importinsert"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -882,7 +882,7 @@ export def "catalog-pvt-collection-stockkeepingunit-importinsert POST-Addproduct
 #
 # GET /api/catalog/pvt/collection/{collectionId}/subcollection
 export def "catalog-pvt-collection-subcollection get" [
-  collectionId: int
+  collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -891,13 +891,13 @@ export def "catalog-pvt-collection-subcollection get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<CollectionId: int, Id: int, Name: string, PreSale: bool, Release: bool, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/collection/($collectionId)/subcollection")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({collection_id: $collection_id} | format pattern "/api/catalog/pvt/collection/{collection_id}/subcollection"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -907,9 +907,9 @@ export def "catalog-pvt-collection-subcollection get" [
 # Create Product with Category and Brand
 #
 # POST /api/catalog/pvt/product
-@deprecated --flag AdWordsRemarketingCode
-@deprecated --flag LomadeeCampaignCode
-@deprecated --flag SupplierId
+@deprecated --flag ad-words-remarketing-code
+@deprecated --flag lomadee-campaign-code
+@deprecated --flag supplier-id
 export def "catalog-pvt-product post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,38 +919,38 @@ export def "catalog-pvt-product post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --AdWordsRemarketingCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
-  --BrandId: int # ID of an existing Brand that will be associated with this product. It is mandatory to use either this field or the `BrandName` field. (e.g. 12121219)
-  --BrandName: string # Name of the brand that will be associated with this product. It is mandatory to use either this field or the `BrandId` field. If you wish to create a new brand, that is, in case the brand does not exist yet, use this field instead of `BrandId`. (e.g. Sample Brand)
-  --CategoryId: int # ID of an existing Category that will be associated with this product. It is mandatory to use either this field or the `CategoryPath` field. (e.g. 2000090)
-  --CategoryPath: string # Path of categories associated with this product, from the highest level of category to the lowest level, separated by `/`. It is mandatory to use either this field or the `CategoryId` field. (e.g. Mens/Clothing/T-Shirts)
-  --Description: string # Product description. (e.g. The Nike Zoom Stefan Janoski Men's Shoe is made with a premium leather upper for superior durability and a flexible midsole for all-day comfort. A tacky gum rubber outsole delivers outstanding traction.)
-  --DescriptionShort: string # Short product description. This information can be displayed on both the product page and the shelf, using the following controls:  Store Framework:  `$product.DescriptionShort`.  Legacy CMS Portal: `<vtex.cmc:productDescriptionShort/>`.  (e.g. The Nike Zoom Stefan Janoski is made with a premium leather.)
-  --Id: int # Product’s unique numerical identifier. If not informed, it will be automatically generated by VTEX. (e.g. 42)
-  --IsActive: oneof<nothing, bool> # Activate (`true`) or inactivate (`false`) product. (e.g. true)
-  --IsVisible: oneof<nothing, bool> # Shows (`true`) or hides (`false`) the product in search result and product pages, but the product can still be added to the shopping cart. Usually applicable for gifts. (e.g. true)
-  --KeyWords: string # Store Framework: Deprecated.  Legacy CMS Portal: Keywords or synonyms related to the product, separated by comma (`,`). "Television", for example, can have a substitute word like "TV". This field is important to make your searches more comprehensive.  (e.g. Zoom,Stefan,Janoski)
-  --LinkId: string # Slug that will be used to build the product page URL. If it not informed, it will be generated according to the product's name replacing spaces and special characters by hyphens (`-`). (e.g. stefan-janoski-canvas-varsity-red)
-  --LomadeeCampaignCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
-  --MetaTagDescription: string # Brief description of the product for SEO. It is recommended not to exceed 150 characters. (e.g. The Nike Zoom Stefan Janoski Men's Shoe is made with a premium leather upper for superior durability and a flexible midsole for all-day comfort. A tacky gum rubber outsole delivers outstanding traction.)
-  Name: string # Product's name. Limited to 150 characters. (e.g. Zoom Stefan Janoski Canvas RM SB Varsity Red)
-  --RefId: string # Product Reference Code. (e.g. sr_1_90)
-  --ReleaseDate: string # Used to assist in the ordering of the search result of the site. Using the `O=OrderByReleaseDateDESC` query string, you can pull this value and show the display order by release date. This attribute is also used as a condition for dynamic collections. (e.g. 2019-01-01T00:00:00)
-  --Score: int # Value used to set the priority on the search result page. (e.g. 1)
-  --ShowWithoutStock: oneof<nothing, bool> # If `true`, activates the [Notify Me](https://help.vtex.com/en/tutorial/setting-up-the-notify-me-option--2VqVifQuf6Co2KG048Yu6e) option when the product is out of stock. (e.g. true)
-  --SupplierId: int # DEPRECATED, nullable
-  --TaxCode: string # Product tax code, used for tax calculation. (e.g. 12345)
-  --Title: string # Product's Title tag. Limited to 150 characters. It is presented in the browser tab and corresponds to the title of the product page. This field is important for SEO. (e.g. Zoom Stefan Janoski Canvas RM SB Varsity Red)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --ad-words-remarketing-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
+  --brand-id: int # ID of an existing Brand that will be associated with this product. It is mandatory to use either this field or the `BrandName` field. (e.g. 12121219)
+  --brand-name: string # Name of the brand that will be associated with this product. It is mandatory to use either this field or the `BrandId` field. If you wish to create a new brand, that is, in case the brand does not exist yet, use this field instead of `BrandId`. (e.g. Sample Brand)
+  --category-id: int # ID of an existing Category that will be associated with this product. It is mandatory to use either this field or the `CategoryPath` field. (e.g. 2000090)
+  --category-path: string # Path of categories associated with this product, from the highest level of category to the lowest level, separated by `/`. It is mandatory to use either this field or the `CategoryId` field. (e.g. Mens/Clothing/T-Shirts)
+  --description: string # Product description. (e.g. The Nike Zoom Stefan Janoski Men's Shoe is made with a premium leather upper for superior durability and a flexible midsole for all-day comfort. A tacky gum rubber outsole delivers outstanding traction.)
+  --description-short: string # Short product description. This information can be displayed on both the product page and the shelf, using the following controls:  Store Framework:  `$product.DescriptionShort`.  Legacy CMS Portal: `<vtex.cmc:productDescriptionShort/>`.  (e.g. The Nike Zoom Stefan Janoski is made with a premium leather.)
+  --id: int # Product’s unique numerical identifier. If not informed, it will be automatically generated by VTEX. (e.g. 42)
+  --is-active: oneof<nothing, bool> # Activate (`true`) or inactivate (`false`) product. (e.g. true)
+  --is-visible: oneof<nothing, bool> # Shows (`true`) or hides (`false`) the product in search result and product pages, but the product can still be added to the shopping cart. Usually applicable for gifts. (e.g. true)
+  --key-words: string # Store Framework: Deprecated.  Legacy CMS Portal: Keywords or synonyms related to the product, separated by comma (`,`). "Television", for example, can have a substitute word like "TV". This field is important to make your searches more comprehensive.  (e.g. Zoom,Stefan,Janoski)
+  --link-id: string # Slug that will be used to build the product page URL. If it not informed, it will be generated according to the product's name replacing spaces and special characters by hyphens (`-`). (e.g. stefan-janoski-canvas-varsity-red)
+  --lomadee-campaign-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
+  --meta-tag-description: string # Brief description of the product for SEO. It is recommended not to exceed 150 characters. (e.g. The Nike Zoom Stefan Janoski Men's Shoe is made with a premium leather upper for superior durability and a flexible midsole for all-day comfort. A tacky gum rubber outsole delivers outstanding traction.)
+  name: string # Product's name. Limited to 150 characters. (e.g. Zoom Stefan Janoski Canvas RM SB Varsity Red)
+  --ref-id: string # Product Reference Code. (e.g. sr_1_90)
+  --release-date: string # Used to assist in the ordering of the search result of the site. Using the `O=OrderByReleaseDateDESC` query string, you can pull this value and show the display order by release date. This attribute is also used as a condition for dynamic collections. (e.g. 2019-01-01T00:00:00)
+  --score: int # Value used to set the priority on the search result page. (e.g. 1)
+  --show-without-stock: oneof<nothing, bool> # If `true`, activates the [Notify Me](https://help.vtex.com/en/tutorial/setting-up-the-notify-me-option--2VqVifQuf6Co2KG048Yu6e) option when the product is out of stock. (e.g. true)
+  --supplier-id: int # DEPRECATED, nullable
+  --tax-code: string # Product tax code, used for tax calculation. (e.g. 12345)
+  --title: string # Product's Title tag. Limited to 150 characters. It is presented in the browser tab and corresponds to the title of the product page. This field is important for SEO. (e.g. Zoom Stefan Janoski Canvas RM SB Varsity Red)
 ]: any -> record<AdWordsRemarketingCode: string, BrandId: int, CategoryId: int, DepartmentId: int, Description: string, DescriptionShort: string, Id: int, IsActive: bool, IsVisible: bool, KeyWords: string, LinkId: string, LomadeeCampaignCode: string, MetaTagDescription: string, Name: string, RefId: string, ReleaseDate: string, Score: int, ShowWithoutStock: bool, SupplierId: int, TaxCode: string, Title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/product")
-  let body = {AdWordsRemarketingCode: $AdWordsRemarketingCode, BrandId: $BrandId, BrandName: $BrandName, CategoryId: $CategoryId, CategoryPath: $CategoryPath, Description: $Description, DescriptionShort: $DescriptionShort, Id: $Id, IsActive: $IsActive, IsVisible: $IsVisible, KeyWords: $KeyWords, LinkId: $LinkId, LomadeeCampaignCode: $LomadeeCampaignCode, MetaTagDescription: $MetaTagDescription, Name: $Name, RefId: $RefId, ReleaseDate: $ReleaseDate, Score: $Score, ShowWithoutStock: $ShowWithoutStock, SupplierId: $SupplierId, TaxCode: $TaxCode, Title: $Title} | compact
+  let body = {"AdWordsRemarketingCode": $ad_words_remarketing_code, "BrandId": $brand_id, "BrandName": $brand_name, "CategoryId": $category_id, "CategoryPath": $category_path, "Description": $description, "DescriptionShort": $description_short, "Id": $id, "IsActive": $is_active, "IsVisible": $is_visible, "KeyWords": $key_words, "LinkId": $link_id, "LomadeeCampaignCode": $lomadee_campaign_code, "MetaTagDescription": $meta_tag_description, "Name": $name, "RefId": $ref_id, "ReleaseDate": $release_date, "Score": $score, "ShowWithoutStock": $show_without_stock, "SupplierId": $supplier_id, "TaxCode": $tax_code, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -961,8 +961,8 @@ export def "catalog-pvt-product post" [
 #
 # GET /api/catalog/pvt/product/{productId}
 # operationId: GetProductbyid
-export def "catalog-pvt-product GetProductbyid" [
-  productId: string
+export def "catalog-pvt-product get-productbyid" [
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,13 +971,13 @@ export def "catalog-pvt-product GetProductbyid" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<AdWordsRemarketingCode: string, BrandId: int, CategoryId: int, DepartmentId: int, Description: string, DescriptionShort: string, Id: int, IsActive: bool, IsVisible: bool, KeyWords: string, LinkId: string, LomadeeCampaignCode: string, MetaTagDescription: string, Name: string, RefId: string, ReleaseDate: string, Score: int, ShowWithoutStock: bool, SupplierId: int, TaxCode: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog/pvt/product/{product_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -987,11 +987,11 @@ export def "catalog-pvt-product GetProductbyid" [
 # Update Product
 #
 # PUT /api/catalog/pvt/product/{productId}
-@deprecated --flag AdWordsRemarketingCode
-@deprecated --flag LomadeeCampaignCode
-@deprecated --flag SupplierId
+@deprecated --flag ad-words-remarketing-code
+@deprecated --flag lomadee-campaign-code
+@deprecated --flag supplier-id
 export def "catalog-pvt-product put" [
-  productId: int
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,36 +1000,36 @@ export def "catalog-pvt-product put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --AdWordsRemarketingCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
-  BrandId: int # Brand ID associated with this product. (e.g. 12121219)
-  CategoryId: int # Category ID associated with this product. (e.g. 2000090)
-  --DepartmentId: int # Department ID according to the product's category. (e.g. 2000089)
-  --Description: string # Product description. (e.g. The Nike Zoom Stefan Janoski Men's Shoe is made with a premium leather upper for superior durability and a flexible midsole for all-day comfort. A tacky gum rubber outsole delivers outstanding traction.)
-  --DescriptionShort: string # Short product description. This information can be displayed on both the product page and the shelf, using the following controls:  Store Framework:  `$product.DescriptionShort`.  Legacy CMS Portal: `<vtex.cmc:productDescriptionShort/>`.  (e.g. The Nike Zoom Stefan Janoski is made with a premium leather.)
-  --IsActive: oneof<nothing, bool> # Activate (`true`) or inactivate (`false`) product. (e.g. true)
-  --IsVisible: oneof<nothing, bool> # Shows (`true`) or hides (`false`) the product in search result and product pages, but the product can still be added to the shopping cart. Usually applicable for gifts. (e.g. true)
-  --KeyWords: string # Store Framework: Deprecated.  Legacy CMS Portal: Keywords or synonyms related to the product, separated by comma (`,`). "Television", for example, can have a substitute word like "TV". This field is important to make your searches more comprehensive.  (e.g. Zoom,Stefan,Janoski)
-  --LinkId: string # Slug that will be used to build the product page URL. If it not informed, it will be generated according to the product's name replacing spaces and special characters by hyphens (`-`). (e.g. stefan-janoski-canvas-varsity-red)
-  --LomadeeCampaignCode: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
-  --MetaTagDescription: string # Brief description of the product for SEO. It is recommended not to exceed 150 characters. (e.g. The Nike Zoom Stefan Janoski Men's Shoe is made with a premium leather upper for superior durability and a flexible midsole for all-day comfort. A tacky gum rubber outsole delivers outstanding traction.)
-  Name: string # Product's name. Limited to 150 characters. (e.g. Zoom Stefan Janoski Canvas RM SB Varsity Red)
-  --RefId: string # Product Reference Code. (e.g. sr_1_90)
-  --ReleaseDate: string # Used to assist in the ordering of the search result of the site. Using the `O=OrderByReleaseDateDESC` query string, you can pull this value and show the display order by release date. This attribute is also used as a condition for dynamic collections. (e.g. 2019-01-01T00:00:00)
-  --Score: int # Value used to set the priority on the search result page. (e.g. 1)
-  --ShowWithoutStock: oneof<nothing, bool> # If `true`, activates the [Notify Me](https://help.vtex.com/en/tutorial/setting-up-the-notify-me-option--2VqVifQuf6Co2KG048Yu6e) option when the product is out of stock. (e.g. true)
-  --SupplierId: int # DEPRECATED, nullable
-  --TaxCode: string # Product tax code, used for tax calculation. (e.g. 12345)
-  --Title: string # Product's Title tag. Limited to 150 characters. It is presented in the browser tab and corresponds to the title of the product page. This field is important for SEO. (e.g. Zoom Stefan Janoski Canvas RM SB Varsity Red)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --ad-words-remarketing-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
+  brand_id: int # Brand ID associated with this product. (e.g. 12121219)
+  category_id: int # Category ID associated with this product. (e.g. 2000090)
+  --department-id: int # Department ID according to the product's category. (e.g. 2000089)
+  --description: string # Product description. (e.g. The Nike Zoom Stefan Janoski Men's Shoe is made with a premium leather upper for superior durability and a flexible midsole for all-day comfort. A tacky gum rubber outsole delivers outstanding traction.)
+  --description-short: string # Short product description. This information can be displayed on both the product page and the shelf, using the following controls:  Store Framework:  `$product.DescriptionShort`.  Legacy CMS Portal: `<vtex.cmc:productDescriptionShort/>`.  (e.g. The Nike Zoom Stefan Janoski is made with a premium leather.)
+  --is-active: oneof<nothing, bool> # Activate (`true`) or inactivate (`false`) product. (e.g. true)
+  --is-visible: oneof<nothing, bool> # Shows (`true`) or hides (`false`) the product in search result and product pages, but the product can still be added to the shopping cart. Usually applicable for gifts. (e.g. true)
+  --key-words: string # Store Framework: Deprecated.  Legacy CMS Portal: Keywords or synonyms related to the product, separated by comma (`,`). "Television", for example, can have a substitute word like "TV". This field is important to make your searches more comprehensive.  (e.g. Zoom,Stefan,Janoski)
+  --link-id: string # Slug that will be used to build the product page URL. If it not informed, it will be generated according to the product's name replacing spaces and special characters by hyphens (`-`). (e.g. stefan-janoski-canvas-varsity-red)
+  --lomadee-campaign-code: string # This is a legacy field. Do not take this information into consideration. (DEPRECATED)
+  --meta-tag-description: string # Brief description of the product for SEO. It is recommended not to exceed 150 characters. (e.g. The Nike Zoom Stefan Janoski Men's Shoe is made with a premium leather upper for superior durability and a flexible midsole for all-day comfort. A tacky gum rubber outsole delivers outstanding traction.)
+  name: string # Product's name. Limited to 150 characters. (e.g. Zoom Stefan Janoski Canvas RM SB Varsity Red)
+  --ref-id: string # Product Reference Code. (e.g. sr_1_90)
+  --release-date: string # Used to assist in the ordering of the search result of the site. Using the `O=OrderByReleaseDateDESC` query string, you can pull this value and show the display order by release date. This attribute is also used as a condition for dynamic collections. (e.g. 2019-01-01T00:00:00)
+  --score: int # Value used to set the priority on the search result page. (e.g. 1)
+  --show-without-stock: oneof<nothing, bool> # If `true`, activates the [Notify Me](https://help.vtex.com/en/tutorial/setting-up-the-notify-me-option--2VqVifQuf6Co2KG048Yu6e) option when the product is out of stock. (e.g. true)
+  --supplier-id: int # DEPRECATED, nullable
+  --tax-code: string # Product tax code, used for tax calculation. (e.g. 12345)
+  --title: string # Product's Title tag. Limited to 150 characters. It is presented in the browser tab and corresponds to the title of the product page. This field is important for SEO. (e.g. Zoom Stefan Janoski Canvas RM SB Varsity Red)
 ]: any -> record<AdWordsRemarketingCode: string, BrandId: int, CategoryId: int, DepartmentId: int, Description: string, DescriptionShort: string, Id: int, IsActive: bool, IsVisible: bool, KeyWords: string, LinkId: string, LomadeeCampaignCode: string, MetaTagDescription: string, Name: string, RefId: string, ReleaseDate: string, Score: int, ShowWithoutStock: bool, SupplierId: int, TaxCode: string, Title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)")
-  let body = {AdWordsRemarketingCode: $AdWordsRemarketingCode, BrandId: $BrandId, CategoryId: $CategoryId, DepartmentId: $DepartmentId, Description: $Description, DescriptionShort: $DescriptionShort, IsActive: $IsActive, IsVisible: $IsVisible, KeyWords: $KeyWords, LinkId: $LinkId, LomadeeCampaignCode: $LomadeeCampaignCode, MetaTagDescription: $MetaTagDescription, Name: $Name, RefId: $RefId, ReleaseDate: $ReleaseDate, Score: $Score, ShowWithoutStock: $ShowWithoutStock, SupplierId: $SupplierId, TaxCode: $TaxCode, Title: $Title} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog/pvt/product/{product_id}"))
+  let body = {"AdWordsRemarketingCode": $ad_words_remarketing_code, "BrandId": $brand_id, "CategoryId": $category_id, "DepartmentId": $department_id, "Description": $description, "DescriptionShort": $description_short, "IsActive": $is_active, "IsVisible": $is_visible, "KeyWords": $key_words, "LinkId": $link_id, "LomadeeCampaignCode": $lomadee_campaign_code, "MetaTagDescription": $meta_tag_description, "Name": $name, "RefId": $ref_id, "ReleaseDate": $release_date, "Score": $score, "ShowWithoutStock": $show_without_stock, "SupplierId": $supplier_id, "TaxCode": $tax_code, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1040,7 +1040,7 @@ export def "catalog-pvt-product put" [
 #
 # GET /api/catalog/pvt/product/{productId}/salespolicy
 export def "catalog-pvt-product-salespolicy get" [
-  productId: int
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,13 +1049,13 @@ export def "catalog-pvt-product-salespolicy get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<ProductId: int, StoreId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/salespolicy")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog/pvt/product/{product_id}/salespolicy"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1066,8 +1066,8 @@ export def "catalog-pvt-product-salespolicy get" [
 #
 # DELETE /api/catalog/pvt/product/{productId}/salespolicy/{tradepolicyId}
 export def "catalog-pvt-product-salespolicy delete" [
-  productId: int
-  tradepolicyId: int
+  product_id: int
+  tradepolicy_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,13 +1076,13 @@ export def "catalog-pvt-product-salespolicy delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/salespolicy/($tradepolicyId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id, tradepolicy_id: $tradepolicy_id} | format pattern "/api/catalog/pvt/product/{product_id}/salespolicy/{tradepolicy_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1093,8 +1093,8 @@ export def "catalog-pvt-product-salespolicy delete" [
 #
 # POST /api/catalog/pvt/product/{productId}/salespolicy/{tradepolicyId}
 export def "catalog-pvt-product-salespolicy post" [
-  productId: int
-  tradepolicyId: int
+  product_id: int
+  tradepolicy_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1103,13 +1103,13 @@ export def "catalog-pvt-product-salespolicy post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/salespolicy/($tradepolicyId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id, tradepolicy_id: $tradepolicy_id} | format pattern "/api/catalog/pvt/product/{product_id}/salespolicy/{tradepolicy_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1120,7 +1120,7 @@ export def "catalog-pvt-product-salespolicy post" [
 #
 # GET /api/catalog/pvt/product/{productId}/similarcategory/
 export def "catalog-pvt-product-similarcategory get" [
-  productId: int
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,13 +1129,13 @@ export def "catalog-pvt-product-similarcategory get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<CategoryId: int, ProductId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/similarcategory/")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog/pvt/product/{product_id}/similarcategory/"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1146,8 +1146,8 @@ export def "catalog-pvt-product-similarcategory get" [
 #
 # DELETE /api/catalog/pvt/product/{productId}/similarcategory/{categoryId}
 export def "catalog-pvt-product-similarcategory delete" [
-  productId: int
-  categoryId: int
+  product_id: int
+  category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,13 +1156,13 @@ export def "catalog-pvt-product-similarcategory delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/similarcategory/($categoryId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id, category_id: $category_id} | format pattern "/api/catalog/pvt/product/{product_id}/similarcategory/{category_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1173,8 +1173,8 @@ export def "catalog-pvt-product-similarcategory delete" [
 #
 # POST /api/catalog/pvt/product/{productId}/similarcategory/{categoryId}
 export def "catalog-pvt-product-similarcategory post" [
-  productId: int
-  categoryId: int
+  product_id: int
+  category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1183,13 +1183,13 @@ export def "catalog-pvt-product-similarcategory post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<ProductId: int, StoreId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/similarcategory/($categoryId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id, category_id: $category_id} | format pattern "/api/catalog/pvt/product/{product_id}/similarcategory/{category_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1200,8 +1200,8 @@ export def "catalog-pvt-product-similarcategory post" [
 #
 # DELETE /api/catalog/pvt/product/{productId}/specification
 # operationId: DeleteAllProductSpecifications
-export def "catalog-pvt-product-specification DeleteAllProductSpecifications" [
-  productId: int
+export def "catalog-pvt-product-specification delete-all" [
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1210,13 +1210,13 @@ export def "catalog-pvt-product-specification DeleteAllProductSpecifications" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/specification")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog/pvt/product/{product_id}/specification"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1227,8 +1227,8 @@ export def "catalog-pvt-product-specification DeleteAllProductSpecifications" [
 #
 # GET /api/catalog/pvt/product/{productId}/specification
 # operationId: GetProductSpecificationbyProductID
-export def "catalog-pvt-product-specification GetProductSpecificationbyProductID" [
-  productId: int
+export def "catalog-pvt-product-specification get-product-specificationby" [
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1237,13 +1237,13 @@ export def "catalog-pvt-product-specification GetProductSpecificationbyProductID
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<FieldId: int, FieldValueId: int, Id: int, ProductId: int, Text: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/specification")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog/pvt/product/{product_id}/specification"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1254,7 +1254,7 @@ export def "catalog-pvt-product-specification GetProductSpecificationbyProductID
 #
 # POST /api/catalog/pvt/product/{productId}/specification
 export def "catalog-pvt-product-specification post" [
-  productId: int
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1263,19 +1263,19 @@ export def "catalog-pvt-product-specification post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  FieldId: int # Specification ID. (e.g. 19)
-  --FieldValueId: int # Specification Value ID. Mandatory for `FieldTypeId` `5`, `6` and `7`. Must not be used for any other field types (e.g. 12)
-  --Text: string # Value of specification. Only for `FieldTypeId` different from `5`, `6` and `7`. (e.g. Metal)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  field_id: int # Specification ID. (e.g. 19)
+  --field-value-id: int # Specification Value ID. Mandatory for `FieldTypeId` `5`, `6` and `7`. Must not be used for any other field types (e.g. 12)
+  --text: string # Value of specification. Only for `FieldTypeId` different from `5`, `6` and `7`. (e.g. Metal)
 ]: any -> record<FieldId: int, FieldValueId: int, Id: int, ProductId: int, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/specification")
-  let body = {FieldId: $FieldId, FieldValueId: $FieldValueId, Text: $Text} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog/pvt/product/{product_id}/specification"))
+  let body = {"FieldId": $field_id, "FieldValueId": $field_value_id, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1286,9 +1286,9 @@ export def "catalog-pvt-product-specification post" [
 #
 # DELETE /api/catalog/pvt/product/{productId}/specification/{specificationId}
 # operationId: DeleteaProductSpecification
-export def "catalog-pvt-product-specification DeleteaProductSpecification" [
-  productId: int
-  specificationId: int
+export def "catalog-pvt-product-specification delete-a" [
+  product_id: int
+  specification_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1297,13 +1297,13 @@ export def "catalog-pvt-product-specification DeleteaProductSpecification" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/specification/($specificationId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id, specification_id: $specification_id} | format pattern "/api/catalog/pvt/product/{product_id}/specification/{specification_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1314,7 +1314,7 @@ export def "catalog-pvt-product-specification DeleteaProductSpecification" [
 #
 # PUT /api/catalog/pvt/product/{productId}/specificationvalue
 export def "catalog-pvt-product-specificationvalue put" [
-  productId: int
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1323,20 +1323,20 @@ export def "catalog-pvt-product-specificationvalue put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  FieldName: string # Specification name. (e.g. Material)
-  FieldValues: list # Array of specification values. (e.g. [Cotton, Polyester])
-  GroupName: string # Group name. (e.g. Composition)
-  --RootLevelSpecification: oneof<nothing, bool> # Root level specification. (e.g. true)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  field_name: string # Specification name. (e.g. Material)
+  field_values: list # Array of specification values. (e.g. [Cotton, Polyester])
+  group_name: string # Group name. (e.g. Composition)
+  --root-level-specification: oneof<nothing, bool> # Root level specification. (e.g. true)
 ]: any -> table<FieldId: int, FieldValueId: int, Id: int, ProductId: int, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/product/($productId)/specificationvalue")
-  let body = {FieldName: $FieldName, FieldValues: $FieldValues, GroupName: $GroupName, RootLevelSpecification: $RootLevelSpecification} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog/pvt/product/{product_id}/specificationvalue"))
+  let body = {"FieldName": $field_name, "FieldValues": $field_values, "GroupName": $group_name, "RootLevelSpecification": $root_level_specification} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1355,16 +1355,16 @@ export def "catalog-pvt-skuattachment delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skuId: int # SKU ID. By using this query param, you can dissociate all the attachments from an SKU based on its SKU ID. (format: int32, e.g. 1)
-  --attachmentId: int # Attachment ID. By using this query param, you can dissociate the given attachment from all previously associated SKUs. (format: int32, e.g. 1)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --sku-id: int # SKU ID. By using this query param, you can dissociate all the attachments from an SKU based on its SKU ID. (format: int32, e.g. 1)
+  --attachment-id: int # Attachment ID. By using this query param, you can dissociate the given attachment from all previously associated SKUs. (format: int32, e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skuId" $skuId "scalar") (serialize-qp "attachmentId" $attachmentId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "skuId" $sku_id "scalar") (serialize-qp "attachmentId" $attachment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/skuattachment" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1383,18 +1383,18 @@ export def "catalog-pvt-skuattachment post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  AttachmentId: int # Attachment ID. (e.g. 1)
-  SkuId: int # Unique identifier of an SKU. (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  attachment_id: int # Attachment ID. (e.g. 1)
+  sku_id: int # Unique identifier of an SKU. (e.g. 1)
 ]: any -> record<AttachmentId: int, Id: int, SkuId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/skuattachment")
-  let body = {AttachmentId: $AttachmentId, SkuId: $SkuId} | compact
+  let body = {"AttachmentId": $attachment_id, "SkuId": $sku_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1405,7 +1405,7 @@ export def "catalog-pvt-skuattachment post" [
 #
 # DELETE /api/catalog/pvt/skuattachment/{skuAttachmentAssociationId}
 export def "catalog-pvt-skuattachment delete-by-skuAttachmentAssociationId" [
-  skuAttachmentAssociationId: int
+  sku_attachment_association_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1414,13 +1414,13 @@ export def "catalog-pvt-skuattachment delete-by-skuAttachmentAssociationId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuattachment/($skuAttachmentAssociationId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_attachment_association_id: $sku_attachment_association_id} | format pattern "/api/catalog/pvt/skuattachment/{sku_attachment_association_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1431,7 +1431,7 @@ export def "catalog-pvt-skuattachment delete-by-skuAttachmentAssociationId" [
 #
 # POST /api/catalog/pvt/skucomplement
 # operationId: CreateSKUComplement
-export def "catalog-pvt-skucomplement CreateSKUComplement" [
+export def "catalog-pvt-skucomplement create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1440,19 +1440,19 @@ export def "catalog-pvt-skucomplement CreateSKUComplement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  ComplementTypeId: int # Complement Type ID. This represents the type of the complement. The possible values are: `1` for Accessory; `2` for Suggestion; `3` for Similar Product; `5` for Show Together. (e.g. 1)
-  ParentSkuId: int # ID of the Parent SKU, where the Complement is inserted. (e.g. 1)
-  SkuId: int # ID of the SKU which will be inserted as a Complement in the Parent SKU. (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  complement_type_id: int # Complement Type ID. This represents the type of the complement. The possible values are: `1` for Accessory; `2` for Suggestion; `3` for Similar Product; `5` for Show Together. (e.g. 1)
+  parent_sku_id: int # ID of the Parent SKU, where the Complement is inserted. (e.g. 1)
+  sku_id: int # ID of the SKU which will be inserted as a Complement in the Parent SKU. (e.g. 1)
 ]: any -> table<ComplementTypeId: int, Id: int, ParentSkuId: int, SkuId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/skucomplement")
-  let body = {ComplementTypeId: $ComplementTypeId, ParentSkuId: $ParentSkuId, SkuId: $SkuId} | compact
+  let body = {"ComplementTypeId": $complement_type_id, "ParentSkuId": $parent_sku_id, "SkuId": $sku_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1463,8 +1463,8 @@ export def "catalog-pvt-skucomplement CreateSKUComplement" [
 #
 # DELETE /api/catalog/pvt/skucomplement/{skuComplementId}
 # operationId: DeleteSKUComplementbySKUComplementID
-export def "catalog-pvt-skucomplement DeleteSKUComplementbySKUComplementID" [
-  skuComplementId: int
+export def "catalog-pvt-skucomplement delete-sku-complementby" [
+  sku_complement_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1473,13 +1473,13 @@ export def "catalog-pvt-skucomplement DeleteSKUComplementbySKUComplementID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skucomplement/($skuComplementId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_complement_id: $sku_complement_id} | format pattern "/api/catalog/pvt/skucomplement/{sku_complement_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1490,8 +1490,8 @@ export def "catalog-pvt-skucomplement DeleteSKUComplementbySKUComplementID" [
 #
 # GET /api/catalog/pvt/skucomplement/{skuComplementId}
 # operationId: GetSKUComplementbySKUComplementID
-export def "catalog-pvt-skucomplement GetSKUComplementbySKUComplementID" [
-  skuComplementId: int
+export def "catalog-pvt-skucomplement get-sku-complementby" [
+  sku_complement_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1500,13 +1500,13 @@ export def "catalog-pvt-skucomplement GetSKUComplementbySKUComplementID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<ComplementTypeId: int, Id: int, ParentSkuId: int, SkuId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skucomplement/($skuComplementId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_complement_id: $sku_complement_id} | format pattern "/api/catalog/pvt/skucomplement/{sku_complement_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1525,22 +1525,22 @@ export def "catalog-pvt-skuservice post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --IsActive: oneof<nothing, bool> # Defines if the SKU Service is active or not. (e.g. true)
-  Name: string # SKU Service Name. Maximum of 50 characters. (e.g. Engraving)
-  SkuId: int # SKU ID. (e.g. 1)
-  SkuServiceTypeId: int # SKU Service Type ID. (e.g. 1)
-  SkuServiceValueId: int # SKU Service Value ID. (e.g. 1)
-  Text: string # Internal description of the SKU Service. Maximum of 100 characters. (e.g. Name engraving additional service.)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --is-active: oneof<nothing, bool> # Defines if the SKU Service is active or not. (e.g. true)
+  name: string # SKU Service Name. Maximum of 50 characters. (e.g. Engraving)
+  sku_id: int # SKU ID. (e.g. 1)
+  sku_service_type_id: int # SKU Service Type ID. (e.g. 1)
+  sku_service_value_id: int # SKU Service Value ID. (e.g. 1)
+  text: string # Internal description of the SKU Service. Maximum of 100 characters. (e.g. Name engraving additional service.)
 ]: any -> record<Id: int, IsActive: bool, Name: string, SkuId: int, SkuServiceTypeId: int, SkuServiceValueId: int, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/skuservice")
-  let body = {IsActive: $IsActive, Name: $Name, SkuId: $SkuId, SkuServiceTypeId: $SkuServiceTypeId, SkuServiceValueId: $SkuServiceValueId, Text: $Text} | compact
+  let body = {"IsActive": $is_active, "Name": $name, "SkuId": $sku_id, "SkuServiceTypeId": $sku_service_type_id, "SkuServiceValueId": $sku_service_value_id, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1551,7 +1551,7 @@ export def "catalog-pvt-skuservice post" [
 #
 # DELETE /api/catalog/pvt/skuservice/{skuServiceId}
 export def "catalog-pvt-skuservice delete" [
-  skuServiceId: int
+  sku_service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1560,13 +1560,13 @@ export def "catalog-pvt-skuservice delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuservice/($skuServiceId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_service_id: $sku_service_id} | format pattern "/api/catalog/pvt/skuservice/{sku_service_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1577,7 +1577,7 @@ export def "catalog-pvt-skuservice delete" [
 #
 # GET /api/catalog/pvt/skuservice/{skuServiceId}
 export def "catalog-pvt-skuservice get" [
-  skuServiceId: int
+  sku_service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1586,13 +1586,13 @@ export def "catalog-pvt-skuservice get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<Id: int, IsActive: bool, Name: string, SkuId: int, SkuServiceTypeId: int, SkuServiceValueId: int, Text: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuservice/($skuServiceId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_service_id: $sku_service_id} | format pattern "/api/catalog/pvt/skuservice/{sku_service_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1603,7 +1603,7 @@ export def "catalog-pvt-skuservice get" [
 #
 # PUT /api/catalog/pvt/skuservice/{skuServiceId}
 export def "catalog-pvt-skuservice put" [
-  skuServiceId: int
+  sku_service_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1612,22 +1612,22 @@ export def "catalog-pvt-skuservice put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --IsActive: oneof<nothing, bool> # Defines if the SKU Service is active or not. (e.g. true)
-  Name: string # SKU Service Name. Maximum of 50 characters. (e.g. Test name)
-  SkuId: int # SKU ID. (e.g. 1)
-  SkuServiceTypeId: int # SKU Service Type ID. (e.g. 2)
-  SkuServiceValueId: int # SKU Service Value ID. (e.g. 1)
-  Text: string # Internal description for the SKU Service. Maximum of 100 characters. (e.g. Text)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --is-active: oneof<nothing, bool> # Defines if the SKU Service is active or not. (e.g. true)
+  name: string # SKU Service Name. Maximum of 50 characters. (e.g. Test name)
+  sku_id: int # SKU ID. (e.g. 1)
+  sku_service_type_id: int # SKU Service Type ID. (e.g. 2)
+  sku_service_value_id: int # SKU Service Value ID. (e.g. 1)
+  text: string # Internal description for the SKU Service. Maximum of 100 characters. (e.g. Text)
 ]: any -> record<Id: int, IsActive: bool, Name: string, SkuId: int, SkuServiceTypeId: int, SkuServiceValueId: int, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuservice/($skuServiceId)")
-  let body = {IsActive: $IsActive, Name: $Name, SkuId: $SkuId, SkuServiceTypeId: $SkuServiceTypeId, SkuServiceValueId: $SkuServiceValueId, Text: $Text} | compact
+  let full_url = (build-url $base ({sku_service_id: $sku_service_id} | format pattern "/api/catalog/pvt/skuservice/{sku_service_id}"))
+  let body = {"IsActive": $is_active, "Name": $name, "SkuId": $sku_id, "SkuServiceTypeId": $sku_service_type_id, "SkuServiceValueId": $sku_service_value_id, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1637,7 +1637,7 @@ export def "catalog-pvt-skuservice put" [
 # Create SKU Service Type
 #
 # POST /api/catalog/pvt/skuservicetype
-@deprecated --flag ShowOnProductFront
+@deprecated --flag show-on-product-front
 export def "catalog-pvt-skuservicetype post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1647,24 +1647,24 @@ export def "catalog-pvt-skuservicetype post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --IsActive: oneof<nothing, bool> # Defines if the SKU Service Type is active or not. (default: true)
-  --IsGiftCard: oneof<nothing, bool> # Defines if the SKU Service Type is displayed as a Gift Card. (e.g. false)
-  --IsRequired: oneof<nothing, bool> # Defines if the SKU Service type is mandatory. (e.g. false)
-  Name: string # SKU Service Type Name. Maximum of 100 characters. (default: Test API Sku Services)
-  --ShowOnAttachmentFront: oneof<nothing, bool> # Defines if the SKU Service Type has an attachment. (e.g. false)
-  --ShowOnCartFront: oneof<nothing, bool> # Defines if the SKU Service Type is displayed on the cart screen. (e.g. false)
-  --ShowOnFileUpload: oneof<nothing, bool> # Defines if the SKU Service Type can be associated with an attachment or not. (e.g. false)
-  --ShowOnProductFront: oneof<nothing, bool> # Deprecated (DEPRECATED, e.g. false)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --is-active: oneof<nothing, bool> # Defines if the SKU Service Type is active or not. (default: true)
+  --is-gift-card: oneof<nothing, bool> # Defines if the SKU Service Type is displayed as a Gift Card. (e.g. false)
+  --is-required: oneof<nothing, bool> # Defines if the SKU Service type is mandatory. (e.g. false)
+  name: string # SKU Service Type Name. Maximum of 100 characters. (default: Test API Sku Services)
+  --show-on-attachment-front: oneof<nothing, bool> # Defines if the SKU Service Type has an attachment. (e.g. false)
+  --show-on-cart-front: oneof<nothing, bool> # Defines if the SKU Service Type is displayed on the cart screen. (e.g. false)
+  --show-on-file-upload: oneof<nothing, bool> # Defines if the SKU Service Type can be associated with an attachment or not. (e.g. false)
+  --show-on-product-front: oneof<nothing, bool> # Deprecated (DEPRECATED, e.g. false)
 ]: any -> record<Id: int, IsActive: bool, IsGiftCard: bool, IsRequired: bool, Name: string, ShowOnAttachmentFront: bool, ShowOnCartFront: bool, ShowOnFileUpload: bool, ShowOnProductFront: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/skuservicetype")
-  let body = {IsActive: $IsActive, IsGiftCard: $IsGiftCard, IsRequired: $IsRequired, Name: $Name, ShowOnAttachmentFront: $ShowOnAttachmentFront, ShowOnCartFront: $ShowOnCartFront, ShowOnFileUpload: $ShowOnFileUpload, ShowOnProductFront: $ShowOnProductFront} | compact
+  let body = {"IsActive": $is_active, "IsGiftCard": $is_gift_card, "IsRequired": $is_required, "Name": $name, "ShowOnAttachmentFront": $show_on_attachment_front, "ShowOnCartFront": $show_on_cart_front, "ShowOnFileUpload": $show_on_file_upload, "ShowOnProductFront": $show_on_product_front} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1675,7 +1675,7 @@ export def "catalog-pvt-skuservicetype post" [
 #
 # DELETE /api/catalog/pvt/skuservicetype/{skuServiceTypeId}
 export def "catalog-pvt-skuservicetype delete" [
-  skuServiceTypeId: int
+  sku_service_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1684,13 +1684,13 @@ export def "catalog-pvt-skuservicetype delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuservicetype/($skuServiceTypeId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_service_type_id: $sku_service_type_id} | format pattern "/api/catalog/pvt/skuservicetype/{sku_service_type_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1701,7 +1701,7 @@ export def "catalog-pvt-skuservicetype delete" [
 #
 # GET /api/catalog/pvt/skuservicetype/{skuServiceTypeId}
 export def "catalog-pvt-skuservicetype get" [
-  skuServiceTypeId: int
+  sku_service_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1710,13 +1710,13 @@ export def "catalog-pvt-skuservicetype get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<Id: int, IsActive: bool, IsGiftCard: bool, IsRequired: bool, Name: string, ShowOnAttachmentFront: bool, ShowOnCartFront: bool, ShowOnFileUpload: bool, ShowOnProductFront: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuservicetype/($skuServiceTypeId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_service_type_id: $sku_service_type_id} | format pattern "/api/catalog/pvt/skuservicetype/{sku_service_type_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1726,9 +1726,9 @@ export def "catalog-pvt-skuservicetype get" [
 # Update SKU Service Type
 #
 # PUT /api/catalog/pvt/skuservicetype/{skuServiceTypeId}
-@deprecated --flag ShowOnProductFront
+@deprecated --flag show-on-product-front
 export def "catalog-pvt-skuservicetype put" [
-  skuServiceTypeId: int
+  sku_service_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1737,24 +1737,24 @@ export def "catalog-pvt-skuservicetype put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --IsActive: oneof<nothing, bool> # Defines if the SKU Service Type is active or not. (default: true)
-  --IsGiftCard: oneof<nothing, bool> # Defines if the SKU Service Type is displayed as a Gift Card. (e.g. false)
-  --IsRequired: oneof<nothing, bool> # Defines if the SKU Service type is mandatory. (e.g. false)
-  Name: string # SKU Service Type Name. Maximum of 100 characters. (default: Test API Sku Services)
-  --ShowOnAttachmentFront: oneof<nothing, bool> # Defines if the SKU Service Type has an attachment. (e.g. false)
-  --ShowOnCartFront: oneof<nothing, bool> # Defines if the SKU Service Type is displayed on the cart screen. (e.g. false)
-  --ShowOnFileUpload: oneof<nothing, bool> # Defines if the SKU Service Type can be associated with an attachment or not. (e.g. false)
-  --ShowOnProductFront: oneof<nothing, bool> # Deprecated (DEPRECATED, e.g. false)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --is-active: oneof<nothing, bool> # Defines if the SKU Service Type is active or not. (default: true)
+  --is-gift-card: oneof<nothing, bool> # Defines if the SKU Service Type is displayed as a Gift Card. (e.g. false)
+  --is-required: oneof<nothing, bool> # Defines if the SKU Service type is mandatory. (e.g. false)
+  name: string # SKU Service Type Name. Maximum of 100 characters. (default: Test API Sku Services)
+  --show-on-attachment-front: oneof<nothing, bool> # Defines if the SKU Service Type has an attachment. (e.g. false)
+  --show-on-cart-front: oneof<nothing, bool> # Defines if the SKU Service Type is displayed on the cart screen. (e.g. false)
+  --show-on-file-upload: oneof<nothing, bool> # Defines if the SKU Service Type can be associated with an attachment or not. (e.g. false)
+  --show-on-product-front: oneof<nothing, bool> # Deprecated (DEPRECATED, e.g. false)
 ]: any -> record<Id: int, IsActive: bool, IsGiftCard: bool, IsRequired: bool, Name: string, ShowOnAttachmentFront: bool, ShowOnCartFront: bool, ShowOnFileUpload: bool, ShowOnProductFront: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuservicetype/($skuServiceTypeId)")
-  let body = {IsActive: $IsActive, IsGiftCard: $IsGiftCard, IsRequired: $IsRequired, Name: $Name, ShowOnAttachmentFront: $ShowOnAttachmentFront, ShowOnCartFront: $ShowOnCartFront, ShowOnFileUpload: $ShowOnFileUpload, ShowOnProductFront: $ShowOnProductFront} | compact
+  let full_url = (build-url $base ({sku_service_type_id: $sku_service_type_id} | format pattern "/api/catalog/pvt/skuservicetype/{sku_service_type_id}"))
+  let body = {"IsActive": $is_active, "IsGiftCard": $is_gift_card, "IsRequired": $is_required, "Name": $name, "ShowOnAttachmentFront": $show_on_attachment_front, "ShowOnCartFront": $show_on_cart_front, "ShowOnFileUpload": $show_on_file_upload, "ShowOnProductFront": $show_on_product_front} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1773,16 +1773,16 @@ export def "catalog-pvt-skuservicetypeattachment delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --attachmentId: int # SKU Service Attachment unique identifier. (e.g. 1)
-  --skuServiceTypeId: int # SKU Service Type unique identifier. (e.g. 1)
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --attachment-id: int # SKU Service Attachment unique identifier. (e.g. 1)
+  --sku-service-type-id: int # SKU Service Type unique identifier. (e.g. 1)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "attachmentId" $attachmentId "scalar") (serialize-qp "skuServiceTypeId" $skuServiceTypeId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "attachmentId" $attachment_id "scalar") (serialize-qp "skuServiceTypeId" $sku_service_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/skuservicetypeattachment" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1801,18 +1801,18 @@ export def "catalog-pvt-skuservicetypeattachment post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  AttachmentId: int # Attachment ID. (e.g. 1)
-  SkuServiceTypeId: int # An explanation about the purpose of this instance. (e.g. 1)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  attachment_id: int # Attachment ID. (e.g. 1)
+  sku_service_type_id: int # An explanation about the purpose of this instance. (e.g. 1)
 ]: any -> record<AttachmentId: int, Id: int, SkuServiceTypeId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/skuservicetypeattachment")
-  let body = {AttachmentId: $AttachmentId, SkuServiceTypeId: $SkuServiceTypeId} | compact
+  let body = {"AttachmentId": $attachment_id, "SkuServiceTypeId": $sku_service_type_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1823,7 +1823,7 @@ export def "catalog-pvt-skuservicetypeattachment post" [
 #
 # DELETE /api/catalog/pvt/skuservicetypeattachment/{skuServiceTypeAttachmentId}
 export def "catalog-pvt-skuservicetypeattachment delete-by-skuServiceTypeAttachmentId" [
-  skuServiceTypeAttachmentId: int
+  sku_service_type_attachment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1832,13 +1832,13 @@ export def "catalog-pvt-skuservicetypeattachment delete-by-skuServiceTypeAttachm
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuservicetypeattachment/($skuServiceTypeAttachmentId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_service_type_attachment_id: $sku_service_type_attachment_id} | format pattern "/api/catalog/pvt/skuservicetypeattachment/{sku_service_type_attachment_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1857,20 +1857,20 @@ export def "catalog-pvt-skuservicevalue post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  Cost: float # SKU Service Value cost. (e.g. 10.5)
-  Name: string # SKU Service Value name. Maximum of 100 characters. (e.g. Test ServiceValue API)
-  SkuServiceTypeId: int # SKU Service Type ID. (e.g. 2)
-  Value: float # SKU Service Value value. (e.g. 10.5)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  cost: float # SKU Service Value cost. (e.g. 10.5)
+  name: string # SKU Service Value name. Maximum of 100 characters. (e.g. Test ServiceValue API)
+  sku_service_type_id: int # SKU Service Type ID. (e.g. 2)
+  value: float # SKU Service Value value. (e.g. 10.5)
 ]: any -> record<Cost: float, Id: int, Name: string, SkuServiceTypeId: int, Value: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/skuservicevalue")
-  let body = {Cost: $Cost, Name: $Name, SkuServiceTypeId: $SkuServiceTypeId, Value: $Value} | compact
+  let body = {"Cost": $cost, "Name": $name, "SkuServiceTypeId": $sku_service_type_id, "Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1881,7 +1881,7 @@ export def "catalog-pvt-skuservicevalue post" [
 #
 # DELETE /api/catalog/pvt/skuservicevalue/{skuServiceValueId}
 export def "catalog-pvt-skuservicevalue delete" [
-  skuServiceValueId: int
+  sku_service_value_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1890,13 +1890,13 @@ export def "catalog-pvt-skuservicevalue delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuservicevalue/($skuServiceValueId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_service_value_id: $sku_service_value_id} | format pattern "/api/catalog/pvt/skuservicevalue/{sku_service_value_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1907,7 +1907,7 @@ export def "catalog-pvt-skuservicevalue delete" [
 #
 # GET /api/catalog/pvt/skuservicevalue/{skuServiceValueId}
 export def "catalog-pvt-skuservicevalue get" [
-  skuServiceValueId: int
+  sku_service_value_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1916,13 +1916,13 @@ export def "catalog-pvt-skuservicevalue get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<Cost: float, Id: int, Name: string, SkuServiceTypeId: int, Value: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuservicevalue/($skuServiceValueId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_service_value_id: $sku_service_value_id} | format pattern "/api/catalog/pvt/skuservicevalue/{sku_service_value_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1933,7 +1933,7 @@ export def "catalog-pvt-skuservicevalue get" [
 #
 # PUT /api/catalog/pvt/skuservicevalue/{skuServiceValueId}
 export def "catalog-pvt-skuservicevalue put" [
-  skuServiceValueId: int
+  sku_service_value_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1942,20 +1942,20 @@ export def "catalog-pvt-skuservicevalue put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  Cost: float # SKU Service Value cost. (e.g. 10.5)
-  Name: string # SKU Service Value name. Maximum of 100 characters. (e.g. Test ServiceValue API)
-  SkuServiceTypeId: int # SKU Service Type ID. (e.g. 2)
-  Value: float # SKU Service Value value. (e.g. 10.5)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  cost: float # SKU Service Value cost. (e.g. 10.5)
+  name: string # SKU Service Value name. Maximum of 100 characters. (e.g. Test ServiceValue API)
+  sku_service_type_id: int # SKU Service Type ID. (e.g. 2)
+  value: float # SKU Service Value value. (e.g. 10.5)
 ]: any -> record<Cost: float, Id: int, Name: string, SkuServiceTypeId: int, Value: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/skuservicevalue/($skuServiceValueId)")
-  let body = {Cost: $Cost, Name: $Name, SkuServiceTypeId: $SkuServiceTypeId, Value: $Value} | compact
+  let full_url = (build-url $base ({sku_service_value_id: $sku_service_value_id} | format pattern "/api/catalog/pvt/skuservicevalue/{sku_service_value_id}"))
+  let body = {"Cost": $cost, "Name": $name, "SkuServiceTypeId": $sku_service_type_id, "Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1965,8 +1965,8 @@ export def "catalog-pvt-skuservicevalue put" [
 # Create Specification
 #
 # POST /api/catalog/pvt/specification
-@deprecated --flag Description
-@deprecated --flag IsWizard
+@deprecated --flag description
+@deprecated --flag is-wizard
 export def "catalog-pvt-specification post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1976,31 +1976,31 @@ export def "catalog-pvt-specification post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --CategoryId: int # Category ID associated with this specification. (e.g. 1)
-  --DefaultValue: string # Specification default value. (e.g. Cotton)
-  --Description: string # DEPRECATED, nullable, e.g. Composition of the product.
-  FieldGroupId: int # ID of the group of specifications that contains the new specification. (e.g. 22)
-  FieldTypeId: int # Field Type ID can be `1 - Text`, `2 - Multi-Line Text`, `4 - Number`, `5 - Combo`, `6 - Radio`, `7 - Checkbox`, `8 - Indexed Text`, `9 - Indexed Multi-Line Text`. (e.g. 1)
-  --IsActive: oneof<nothing, bool> # Enable (`true`) or disable (`false`) specification. (e.g. true)
-  --IsFilter: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To allow the specification to be used as a facet (filter) on the search navigation bar.  (e.g. false)
-  --IsOnProductDetails: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal -If specification is visible on the product page.  (e.g. true)
-  --IsRequired: oneof<nothing, bool> # Makes the specification mandatory (`true`) or optional (`false`). (e.g. false)
-  --IsSideMenuLinkActive: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification field clickable in the search navigation bar.  (e.g. false)
-  --IsStockKeepingUnit: oneof<nothing, bool> # If `true`, it will be added as a SKU specification. If `false`, it will be added as a product specification field. (e.g. false)
-  --IsTopMenuLinkActive: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification visible in the store's upper menu.  (e.g. false)
-  --IsWizard: oneof<nothing, bool> # DEPRECATED, nullable
-  Name: string # Specification name. (e.g. Material)
-  --Position: int # Store Framework - Deprecated. Legacy CMS Portal - This position number is used in ordering the specifications both in the navigation menu and in the specification listing on the product page.  (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --category-id: int # Category ID associated with this specification. (e.g. 1)
+  --default-value: string # Specification default value. (e.g. Cotton)
+  --description: string # DEPRECATED, nullable, e.g. Composition of the product.
+  field_group_id: int # ID of the group of specifications that contains the new specification. (e.g. 22)
+  field_type_id: int # Field Type ID can be `1 - Text`, `2 - Multi-Line Text`, `4 - Number`, `5 - Combo`, `6 - Radio`, `7 - Checkbox`, `8 - Indexed Text`, `9 - Indexed Multi-Line Text`. (e.g. 1)
+  --is-active: oneof<nothing, bool> # Enable (`true`) or disable (`false`) specification. (e.g. true)
+  --is-filter: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To allow the specification to be used as a facet (filter) on the search navigation bar.  (e.g. false)
+  --is-on-product-details: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal -If specification is visible on the product page.  (e.g. true)
+  --is-required: oneof<nothing, bool> # Makes the specification mandatory (`true`) or optional (`false`). (e.g. false)
+  --is-side-menu-link-active: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification field clickable in the search navigation bar.  (e.g. false)
+  --is-stock-keeping-unit: oneof<nothing, bool> # If `true`, it will be added as a SKU specification. If `false`, it will be added as a product specification field. (e.g. false)
+  --is-top-menu-link-active: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification visible in the store's upper menu.  (e.g. false)
+  --is-wizard: oneof<nothing, bool> # DEPRECATED, nullable
+  name: string # Specification name. (e.g. Material)
+  --position: int # Store Framework - Deprecated. Legacy CMS Portal - This position number is used in ordering the specifications both in the navigation menu and in the specification listing on the product page.  (e.g. 1)
 ]: any -> record<CategoryId: int, DefaultValue: string, Description: string, FieldGroupId: int, FieldTypeId: int, Id: int, IsActive: bool, IsFilter: bool, IsOnProductDetails: bool, IsRequired: bool, IsSideMenuLinkActive: bool, IsStockKeepingUnit: bool, IsTopMenuLinkActive: bool, IsWizard: bool, Name: string, Position: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/specification")
-  let body = {CategoryId: $CategoryId, DefaultValue: $DefaultValue, Description: $Description, FieldGroupId: $FieldGroupId, FieldTypeId: $FieldTypeId, IsActive: $IsActive, IsFilter: $IsFilter, IsOnProductDetails: $IsOnProductDetails, IsRequired: $IsRequired, IsSideMenuLinkActive: $IsSideMenuLinkActive, IsStockKeepingUnit: $IsStockKeepingUnit, IsTopMenuLinkActive: $IsTopMenuLinkActive, IsWizard: $IsWizard, Name: $Name, Position: $Position} | compact
+  let body = {"CategoryId": $category_id, "DefaultValue": $default_value, "Description": $description, "FieldGroupId": $field_group_id, "FieldTypeId": $field_type_id, "IsActive": $is_active, "IsFilter": $is_filter, "IsOnProductDetails": $is_on_product_details, "IsRequired": $is_required, "IsSideMenuLinkActive": $is_side_menu_link_active, "IsStockKeepingUnit": $is_stock_keeping_unit, "IsTopMenuLinkActive": $is_top_menu_link_active, "IsWizard": $is_wizard, "Name": $name, "Position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2019,15 +2019,15 @@ export def "catalog-pvt-specification-nonstructured delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skuId: int # SKU’s unique numerical identifier. (e.g. 1)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --sku-id: int # SKU’s unique numerical identifier. (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skuId" $skuId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "skuId" $sku_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/specification/nonstructured" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2046,15 +2046,15 @@ export def "catalog-pvt-specification-nonstructured list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skuId: int # SKU’s unique numerical identifier. (e.g. 1)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --sku-id: int # SKU’s unique numerical identifier. (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<Id: int, SkuId: int, SpecificationName: string, SpecificationValue: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skuId" $skuId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "skuId" $sku_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/specification/nonstructured" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2065,7 +2065,7 @@ export def "catalog-pvt-specification-nonstructured list" [
 #
 # DELETE /api/catalog/pvt/specification/nonstructured/{Id}
 export def "catalog-pvt-specification-nonstructured delete-by-Id" [
-  Id: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2074,13 +2074,13 @@ export def "catalog-pvt-specification-nonstructured delete-by-Id" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/specification/nonstructured/($Id)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/catalog/pvt/specification/nonstructured/{id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2091,7 +2091,7 @@ export def "catalog-pvt-specification-nonstructured delete-by-Id" [
 #
 # GET /api/catalog/pvt/specification/nonstructured/{Id}
 export def "catalog-pvt-specification-nonstructured get" [
-  Id: int
+  id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2100,13 +2100,13 @@ export def "catalog-pvt-specification-nonstructured get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<Id: int, SkuId: int, SpecificationName: string, SpecificationValue: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/specification/nonstructured/($Id)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/catalog/pvt/specification/nonstructured/{id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2117,7 +2117,7 @@ export def "catalog-pvt-specification-nonstructured get" [
 #
 # GET /api/catalog/pvt/specification/{specificationId}
 export def "catalog-pvt-specification get" [
-  specificationId: int
+  specification_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2126,13 +2126,13 @@ export def "catalog-pvt-specification get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<CategoryId: int, DefaultValue: string, Description: string, FieldGroupId: int, FieldTypeId: int, Id: int, IsActive: bool, IsFilter: bool, IsOnProductDetails: bool, IsRequired: bool, IsSideMenuLinkActive: bool, IsStockKeepingUnit: bool, IsTopMenuLinkActive: bool, IsWizard: bool, Name: string, Position: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/specification/($specificationId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({specification_id: $specification_id} | format pattern "/api/catalog/pvt/specification/{specification_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2142,9 +2142,9 @@ export def "catalog-pvt-specification get" [
 # Update Specification
 #
 # PUT /api/catalog/pvt/specification/{specificationId}
-@deprecated --flag IsWizard
+@deprecated --flag is-wizard
 export def "catalog-pvt-specification put" [
-  specificationId: int
+  specification_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2153,31 +2153,31 @@ export def "catalog-pvt-specification put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  CategoryId: int # Specification Category ID. (e.g. 0)
-  DefaultValue: string # Specification Default Value. (e.g. Leather)
-  Description: string # Specification Description. (e.g. Composition of the product.)
-  FieldGroupId: int # Numerical ID of the Group of Specifications that contains the new Specification. (e.g. 0)
-  FieldTypeId: int # Field Type can be `1 - Text`, `2 - Multi-Line Text`, `4 - Number`, `5 - Combo`, `6 - Radio`, `7 - Checkbox`, `8 - Indexed Text`, `9 - Indexed Multi-Line Text`. (e.g. 1)
-  --IsActive: oneof<nothing, bool> # Defines if the Specification is active or not. (e.g. false)
-  --IsFilter: oneof<nothing, bool> # Defines if the Specification can be used as a Filter. (e.g. false)
-  --IsOnProductDetails: oneof<nothing, bool> # Defines if the Specification will be  shown on the Product screen in the specification area. (e.g. false)
-  --IsRequired: oneof<nothing, bool> # Defines if the Specification is required or not. (e.g. false)
-  --IsSideMenuLinkActive: oneof<nothing, bool> # Defines if the Specification is shown in the side menu. (e.g. false)
-  --IsStockKeepingUnit: oneof<nothing, bool> # Defines if the Specification is applied to a specific SKU. (e.g. false)
-  --IsTopMenuLinkActive: oneof<nothing, bool> # Defines if the Specification is shown in the main menu of the site. (e.g. false)
-  --IsWizard: oneof<nothing, bool> # Deprecated (DEPRECATED, e.g. false)
-  Name: string # Specification Name. (e.g. Material)
-  Position: int # The current Specification's position in comparison to the other Specifications. (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  category_id: int # Specification Category ID. (e.g. 0)
+  default_value: string # Specification Default Value. (e.g. Leather)
+  description: string # Specification Description. (e.g. Composition of the product.)
+  field_group_id: int # Numerical ID of the Group of Specifications that contains the new Specification. (e.g. 0)
+  field_type_id: int # Field Type can be `1 - Text`, `2 - Multi-Line Text`, `4 - Number`, `5 - Combo`, `6 - Radio`, `7 - Checkbox`, `8 - Indexed Text`, `9 - Indexed Multi-Line Text`. (e.g. 1)
+  --is-active: oneof<nothing, bool> # Defines if the Specification is active or not. (e.g. false)
+  --is-filter: oneof<nothing, bool> # Defines if the Specification can be used as a Filter. (e.g. false)
+  --is-on-product-details: oneof<nothing, bool> # Defines if the Specification will be  shown on the Product screen in the specification area. (e.g. false)
+  --is-required: oneof<nothing, bool> # Defines if the Specification is required or not. (e.g. false)
+  --is-side-menu-link-active: oneof<nothing, bool> # Defines if the Specification is shown in the side menu. (e.g. false)
+  --is-stock-keeping-unit: oneof<nothing, bool> # Defines if the Specification is applied to a specific SKU. (e.g. false)
+  --is-top-menu-link-active: oneof<nothing, bool> # Defines if the Specification is shown in the main menu of the site. (e.g. false)
+  --is-wizard: oneof<nothing, bool> # Deprecated (DEPRECATED, e.g. false)
+  name: string # Specification Name. (e.g. Material)
+  position: int # The current Specification's position in comparison to the other Specifications. (e.g. 1)
 ]: any -> record<CategoryId: int, DefaultValue: string, Description: string, FieldGroupId: int, FieldTypeId: int, Id: int, IsActive: bool, IsFilter: bool, IsOnProductDetails: bool, IsRequired: bool, IsSideMenuLinkActive: bool, IsStockKeepingUnit: bool, IsTopMenuLinkActive: bool, IsWizard: bool, Name: string, Position: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/specification/($specificationId)")
-  let body = {CategoryId: $CategoryId, DefaultValue: $DefaultValue, Description: $Description, FieldGroupId: $FieldGroupId, FieldTypeId: $FieldTypeId, IsActive: $IsActive, IsFilter: $IsFilter, IsOnProductDetails: $IsOnProductDetails, IsRequired: $IsRequired, IsSideMenuLinkActive: $IsSideMenuLinkActive, IsStockKeepingUnit: $IsStockKeepingUnit, IsTopMenuLinkActive: $IsTopMenuLinkActive, IsWizard: $IsWizard, Name: $Name, Position: $Position} | compact
+  let full_url = (build-url $base ({specification_id: $specification_id} | format pattern "/api/catalog/pvt/specification/{specification_id}"))
+  let body = {"CategoryId": $category_id, "DefaultValue": $default_value, "Description": $description, "FieldGroupId": $field_group_id, "FieldTypeId": $field_type_id, "IsActive": $is_active, "IsFilter": $is_filter, "IsOnProductDetails": $is_on_product_details, "IsRequired": $is_required, "IsSideMenuLinkActive": $is_side_menu_link_active, "IsStockKeepingUnit": $is_stock_keeping_unit, "IsTopMenuLinkActive": $is_top_menu_link_active, "IsWizard": $is_wizard, "Name": $name, "Position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2188,7 +2188,7 @@ export def "catalog-pvt-specification put" [
 #
 # POST /api/catalog/pvt/specificationgroup
 # operationId: SpecificationGroupInsert2
-export def "catalog-pvt-specificationgroup SpecificationGroupInsert2" [
+export def "catalog-pvt-specificationgroup post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2197,18 +2197,18 @@ export def "catalog-pvt-specificationgroup SpecificationGroupInsert2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  CategoryId: int # Category ID. (format: int32)
-  Name: string # Specification Group Name.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  category_id: int # Category ID. (format: int32)
+  name: string # Specification Group Name.
 ]: any -> record<CategoryId: int, Id: int, Name: string, Position: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/specificationgroup")
-  let body = {CategoryId: $CategoryId, Name: $Name} | compact
+  let body = {"CategoryId": $category_id, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2219,7 +2219,7 @@ export def "catalog-pvt-specificationgroup SpecificationGroupInsert2" [
 #
 # PUT /api/catalog/pvt/specificationgroup/{groupId}
 export def "catalog-pvt-specificationgroup put" [
-  groupId: int
+  group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2228,20 +2228,20 @@ export def "catalog-pvt-specificationgroup put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  CategoryId: int # Category ID where the Specification Group is contained. (e.g. 1)
-  Id: int # Specification Group ID. (format: int32, e.g. 24)
-  Name: string # Specification Group Name. (e.g. Sizes)
-  Position: int # Specification Group Position. (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  category_id: int # Category ID where the Specification Group is contained. (e.g. 1)
+  id: int # Specification Group ID. (format: int32, e.g. 24)
+  name: string # Specification Group Name. (e.g. Sizes)
+  position: int # Specification Group Position. (e.g. 1)
 ]: any -> record<CategoryId: int, Id: int, Name: string, Position: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/specificationgroup/($groupId)")
-  let body = {CategoryId: $CategoryId, Id: $Id, Name: $Name, Position: $Position} | compact
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/api/catalog/pvt/specificationgroup/{group_id}"))
+  let body = {"CategoryId": $category_id, "Id": $id, "Name": $name, "Position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2251,7 +2251,7 @@ export def "catalog-pvt-specificationgroup put" [
 # Create Specification Value
 #
 # POST /api/catalog/pvt/specificationvalue
-@deprecated --flag Text
+@deprecated --flag text
 export def "catalog-pvt-specificationvalue post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2261,21 +2261,21 @@ export def "catalog-pvt-specificationvalue post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  FieldId: int # Specification ID associated with this specification value. (e.g. 193)
-  --IsActive: oneof<nothing, bool> # Enable (`true`) or disable (`false`) specification value. (e.g. true)
-  Name: string # Specification Value name. (e.g. Metal)
-  --Position: int # The position of the value to be shown on product registration page (`/admin/Site/Produto.aspx`). (e.g. 1)
-  --Text: string # Specification Value Text. (DEPRECATED, nullable)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  field_id: int # Specification ID associated with this specification value. (e.g. 193)
+  --is-active: oneof<nothing, bool> # Enable (`true`) or disable (`false`) specification value. (e.g. true)
+  name: string # Specification Value name. (e.g. Metal)
+  --position: int # The position of the value to be shown on product registration page (`/admin/Site/Produto.aspx`). (e.g. 1)
+  --text: string # Specification Value Text. (DEPRECATED, nullable)
 ]: any -> record<FieldId: int, FieldValueId: int, IsActive: bool, Name: string, Position: int, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/specificationvalue")
-  let body = {FieldId: $FieldId, IsActive: $IsActive, Name: $Name, Position: $Position, Text: $Text} | compact
+  let body = {"FieldId": $field_id, "IsActive": $is_active, "Name": $name, "Position": $position, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2286,7 +2286,7 @@ export def "catalog-pvt-specificationvalue post" [
 #
 # GET /api/catalog/pvt/specificationvalue/{specificationValueId}
 export def "catalog-pvt-specificationvalue get" [
-  specificationValueId: int
+  specification_value_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2295,13 +2295,13 @@ export def "catalog-pvt-specificationvalue get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<FieldId: int, FieldValueId: int, IsActive: bool, Name: string, Position: int, Text: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/specificationvalue/($specificationValueId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({specification_value_id: $specification_value_id} | format pattern "/api/catalog/pvt/specificationvalue/{specification_value_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2311,9 +2311,9 @@ export def "catalog-pvt-specificationvalue get" [
 # Update Specification Value
 #
 # PUT /api/catalog/pvt/specificationvalue/{specificationValueId}
-@deprecated --flag Text
+@deprecated --flag text
 export def "catalog-pvt-specificationvalue put" [
-  specificationValueId: int
+  specification_value_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2322,21 +2322,21 @@ export def "catalog-pvt-specificationvalue put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  FieldId: int # Specification ID associated with this specification value. (e.g. 193)
-  --IsActive: oneof<nothing, bool> # Enable (`true`) or disable (`false`) specification value. (e.g. true)
-  Name: string # Specification Value name. (e.g. Metal)
-  --Position: int # The position of the value to be shown on product registration page (`/admin/Site/Produto.aspx`). (e.g. 1)
-  --Text: string # Specification Value Text. (DEPRECATED, nullable)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  field_id: int # Specification ID associated with this specification value. (e.g. 193)
+  --is-active: oneof<nothing, bool> # Enable (`true`) or disable (`false`) specification value. (e.g. true)
+  name: string # Specification Value name. (e.g. Metal)
+  --position: int # The position of the value to be shown on product registration page (`/admin/Site/Produto.aspx`). (e.g. 1)
+  --text: string # Specification Value Text. (DEPRECATED, nullable)
 ]: any -> record<FieldId: int, FieldValueId: int, IsActive: bool, Name: string, Position: int, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/specificationvalue/($specificationValueId)")
-  let body = {FieldId: $FieldId, IsActive: $IsActive, Name: $Name, Position: $Position, Text: $Text} | compact
+  let full_url = (build-url $base ({specification_value_id: $specification_value_id} | format pattern "/api/catalog/pvt/specificationvalue/{specification_value_id}"))
+  let body = {"FieldId": $field_id, "IsActive": $is_active, "Name": $name, "Position": $position, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2346,7 +2346,7 @@ export def "catalog-pvt-specificationvalue put" [
 # Get SKU by RefId
 #
 # GET /api/catalog/pvt/stockkeepingunit
-export def "catalog-pvt-stockkeepingunit get" [
+export def "catalog-pvt-stockkeepingunit list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2355,15 +2355,15 @@ export def "catalog-pvt-stockkeepingunit get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --refId: string # SKU Reference ID. (e.g. 1)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --ref-id: string # SKU Reference ID. (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<ActivateIfPossible: bool, CommercialConditionId: int, CreationDate: string, CubicWeight: float, EstimatedDateArrival: string, Height: float, Id: int, IsActive: bool, IsKit: bool, KitItensSellApart: bool, Length: float, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, Name: string, PackagedHeight: float, PackagedLength: float, PackagedWeightKg: float, PackagedWidth: float, ProductId: int, RefId: string, RewardValue: float, UnitMultiplier: float, Videos: string, WeightKg: float, Width: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "refId" $refId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "refId" $ref_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/stockkeepingunit" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2382,43 +2382,43 @@ export def "catalog-pvt-stockkeepingunit post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --ActivateIfPossible: oneof<nothing, bool> # When set to `true`, this attribute will automatically update the SKU as active once associated with an image or an active component. (e.g. true)
-  --CommercialConditionId: int # Used to define SKU specific promotions or installment rules. In case of no specific condition, use `1` (default value). This field does not accept `0`. Find out more by reading [Registering a commercial condition](https://help.vtex.com/tutorial/registering-a-commercial-condition--tutorials_445). (e.g. 1)
-  --CreationDate: string # Date and time of the SKU's creation. (e.g. 2020-01-25T15:51:29.2614605)
-  --CubicWeight: float # [Cubic weight](https://help.vtex.com/en/tutorial/understanding-the-cubic-weight-factor--tutorials_128). (e.g. 0.1667)
-  --Ean: string # EAN code. Required only if `RefId` is not informed, but can be used alongside `RefId` as well. (e.g. 8949461894984)
-  --EstimatedDateArrival: string # To add the product as pre-sale, enter the product estimated arrival date in [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) format. You must take into consideration both the launch date and the freight calculation for the arrival date. (nullable)
-  --Height: float # SKU real height. (e.g. 1)
-  --Id: int # SKU unique identifier. If not informed, it will be automatically generated by VTEX. (e.g. 1)
-  --IsActive: oneof<nothing, bool> # Shows if the SKU is active (`true`) or not (`false`). (e.g. false)
-  --IsKit: oneof<nothing, bool> # Flag to set whether the product SKU is made up of one or more SKUs, thereby becoming a bundle. Must be enabled if you are adding a bundle. Once activated, the flag cannot be reverted. (e.g. false)
-  --KitItensSellApart: oneof<nothing, bool> # Defines if Kit components can be sold apart. (e.g. false)
-  --Length: float # SKU real length. (e.g. 1)
-  --ManufacturerCode: string # Provided by the manufacturers to identify their product. This field should be filled in if the product has a specific manufacturer’s code. (e.g. 123)
-  --MeasurementUnit: string # Used only in cases when you need to convert the unit of measure for sale. If a product is sold in boxes for example, but customers want to buy per square meter (m²). In common cases, use `'un'`. (e.g. un)
-  --ModalType: string # Links an unusual type of SKU to a carrier specialized in delivering it. This field should be filled in with the name of the modal (e.g. "Chemicals" or "Refrigerated products"). To learn more about this feature, read our articles [How the modal works](https://help.vtex.com/en/tutorial/how-does-the-modal-work--tutorials_125) and [Setting up modal for carriers](https://help.vtex.com/en/tutorial/configure-modal--3jhLqxuPhuiq24UoykCcqy). (nullable)
-  Name: string # SKU name, meaning the variation of the previously added product. For example: **Product** - _Fridge_, **SKU** - _110V_. (e.g. Size 10)
-  PackagedHeight: float # Height used for shipping calculation. (e.g. 10)
-  PackagedLength: float # Length used for shipping calculation. (e.g. 10)
-  PackagedWeightKg: int # Weight used for shipping calculation, in the measurement [configured in the store](https://help.vtex.com/en/tutorial/filling-in-system-settings--tutorials_269), which by default is in grams. (e.g. 10)
-  PackagedWidth: float # Width used for shipping calculation. (e.g. 10)
-  ProductId: int # ID of the Product associated with this SKU. (e.g. 42)
-  --RefId: string # Reference code used internally for organizational purposes. Must be unique. Required only if `Ean` is not informed, but can be used alongside `Ean` as well. (e.g. B096QW8Y8Z)
-  --RewardValue: float # Credit that the customer receives when finalizing an order of one specific SKU unit. By filling this field out with `1`, the customer gets U$ 1 credit on the site. (e.g. 1)
-  --UnitMultiplier: float # This is the multiple number of SKU. If the Multiplier is 5.0000, the product can be added in multiple quantities of 5, 10, 15, 20, onward. (e.g. 2)
-  --Videos: list # Videos URLs (e.g. [https://www.youtube.com/])
-  --WeightKg: float # Weight of the SKU in the measurement [configured in the store](https://help.vtex.com/en/tutorial/filling-in-system-settings--tutorials_269), which by default is in grams. (e.g. 1)
-  --Width: float # SKU real width. (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --activate-if-possible: oneof<nothing, bool> # When set to `true`, this attribute will automatically update the SKU as active once associated with an image or an active component. (e.g. true)
+  --commercial-condition-id: int # Used to define SKU specific promotions or installment rules. In case of no specific condition, use `1` (default value). This field does not accept `0`. Find out more by reading [Registering a commercial condition](https://help.vtex.com/tutorial/registering-a-commercial-condition--tutorials_445). (e.g. 1)
+  --creation-date: string # Date and time of the SKU's creation. (e.g. 2020-01-25T15:51:29.2614605)
+  --cubic-weight: float # [Cubic weight](https://help.vtex.com/en/tutorial/understanding-the-cubic-weight-factor--tutorials_128). (e.g. 0.1667)
+  --ean: string # EAN code. Required only if `RefId` is not informed, but can be used alongside `RefId` as well. (e.g. 8949461894984)
+  --estimated-date-arrival: string # To add the product as pre-sale, enter the product estimated arrival date in [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) format. You must take into consideration both the launch date and the freight calculation for the arrival date. (nullable)
+  --height: float # SKU real height. (e.g. 1)
+  --id: int # SKU unique identifier. If not informed, it will be automatically generated by VTEX. (e.g. 1)
+  --is-active: oneof<nothing, bool> # Shows if the SKU is active (`true`) or not (`false`). (e.g. false)
+  --is-kit: oneof<nothing, bool> # Flag to set whether the product SKU is made up of one or more SKUs, thereby becoming a bundle. Must be enabled if you are adding a bundle. Once activated, the flag cannot be reverted. (e.g. false)
+  --kit-itens-sell-apart: oneof<nothing, bool> # Defines if Kit components can be sold apart. (e.g. false)
+  --length: float # SKU real length. (e.g. 1)
+  --manufacturer-code: string # Provided by the manufacturers to identify their product. This field should be filled in if the product has a specific manufacturer’s code. (e.g. 123)
+  --measurement-unit: string # Used only in cases when you need to convert the unit of measure for sale. If a product is sold in boxes for example, but customers want to buy per square meter (m²). In common cases, use `'un'`. (e.g. un)
+  --modal-type: string # Links an unusual type of SKU to a carrier specialized in delivering it. This field should be filled in with the name of the modal (e.g. "Chemicals" or "Refrigerated products"). To learn more about this feature, read our articles [How the modal works](https://help.vtex.com/en/tutorial/how-does-the-modal-work--tutorials_125) and [Setting up modal for carriers](https://help.vtex.com/en/tutorial/configure-modal--3jhLqxuPhuiq24UoykCcqy). (nullable)
+  name: string # SKU name, meaning the variation of the previously added product. For example: **Product** - _Fridge_, **SKU** - _110V_. (e.g. Size 10)
+  packaged_height: float # Height used for shipping calculation. (e.g. 10)
+  packaged_length: float # Length used for shipping calculation. (e.g. 10)
+  packaged_weight_kg: int # Weight used for shipping calculation, in the measurement [configured in the store](https://help.vtex.com/en/tutorial/filling-in-system-settings--tutorials_269), which by default is in grams. (e.g. 10)
+  packaged_width: float # Width used for shipping calculation. (e.g. 10)
+  product_id: int # ID of the Product associated with this SKU. (e.g. 42)
+  --ref-id: string # Reference code used internally for organizational purposes. Must be unique. Required only if `Ean` is not informed, but can be used alongside `Ean` as well. (e.g. B096QW8Y8Z)
+  --reward-value: float # Credit that the customer receives when finalizing an order of one specific SKU unit. By filling this field out with `1`, the customer gets U$ 1 credit on the site. (e.g. 1)
+  --unit-multiplier: float # This is the multiple number of SKU. If the Multiplier is 5.0000, the product can be added in multiple quantities of 5, 10, 15, 20, onward. (e.g. 2)
+  --videos: list # Videos URLs (e.g. [https://www.youtube.com/])
+  --weight-kg: float # Weight of the SKU in the measurement [configured in the store](https://help.vtex.com/en/tutorial/filling-in-system-settings--tutorials_269), which by default is in grams. (e.g. 1)
+  --width: float # SKU real width. (e.g. 1)
 ]: any -> record<ActivateIfPossible: bool, CommercialConditionId: int, CreationDate: string, CubicWeight: float, Ean: string, EstimatedDateArrival: string, Height: float, Id: int, IsActive: bool, IsKit: bool, KitItensSellApart: bool, Length: float, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, Name: string, PackagedHeight: float, PackagedLength: float, PackagedWeightKg: int, PackagedWidth: float, ProductId: int, RefId: string, RewardValue: float, UnitMultiplier: float, Videos: list<string>, WeightKg: float, Width: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/stockkeepingunit")
-  let body = {ActivateIfPossible: $ActivateIfPossible, CommercialConditionId: $CommercialConditionId, CreationDate: $CreationDate, CubicWeight: $CubicWeight, Ean: $Ean, EstimatedDateArrival: $EstimatedDateArrival, Height: $Height, Id: $Id, IsActive: $IsActive, IsKit: $IsKit, KitItensSellApart: $KitItensSellApart, Length: $Length, ManufacturerCode: $ManufacturerCode, MeasurementUnit: $MeasurementUnit, ModalType: $ModalType, Name: $Name, PackagedHeight: $PackagedHeight, PackagedLength: $PackagedLength, PackagedWeightKg: $PackagedWeightKg, PackagedWidth: $PackagedWidth, ProductId: $ProductId, RefId: $RefId, RewardValue: $RewardValue, UnitMultiplier: $UnitMultiplier, Videos: $Videos, WeightKg: $WeightKg, Width: $Width} | compact
+  let body = {"ActivateIfPossible": $activate_if_possible, "CommercialConditionId": $commercial_condition_id, "CreationDate": $creation_date, "CubicWeight": $cubic_weight, "Ean": $ean, "EstimatedDateArrival": $estimated_date_arrival, "Height": $height, "Id": $id, "IsActive": $is_active, "IsKit": $is_kit, "KitItensSellApart": $kit_itens_sell_apart, "Length": $length, "ManufacturerCode": $manufacturer_code, "MeasurementUnit": $measurement_unit, "ModalType": $modal_type, "Name": $name, "PackagedHeight": $packaged_height, "PackagedLength": $packaged_length, "PackagedWeightKg": $packaged_weight_kg, "PackagedWidth": $packaged_width, "ProductId": $product_id, "RefId": $ref_id, "RewardValue": $reward_value, "UnitMultiplier": $unit_multiplier, "Videos": $videos, "WeightKg": $weight_kg, "Width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2429,8 +2429,8 @@ export def "catalog-pvt-stockkeepingunit post" [
 #
 # PUT /api/catalog/pvt/stockkeepingunit/copy/{skuIdfrom}/{skuIdto}/file/
 export def "catalog-pvt-stockkeepingunit-copy-file put" [
-  skuIdfrom: int
-  skuIdto: int
+  sku_idfrom: int
+  sku_idto: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2439,13 +2439,13 @@ export def "catalog-pvt-stockkeepingunit-copy-file put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<ArchiveId: int, Id: int, IsMain: bool, Label: string, SkuId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/copy/($skuIdfrom)/($skuIdto)/file/")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_idfrom: $sku_idfrom, sku_idto: $sku_idto} | format pattern "/api/catalog/pvt/stockkeepingunit/copy/{sku_idfrom}/{sku_idto}/file/"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2456,8 +2456,8 @@ export def "catalog-pvt-stockkeepingunit-copy-file put" [
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/disassociate/{skuId}/file/{skuFileId}
 export def "catalog-pvt-stockkeepingunit-disassociate-file delete" [
-  skuId: int
-  skuFileId: int
+  sku_id: int
+  sku_file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2466,13 +2466,13 @@ export def "catalog-pvt-stockkeepingunit-disassociate-file delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/disassociate/($skuId)/file/($skuFileId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, sku_file_id: $sku_file_id} | format pattern "/api/catalog/pvt/stockkeepingunit/disassociate/{sku_id}/file/{sku_file_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2483,8 +2483,8 @@ export def "catalog-pvt-stockkeepingunit-disassociate-file delete" [
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}
 # operationId: Sku
-export def "catalog-pvt-stockkeepingunit Sku" [
-  skuId: int
+export def "catalog-pvt-stockkeepingunit get" [
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2493,13 +2493,13 @@ export def "catalog-pvt-stockkeepingunit Sku" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<ActivateIfPossible: bool, CommercialConditionId: int, CreationDate: string, CubicWeight: float, EstimatedDateArrival: string, Height: float, Id: int, IsActive: bool, IsKit: bool, KitItensSellApart: bool, Length: float, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, Name: string, PackagedHeight: float, PackagedLength: float, PackagedWeightKg: int, PackagedWidth: float, ProductId: int, RefId: string, RewardValue: float, UnitMultiplier: float, Videos: list<string>, WeightKg: float, Width: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2510,7 +2510,7 @@ export def "catalog-pvt-stockkeepingunit Sku" [
 #
 # PUT /api/catalog/pvt/stockkeepingunit/{skuId}
 export def "catalog-pvt-stockkeepingunit put" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2519,41 +2519,41 @@ export def "catalog-pvt-stockkeepingunit put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --ActivateIfPossible: oneof<nothing, bool> # When set to `true`, this attribute will automatically update the SKU as active once associated with an image or an active component. (e.g. false)
-  --CommercialConditionId: int # Used to define SKU specific promotions or installment rules. In case of no specific condition, use `1` (default value). This field does not accept `0`. Find out more by reading [Registering a commercial condition](https://help.vtex.com/tutorial/registering-a-commercial-condition--tutorials_445). (e.g. 1)
-  --CreationDate: string # Date and time of the SKU's creation. (e.g. 2020-01-25T15:51:00)
-  --CubicWeight: float # [Cubic weight](https://help.vtex.com/en/tutorial/understanding-the-cubic-weight-factor--tutorials_128). (e.g. 0.1667)
-  --EstimatedDateArrival: string # To add the product as pre-sale, enter the product estimated arrival date in [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) format. You must take into consideration both the launch date and the freight calculation for the arrival date. (nullable)
-  --Height: float # SKU real height. (e.g. 1)
-  --IsActive: oneof<nothing, bool> # Shows if the SKU is active (`true`) or not (`false`). (e.g. false)
-  --IsKit: oneof<nothing, bool> # Flag to set whether the product SKU is made up of one or more SKUs, thereby becoming a bundle. Must be enabled if you are adding a bundle. Once activated, the flag cannot be reverted. (e.g. false)
-  --KitItensSellApart: oneof<nothing, bool> # Defines if Kit components can be sold apart. (e.g. false)
-  --Length: float # SKU real length. (e.g. 1)
-  --ManufacturerCode: string # Provided by the manufacturers to identify their product. This field should be filled in if the product has a specific manufacturer’s code. (e.g. 123)
-  --MeasurementUnit: string # Used only in cases when you need to convert the unit of measure for sale. If a product is sold in boxes for example, but customers want to buy per square meter (m²). In common cases, use `'un'`. (e.g. un)
-  --ModalType: string # Links an unusual type of SKU to a carrier specialized in delivering it. This field should be filled in with the name of the modal (e.g. "Chemicals" or "Refrigerated products"). To learn more about this feature, read our articles [How the modal works](https://help.vtex.com/en/tutorial/how-does-the-modal-work--tutorials_125) and [Setting up modal for carriers](https://help.vtex.com/en/tutorial/configure-modal--3jhLqxuPhuiq24UoykCcqy). (nullable)
-  Name: string # SKU name, meaning the variation of the previously added product. For example: **Product** - _Fridge_, **SKU** - _110V_. (e.g. Size 10)
-  PackagedHeight: float # Height used for shipping calculation. (e.g. 10)
-  PackagedLength: float # Length used for shipping calculation. (e.g. 10)
-  PackagedWeightKg: int # Weight used for shipping calculation, in the measurement [configured in the store](https://help.vtex.com/en/tutorial/filling-in-system-settings--tutorials_269), which by default is in grams. (e.g. 10)
-  PackagedWidth: float # Width used for shipping calculation. (e.g. 10)
-  ProductId: int # ID of the Product associated with this SKU. (e.g. 42)
-  --RefId: string # Reference code used internally for organizational purposes. Must be unique. It is not required only if EAN code already exists. If not, this field must be provided. (e.g. B096QW8Y8Z)
-  --RewardValue: float # Credit that the customer receives when finalizing an order of one specific SKU unit. By filling this field out with `1`, the customer gets U$ 1 credit on the site. (e.g. 1)
-  --UnitMultiplier: float # This is the multiple number of SKU. If the Multiplier is 5.0000, the product can be added in multiple quantities of 5, 10, 15, 20, onward. (e.g. 2)
-  --Videos: list # Videos URLs (e.g. [https://www.youtube.com/])
-  --WeightKg: float # Weight of the SKU in the measurement [configured in the store](https://help.vtex.com/en/tutorial/filling-in-system-settings--tutorials_269), which by default is in grams. (e.g. 1)
-  --Width: float # SKU real width. (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --activate-if-possible: oneof<nothing, bool> # When set to `true`, this attribute will automatically update the SKU as active once associated with an image or an active component. (e.g. false)
+  --commercial-condition-id: int # Used to define SKU specific promotions or installment rules. In case of no specific condition, use `1` (default value). This field does not accept `0`. Find out more by reading [Registering a commercial condition](https://help.vtex.com/tutorial/registering-a-commercial-condition--tutorials_445). (e.g. 1)
+  --creation-date: string # Date and time of the SKU's creation. (e.g. 2020-01-25T15:51:00)
+  --cubic-weight: float # [Cubic weight](https://help.vtex.com/en/tutorial/understanding-the-cubic-weight-factor--tutorials_128). (e.g. 0.1667)
+  --estimated-date-arrival: string # To add the product as pre-sale, enter the product estimated arrival date in [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601) format. You must take into consideration both the launch date and the freight calculation for the arrival date. (nullable)
+  --height: float # SKU real height. (e.g. 1)
+  --is-active: oneof<nothing, bool> # Shows if the SKU is active (`true`) or not (`false`). (e.g. false)
+  --is-kit: oneof<nothing, bool> # Flag to set whether the product SKU is made up of one or more SKUs, thereby becoming a bundle. Must be enabled if you are adding a bundle. Once activated, the flag cannot be reverted. (e.g. false)
+  --kit-itens-sell-apart: oneof<nothing, bool> # Defines if Kit components can be sold apart. (e.g. false)
+  --length: float # SKU real length. (e.g. 1)
+  --manufacturer-code: string # Provided by the manufacturers to identify their product. This field should be filled in if the product has a specific manufacturer’s code. (e.g. 123)
+  --measurement-unit: string # Used only in cases when you need to convert the unit of measure for sale. If a product is sold in boxes for example, but customers want to buy per square meter (m²). In common cases, use `'un'`. (e.g. un)
+  --modal-type: string # Links an unusual type of SKU to a carrier specialized in delivering it. This field should be filled in with the name of the modal (e.g. "Chemicals" or "Refrigerated products"). To learn more about this feature, read our articles [How the modal works](https://help.vtex.com/en/tutorial/how-does-the-modal-work--tutorials_125) and [Setting up modal for carriers](https://help.vtex.com/en/tutorial/configure-modal--3jhLqxuPhuiq24UoykCcqy). (nullable)
+  name: string # SKU name, meaning the variation of the previously added product. For example: **Product** - _Fridge_, **SKU** - _110V_. (e.g. Size 10)
+  packaged_height: float # Height used for shipping calculation. (e.g. 10)
+  packaged_length: float # Length used for shipping calculation. (e.g. 10)
+  packaged_weight_kg: int # Weight used for shipping calculation, in the measurement [configured in the store](https://help.vtex.com/en/tutorial/filling-in-system-settings--tutorials_269), which by default is in grams. (e.g. 10)
+  packaged_width: float # Width used for shipping calculation. (e.g. 10)
+  product_id: int # ID of the Product associated with this SKU. (e.g. 42)
+  --ref-id: string # Reference code used internally for organizational purposes. Must be unique. It is not required only if EAN code already exists. If not, this field must be provided. (e.g. B096QW8Y8Z)
+  --reward-value: float # Credit that the customer receives when finalizing an order of one specific SKU unit. By filling this field out with `1`, the customer gets U$ 1 credit on the site. (e.g. 1)
+  --unit-multiplier: float # This is the multiple number of SKU. If the Multiplier is 5.0000, the product can be added in multiple quantities of 5, 10, 15, 20, onward. (e.g. 2)
+  --videos: list # Videos URLs (e.g. [https://www.youtube.com/])
+  --weight-kg: float # Weight of the SKU in the measurement [configured in the store](https://help.vtex.com/en/tutorial/filling-in-system-settings--tutorials_269), which by default is in grams. (e.g. 1)
+  --width: float # SKU real width. (e.g. 1)
 ]: any -> record<ActivateIfPossible: bool, CommercialConditionId: int, CreationDate: string, CubicWeight: float, EstimatedDateArrival: string, Height: float, Id: int, IsActive: bool, IsKit: bool, KitItensSellApart: bool, Length: float, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, Name: string, PackagedHeight: float, PackagedLength: float, PackagedWeightKg: int, PackagedWidth: float, ProductId: int, RefId: string, RewardValue: float, UnitMultiplier: float, Videos: list<string>, WeightKg: float, Width: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)")
-  let body = {ActivateIfPossible: $ActivateIfPossible, CommercialConditionId: $CommercialConditionId, CreationDate: $CreationDate, CubicWeight: $CubicWeight, EstimatedDateArrival: $EstimatedDateArrival, Height: $Height, IsActive: $IsActive, IsKit: $IsKit, KitItensSellApart: $KitItensSellApart, Length: $Length, ManufacturerCode: $ManufacturerCode, MeasurementUnit: $MeasurementUnit, ModalType: $ModalType, Name: $Name, PackagedHeight: $PackagedHeight, PackagedLength: $PackagedLength, PackagedWeightKg: $PackagedWeightKg, PackagedWidth: $PackagedWidth, ProductId: $ProductId, RefId: $RefId, RewardValue: $RewardValue, UnitMultiplier: $UnitMultiplier, Videos: $Videos, WeightKg: $WeightKg, Width: $Width} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}"))
+  let body = {"ActivateIfPossible": $activate_if_possible, "CommercialConditionId": $commercial_condition_id, "CreationDate": $creation_date, "CubicWeight": $cubic_weight, "EstimatedDateArrival": $estimated_date_arrival, "Height": $height, "IsActive": $is_active, "IsKit": $is_kit, "KitItensSellApart": $kit_itens_sell_apart, "Length": $length, "ManufacturerCode": $manufacturer_code, "MeasurementUnit": $measurement_unit, "ModalType": $modal_type, "Name": $name, "PackagedHeight": $packaged_height, "PackagedLength": $packaged_length, "PackagedWeightKg": $packaged_weight_kg, "PackagedWidth": $packaged_width, "ProductId": $product_id, "RefId": $ref_id, "RewardValue": $reward_value, "UnitMultiplier": $unit_multiplier, "Videos": $videos, "WeightKg": $weight_kg, "Width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2564,7 +2564,7 @@ export def "catalog-pvt-stockkeepingunit put" [
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/attachment
 export def "catalog-pvt-stockkeepingunit-attachment get" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2573,13 +2573,13 @@ export def "catalog-pvt-stockkeepingunit-attachment get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<AttachmentId: int, Id: int, SkuId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/attachment")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/attachment"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2590,8 +2590,8 @@ export def "catalog-pvt-stockkeepingunit-attachment get" [
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/complement
 # operationId: GetSKUComplementbySKUID
-export def "catalog-pvt-stockkeepingunit-complement GetSKUComplementbySKUID" [
-  skuId: int
+export def "catalog-pvt-stockkeepingunit-complement get-sku-complementby" [
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2600,13 +2600,13 @@ export def "catalog-pvt-stockkeepingunit-complement GetSKUComplementbySKUID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<ComplementTypeId: int, Id: int, ParentSkuId: int, SkuId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/complement")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/complement"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2617,9 +2617,9 @@ export def "catalog-pvt-stockkeepingunit-complement GetSKUComplementbySKUID" [
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/complement/{complementTypeId}
 # operationId: GetSKUComplementsbyComplementTypeID
-export def "catalog-pvt-stockkeepingunit-complement GetSKUComplementsbyComplementTypeID" [
-  skuId: int
-  complementTypeId: int
+export def "catalog-pvt-stockkeepingunit-complement get-sku-complementsby-complement-type" [
+  sku_id: int
+  complement_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2628,13 +2628,13 @@ export def "catalog-pvt-stockkeepingunit-complement GetSKUComplementsbyComplemen
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<ComplementTypeId: int, Id: int, ParentSkuId: int, SkuId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/complement/($complementTypeId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, complement_type_id: $complement_type_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/complement/{complement_type_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2645,7 +2645,7 @@ export def "catalog-pvt-stockkeepingunit-complement GetSKUComplementsbyComplemen
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/ean
 export def "catalog-pvt-stockkeepingunit-ean delete-by-skuId" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2654,13 +2654,13 @@ export def "catalog-pvt-stockkeepingunit-ean delete-by-skuId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/ean")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/ean"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2671,7 +2671,7 @@ export def "catalog-pvt-stockkeepingunit-ean delete-by-skuId" [
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/ean
 export def "catalog-pvt-stockkeepingunit-ean get" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2680,13 +2680,13 @@ export def "catalog-pvt-stockkeepingunit-ean get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/ean")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/ean"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2697,7 +2697,7 @@ export def "catalog-pvt-stockkeepingunit-ean get" [
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/ean/{ean}
 export def "catalog-pvt-stockkeepingunit-ean delete-by-skuId-ean" [
-  skuId: int
+  sku_id: int
   ean: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2707,13 +2707,13 @@ export def "catalog-pvt-stockkeepingunit-ean delete-by-skuId-ean" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/ean/($ean)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, ean: $ean} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/ean/{ean}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2724,7 +2724,7 @@ export def "catalog-pvt-stockkeepingunit-ean delete-by-skuId-ean" [
 #
 # POST /api/catalog/pvt/stockkeepingunit/{skuId}/ean/{ean}
 export def "catalog-pvt-stockkeepingunit-ean post" [
-  skuId: int
+  sku_id: int
   ean: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2734,13 +2734,13 @@ export def "catalog-pvt-stockkeepingunit-ean post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/ean/($ean)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, ean: $ean} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/ean/{ean}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2751,7 +2751,7 @@ export def "catalog-pvt-stockkeepingunit-ean post" [
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/file
 export def "catalog-pvt-stockkeepingunit-file delete-by-skuId" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2760,13 +2760,13 @@ export def "catalog-pvt-stockkeepingunit-file delete-by-skuId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/file")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/file"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2777,7 +2777,7 @@ export def "catalog-pvt-stockkeepingunit-file delete-by-skuId" [
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/file
 export def "catalog-pvt-stockkeepingunit-file get" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2786,13 +2786,13 @@ export def "catalog-pvt-stockkeepingunit-file get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<ArchiveId: int, Id: int, IsMain: bool, Label: string, Name: string, SkuId: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/file")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/file"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2803,7 +2803,7 @@ export def "catalog-pvt-stockkeepingunit-file get" [
 #
 # POST /api/catalog/pvt/stockkeepingunit/{skuId}/file
 export def "catalog-pvt-stockkeepingunit-file post" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2812,21 +2812,21 @@ export def "catalog-pvt-stockkeepingunit-file post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --IsMain: oneof<nothing, bool> # Defines if the Image is the main image of the SKU. (e.g. true)
-  --Label: string # SKU image label. (e.g. Main)
-  Name: string # SKU image name. (e.g. Nike-Red-Janoski-1)
-  --Text: string # General text of the image. (nullable, e.g. Nike-Red-Janoski)
-  Url: string # External Image's URL.  The URL must start with the protocol identifier (`http://` or `https://`) and end with the file extension (`.jpg`, `.png` or `.gif`). (e.g. https://m.media-amazon.com/images/I/610G2-sJx5L._AC_UX695_.jpg)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --is-main: oneof<nothing, bool> # Defines if the Image is the main image of the SKU. (e.g. true)
+  --label: string # SKU image label. (e.g. Main)
+  name: string # SKU image name. (e.g. Nike-Red-Janoski-1)
+  --text: string # General text of the image. (nullable, e.g. Nike-Red-Janoski)
+  --body-url: string # External Image's URL.  The URL must start with the protocol identifier (`http://` or `https://`) and end with the file extension (`.jpg`, `.png` or `.gif`). (e.g. https://m.media-amazon.com/images/I/610G2-sJx5L._AC_UX695_.jpg)
 ]: any -> record<ArchiveId: int, Id: int, IsMain: bool, Label: string, SkuId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/file")
-  let body = {IsMain: $IsMain, Label: $Label, Name: $Name, Text: $Text, Url: $Url} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/file"))
+  let body = {"IsMain": $is_main, "Label": $label, "Name": $name, "Text": $text, "Url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2837,8 +2837,8 @@ export def "catalog-pvt-stockkeepingunit-file post" [
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/file/{skuFileId}
 export def "catalog-pvt-stockkeepingunit-file delete-by-skuId-skuFileId" [
-  skuId: int
-  skuFileId: int
+  sku_id: int
+  sku_file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2847,13 +2847,13 @@ export def "catalog-pvt-stockkeepingunit-file delete-by-skuId-skuFileId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/file/($skuFileId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, sku_file_id: $sku_file_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/file/{sku_file_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2864,8 +2864,8 @@ export def "catalog-pvt-stockkeepingunit-file delete-by-skuId-skuFileId" [
 #
 # PUT /api/catalog/pvt/stockkeepingunit/{skuId}/file/{skuFileId}
 export def "catalog-pvt-stockkeepingunit-file put" [
-  skuId: int
-  skuFileId: int
+  sku_id: int
+  sku_file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2874,21 +2874,21 @@ export def "catalog-pvt-stockkeepingunit-file put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --IsMain: oneof<nothing, bool> # Defines if the Image is the main image of the SKU. (e.g. true)
-  --Label: string # SKU image label. (e.g. Main)
-  Name: string # SKU image name. (e.g. Nike-Red-Janoski-1)
-  --Text: string # General text of the image. (nullable, e.g. Nike-Red-Janoski)
-  Url: string # External Image's URL.  The URL must start with the protocol identifier (`http://` or `https://`) and end with the file extension (`.jpg`, `.png` or `.gif`). (e.g. https://m.media-amazon.com/images/I/610G2-sJx5L._AC_UX695_.jpg)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --is-main: oneof<nothing, bool> # Defines if the Image is the main image of the SKU. (e.g. true)
+  --label: string # SKU image label. (e.g. Main)
+  name: string # SKU image name. (e.g. Nike-Red-Janoski-1)
+  --text: string # General text of the image. (nullable, e.g. Nike-Red-Janoski)
+  --body-url: string # External Image's URL.  The URL must start with the protocol identifier (`http://` or `https://`) and end with the file extension (`.jpg`, `.png` or `.gif`). (e.g. https://m.media-amazon.com/images/I/610G2-sJx5L._AC_UX695_.jpg)
 ]: any -> record<ArchiveId: int, Id: int, IsMain: bool, Label: string, SkuId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/file/($skuFileId)")
-  let body = {IsMain: $IsMain, Label: $Label, Name: $Name, Text: $Text, Url: $Url} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, sku_file_id: $sku_file_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/file/{sku_file_id}"))
+  let body = {"IsMain": $is_main, "Label": $label, "Name": $name, "Text": $text, "Url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2899,7 +2899,7 @@ export def "catalog-pvt-stockkeepingunit-file put" [
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/specification
 export def "catalog-pvt-stockkeepingunit-specification delete-by-skuId" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2908,13 +2908,13 @@ export def "catalog-pvt-stockkeepingunit-specification delete-by-skuId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/specification")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specification"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2925,7 +2925,7 @@ export def "catalog-pvt-stockkeepingunit-specification delete-by-skuId" [
 #
 # GET /api/catalog/pvt/stockkeepingunit/{skuId}/specification
 export def "catalog-pvt-stockkeepingunit-specification get" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2934,13 +2934,13 @@ export def "catalog-pvt-stockkeepingunit-specification get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<FieldId: int, FieldValueId: int, Id: int, SkuId: int, Text: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/specification")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specification"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2951,7 +2951,7 @@ export def "catalog-pvt-stockkeepingunit-specification get" [
 #
 # POST /api/catalog/pvt/stockkeepingunit/{skuId}/specification
 export def "catalog-pvt-stockkeepingunit-specification post" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2960,18 +2960,18 @@ export def "catalog-pvt-stockkeepingunit-specification post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  FieldId: int # Specification ID. (e.g. 13)
-  --FieldValueId: int # Specification Value ID. Required only for `FieldTypeId` as `5`, `6` and `7`. (e.g. 101)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  field_id: int # Specification ID. (e.g. 13)
+  --field-value-id: int # Specification Value ID. Required only for `FieldTypeId` as `5`, `6` and `7`. (e.g. 101)
 ]: any -> record<FieldId: int, FieldValueId: int, Id: int, SkuId: int, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/specification")
-  let body = {FieldId: $FieldId, FieldValueId: $FieldValueId} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specification"))
+  let body = {"FieldId": $field_id, "FieldValueId": $field_value_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2982,7 +2982,7 @@ export def "catalog-pvt-stockkeepingunit-specification post" [
 #
 # PUT /api/catalog/pvt/stockkeepingunit/{skuId}/specification
 export def "catalog-pvt-stockkeepingunit-specification put" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2991,21 +2991,21 @@ export def "catalog-pvt-stockkeepingunit-specification put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  FieldId: int # Specification unique identifier. This field cannot be updated. (e.g. 32)
-  FieldValueId: int # Specification value unique identifier. This field can only be updated with other values of the same `FieldId`. (e.g. 131)
-  Id: int # Specification and SKU association unique identifier. This field cannot be updated. (e.g. 65)
-  --SkuId: int # SKU unique identifier. This field cannot be updated. (e.g. 21)
-  --Text: string # Specification Value Name. This field is automatically updated if the `FieldValue` is updated. Otherwise, the value cannot be modified. (e.g. Red)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  field_id: int # Specification unique identifier. This field cannot be updated. (e.g. 32)
+  field_value_id: int # Specification value unique identifier. This field can only be updated with other values of the same `FieldId`. (e.g. 131)
+  id: int # Specification and SKU association unique identifier. This field cannot be updated. (e.g. 65)
+  --body-sku-id: int # SKU unique identifier. This field cannot be updated. (e.g. 21)
+  --text: string # Specification Value Name. This field is automatically updated if the `FieldValue` is updated. Otherwise, the value cannot be modified. (e.g. Red)
 ]: any -> table<FieldId: int, FieldValueId: int, Id: int, SkuId: int, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/specification")
-  let body = {FieldId: $FieldId, FieldValueId: $FieldValueId, Id: $Id, SkuId: $SkuId, Text: $Text} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specification"))
+  let body = {"FieldId": $field_id, "FieldValueId": $field_value_id, "Id": $id, "SkuId": $body_sku_id, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3016,8 +3016,8 @@ export def "catalog-pvt-stockkeepingunit-specification put" [
 #
 # DELETE /api/catalog/pvt/stockkeepingunit/{skuId}/specification/{specificationId}
 export def "catalog-pvt-stockkeepingunit-specification delete-by-skuId-specificationId" [
-  skuId: int
-  specificationId: int
+  sku_id: int
+  specification_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3026,13 +3026,13 @@ export def "catalog-pvt-stockkeepingunit-specification delete-by-skuId-specifica
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/specification/($specificationId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id, specification_id: $specification_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specification/{specification_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3043,7 +3043,7 @@ export def "catalog-pvt-stockkeepingunit-specification delete-by-skuId-specifica
 #
 # PUT /api/catalog/pvt/stockkeepingunit/{skuId}/specificationvalue
 export def "catalog-pvt-stockkeepingunit-specificationvalue put" [
-  skuId: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3052,20 +3052,20 @@ export def "catalog-pvt-stockkeepingunit-specificationvalue put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  FieldName: string # Specification name. (e.g. Material)
-  FieldValues: list # Array of specification values. SKU Specifications must contain only one value. (e.g. [M])
-  GroupName: string # Group name. (e.g. Composition)
-  --RootLevelSpecification: oneof<nothing, bool> # Root level specification. (e.g. true)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  field_name: string # Specification name. (e.g. Material)
+  field_values: list # Array of specification values. SKU Specifications must contain only one value. (e.g. [M])
+  group_name: string # Group name. (e.g. Composition)
+  --root-level-specification: oneof<nothing, bool> # Root level specification. (e.g. true)
 ]: any -> table<FieldId: int, FieldValueId: int, Id: int, SkuId: int, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunit/($skuId)/specificationvalue")
-  let body = {FieldName: $FieldName, FieldValues: $FieldValues, GroupName: $GroupName, RootLevelSpecification: $RootLevelSpecification} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog/pvt/stockkeepingunit/{sku_id}/specificationvalue"))
+  let body = {"FieldName": $field_name, "FieldValues": $field_values, "GroupName": $group_name, "RootLevelSpecification": $root_level_specification} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3084,16 +3084,16 @@ export def "catalog-pvt-stockkeepingunitkit delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skuId: int # SKU’s unique numerical identifier. (format: int32, e.g. 1)
-  --parentSkuId: int # Parent SKU’s unique numerical identifier. (format: int32, e.g. 1)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --sku-id: int # SKU’s unique numerical identifier. (format: int32, e.g. 1)
+  --parent-sku-id: int # Parent SKU’s unique numerical identifier. (format: int32, e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skuId" $skuId "scalar") (serialize-qp "parentSkuId" $parentSkuId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "skuId" $sku_id "scalar") (serialize-qp "parentSkuId" $parent_sku_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/stockkeepingunitkit" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3112,16 +3112,16 @@ export def "catalog-pvt-stockkeepingunitkit list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skuId: int # SKU’s unique numerical identifier. (format: int32, e.g. 1)
-  --parentSkuId: int # Parent SKU’s unique numerical identifier. (format: int32, e.g. 1)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --sku-id: int # SKU’s unique numerical identifier. (format: int32, e.g. 1)
+  --parent-sku-id: int # Parent SKU’s unique numerical identifier. (format: int32, e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<Id: int, Quantity: int, StockKeepingUnitId: int, StockKeepingUnitParent: int, UnitPrice: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skuId" $skuId "scalar") (serialize-qp "parentSkuId" $parentSkuId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "skuId" $sku_id "scalar") (serialize-qp "parentSkuId" $parent_sku_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog/pvt/stockkeepingunitkit" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3140,20 +3140,20 @@ export def "catalog-pvt-stockkeepingunitkit post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  Quantity: int # Component quantity. (e.g. 3)
-  StockKeepingUnitId: int # Component SKU ID. (e.g. 31018374)
-  StockKeepingUnitParent: int # SKU ID of the SKU Kit. (e.g. 31018373)
-  UnitPrice: float # Component price per unit. (e.g. 15.5)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  quantity: int # Component quantity. (e.g. 3)
+  stock_keeping_unit_id: int # Component SKU ID. (e.g. 31018374)
+  stock_keeping_unit_parent: int # SKU ID of the SKU Kit. (e.g. 31018373)
+  unit_price: float # Component price per unit. (e.g. 15.5)
 ]: any -> record<Id: int, Quantity: int, StockKeepingUnitId: int, StockKeepingUnitParent: int, UnitPrice: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/stockkeepingunitkit")
-  let body = {Quantity: $Quantity, StockKeepingUnitId: $StockKeepingUnitId, StockKeepingUnitParent: $StockKeepingUnitParent, UnitPrice: $UnitPrice} | compact
+  let body = {"Quantity": $quantity, "StockKeepingUnitId": $stock_keeping_unit_id, "StockKeepingUnitParent": $stock_keeping_unit_parent, "UnitPrice": $unit_price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3164,7 +3164,7 @@ export def "catalog-pvt-stockkeepingunitkit post" [
 #
 # DELETE /api/catalog/pvt/stockkeepingunitkit/{kitId}
 export def "catalog-pvt-stockkeepingunitkit delete-by-kitId" [
-  kitId: int
+  kit_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3173,13 +3173,13 @@ export def "catalog-pvt-stockkeepingunitkit delete-by-kitId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunitkit/($kitId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({kit_id: $kit_id} | format pattern "/api/catalog/pvt/stockkeepingunitkit/{kit_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3190,7 +3190,7 @@ export def "catalog-pvt-stockkeepingunitkit delete-by-kitId" [
 #
 # GET /api/catalog/pvt/stockkeepingunitkit/{kitId}
 export def "catalog-pvt-stockkeepingunitkit get" [
-  kitId: int
+  kit_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3199,13 +3199,13 @@ export def "catalog-pvt-stockkeepingunitkit get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<Id: int, Quantity: int, StockKeepingUnitId: int, StockKeepingUnitParent: int, UnitPrice: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/stockkeepingunitkit/($kitId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({kit_id: $kit_id} | format pattern "/api/catalog/pvt/stockkeepingunitkit/{kit_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3224,21 +3224,21 @@ export def "catalog-pvt-subcollection post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  CollectionId: int # SubCollection ID. (e.g. 17)
-  Name: string # SubCollection Name. (e.g. group 1)
-  --PreSale: oneof<nothing, bool> # Defines PreSale date. (e.g. false)
-  --Release: oneof<nothing, bool> # Defines Release date. (e.g. false)
-  Type: string # Either `“Exclusive”` (all the products contained in it will not be used) or `“Inclusive”` (all the products contained in it will be used). (e.g. Inclusive)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  collection_id: int # SubCollection ID. (e.g. 17)
+  name: string # SubCollection Name. (e.g. group 1)
+  --pre-sale: oneof<nothing, bool> # Defines PreSale date. (e.g. false)
+  --release: oneof<nothing, bool> # Defines Release date. (e.g. false)
+  type: string # Either `“Exclusive”` (all the products contained in it will not be used) or `“Inclusive”` (all the products contained in it will be used). (e.g. Inclusive)
 ]: any -> record<CollectionId: int, Id: int, Name: string, PreSale: bool, Release: bool, Type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/subcollection")
-  let body = {CollectionId: $CollectionId, Name: $Name, PreSale: $PreSale, Release: $Release, Type: $Type} | compact
+  let body = {"CollectionId": $collection_id, "Name": $name, "PreSale": $pre_sale, "Release": $release, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3249,7 +3249,7 @@ export def "catalog-pvt-subcollection post" [
 #
 # DELETE /api/catalog/pvt/subcollection/{subCollectionId}
 export def "catalog-pvt-subcollection delete" [
-  subCollectionId: int
+  sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3258,13 +3258,13 @@ export def "catalog-pvt-subcollection delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/subcollection/($subCollectionId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sub_collection_id: $sub_collection_id} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3275,7 +3275,7 @@ export def "catalog-pvt-subcollection delete" [
 #
 # GET /api/catalog/pvt/subcollection/{subCollectionId}
 export def "catalog-pvt-subcollection get" [
-  subCollectionId: int
+  sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3284,13 +3284,13 @@ export def "catalog-pvt-subcollection get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<CollectionId: int, Id: int, Name: string, PreSale: bool, Release: bool, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/subcollection/($subCollectionId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sub_collection_id: $sub_collection_id} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3301,7 +3301,7 @@ export def "catalog-pvt-subcollection get" [
 #
 # PUT /api/catalog/pvt/subcollection/{subCollectionId}
 export def "catalog-pvt-subcollection put" [
-  subCollectionId: int
+  sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3310,21 +3310,21 @@ export def "catalog-pvt-subcollection put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  CollectionId: int # Collection ID. (e.g. 17)
-  Name: string # Subcollection Name. (e.g. group 1)
-  --PreSale: oneof<nothing, bool> # Defines PreSale date. (e.g. false)
-  --Release: oneof<nothing, bool> # Defines Release date. (e.g. false)
-  Type: string # Either `“Exclusive”` (all the products contained in it will not be used) or `“Inclusive”` (all the products contained in it will be used). (e.g. Inclusive)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  collection_id: int # Collection ID. (e.g. 17)
+  name: string # Subcollection Name. (e.g. group 1)
+  --pre-sale: oneof<nothing, bool> # Defines PreSale date. (e.g. false)
+  --release: oneof<nothing, bool> # Defines Release date. (e.g. false)
+  type: string # Either `“Exclusive”` (all the products contained in it will not be used) or `“Inclusive”` (all the products contained in it will be used). (e.g. Inclusive)
 ]: any -> record<CollectionId: int, Id: int, Name: string, PreSale: bool, Release: bool, Type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/subcollection/($subCollectionId)")
-  let body = {CollectionId: $CollectionId, Name: $Name, PreSale: $PreSale, Release: $Release, Type: $Type} | compact
+  let full_url = (build-url $base ({sub_collection_id: $sub_collection_id} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}"))
+  let body = {"CollectionId": $collection_id, "Name": $name, "PreSale": $pre_sale, "Release": $release, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3335,7 +3335,7 @@ export def "catalog-pvt-subcollection put" [
 #
 # POST /api/catalog/pvt/subcollection/{subCollectionId}/brand
 export def "catalog-pvt-subcollection-brand post" [
-  subCollectionId: int
+  sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3344,17 +3344,17 @@ export def "catalog-pvt-subcollection-brand post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  BrandId: int # Unique identifier of a Brand. (e.g. 2000000)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  brand_id: int # Unique identifier of a Brand. (e.g. 2000000)
 ]: any -> record<BrandId: int, SubCollectionId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/subcollection/($subCollectionId)/brand")
-  let body = {BrandId: $BrandId} | compact
+  let full_url = (build-url $base ({sub_collection_id: $sub_collection_id} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/brand"))
+  let body = {"BrandId": $brand_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3365,8 +3365,8 @@ export def "catalog-pvt-subcollection-brand post" [
 #
 # DELETE /api/catalog/pvt/subcollection/{subCollectionId}/brand/{brandId}
 export def "catalog-pvt-subcollection-brand delete-by-subCollectionId-brandId" [
-  subCollectionId: int
-  brandId: int
+  sub_collection_id: int
+  brand_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3375,13 +3375,13 @@ export def "catalog-pvt-subcollection-brand delete-by-subCollectionId-brandId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/subcollection/($subCollectionId)/brand/($brandId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sub_collection_id: $sub_collection_id, brand_id: $brand_id} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/brand/{brand_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3392,8 +3392,8 @@ export def "catalog-pvt-subcollection-brand delete-by-subCollectionId-brandId" [
 #
 # DELETE /api/catalog/pvt/subcollection/{subCollectionId}/brand/{categoryId}
 export def "catalog-pvt-subcollection-brand delete-by-subCollectionId-categoryId" [
-  subCollectionId: int
-  categoryId: int
+  sub_collection_id: int
+  category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3402,13 +3402,13 @@ export def "catalog-pvt-subcollection-brand delete-by-subCollectionId-categoryId
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/subcollection/($subCollectionId)/brand/($categoryId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sub_collection_id: $sub_collection_id, category_id: $category_id} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/brand/{category_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3419,7 +3419,7 @@ export def "catalog-pvt-subcollection-brand delete-by-subCollectionId-categoryId
 #
 # POST /api/catalog/pvt/subcollection/{subCollectionId}/category
 export def "catalog-pvt-subcollection-category post" [
-  subCollectionId: int
+  sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3428,17 +3428,17 @@ export def "catalog-pvt-subcollection-category post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  CategoryId: int # Unique identifier of a Category. (e.g. 0)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  category_id: int # Unique identifier of a Category. (e.g. 0)
 ]: any -> record<CategoryId: int, SubCollectionId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/subcollection/($subCollectionId)/category")
-  let body = {CategoryId: $CategoryId} | compact
+  let full_url = (build-url $base ({sub_collection_id: $sub_collection_id} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/category"))
+  let body = {"CategoryId": $category_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3449,7 +3449,7 @@ export def "catalog-pvt-subcollection-category post" [
 #
 # POST /api/catalog/pvt/subcollection/{subCollectionId}/stockkeepingunit
 export def "catalog-pvt-subcollection-stockkeepingunit post" [
-  subCollectionId: int
+  sub_collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3458,17 +3458,17 @@ export def "catalog-pvt-subcollection-stockkeepingunit post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  SkuId: int # Unique identifier of an SKU. (e.g. 1)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  sku_id: int # Unique identifier of an SKU. (e.g. 1)
 ]: any -> record<SkuId: int, SubCollectionId: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/subcollection/($subCollectionId)/stockkeepingunit")
-  let body = {SkuId: $SkuId} | compact
+  let full_url = (build-url $base ({sub_collection_id: $sub_collection_id} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/stockkeepingunit"))
+  let body = {"SkuId": $sku_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3479,8 +3479,8 @@ export def "catalog-pvt-subcollection-stockkeepingunit post" [
 #
 # DELETE /api/catalog/pvt/subcollection/{subCollectionId}/stockkeepingunit/{skuId}
 export def "catalog-pvt-subcollection-stockkeepingunit delete" [
-  subCollectionId: int
-  skuId: int
+  sub_collection_id: int
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3489,13 +3489,13 @@ export def "catalog-pvt-subcollection-stockkeepingunit delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/subcollection/($subCollectionId)/stockkeepingunit/($skuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sub_collection_id: $sub_collection_id, sku_id: $sku_id} | format pattern "/api/catalog/pvt/subcollection/{sub_collection_id}/stockkeepingunit/{sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3514,25 +3514,25 @@ export def "catalog-pvt-supplier post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  CellPhone: string # Supplier Cellphone. (e.g. 4444444444)
-  Cnpj: string # Corporate legal ID. (e.g. 33304981001272)
-  CorporateName: string # Supplier Corporate Name. (e.g. TopStore)
-  CorportePhone: string # Supplier Corporate Phone. (e.g. 5555555555)
-  Email: string # Supplier email. (e.g. email@email.com)
-  --IsActive: oneof<nothing, bool> # Defines if the Supplier is active (`true`) or not (`false`). (e.g. false)
-  Name: string # Supplier Name. (e.g. Supplier)
-  Phone: string # Supplier Phone. (e.g. 3333333333)
-  StateInscription: string # State Inscription. (e.g. 123456)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  cell_phone: string # Supplier Cellphone. (e.g. 4444444444)
+  cnpj: string # Corporate legal ID. (e.g. 33304981001272)
+  corporate_name: string # Supplier Corporate Name. (e.g. TopStore)
+  corporte_phone: string # Supplier Corporate Phone. (e.g. 5555555555)
+  email: string # Supplier email. (e.g. email@email.com)
+  --is-active: oneof<nothing, bool> # Defines if the Supplier is active (`true`) or not (`false`). (e.g. false)
+  name: string # Supplier Name. (e.g. Supplier)
+  phone: string # Supplier Phone. (e.g. 3333333333)
+  state_inscription: string # State Inscription. (e.g. 123456)
 ]: any -> record<CellPhone: string, Cnpj: string, CorporateName: string, CorportePhone: string, Email: string, Id: int, IsActive: bool, Name: string, Phone: string, StateInscription: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog/pvt/supplier")
-  let body = {CellPhone: $CellPhone, Cnpj: $Cnpj, CorporateName: $CorporateName, CorportePhone: $CorportePhone, Email: $Email, IsActive: $IsActive, Name: $Name, Phone: $Phone, StateInscription: $StateInscription} | compact
+  let body = {"CellPhone": $cell_phone, "Cnpj": $cnpj, "CorporateName": $corporate_name, "CorportePhone": $corporte_phone, "Email": $email, "IsActive": $is_active, "Name": $name, "Phone": $phone, "StateInscription": $state_inscription} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3543,7 +3543,7 @@ export def "catalog-pvt-supplier post" [
 #
 # DELETE /api/catalog/pvt/supplier/{supplierId}
 export def "catalog-pvt-supplier delete" [
-  supplierId: int
+  supplier_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3552,13 +3552,13 @@ export def "catalog-pvt-supplier delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/supplier/($supplierId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({supplier_id: $supplier_id} | format pattern "/api/catalog/pvt/supplier/{supplier_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3569,7 +3569,7 @@ export def "catalog-pvt-supplier delete" [
 #
 # PUT /api/catalog/pvt/supplier/{supplierId}
 export def "catalog-pvt-supplier put" [
-  supplierId: int
+  supplier_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3578,25 +3578,25 @@ export def "catalog-pvt-supplier put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  CellPhone: string # Supplier Cellphone. (e.g. 4444444444)
-  Cnpj: string # Corporate legal ID. (e.g. 33304981001272)
-  CorporateName: string # Supplier Corporate Name. (e.g. TopStore)
-  CorportePhone: string # Supplier Corporate Phone. (e.g. 5555555555)
-  Email: string # Supplier email. (e.g. email@email.com)
-  --IsActive: oneof<nothing, bool> # Defines if the Supplier is active (`true`) or not (`false`). (e.g. false)
-  Name: string # Supplier Name. (e.g. Supplier)
-  Phone: string # Supplier Phone. (e.g. 3333333333)
-  StateInscription: string # State Inscription. (e.g. 123456)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  cell_phone: string # Supplier Cellphone. (e.g. 4444444444)
+  cnpj: string # Corporate legal ID. (e.g. 33304981001272)
+  corporate_name: string # Supplier Corporate Name. (e.g. TopStore)
+  corporte_phone: string # Supplier Corporate Phone. (e.g. 5555555555)
+  email: string # Supplier email. (e.g. email@email.com)
+  --is-active: oneof<nothing, bool> # Defines if the Supplier is active (`true`) or not (`false`). (e.g. false)
+  name: string # Supplier Name. (e.g. Supplier)
+  phone: string # Supplier Phone. (e.g. 3333333333)
+  state_inscription: string # State Inscription. (e.g. 123456)
 ]: any -> record<CellPhone: string, Cnpj: string, CorporateName: string, CorportePhone: string, Email: string, Id: int, IsActive: bool, Name: string, Phone: string, StateInscription: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog/pvt/supplier/($supplierId)")
-  let body = {CellPhone: $CellPhone, Cnpj: $Cnpj, CorporateName: $CorporateName, CorportePhone: $CorportePhone, Email: $Email, IsActive: $IsActive, Name: $Name, Phone: $Phone, StateInscription: $StateInscription} | compact
+  let full_url = (build-url $base ({supplier_id: $supplier_id} | format pattern "/api/catalog/pvt/supplier/{supplier_id}"))
+  let body = {"CellPhone": $cell_phone, "Cnpj": $cnpj, "CorporateName": $corporate_name, "CorportePhone": $corporte_phone, "Email": $email, "IsActive": $is_active, "Name": $name, "Phone": $phone, "StateInscription": $state_inscription} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3607,8 +3607,8 @@ export def "catalog-pvt-supplier put" [
 #
 # GET /api/catalog_system/pub/category/tree/{categoryLevels}
 # operationId: CategoryTree
-export def "catalog-system-pub-category-tree CategoryTree" [
-  categoryLevels: string
+export def "catalog-system-pub-category-tree get" [
+  category_levels: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3617,13 +3617,13 @@ export def "catalog-system-pub-category-tree CategoryTree" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<MetaTagDescription: string, Title: string, children: list<record>, hasChildren: bool, id: int, name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pub/category/tree/($categoryLevels)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({category_levels: $category_levels} | format pattern "/api/catalog_system/pub/category/tree/{category_levels}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3634,8 +3634,8 @@ export def "catalog-system-pub-category-tree CategoryTree" [
 #
 # GET /api/catalog_system/pub/products/variations/{productId}
 # operationId: ProductVariations
-export def "catalog-system-pub-products-variations ProductVariations" [
-  productId: int
+export def "catalog-system-pub-products-variations get" [
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3644,13 +3644,13 @@ export def "catalog-system-pub-products-variations ProductVariations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<available: bool, dimensions: list<string>, dimensionsInputType: record, dimensionsMap: record, displayMode: string, name: string, productId: int, salesChannel: string, skus: table<available: bool, availablequantity: int, bestPrice: int, bestPriceFormated: string, cacheVersionUsedToCallCheckout: string, dimensions: record, image: string, installments: int, installmentsInsterestRate: int, installmentsValue: int, listPrice: int, listPriceFormated: string, measures: record, rewardValue: int, sellerId: string, sku: int, skuname: string, spotPrice: int, taxAsInt: int, taxFormated: string, unitMultiplier: float>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pub/products/variations/($productId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pub/products/variations/{product_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3661,8 +3661,8 @@ export def "catalog-system-pub-products-variations ProductVariations" [
 #
 # GET /api/catalog_system/pub/saleschannel/{salesChannelId}
 # operationId: SalesChannelbyId
-export def "catalog-system-pub-saleschannel SalesChannelbyId" [
-  salesChannelId: string
+export def "catalog-system-pub-saleschannel get" [
+  sales_channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3671,13 +3671,13 @@ export def "catalog-system-pub-saleschannel SalesChannelbyId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<ConditionRule: string, CountryCode: string, CultureInfo: string, CurrencyCode: string, CurrencyDecimalDigits: int, CurrencyFormatInfo: record<CurrencyDecimalDigits: int, CurrencyDecimalSeparator: string, CurrencyGroupSeparator: string, CurrencyGroupSize: int, StartsWithCurrencySymbol: bool>, CurrencyLocale: int, CurrencySymbol: string, Id: int, IsActive: bool, Name: string, Origin: string, Position: int, ProductClusterId: int, TimeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pub/saleschannel/($salesChannelId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sales_channel_id: $sales_channel_id} | format pattern "/api/catalog_system/pub/saleschannel/{sales_channel_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3688,7 +3688,7 @@ export def "catalog-system-pub-saleschannel SalesChannelbyId" [
 #
 # POST /api/catalog_system/pub/sku/stockkeepingunitidsbyrefids
 # operationId: SkuIdlistbyRefIdlist
-export def "catalog-system-pub-sku-stockkeepingunitidsbyrefids SkuIdlistbyRefIdlist" [
+export def "catalog-system-pub-sku-stockkeepingunitidsbyrefids post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3697,8 +3697,8 @@ export def "catalog-system-pub-sku-stockkeepingunitidsbyrefids SkuIdlistbyRefIdl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --body: record
 ]: any -> record {
   let input = $in
@@ -3706,7 +3706,7 @@ export def "catalog-system-pub-sku-stockkeepingunitidsbyrefids SkuIdlistbyRefIdl
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pub/sku/stockkeepingunitidsbyrefids")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3717,8 +3717,8 @@ export def "catalog-system-pub-sku-stockkeepingunitidsbyrefids SkuIdlistbyRefIdl
 #
 # GET /api/catalog_system/pub/specification/field/listByCategoryId/{categoryId}
 # operationId: SpecificationsByCategoryId
-export def "catalog-system-pub-specification-field-list-by-category-id SpecificationsByCategoryId" [
-  categoryId: int
+export def "catalog-system-pub-specification-field-list-by-category-id get" [
+  category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3727,13 +3727,13 @@ export def "catalog-system-pub-specification-field-list-by-category-id Specifica
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<CategoryId: int, FieldId: int, IsActive: bool, IsStockKeepingUnit: bool, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pub/specification/field/listByCategoryId/($categoryId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/api/catalog_system/pub/specification/field/listByCategoryId/{category_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3744,8 +3744,8 @@ export def "catalog-system-pub-specification-field-list-by-category-id Specifica
 #
 # GET /api/catalog_system/pub/specification/field/listTreeByCategoryId/{categoryId}
 # operationId: SpecificationsTreeByCategoryId
-export def "catalog-system-pub-specification-field-list-tree-by-category-id SpecificationsTreeByCategoryId" [
-  categoryId: int
+export def "catalog-system-pub-specification-field-list-tree-by-category-id get" [
+  category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3754,13 +3754,13 @@ export def "catalog-system-pub-specification-field-list-tree-by-category-id Spec
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<CategoryId: int, FieldId: int, IsActive: bool, IsStockKeepingUnit: bool, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pub/specification/field/listTreeByCategoryId/($categoryId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/api/catalog_system/pub/specification/field/listTreeByCategoryId/{category_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3771,8 +3771,8 @@ export def "catalog-system-pub-specification-field-list-tree-by-category-id Spec
 #
 # GET /api/catalog_system/pub/specification/fieldGet/{fieldId}
 # operationId: SpecificationsField
-export def "catalog-system-pub-specification-field-get SpecificationsField" [
-  fieldId: int
+export def "catalog-system-pub-specification-field-get get" [
+  field_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3781,13 +3781,13 @@ export def "catalog-system-pub-specification-field-get SpecificationsField" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<DefaultValue: string, Description: string, FieldGroupId: int, FieldGroupName: string, FieldId: int, FieldTypeId: int, FieldTypeName: string, FieldValueId: int, IsActive: bool, IsFilter: bool, IsOnProductDetails: bool, IsRequired: bool, IsSideMenuLinkActive: bool, IsStockKeepingUnit: bool, IsTopMenuLinkActive: bool, IsWizard: bool, Name: string, Position: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pub/specification/fieldGet/($fieldId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/api/catalog_system/pub/specification/fieldGet/{field_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3798,8 +3798,8 @@ export def "catalog-system-pub-specification-field-get SpecificationsField" [
 #
 # GET /api/catalog_system/pub/specification/fieldvalue/{fieldId}
 # operationId: SpecificationsValuesByFieldId
-export def "catalog-system-pub-specification-fieldvalue SpecificationsValuesByFieldId" [
-  fieldId: int
+export def "catalog-system-pub-specification-fieldvalue get" [
+  field_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3808,13 +3808,13 @@ export def "catalog-system-pub-specification-fieldvalue SpecificationsValuesByFi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<FieldValueId: int, IsActive: bool, Position: int, Value: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pub/specification/fieldvalue/($fieldId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/api/catalog_system/pub/specification/fieldvalue/{field_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3825,8 +3825,8 @@ export def "catalog-system-pub-specification-fieldvalue SpecificationsValuesByFi
 #
 # GET /api/catalog_system/pub/specification/groupGet/{groupId}
 # operationId: SpecificationsGroupGet
-export def "catalog-system-pub-specification-group-get SpecificationsGroupGet" [
-  groupId: string
+export def "catalog-system-pub-specification-group-get get" [
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3835,13 +3835,13 @@ export def "catalog-system-pub-specification-group-get SpecificationsGroupGet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<CategoryId: int, Id: int, Name: string, Position: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pub/specification/groupGet/($groupId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/api/catalog_system/pub/specification/groupGet/{group_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3852,7 +3852,7 @@ export def "catalog-system-pub-specification-group-get SpecificationsGroupGet" [
 #
 # GET /api/catalog_system/pvt/brand/list
 # operationId: BrandList
-export def "catalog-system-pvt-brand-list BrandList" [
+export def "catalog-system-pvt-brand-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3861,13 +3861,13 @@ export def "catalog-system-pvt-brand-list BrandList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<id: int, imageUrl: string, isActive: bool, metaTagDescription: string, name: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pvt/brand/list")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3878,7 +3878,7 @@ export def "catalog-system-pvt-brand-list BrandList" [
 #
 # GET /api/catalog_system/pvt/brand/pagedlist
 # operationId: BrandListPerPage
-export def "catalog-system-pvt-brand-pagedlist BrandListPerPage" [
+export def "catalog-system-pvt-brand-pagedlist get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3887,16 +3887,16 @@ export def "catalog-system-pvt-brand-pagedlist BrandListPerPage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: int # Quantity of brands per page. (e.g. 5)
+  --page-size: int # Quantity of brands per page. (e.g. 5)
   --page: int # Page number of the brand list. (e.g. 1)
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<items: table<id: int, imageUrl: string, isActive: bool, metaTagDescription: string, name: string, title: string>, paging: record<page: int, pages: int, perPage: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/brand/pagedlist" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3907,8 +3907,8 @@ export def "catalog-system-pvt-brand-pagedlist BrandListPerPage" [
 #
 # GET /api/catalog_system/pvt/brand/{brandId}
 # operationId: Brand
-export def "catalog-system-pvt-brand Brand" [
-  brandId: string
+export def "catalog-system-pvt-brand get" [
+  brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3917,13 +3917,13 @@ export def "catalog-system-pvt-brand Brand" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<id: int, imageUrl: string, isActive: bool, metaTagDescription: string, name: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/brand/($brandId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({brand_id: $brand_id} | format pattern "/api/catalog_system/pvt/brand/{brand_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3934,7 +3934,7 @@ export def "catalog-system-pvt-brand Brand" [
 #
 # GET /api/catalog_system/pvt/collection/search
 # operationId: GET-AllCollections
-export def "catalog-system-pvt-collection-search GET-AllCollections" [
+export def "catalog-system-pvt-collection-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3944,16 +3944,16 @@ export def "catalog-system-pvt-collection-search GET-AllCollections" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 2)
-  --pageSize: int # Number of the items of the page. (e.g. 15)
-  --orderByAsc: oneof<nothing, bool> # Defines if the items of the page are in ascending order. (e.g. true)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --page-size: int # Number of the items of the page. (e.g. 15)
+  --order-by-asc: oneof<nothing, bool> # Defines if the items of the page are in ascending order. (e.g. true)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "orderByAsc" $orderByAsc "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderByAsc" $order_by_asc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/collection/search" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3964,8 +3964,8 @@ export def "catalog-system-pvt-collection-search GET-AllCollections" [
 #
 # GET /api/catalog_system/pvt/collection/search/{searchTerms}
 # operationId: GET-Collectionsbyseachterms
-export def "catalog-system-pvt-collection-search GET-Collectionsbyseachterms" [
-  searchTerms: string
+export def "catalog-system-pvt-collection-search get" [
+  search_terms: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3975,16 +3975,16 @@ export def "catalog-system-pvt-collection-search GET-Collectionsbyseachterms" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number. (e.g. 2)
-  --pageSize: int # Number of the items of the page. (e.g. 15)
-  --orderByAsc: oneof<nothing, bool> # Defines if the items of the page are in ascending order. (e.g. true)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --page-size: int # Number of the items of the page. (e.g. 15)
+  --order-by-asc: oneof<nothing, bool> # Defines if the items of the page are in ascending order. (e.g. true)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "orderByAsc" $orderByAsc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/catalog_system/pvt/collection/search/($searchTerms)" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "orderByAsc" $order_by_asc "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({search_terms: $search_terms} | format pattern "/api/catalog_system/pvt/collection/search/{search_terms}") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3995,7 +3995,7 @@ export def "catalog-system-pvt-collection-search GET-Collectionsbyseachterms" [
 #
 # GET /api/catalog_system/pvt/commercialcondition/list
 # operationId: GetAllCommercialConditions
-export def "catalog-system-pvt-commercialcondition-list GetAllCommercialConditions" [
+export def "catalog-system-pvt-commercialcondition-list get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4004,13 +4004,13 @@ export def "catalog-system-pvt-commercialcondition-list GetAllCommercialConditio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<Id: int, IsDefault: bool, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pvt/commercialcondition/list")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4021,8 +4021,8 @@ export def "catalog-system-pvt-commercialcondition-list GetAllCommercialConditio
 #
 # GET /api/catalog_system/pvt/commercialcondition/{commercialConditionId}
 # operationId: GetCommercialConditions
-export def "catalog-system-pvt-commercialcondition GetCommercialConditions" [
-  commercialConditionId: int
+export def "catalog-system-pvt-commercialcondition get" [
+  commercial_condition_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4031,13 +4031,13 @@ export def "catalog-system-pvt-commercialcondition GetCommercialConditions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<Id: int, IsDefault: bool, Name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/commercialcondition/($commercialConditionId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({commercial_condition_id: $commercial_condition_id} | format pattern "/api/catalog_system/pvt/commercialcondition/{commercial_condition_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4048,8 +4048,8 @@ export def "catalog-system-pvt-commercialcondition GetCommercialConditions" [
 #
 # GET /api/catalog_system/pvt/products/GetIndexedInfo/{productId}
 # operationId: IndexedInfo
-export def "catalog-system-pvt-products-get-indexed-info IndexedInfo" [
-  productId: string
+export def "catalog-system-pvt-products-get-indexed-info get" [
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4058,13 +4058,13 @@ export def "catalog-system-pvt-products-get-indexed-info IndexedInfo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/products/GetIndexedInfo/($productId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pvt/products/GetIndexedInfo/{product_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "xml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4075,7 +4075,7 @@ export def "catalog-system-pvt-products-get-indexed-info IndexedInfo" [
 #
 # GET /api/catalog_system/pvt/products/GetProductAndSkuIds
 # operationId: ProductAndSkuIds
-export def "catalog-system-pvt-products-get-product-and-sku-ids ProductAndSkuIds" [
+export def "catalog-system-pvt-products-get-product-and-sku-ids get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4084,17 +4084,17 @@ export def "catalog-system-pvt-products-get-product-and-sku-ids ProductAndSkuIds
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --categoryId: int # ID of the category from which you need to retrieve Products and SKUs. (format: int32, e.g. 1)
+  --category-id: int # ID of the category from which you need to retrieve Products and SKUs. (format: int32, e.g. 1)
   --qp-from: int # Insert the ID that will start the request result. (format: int32, e.g. 1)
   --qp-to: int # Insert the ID that will end the request result. (format: int32, e.g. 10)
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<data: record<Product_ID: list<any>>, range: record<from: int, to: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "categoryId" $categoryId "scalar") (serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "categoryId" $category_id "scalar") (serialize-qp "_from" $qp_from "scalar") (serialize-qp "_to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/products/GetProductAndSkuIds" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4105,8 +4105,8 @@ export def "catalog-system-pvt-products-get-product-and-sku-ids ProductAndSkuIds
 #
 # GET /api/catalog_system/pvt/products/productget/{productId}
 # operationId: ProductandTradePolicy
-export def "catalog-system-pvt-products-productget ProductandTradePolicy" [
-  productId: int
+export def "catalog-system-pvt-products-productget get" [
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4115,13 +4115,13 @@ export def "catalog-system-pvt-products-productget ProductandTradePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<AdWordsRemarketingCode: string, BrandId: int, CategoryId: int, DepartmentId: int, Description: string, DescriptionShort: string, Id: int, IsActive: bool, IsVisible: bool, KeyWords: string, LinkId: string, ListStoreId: list<any>, LomadeeCampaignCode: string, MetaTagDescription: string, Name: string, RefId: string, ReleaseDate: string, ShowWithoutStock: bool, SupplierId: int, TaxCode: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/products/productget/($productId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pvt/products/productget/{product_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4132,8 +4132,8 @@ export def "catalog-system-pvt-products-productget ProductandTradePolicy" [
 #
 # GET /api/catalog_system/pvt/products/productgetbyrefid/{refId}
 # operationId: ProductbyRefId
-export def "catalog-system-pvt-products-productgetbyrefid ProductbyRefId" [
-  refId: string
+export def "catalog-system-pvt-products-productgetbyrefid get" [
+  ref_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4142,13 +4142,13 @@ export def "catalog-system-pvt-products-productgetbyrefid ProductbyRefId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<AdWordsRemarketingCode: string, BrandId: int, CategoryId: int, DepartmentId: int, Description: string, DescriptionShort: string, Id: int, IsActive: bool, IsVisible: bool, KeyWords: string, LinkId: string, ListStoreId: list<int>, LomadeeCampaignCode: string, MetaTagDescription: string, Name: string, RefId: string, ReleaseDate: string, ShowWithoutStock: bool, SupplierId: int, TaxCode: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/products/productgetbyrefid/($refId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({ref_id: $ref_id} | format pattern "/api/catalog_system/pvt/products/productgetbyrefid/{ref_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4159,8 +4159,8 @@ export def "catalog-system-pvt-products-productgetbyrefid ProductbyRefId" [
 #
 # GET /api/catalog_system/pvt/products/{productId}/specification
 # operationId: GetProductSpecification
-export def "catalog-system-pvt-products-specification GetProductSpecification" [
-  productId: int
+export def "catalog-system-pvt-products-specification get" [
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4169,13 +4169,13 @@ export def "catalog-system-pvt-products-specification GetProductSpecification" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<Id: int, Name: string, Value: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/products/($productId)/specification")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pvt/products/{product_id}/specification"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4186,8 +4186,8 @@ export def "catalog-system-pvt-products-specification GetProductSpecification" [
 #
 # POST /api/catalog_system/pvt/products/{productId}/specification
 # operationId: UpdateProductSpecification
-export def "catalog-system-pvt-products-specification UpdateProductSpecification" [
-  productId: int
+export def "catalog-system-pvt-products-specification update" [
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4196,16 +4196,16 @@ export def "catalog-system-pvt-products-specification UpdateProductSpecification
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/products/($productId)/specification")
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pvt/products/{product_id}/specification"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4216,7 +4216,7 @@ export def "catalog-system-pvt-products-specification UpdateProductSpecification
 #
 # GET /api/catalog_system/pvt/saleschannel/list
 # operationId: SalesChannelList
-export def "catalog-system-pvt-saleschannel-list SalesChannelList" [
+export def "catalog-system-pvt-saleschannel-list get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4225,13 +4225,13 @@ export def "catalog-system-pvt-saleschannel-list SalesChannelList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<ConditionRule: string, CountryCode: string, CultureInfo: string, CurrencyCode: string, CurrencyDecimalDigits: int, CurrencyFormatInfo: record<CurrencyDecimalDigits: int, CurrencyDecimalSeparator: string, CurrencyGroupSeparator: string, CurrencyGroupSize: int, StartsWithCurrencySymbol: bool>, CurrencyLocale: int, CurrencySymbol: string, Id: int, IsActive: bool, Name: string, Origin: string, Position: int, ProductClusterId: int, TimeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pvt/saleschannel/list")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4242,7 +4242,7 @@ export def "catalog-system-pvt-saleschannel-list SalesChannelList" [
 #
 # POST /api/catalog_system/pvt/seller
 # operationId: CreateSeller
-export def "catalog-system-pvt-seller CreateSeller" [
+export def "catalog-system-pvt-seller create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4251,41 +4251,41 @@ export def "catalog-system-pvt-seller CreateSeller" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  ArchiveId: int # Seller archive ID. (e.g. 1)
-  CNPJ: string # Company registration number. (e.g. 12035072751)
-  CSCIdentification: string # CSC identification. (e.g. pedrostore)
-  CatalogSystemEndpoint: string # URL of the endpoint of the seller's catalog. This field will only be displayed if the seller type is VTEX Store. The field format will be as follows: `http://{sellerName}.vtexcommercestable.com.br/api/catalog_system/`. (e.g. http://pedrostore.vtexcommercestable.com.br/api/catalog_system/)
-  --CategoryCommissionPercentage: string # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. [{"CategoryId":14,"ProductCommission":15.0,"FreightCommission":0.0}])
-  DeliveryPolicy: string # Text describing the delivery policy previously agreed between the marketplace and the seller. (e.g. Delivery policy text)
-  Description: string # Text describing the seller with a marketing tone. You can display this text in the marketplace window display by [customizing the CMS](https://help.vtex.com/en/tutorial/list-of-controls-for-templates--tutorials_563). (e.g. Brief description)
-  Email: string # Email of the admin responsible for the seller. (e.g. breno@breno.com)
-  ExchangeReturnPolicy: string # Text describing the exchange and return policy previously agreed between the marketplace and the seller. (e.g. Exchange return policy text)
-  FreightCommissionPercentage: float # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. 0)
-  FulfillmentEndpoint: string # URL of the endpoint for fulfillment of seller's orders, which the marketplace will use to communicate with the seller. This field applies to all sellers, regardless of their type. However, for `VTEX Stores`, you don’t need to fill it in because the system will do that automatically. You can edit this field once the seller has been successfully added. (e.g. http://pedrostore.vtexcommercestable.com.br/api/fulfillment?affiliateid=LDB&sc=1)
-  FulfillmentSellerId: int # Identification code of the seller responsible for fulfilling the order. This is an optional field used when a seller sells SKUs from another seller. If the seller sells their own SKUs, it must be left blank. (e.g. 1)
-  --IsActive: oneof<nothing, bool> # If the selle is active (`true`) or not (`false`). (e.g. true)
-  --IsBetterScope: oneof<nothing, bool> # Indicates whether it is a [comprehensive seller](https://help.vtex.com/en/tutorial/comprehensive-seller--5Qn4O2GpjUIzWTPpvLUfkI). (e.g. false)
-  --MerchantName: string # Name of the marketplace, used to guide payments. This field should be nulled if the marketplace is responsible for processing payments. Check out our [Split Payment](https://help.vtex.com/en/tutorial/split-payment--6k5JidhYRUxileNolY2VLx) article to know more. (e.g. pedrostore)
-  Name: string # Name of the account in the seller's environment. You can find it on **Account settings > Account > Account Name**). Applicable only if the seller uses their own payment method. (e.g. My pedrostore)
-  Password: string # Seller password. (e.g. passoword)
-  ProductCommissionPercentage: float # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. 0)
-  SecutityPrivacyPolicy: string # Text describing the security policy previously agreed between the marketplace and the seller. (e.g. Secutity privacy policy text)
-  SellerId: string # Code used to identify the seller. It is assigned by the marketplace. We recommend filling it in with the seller's account name. (e.g. pedrostore)
-  SellerType: int # Seller type. (e.g. 1)
-  --TrustPolicy: string # Seller trust policy. The default value is `'Default'`, but if your store is a B2B marketplace and you want to share the customers'emails with the sellers you need to set this field as `'AllowEmailSharing'`. (e.g. Default)
-  UrlLogo: string # Seller URL logo. (e.g. /myseller)
-  --UseHybridPaymentOptions: oneof<nothing, bool> # Allows customers to use gift cards from the seller to buy their products on the marketplace. It identifies purchases made with a gift card so that only the final price (with discounts applied) is paid to the seller. (e.g. false)
-  UserName: string # Seller username. (e.g. myseller)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  archive_id: int # Seller archive ID. (e.g. 1)
+  cnpj: string # Company registration number. (e.g. 12035072751)
+  csc_identification: string # CSC identification. (e.g. pedrostore)
+  catalog_system_endpoint: string # URL of the endpoint of the seller's catalog. This field will only be displayed if the seller type is VTEX Store. The field format will be as follows: `http://{sellerName}.vtexcommercestable.com.br/api/catalog_system/`. (e.g. http://pedrostore.vtexcommercestable.com.br/api/catalog_system/)
+  --category-commission-percentage: string # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. [{"CategoryId":14,"ProductCommission":15.0,"FreightCommission":0.0}])
+  delivery_policy: string # Text describing the delivery policy previously agreed between the marketplace and the seller. (e.g. Delivery policy text)
+  description: string # Text describing the seller with a marketing tone. You can display this text in the marketplace window display by [customizing the CMS](https://help.vtex.com/en/tutorial/list-of-controls-for-templates--tutorials_563). (e.g. Brief description)
+  email: string # Email of the admin responsible for the seller. (e.g. breno@breno.com)
+  exchange_return_policy: string # Text describing the exchange and return policy previously agreed between the marketplace and the seller. (e.g. Exchange return policy text)
+  freight_commission_percentage: float # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. 0)
+  fulfillment_endpoint: string # URL of the endpoint for fulfillment of seller's orders, which the marketplace will use to communicate with the seller. This field applies to all sellers, regardless of their type. However, for `VTEX Stores`, you don’t need to fill it in because the system will do that automatically. You can edit this field once the seller has been successfully added. (e.g. http://pedrostore.vtexcommercestable.com.br/api/fulfillment?affiliateid=LDB&sc=1)
+  fulfillment_seller_id: int # Identification code of the seller responsible for fulfilling the order. This is an optional field used when a seller sells SKUs from another seller. If the seller sells their own SKUs, it must be left blank. (e.g. 1)
+  --is-active: oneof<nothing, bool> # If the selle is active (`true`) or not (`false`). (e.g. true)
+  --is-better-scope: oneof<nothing, bool> # Indicates whether it is a [comprehensive seller](https://help.vtex.com/en/tutorial/comprehensive-seller--5Qn4O2GpjUIzWTPpvLUfkI). (e.g. false)
+  --merchant-name: string # Name of the marketplace, used to guide payments. This field should be nulled if the marketplace is responsible for processing payments. Check out our [Split Payment](https://help.vtex.com/en/tutorial/split-payment--6k5JidhYRUxileNolY2VLx) article to know more. (e.g. pedrostore)
+  name: string # Name of the account in the seller's environment. You can find it on **Account settings > Account > Account Name**). Applicable only if the seller uses their own payment method. (e.g. My pedrostore)
+  password: string # Seller password. (e.g. passoword)
+  product_commission_percentage: float # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. 0)
+  secutity_privacy_policy: string # Text describing the security policy previously agreed between the marketplace and the seller. (e.g. Secutity privacy policy text)
+  seller_id: string # Code used to identify the seller. It is assigned by the marketplace. We recommend filling it in with the seller's account name. (e.g. pedrostore)
+  seller_type: int # Seller type. (e.g. 1)
+  --trust-policy: string # Seller trust policy. The default value is `'Default'`, but if your store is a B2B marketplace and you want to share the customers'emails with the sellers you need to set this field as `'AllowEmailSharing'`. (e.g. Default)
+  url_logo: string # Seller URL logo. (e.g. /myseller)
+  --use-hybrid-payment-options: oneof<nothing, bool> # Allows customers to use gift cards from the seller to buy their products on the marketplace. It identifies purchases made with a gift card so that only the final price (with discounts applied) is paid to the seller. (e.g. false)
+  user_name: string # Seller username. (e.g. myseller)
 ]: any -> record<ArchiveId: int, CNPJ: string, CSCIdentification: string, CatalogSystemEndpoint: string, CategoryCommissionPercentage: string, DeliveryPolicy: string, Description: string, Email: string, ExchangeReturnPolicy: string, FreightCommissionPercentage: float, FulfillmentEndpoint: string, FulfillmentSellerId: int, IsActive: bool, IsBetterScope: bool, MerchantName: string, Name: string, Password: string, ProductCommissionPercentage: float, SecutityPrivacyPolicy: string, SellerId: string, SellerType: int, TrustPolicy: string, UrlLogo: string, UseHybridPaymentOptions: bool, UserName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pvt/seller")
-  let body = {ArchiveId: $ArchiveId, CNPJ: $CNPJ, CSCIdentification: $CSCIdentification, CatalogSystemEndpoint: $CatalogSystemEndpoint, CategoryCommissionPercentage: $CategoryCommissionPercentage, DeliveryPolicy: $DeliveryPolicy, Description: $Description, Email: $Email, ExchangeReturnPolicy: $ExchangeReturnPolicy, FreightCommissionPercentage: $FreightCommissionPercentage, FulfillmentEndpoint: $FulfillmentEndpoint, FulfillmentSellerId: $FulfillmentSellerId, IsActive: $IsActive, IsBetterScope: $IsBetterScope, MerchantName: $MerchantName, Name: $Name, Password: $Password, ProductCommissionPercentage: $ProductCommissionPercentage, SecutityPrivacyPolicy: $SecutityPrivacyPolicy, SellerId: $SellerId, SellerType: $SellerType, TrustPolicy: $TrustPolicy, UrlLogo: $UrlLogo, UseHybridPaymentOptions: $UseHybridPaymentOptions, UserName: $UserName} | compact
+  let body = {"ArchiveId": $archive_id, "CNPJ": $cnpj, "CSCIdentification": $csc_identification, "CatalogSystemEndpoint": $catalog_system_endpoint, "CategoryCommissionPercentage": $category_commission_percentage, "DeliveryPolicy": $delivery_policy, "Description": $description, "Email": $email, "ExchangeReturnPolicy": $exchange_return_policy, "FreightCommissionPercentage": $freight_commission_percentage, "FulfillmentEndpoint": $fulfillment_endpoint, "FulfillmentSellerId": $fulfillment_seller_id, "IsActive": $is_active, "IsBetterScope": $is_better_scope, "MerchantName": $merchant_name, "Name": $name, "Password": $password, "ProductCommissionPercentage": $product_commission_percentage, "SecutityPrivacyPolicy": $secutity_privacy_policy, "SellerId": $seller_id, "SellerType": $seller_type, "TrustPolicy": $trust_policy, "UrlLogo": $url_logo, "UseHybridPaymentOptions": $use_hybrid_payment_options, "UserName": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4296,7 +4296,7 @@ export def "catalog-system-pvt-seller CreateSeller" [
 #
 # PUT /api/catalog_system/pvt/seller
 # operationId: UpdateSeller
-export def "catalog-system-pvt-seller UpdateSeller" [
+export def "catalog-system-pvt-seller update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4305,41 +4305,41 @@ export def "catalog-system-pvt-seller UpdateSeller" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  ArchiveId: int # Seller archive ID. (e.g. 1)
-  CNPJ: string # Company registration number. (e.g. 12035072751)
-  CSCIdentification: string # CSC identification. (e.g. pedrostore)
-  CatalogSystemEndpoint: string # URL of the endpoint of the seller's catalog. This field will only be displayed if the seller type is VTEX Store. The field format will be as follows: `http://{sellerName}.vtexcommercestable.com.br/api/catalog_system/`. (e.g. http://pedrostore.vtexcommercestable.com.br/api/catalog_system/)
-  --CategoryCommissionPercentage: string # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. [{"CategoryId":14,"ProductCommission":15.0,"FreightCommission":0.0}])
-  DeliveryPolicy: string # Text describing the delivery policy previously agreed between the marketplace and the seller. (e.g. Delivery policy text)
-  Description: string # Text describing the seller with a marketing tone. You can display this text in the marketplace window display by [customizing the CMS](https://help.vtex.com/en/tutorial/list-of-controls-for-templates--tutorials_563). (e.g. Brief description)
-  Email: string # Email of the admin responsible for the seller. (e.g. breno@breno.com)
-  ExchangeReturnPolicy: string # Text describing the exchange and return policy previously agreed between the marketplace and the seller. (e.g. Exchange return policy text)
-  FreightCommissionPercentage: float # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. 0)
-  FulfillmentEndpoint: string # URL of the endpoint for fulfillment of seller's orders, which the marketplace will use to communicate with the seller. This field applies to all sellers, regardless of their type. However, for `VTEX Stores`, you don’t need to fill it in because the system will do that automatically. You can edit this field once the seller has been successfully added. (e.g. http://pedrostore.vtexcommercestable.com.br/api/fulfillment?affiliateid=LDB&sc=1)
-  FulfillmentSellerId: int # Identification code of the seller responsible for fulfilling the order. This is an optional field used when a seller sells SKUs from another seller. If the seller sells their own SKUs, it must be left blank. (e.g. 1)
-  --IsActive: oneof<nothing, bool> # If the selle is active (`true`) or not (`false`). (e.g. true)
-  --IsBetterScope: oneof<nothing, bool> # Indicates whether it is a [comprehensive seller](https://help.vtex.com/en/tutorial/comprehensive-seller--5Qn4O2GpjUIzWTPpvLUfkI). (e.g. false)
-  --MerchantName: string # Name of the marketplace, used to guide payments. This field should be nulled if the marketplace is responsible for processing payments. Check out our [Split Payment](https://help.vtex.com/en/tutorial/split-payment--6k5JidhYRUxileNolY2VLx) article to know more. (e.g. pedrostore)
-  Name: string # Name of the account in the seller's environment. You can find it on **Account settings > Account > Account Name**). Applicable only if the seller uses their own payment method. (e.g. My pedrostore)
-  Password: string # Seller password. (e.g. passoword)
-  ProductCommissionPercentage: float # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. 0)
-  SecutityPrivacyPolicy: string # Text describing the security policy previously agreed between the marketplace and the seller. (e.g. Secutity privacy policy text)
-  SellerId: string # ID that identifies the seller in the marketplace. It can be the same as the seller name or a unique number. Check the **Sellers management** section in the Admin to get the correct ID. (e.g. pedrostore)
-  SellerType: int # Seller type. (e.g. 1)
-  --TrustPolicy: string # Seller trust policy. The default value is `'Default'`, but if your store is a B2B marketplace and you want to share the customers'emails with the sellers you need to set this field as `'AllowEmailSharing'`. (e.g. Default)
-  UrlLogo: string # Seller URL logo. (e.g. /myseller)
-  --UseHybridPaymentOptions: oneof<nothing, bool> # Allows customers to use gift cards from the seller to buy their products on the marketplace. It identifies purchases made with a gift card so that only the final price (with discounts applied) is paid to the seller. (e.g. false)
-  UserName: string # Seller username. (e.g. myseller)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  archive_id: int # Seller archive ID. (e.g. 1)
+  cnpj: string # Company registration number. (e.g. 12035072751)
+  csc_identification: string # CSC identification. (e.g. pedrostore)
+  catalog_system_endpoint: string # URL of the endpoint of the seller's catalog. This field will only be displayed if the seller type is VTEX Store. The field format will be as follows: `http://{sellerName}.vtexcommercestable.com.br/api/catalog_system/`. (e.g. http://pedrostore.vtexcommercestable.com.br/api/catalog_system/)
+  --category-commission-percentage: string # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. [{"CategoryId":14,"ProductCommission":15.0,"FreightCommission":0.0}])
+  delivery_policy: string # Text describing the delivery policy previously agreed between the marketplace and the seller. (e.g. Delivery policy text)
+  description: string # Text describing the seller with a marketing tone. You can display this text in the marketplace window display by [customizing the CMS](https://help.vtex.com/en/tutorial/list-of-controls-for-templates--tutorials_563). (e.g. Brief description)
+  email: string # Email of the admin responsible for the seller. (e.g. breno@breno.com)
+  exchange_return_policy: string # Text describing the exchange and return policy previously agreed between the marketplace and the seller. (e.g. Exchange return policy text)
+  freight_commission_percentage: float # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. 0)
+  fulfillment_endpoint: string # URL of the endpoint for fulfillment of seller's orders, which the marketplace will use to communicate with the seller. This field applies to all sellers, regardless of their type. However, for `VTEX Stores`, you don’t need to fill it in because the system will do that automatically. You can edit this field once the seller has been successfully added. (e.g. http://pedrostore.vtexcommercestable.com.br/api/fulfillment?affiliateid=LDB&sc=1)
+  fulfillment_seller_id: int # Identification code of the seller responsible for fulfilling the order. This is an optional field used when a seller sells SKUs from another seller. If the seller sells their own SKUs, it must be left blank. (e.g. 1)
+  --is-active: oneof<nothing, bool> # If the selle is active (`true`) or not (`false`). (e.g. true)
+  --is-better-scope: oneof<nothing, bool> # Indicates whether it is a [comprehensive seller](https://help.vtex.com/en/tutorial/comprehensive-seller--5Qn4O2GpjUIzWTPpvLUfkI). (e.g. false)
+  --merchant-name: string # Name of the marketplace, used to guide payments. This field should be nulled if the marketplace is responsible for processing payments. Check out our [Split Payment](https://help.vtex.com/en/tutorial/split-payment--6k5JidhYRUxileNolY2VLx) article to know more. (e.g. pedrostore)
+  name: string # Name of the account in the seller's environment. You can find it on **Account settings > Account > Account Name**). Applicable only if the seller uses their own payment method. (e.g. My pedrostore)
+  password: string # Seller password. (e.g. passoword)
+  product_commission_percentage: float # The percentage that must be filled in as agreed between the marketplace and the seller. If there is no such commission, please fill in the field with the value: `0.00`. (e.g. 0)
+  secutity_privacy_policy: string # Text describing the security policy previously agreed between the marketplace and the seller. (e.g. Secutity privacy policy text)
+  seller_id: string # ID that identifies the seller in the marketplace. It can be the same as the seller name or a unique number. Check the **Sellers management** section in the Admin to get the correct ID. (e.g. pedrostore)
+  seller_type: int # Seller type. (e.g. 1)
+  --trust-policy: string # Seller trust policy. The default value is `'Default'`, but if your store is a B2B marketplace and you want to share the customers'emails with the sellers you need to set this field as `'AllowEmailSharing'`. (e.g. Default)
+  url_logo: string # Seller URL logo. (e.g. /myseller)
+  --use-hybrid-payment-options: oneof<nothing, bool> # Allows customers to use gift cards from the seller to buy their products on the marketplace. It identifies purchases made with a gift card so that only the final price (with discounts applied) is paid to the seller. (e.g. false)
+  user_name: string # Seller username. (e.g. myseller)
 ]: any -> record<ArchiveId: int, CNPJ: string, CSCIdentification: string, CatalogSystemEndpoint: string, CategoryCommissionPercentage: string, DeliveryPolicy: string, Description: string, Email: string, ExchangeReturnPolicy: string, FreightCommissionPercentage: float, FulfillmentEndpoint: string, FulfillmentSellerId: int, IsActive: bool, IsBetterScope: bool, MerchantName: string, Name: string, Password: string, ProductCommissionPercentage: float, SecutityPrivacyPolicy: string, SellerId: string, SellerType: int, TrustPolicy: string, UrlLogo: string, UseHybridPaymentOptions: bool, UserName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pvt/seller")
-  let body = {ArchiveId: $ArchiveId, CNPJ: $CNPJ, CSCIdentification: $CSCIdentification, CatalogSystemEndpoint: $CatalogSystemEndpoint, CategoryCommissionPercentage: $CategoryCommissionPercentage, DeliveryPolicy: $DeliveryPolicy, Description: $Description, Email: $Email, ExchangeReturnPolicy: $ExchangeReturnPolicy, FreightCommissionPercentage: $FreightCommissionPercentage, FulfillmentEndpoint: $FulfillmentEndpoint, FulfillmentSellerId: $FulfillmentSellerId, IsActive: $IsActive, IsBetterScope: $IsBetterScope, MerchantName: $MerchantName, Name: $Name, Password: $Password, ProductCommissionPercentage: $ProductCommissionPercentage, SecutityPrivacyPolicy: $SecutityPrivacyPolicy, SellerId: $SellerId, SellerType: $SellerType, TrustPolicy: $TrustPolicy, UrlLogo: $UrlLogo, UseHybridPaymentOptions: $UseHybridPaymentOptions, UserName: $UserName} | compact
+  let body = {"ArchiveId": $archive_id, "CNPJ": $cnpj, "CSCIdentification": $csc_identification, "CatalogSystemEndpoint": $catalog_system_endpoint, "CategoryCommissionPercentage": $category_commission_percentage, "DeliveryPolicy": $delivery_policy, "Description": $description, "Email": $email, "ExchangeReturnPolicy": $exchange_return_policy, "FreightCommissionPercentage": $freight_commission_percentage, "FulfillmentEndpoint": $fulfillment_endpoint, "FulfillmentSellerId": $fulfillment_seller_id, "IsActive": $is_active, "IsBetterScope": $is_better_scope, "MerchantName": $merchant_name, "Name": $name, "Password": $password, "ProductCommissionPercentage": $product_commission_percentage, "SecutityPrivacyPolicy": $secutity_privacy_policy, "SellerId": $seller_id, "SellerType": $seller_type, "TrustPolicy": $trust_policy, "UrlLogo": $url_logo, "UseHybridPaymentOptions": $use_hybrid_payment_options, "UserName": $user_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4350,7 +4350,7 @@ export def "catalog-system-pvt-seller UpdateSeller" [
 #
 # GET /api/catalog_system/pvt/seller/list
 # operationId: SellerList
-export def "catalog-system-pvt-seller-list SellerList" [
+export def "catalog-system-pvt-seller-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4360,16 +4360,16 @@ export def "catalog-system-pvt-seller-list SellerList" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --sc: int # Trade policy ID. (format: int32, e.g. 1)
-  --sellerType: int # Seller type. (format: int32, e.g. 1)
-  --isBetterScope: oneof<nothing, bool> # If the seller is better scope. (e.g. false)
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --seller-type: int # Seller type. (format: int32, e.g. 1)
+  --is-better-scope: oneof<nothing, bool> # If the seller is better scope. (e.g. false)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<ArchiveId: int, CNPJ: string, CSCIdentification: string, CatalogSystemEndpoint: string, CategoryCommissionPercentage: string, DeliveryPolicy: string, Description: string, Email: string, ExchangeReturnPolicy: string, FreightCommissionPercentage: float, FulfillmentEndpoint: string, FulfillmentSellerId: int, IsActive: bool, IsBetterScope: bool, MerchantName: string, Name: string, Password: string, ProductCommissionPercentage: float, SecutityPrivacyPolicy: string, SellerId: string, SellerType: int, TrustPolicy: string, UrlLogo: string, UseHybridPaymentOptions: bool, UserName: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "sellerType" $sellerType "scalar") (serialize-qp "isBetterScope" $isBetterScope "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "sellerType" $seller_type "scalar") (serialize-qp "isBetterScope" $is_better_scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/seller/list" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4380,8 +4380,8 @@ export def "catalog-system-pvt-seller-list SellerList" [
 #
 # GET /api/catalog_system/pvt/seller/{sellerId}
 # operationId: GetSellerbyId
-export def "catalog-system-pvt-seller GetSellerbyId" [
-  sellerId: string
+export def "catalog-system-pvt-seller get-sellerby" [
+  seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4390,13 +4390,13 @@ export def "catalog-system-pvt-seller GetSellerbyId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<ArchiveId: int, CNPJ: string, CSCIdentification: string, CatalogSystemEndpoint: string, CategoryCommissionPercentage: string, DeliveryPolicy: string, Description: string, Email: string, ExchangeReturnPolicy: string, FreightCommissionPercentage: float, FulfillmentEndpoint: string, FulfillmentSellerId: int, IsActive: bool, IsBetterScope: bool, MerchantName: string, Name: string, Password: string, ProductCommissionPercentage: float, SecutityPrivacyPolicy: string, SellerId: string, SellerType: int, TrustPolicy: string, UrlLogo: string, UseHybridPaymentOptions: bool, UserName: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/seller/($sellerId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/api/catalog_system/pvt/seller/{seller_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4407,8 +4407,8 @@ export def "catalog-system-pvt-seller GetSellerbyId" [
 #
 # GET /api/catalog_system/pvt/sellers/{sellerId}
 # operationId: GetSellersbyId
-export def "catalog-system-pvt-sellers GetSellersbyId" [
-  sellerId: string
+export def "catalog-system-pvt-sellers get-sellersby" [
+  seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4417,13 +4417,13 @@ export def "catalog-system-pvt-sellers GetSellersbyId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<ArchiveId: int, CNPJ: string, CSCIdentification: string, CatalogSystemEndpoint: string, CategoryCommissionPercentage: string, DeliveryPolicy: string, Description: string, Email: string, ExchangeReturnPolicy: string, FreightCommissionPercentage: float, FulfillmentEndpoint: string, FulfillmentSellerId: int, IsActive: bool, IsBetterScope: bool, MerchantName: string, Name: string, Password: string, ProductCommissionPercentage: float, SecutityPrivacyPolicy: string, SellerId: string, SellerType: int, TrustPolicy: string, UrlLogo: string, UseHybridPaymentOptions: bool, UserName: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/sellers/($sellerId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id} | format pattern "/api/catalog_system/pvt/sellers/{seller_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4434,7 +4434,7 @@ export def "catalog-system-pvt-sellers GetSellersbyId" [
 #
 # POST /api/catalog_system/pvt/sku/associateattachments
 # operationId: AssociateattachmentstoSKU
-export def "catalog-system-pvt-sku-associateattachments AssociateattachmentstoSKU" [
+export def "catalog-system-pvt-sku-associateattachments post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4443,18 +4443,18 @@ export def "catalog-system-pvt-sku-associateattachments AssociateattachmentstoSK
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  AttachmentNames: list # Array with all the names of the attachments that you need to associate to the SKU.
-  SkuId: int # Unique identifier of the SKU. (e.g. 1)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  attachment_names: list # Array with all the names of the attachments that you need to associate to the SKU.
+  sku_id: int # Unique identifier of the SKU. (e.g. 1)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pvt/sku/associateattachments")
-  let body = {AttachmentNames: $AttachmentNames, SkuId: $SkuId} | compact
+  let body = {"AttachmentNames": $attachment_names, "SkuId": $sku_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4465,8 +4465,8 @@ export def "catalog-system-pvt-sku-associateattachments AssociateattachmentstoSK
 #
 # GET /api/catalog_system/pvt/sku/complements/{parentSkuId}/{type}
 # operationId: GetSKUcomplementsbytype
-export def "catalog-system-pvt-sku-complements GetSKUcomplementsbytype" [
-  parentSkuId: int
+export def "catalog-system-pvt-sku-complements get-sk-ucomplementsbytype" [
+  parent_sku_id: int
   type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4476,13 +4476,13 @@ export def "catalog-system-pvt-sku-complements GetSKUcomplementsbytype" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<ComplementSkuIds: list<int>, ParentSkuId: int, Type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/sku/complements/($parentSkuId)/($type)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({parent_sku_id: $parent_sku_id, type: $type} | format pattern "/api/catalog_system/pvt/sku/complements/{parent_sku_id}/{type}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4493,8 +4493,8 @@ export def "catalog-system-pvt-sku-complements GetSKUcomplementsbytype" [
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitByProductId/{productId}
 # operationId: SkulistbyProductId
-export def "catalog-system-pvt-sku-stockkeepingunit-by-product-id SkulistbyProductId" [
-  productId: int
+export def "catalog-system-pvt-sku-stockkeepingunit-by-product-id get" [
+  product_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4503,13 +4503,13 @@ export def "catalog-system-pvt-sku-stockkeepingunit-by-product-id SkulistbyProdu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<ActivateIfPossible: bool, CommercialConditionId: int, CubicWeight: float, DateUpdated: string, EstimatedDateArrival: string, FlagKitItensSellApart: bool, Height: float, Id: int, InternalNote: string, IsActive: bool, IsDynamicKit: string, IsGiftCardRecharge: bool, IsInventoried: bool, IsKit: bool, IsPersisted: bool, IsRemoved: bool, IsTransported: bool, Length: float, ManufacturerCode: string, MeasurementUnit: string, ModalId: int, ModalType: string, Name: string, Position: int, ProductId: int, RealHeight: float, RealLength: float, RealWeightKg: float, RealWidth: float, RefId: string, ReferenceStockKeepingUnitId: string, RewardValue: float, UnitMultiplier: float, WeightKg: float, Width: float, isKitOptimized: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/sku/stockkeepingunitByProductId/($productId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog_system/pvt/sku/stockkeepingunitByProductId/{product_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4520,8 +4520,8 @@ export def "catalog-system-pvt-sku-stockkeepingunit-by-product-id SkulistbyProdu
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitbyalternateId/{alternateId}
 # operationId: SkubyAlternateId
-export def "catalog-system-pvt-sku-stockkeepingunitbyalternate-id SkubyAlternateId" [
-  alternateId: int
+export def "catalog-system-pvt-sku-stockkeepingunitbyalternate-id get" [
+  alternate_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4530,13 +4530,13 @@ export def "catalog-system-pvt-sku-stockkeepingunitbyalternate-id SkubyAlternate
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<AlternateIdValues: list<string>, AlternateIds: record<Ean: string, RefId: string>, Attachments: table<Fields: list, Id: int, IsActive: bool, IsRequired: bool, Keys: list, Name: string>, BrandId: string, BrandName: string, CSCIdentification: string, Categories: list<string>, CategoriesFullPath: list<string>, Collections: list<string>, CommercialConditionId: int, ComplementName: string, DetailUrl: string, Dimension: record<cubicweight: float, height: float, length: float, weight: float, width: float>, EstimatedDateArrival: string, Id: int, ImageUrl: string, Images: table<FileId: int, ImageName: string, ImageUrl: string>, InformationSource: string, IsActive: bool, IsDirectCategoryActive: bool, IsGiftCardRecharge: bool, IsInventoried: bool, IsKit: bool, IsProductActive: bool, IsTransported: bool, KeyWords: string, KitItems: list<string>, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, NameComplete: string, PositionsInClusters: record, ProductCategories: record, ProductCategoryIds: string, ProductClusterHighlights: record, ProductClusterNames: record, ProductClustersIds: string, ProductDescription: string, ProductFinalScore: int, ProductGlobalCategoryId: int, ProductId: int, ProductIsVisible: bool, ProductName: string, ProductRefId: string, ProductSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, RealDimension: record<realCubicWeight: float, realHeight: float, realLength: float, realWeight: float, realWidth: float>, ReleaseDate: string, RewardValue: float, SalesChannels: list<int>, Services: list<string>, ShowIfNotAvailable: bool, SkuName: string, SkuSellers: table<FreightCommissionPercentage: float, IsActive: bool, ProductCommissionPercentage: float, SellerId: string, SellerStockKeepingUnitId: string, StockKeepingUnitId: int>, SkuSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, TaxCode: string, UnitMultiplier: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/sku/stockkeepingunitbyalternateId/($alternateId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({alternate_id: $alternate_id} | format pattern "/api/catalog_system/pvt/sku/stockkeepingunitbyalternateId/{alternate_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4547,7 +4547,7 @@ export def "catalog-system-pvt-sku-stockkeepingunitbyalternate-id SkubyAlternate
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitbyean/{ean}
 # operationId: SkubyEAN
-export def "catalog-system-pvt-sku-stockkeepingunitbyean SkubyEAN" [
+export def "catalog-system-pvt-sku-stockkeepingunitbyean get" [
   ean: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4557,13 +4557,13 @@ export def "catalog-system-pvt-sku-stockkeepingunitbyean SkubyEAN" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<AlternateIdValues: list<string>, AlternateIds: record<Ean: string, RefId: string>, Attachments: table<Fields: list, Id: int, IsActive: bool, IsRequired: bool, Keys: list, Name: string>, BrandId: string, BrandName: string, CSCIdentification: string, Categories: list<string>, CategoriesFullPath: list<string>, Collections: list<string>, CommercialConditionId: int, ComplementName: string, DetailUrl: string, Dimension: record<cubicweight: float, height: float, length: float, weight: float, width: float>, EstimatedDateArrival: string, Id: int, ImageUrl: string, Images: table<FileId: int, ImageName: string, ImageUrl: string>, InformationSource: string, IsActive: bool, IsDirectCategoryActive: bool, IsGiftCardRecharge: bool, IsInventoried: bool, IsKit: bool, IsProductActive: bool, IsTransported: bool, KeyWords: string, KitItems: list<string>, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, NameComplete: string, PositionsInClusters: record, ProductCategories: record, ProductCategoryIds: string, ProductClusterHighlights: record, ProductClusterNames: record, ProductClustersIds: string, ProductDescription: string, ProductFinalScore: int, ProductGlobalCategoryId: int, ProductId: int, ProductIsVisible: bool, ProductName: string, ProductRefId: string, ProductSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, RealDimension: record<realCubicWeight: float, realHeight: float, realLength: float, realWeight: float, realWidth: float>, ReleaseDate: string, RewardValue: float, SalesChannels: list<int>, Services: list<string>, ShowIfNotAvailable: bool, SkuName: string, SkuSellers: table<FreightCommissionPercentage: float, IsActive: bool, ProductCommissionPercentage: float, SellerId: string, SellerStockKeepingUnitId: string, StockKeepingUnitId: int>, SkuSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, TaxCode: string, UnitMultiplier: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/sku/stockkeepingunitbyean/($ean)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({ean: $ean} | format pattern "/api/catalog_system/pvt/sku/stockkeepingunitbyean/{ean}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4574,8 +4574,8 @@ export def "catalog-system-pvt-sku-stockkeepingunitbyean SkubyEAN" [
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitbyid/{skuId}
 # operationId: SkuContext
-export def "catalog-system-pvt-sku-stockkeepingunitbyid SkuContext" [
-  skuId: int
+export def "catalog-system-pvt-sku-stockkeepingunitbyid get" [
+  sku_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4585,14 +4585,14 @@ export def "catalog-system-pvt-sku-stockkeepingunitbyid SkuContext" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --sc: int # Trade Policy's unique identifier number. (e.g. 1)
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<AlternateIdValues: list<string>, AlternateIds: record<Ean: string, RefId: string>, Attachments: table<Fields: list, Id: int, IsActive: bool, IsRequired: bool, Keys: list, Name: string>, BrandId: string, BrandName: string, CSCIdentification: string, Categories: list<string>, Collections: list<string>, CommercialConditionId: int, ComplementName: string, DetailUrl: string, Dimension: record<cubicweight: float, height: float, length: float, weight: float, width: float>, EstimatedDateArrival: string, Id: int, ImageUrl: string, Images: table<FileId: int, ImageName: string, ImageUrl: string>, InformationSource: string, IsActive: bool, IsGiftCardRecharge: bool, IsInventoried: bool, IsKit: bool, IsProductActive: bool, IsTransported: bool, KeyWords: string, KitItems: list<string>, ManufacturerCode: string, MeasurementUnit: string, ModalType: string, NameComplete: string, ProductCategories: record, ProductCategoryIds: string, ProductClustersIds: string, ProductDescription: string, ProductFinalScore: int, ProductGlobalCategoryId: int, ProductId: int, ProductIsVisible: bool, ProductName: string, ProductRefId: string, ProductSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, RealDimension: record<realCubicWeight: float, realHeight: float, realLength: float, realWeight: float, realWidth: float>, ReleaseDate: string, RewardValue: float, SalesChannels: list<int>, Services: list<string>, ShowIfNotAvailable: bool, SkuName: string, SkuSellers: table<FreightCommissionPercentage: float, IsActive: bool, ProductCommissionPercentage: float, SellerId: string, SellerStockKeepingUnitId: string, StockKeepingUnitId: int>, SkuSpecifications: table<FieldId: int, FieldName: string, FieldValueIds: list, FieldValues: list>, TaxCode: string, UnitMultiplier: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/catalog_system/pvt/sku/stockkeepingunitbyid/($skuId)" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog_system/pvt/sku/stockkeepingunitbyid/{sku_id}") $qp)
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4603,8 +4603,8 @@ export def "catalog-system-pvt-sku-stockkeepingunitbyid SkuContext" [
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitidbyrefid/{refId}
 # operationId: SkuIdbyRefId
-export def "catalog-system-pvt-sku-stockkeepingunitidbyrefid SkuIdbyRefId" [
-  refId: string
+export def "catalog-system-pvt-sku-stockkeepingunitidbyrefid get" [
+  ref_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4613,13 +4613,13 @@ export def "catalog-system-pvt-sku-stockkeepingunitidbyrefid SkuIdbyRefId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/sku/stockkeepingunitidbyrefid/($refId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({ref_id: $ref_id} | format pattern "/api/catalog_system/pvt/sku/stockkeepingunitidbyrefid/{ref_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4630,7 +4630,7 @@ export def "catalog-system-pvt-sku-stockkeepingunitidbyrefid SkuIdbyRefId" [
 #
 # GET /api/catalog_system/pvt/sku/stockkeepingunitids
 # operationId: ListallSKUIDs
-export def "catalog-system-pvt-sku-stockkeepingunitids ListallSKUIDs" [
+export def "catalog-system-pvt-sku-stockkeepingunitids list-all-skui-ds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4641,14 +4641,14 @@ export def "catalog-system-pvt-sku-stockkeepingunitids ListallSKUIDs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Number of the page from where you need to retrieve SKU IDs. (e.g. 1)
   --pagesize: int # Size of the page from where you need retrieve SKU IDs. The maximum value is `1000`. (e.g. 25)
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pagesize" $pagesize "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/sku/stockkeepingunitids" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4669,16 +4669,16 @@ export def "catalog-system-pvt-sku-stockkeepingunitidsbysaleschannel get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sc: int # Trade Policy’s unique numerical identifier. (e.g. 1)
   --page: int # Page number. (e.g. 1)
-  --pageSize: int # Number of items in the page. (e.g. 1)
-  --onlyAssigned: oneof<nothing, bool> # If set as `false`, it allows the user to decide if the SKUs that are not assigned to a specific trade policy should be also returned. (e.g. true)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --page-size: int # Number of items in the page. (e.g. 1)
+  --only-assigned: oneof<nothing, bool> # If set as `false`, it allows the user to decide if the SKUs that are not assigned to a specific trade policy should be also returned. (e.g. true)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "onlyAssigned" $onlyAssigned "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sc" $sc "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "onlyAssigned" $only_assigned "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog_system/pvt/sku/stockkeepingunitidsbysaleschannel" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4688,9 +4688,9 @@ export def "catalog-system-pvt-sku-stockkeepingunitidsbysaleschannel get" [
 # Change Notification with Seller ID and Seller SKU ID
 #
 # POST /api/catalog_system/pvt/skuseller/changenotification/{sellerId}/{sellerSkuId}
-export def "catalog-system-pvt-skuseller-changenotification post" [
-  sellerId: string
-  sellerSkuId: string
+export def "catalog-system-pvt-skuseller-changenotification post-by-sellerId-sellerSkuId" [
+  seller_id: string
+  seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4699,13 +4699,13 @@ export def "catalog-system-pvt-skuseller-changenotification post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/skuseller/changenotification/($sellerId)/($sellerSkuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/api/catalog_system/pvt/skuseller/changenotification/{seller_id}/{seller_sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4716,8 +4716,8 @@ export def "catalog-system-pvt-skuseller-changenotification post" [
 #
 # POST /api/catalog_system/pvt/skuseller/changenotification/{skuId}
 # operationId: ChangeNotification
-export def "catalog-system-pvt-skuseller-changenotification ChangeNotification" [
-  skuId: string
+export def "catalog-system-pvt-skuseller-changenotification post-by-skuId" [
+  sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4726,13 +4726,13 @@ export def "catalog-system-pvt-skuseller-changenotification ChangeNotification" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/skuseller/changenotification/($skuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({sku_id: $sku_id} | format pattern "/api/catalog_system/pvt/skuseller/changenotification/{sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4743,9 +4743,9 @@ export def "catalog-system-pvt-skuseller-changenotification ChangeNotification" 
 #
 # POST /api/catalog_system/pvt/skuseller/remove/{sellerId}/{sellerSkuId}
 # operationId: DeleteSKUsellerassociation
-export def "catalog-system-pvt-skuseller-remove DeleteSKUsellerassociation" [
-  sellerId: string
-  sellerSkuId: string
+export def "catalog-system-pvt-skuseller-remove delete-sk-usellerassociation" [
+  seller_id: string
+  seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4754,13 +4754,13 @@ export def "catalog-system-pvt-skuseller-remove DeleteSKUsellerassociation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/skuseller/remove/($sellerId)/($sellerSkuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/api/catalog_system/pvt/skuseller/remove/{seller_id}/{seller_sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4771,9 +4771,9 @@ export def "catalog-system-pvt-skuseller-remove DeleteSKUsellerassociation" [
 #
 # GET /api/catalog_system/pvt/skuseller/{sellerId}/{sellerSkuId}
 # operationId: GetSKUseller
-export def "catalog-system-pvt-skuseller GetSKUseller" [
-  sellerId: string
-  sellerSkuId: string
+export def "catalog-system-pvt-skuseller get" [
+  seller_id: string
+  seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4782,13 +4782,13 @@ export def "catalog-system-pvt-skuseller GetSKUseller" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<IsActive: bool, IsPersisted: bool, IsRemoved: bool, RequestedUpdateDate: string, SellerId: string, SellerStockKeepingUnitId: string, SkuSellerId: int, StockKeepingUnitId: int, UpdateDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/skuseller/($sellerId)/($sellerSkuId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({seller_id: $seller_id, seller_sku_id: $seller_sku_id} | format pattern "/api/catalog_system/pvt/skuseller/{seller_id}/{seller_sku_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4799,8 +4799,8 @@ export def "catalog-system-pvt-skuseller GetSKUseller" [
 #
 # POST /api/catalog_system/pvt/specification/field
 # operationId: SpecificationsInsertField
-@deprecated --flag IsWizard
-export def "catalog-system-pvt-specification-field SpecificationsInsertField" [
+@deprecated --flag is-wizard
+export def "catalog-system-pvt-specification-field post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4809,34 +4809,34 @@ export def "catalog-system-pvt-specification-field SpecificationsInsertField" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --CategoryId: int # Category ID. (nullable)
-  --DefaultValue: string # Specification Field default Value. (nullable)
-  --Description: string # Specification Field Description. (nullable)
-  FieldGroupId: int # Specification Field Group ID. (format: int32)
-  FieldGroupName: string # Specification Field Group Name.
-  --FieldId: int # Specification Field ID. (nullable)
-  FieldTypeId: int # Specification Field Type ID. (format: int32)
-  --FieldValueId: int # Specification Field Value ID. (nullable)
-  --IsActive: oneof<nothing, bool> # Defines if the Specification Field is active. The default value is `true`.
-  --IsFilter: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To allow the specification to be used as a facet (filter) on the search navigation bar.
-  --IsOnProductDetails: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal -If specification is visible on the product page.
-  --IsRequired: oneof<nothing, bool> # Makes the Specification Field mandatory (`true`) or optional (`false`).
-  --IsSideMenuLinkActive: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification field clickable in the search navigation bar.
-  --IsStockKeepingUnit: oneof<nothing, bool> # If `true`, it will be added as a SKU specification. If `false`, it will be added as a product specification field.
-  --IsTopMenuLinkActive: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification visible in the store's upper menu.
-  --IsWizard: oneof<nothing, bool> # Deprecated field. (DEPRECATED)
-  Name: string # Specification Field ID.
-  Position: int # Specification Field Position. (format: int32)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --category-id: int # Category ID. (nullable)
+  --default-value: string # Specification Field default Value. (nullable)
+  --description: string # Specification Field Description. (nullable)
+  field_group_id: int # Specification Field Group ID. (format: int32)
+  field_group_name: string # Specification Field Group Name.
+  --field-id: int # Specification Field ID. (nullable)
+  field_type_id: int # Specification Field Type ID. (format: int32)
+  --field-value-id: int # Specification Field Value ID. (nullable)
+  --is-active: oneof<nothing, bool> # Defines if the Specification Field is active. The default value is `true`.
+  --is-filter: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To allow the specification to be used as a facet (filter) on the search navigation bar.
+  --is-on-product-details: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal -If specification is visible on the product page.
+  --is-required: oneof<nothing, bool> # Makes the Specification Field mandatory (`true`) or optional (`false`).
+  --is-side-menu-link-active: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification field clickable in the search navigation bar.
+  --is-stock-keeping-unit: oneof<nothing, bool> # If `true`, it will be added as a SKU specification. If `false`, it will be added as a product specification field.
+  --is-top-menu-link-active: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification visible in the store's upper menu.
+  --is-wizard: oneof<nothing, bool> # Deprecated field. (DEPRECATED)
+  name: string # Specification Field ID.
+  position: int # Specification Field Position. (format: int32)
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pvt/specification/field")
-  let body = {CategoryId: $CategoryId, DefaultValue: $DefaultValue, Description: $Description, FieldGroupId: $FieldGroupId, FieldGroupName: $FieldGroupName, FieldId: $FieldId, FieldTypeId: $FieldTypeId, FieldValueId: $FieldValueId, IsActive: $IsActive, IsFilter: $IsFilter, IsOnProductDetails: $IsOnProductDetails, IsRequired: $IsRequired, IsSideMenuLinkActive: $IsSideMenuLinkActive, IsStockKeepingUnit: $IsStockKeepingUnit, IsTopMenuLinkActive: $IsTopMenuLinkActive, IsWizard: $IsWizard, Name: $Name, Position: $Position} | compact
+  let body = {"CategoryId": $category_id, "DefaultValue": $default_value, "Description": $description, "FieldGroupId": $field_group_id, "FieldGroupName": $field_group_name, "FieldId": $field_id, "FieldTypeId": $field_type_id, "FieldValueId": $field_value_id, "IsActive": $is_active, "IsFilter": $is_filter, "IsOnProductDetails": $is_on_product_details, "IsRequired": $is_required, "IsSideMenuLinkActive": $is_side_menu_link_active, "IsStockKeepingUnit": $is_stock_keeping_unit, "IsTopMenuLinkActive": $is_top_menu_link_active, "IsWizard": $is_wizard, "Name": $name, "Position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4847,8 +4847,8 @@ export def "catalog-system-pvt-specification-field SpecificationsInsertField" [
 #
 # PUT /api/catalog_system/pvt/specification/field
 # operationId: SpecificationsInsertFieldUpdate
-@deprecated --flag IsWizard
-export def "catalog-system-pvt-specification-field SpecificationsInsertFieldUpdate" [
+@deprecated --flag is-wizard
+export def "catalog-system-pvt-specification-field update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4857,34 +4857,34 @@ export def "catalog-system-pvt-specification-field SpecificationsInsertFieldUpda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --CategoryId: int # Category ID. (nullable)
-  --DefaultValue: string # Specification Field default Value. (nullable)
-  --Description: string # Specification Field Description. (nullable)
-  FieldGroupId: int # Specification Field Group ID. (format: int32)
-  FieldGroupName: string # Specification Field Group Name.
-  --FieldId: int # Specification Field ID. (nullable)
-  FieldTypeId: int # Specification Field Type ID. (format: int32)
-  --FieldValueId: int # Specification Field Value ID. (nullable)
-  --IsActive: oneof<nothing, bool> # Enables(`true`) or disables (`false`) the Specification Field. (e.g. true)
-  --IsFilter: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To allow the specification to be used as a facet (filter) on the search navigation bar.
-  --IsOnProductDetails: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal -If specification is visible on the product page.
-  --IsRequired: oneof<nothing, bool> # Makes the Specification Field mandatory (`true`) or optional (`false`).
-  --IsSideMenuLinkActive: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification field clickable in the search navigation bar.  (e.g. false)
-  --IsStockKeepingUnit: oneof<nothing, bool> # If `true`, it will be added as a SKU specification field. If `false`, it will be added as a product specification field.
-  --IsTopMenuLinkActive: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification visible in the store's upper menu.
-  --IsWizard: oneof<nothing, bool> # Deprecated field. (DEPRECATED)
-  Name: string # Specification Field ID.
-  Position: int # Specification Field Position. (format: int32)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --category-id: int # Category ID. (nullable)
+  --default-value: string # Specification Field default Value. (nullable)
+  --description: string # Specification Field Description. (nullable)
+  field_group_id: int # Specification Field Group ID. (format: int32)
+  field_group_name: string # Specification Field Group Name.
+  --field-id: int # Specification Field ID. (nullable)
+  field_type_id: int # Specification Field Type ID. (format: int32)
+  --field-value-id: int # Specification Field Value ID. (nullable)
+  --is-active: oneof<nothing, bool> # Enables(`true`) or disables (`false`) the Specification Field. (e.g. true)
+  --is-filter: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To allow the specification to be used as a facet (filter) on the search navigation bar.
+  --is-on-product-details: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal -If specification is visible on the product page.
+  --is-required: oneof<nothing, bool> # Makes the Specification Field mandatory (`true`) or optional (`false`).
+  --is-side-menu-link-active: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification field clickable in the search navigation bar.  (e.g. false)
+  --is-stock-keeping-unit: oneof<nothing, bool> # If `true`, it will be added as a SKU specification field. If `false`, it will be added as a product specification field.
+  --is-top-menu-link-active: oneof<nothing, bool> # Store Framework - Deprecated. Legacy CMS Portal - To make the specification visible in the store's upper menu.
+  --is-wizard: oneof<nothing, bool> # Deprecated field. (DEPRECATED)
+  name: string # Specification Field ID.
+  position: int # Specification Field Position. (format: int32)
 ]: any -> int {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pvt/specification/field")
-  let body = {CategoryId: $CategoryId, DefaultValue: $DefaultValue, Description: $Description, FieldGroupId: $FieldGroupId, FieldGroupName: $FieldGroupName, FieldId: $FieldId, FieldTypeId: $FieldTypeId, FieldValueId: $FieldValueId, IsActive: $IsActive, IsFilter: $IsFilter, IsOnProductDetails: $IsOnProductDetails, IsRequired: $IsRequired, IsSideMenuLinkActive: $IsSideMenuLinkActive, IsStockKeepingUnit: $IsStockKeepingUnit, IsTopMenuLinkActive: $IsTopMenuLinkActive, IsWizard: $IsWizard, Name: $Name, Position: $Position} | compact
+  let body = {"CategoryId": $category_id, "DefaultValue": $default_value, "Description": $description, "FieldGroupId": $field_group_id, "FieldGroupName": $field_group_name, "FieldId": $field_id, "FieldTypeId": $field_type_id, "FieldValueId": $field_value_id, "IsActive": $is_active, "IsFilter": $is_filter, "IsOnProductDetails": $is_on_product_details, "IsRequired": $is_required, "IsSideMenuLinkActive": $is_side_menu_link_active, "IsStockKeepingUnit": $is_stock_keeping_unit, "IsTopMenuLinkActive": $is_top_menu_link_active, "IsWizard": $is_wizard, "Name": $name, "Position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4895,7 +4895,7 @@ export def "catalog-system-pvt-specification-field SpecificationsInsertFieldUpda
 #
 # POST /api/catalog_system/pvt/specification/fieldValue
 # operationId: SpecificationsInsertFieldValue
-export def "catalog-system-pvt-specification-field-value SpecificationsInsertFieldValue" [
+export def "catalog-system-pvt-specification-field-value post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4904,21 +4904,21 @@ export def "catalog-system-pvt-specification-field-value SpecificationsInsertFie
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  FieldId: int # Specification Field ID. (format: int32)
-  --IsActive: oneof<nothing, bool> # Defines if the Specification Field Value is active (`true`) or inactive (`false`).
-  Name: string # Specification Field Value Name.
-  Position: int # Specification Field Value Position. (format: int32)
-  Text: string # Specification Field Value Description.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  field_id: int # Specification Field ID. (format: int32)
+  --is-active: oneof<nothing, bool> # Defines if the Specification Field Value is active (`true`) or inactive (`false`).
+  name: string # Specification Field Value Name.
+  position: int # Specification Field Value Position. (format: int32)
+  text: string # Specification Field Value Description.
 ]: any -> record<FieldId: int, FieldValueId: int, IsActive: bool, Name: string, Position: int, Text: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pvt/specification/fieldValue")
-  let body = {FieldId: $FieldId, IsActive: $IsActive, Name: $Name, Position: $Position, Text: $Text} | compact
+  let body = {"FieldId": $field_id, "IsActive": $is_active, "Name": $name, "Position": $position, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4929,7 +4929,7 @@ export def "catalog-system-pvt-specification-field-value SpecificationsInsertFie
 #
 # PUT /api/catalog_system/pvt/specification/fieldValue
 # operationId: SpecificationsUpdateFieldValue
-export def "catalog-system-pvt-specification-field-value SpecificationsUpdateFieldValue" [
+export def "catalog-system-pvt-specification-field-value put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4938,21 +4938,21 @@ export def "catalog-system-pvt-specification-field-value SpecificationsUpdateFie
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --FieldId: int # Specification Field ID. (nullable)
-  --IsActive: oneof<nothing, bool> # Defines if the Specification Field Value is active (`true`) or inactive (`false`).
-  Name: string # Specification Field Value Name.
-  Position: int # Specification Field Position. (format: int32)
-  --Text: string # Specification Field Value Description. (nullable)
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --field-id: int # Specification Field ID. (nullable)
+  --is-active: oneof<nothing, bool> # Defines if the Specification Field Value is active (`true`) or inactive (`false`).
+  name: string # Specification Field Value Name.
+  position: int # Specification Field Position. (format: int32)
+  --text: string # Specification Field Value Description. (nullable)
 ]: any -> string {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog_system/pvt/specification/fieldValue")
-  let body = {FieldId: $FieldId, IsActive: $IsActive, Name: $Name, Position: $Position, Text: $Text} | compact
+  let body = {"FieldId": $field_id, "IsActive": $is_active, "Name": $name, "Position": $position, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4963,8 +4963,8 @@ export def "catalog-system-pvt-specification-field-value SpecificationsUpdateFie
 #
 # GET /api/catalog_system/pvt/specification/fieldValue/{fieldValueId}
 # operationId: SpecificationsGetFieldValue
-export def "catalog-system-pvt-specification-field-value SpecificationsGetFieldValue" [
-  fieldValueId: string
+export def "catalog-system-pvt-specification-field-value get" [
+  field_value_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4973,13 +4973,13 @@ export def "catalog-system-pvt-specification-field-value SpecificationsGetFieldV
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<FieldId: int, FieldValueId: int, IsActive: bool, Name: string, Position: int, Text: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/specification/fieldValue/($fieldValueId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({field_value_id: $field_value_id} | format pattern "/api/catalog_system/pvt/specification/fieldValue/{field_value_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4990,8 +4990,8 @@ export def "catalog-system-pvt-specification-field-value SpecificationsGetFieldV
 #
 # GET /api/catalog_system/pvt/specification/groupbycategory/{categoryId}
 # operationId: SpecificationsGroupListbyCategory
-export def "catalog-system-pvt-specification-groupbycategory SpecificationsGroupListbyCategory" [
-  categoryId: string
+export def "catalog-system-pvt-specification-groupbycategory get" [
+  category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5000,13 +5000,13 @@ export def "catalog-system-pvt-specification-groupbycategory SpecificationsGroup
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Describes the type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> table<CategoryId: int, Id: int, Name: string, Position: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog_system/pvt/specification/groupbycategory/($categoryId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/api/catalog_system/pvt/specification/groupbycategory/{category_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

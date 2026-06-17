@@ -124,8 +124,8 @@ export def "entities post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --OTP: string # Solo necesario cuando se esté completando la seguda petición de un login con 2 factores de autenticación, si el tipo de desafío es OTP. Requiere la clave que la entidad le ha enviado al usario final
-  --SESSION: string # Solo necesario cuando se esté completando la seguda petición de un login con 2 factores de autenticación. Requiere el valor de SESSION obtenido en la primera petición
+  --otp: string # Solo necesario cuando se esté completando la seguda petición de un login con 2 factores de autenticación, si el tipo de desafío es OTP. Requiere la clave que la entidad le ha enviado al usario final
+  --session: string # Solo necesario cuando se esté completando la seguda petición de un login con 2 factores de autenticación. Requiere el valor de SESSION obtenido en la primera petición
   --api-key: string # Identifica al cliente en el servicio
   --code: string # Nombre de la entidad. El listado completo está disponible con GET
   --contract-code: string # Solo necesario cuando el usuario puede acceder a más de un contrato. El listado de contratos disponibles se obtiene al realizar una conexión con un usuario con opción a trabajar con varios contratos en su entidad (que al hacer login en su banca online ve como primera opción una pantalla de selección de contratos) y cuya llamada a la API no se le ha especificado un valor a contract_code
@@ -140,7 +140,7 @@ export def "entities post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/entities")
-  let body = {OTP: $OTP, SESSION: $SESSION, api_key: $api_key, code: $code, contract_code: $contract_code, document_type: $document_type, password: $password, second_password: $second_password, token: $body_token, tokenize: $tokenize, user: $user} | compact
+  let body = {"OTP": $otp, "SESSION": $session, "api_key": $api_key, "code": $code, "contract_code": $contract_code, "document_type": $document_type, "password": $password, "second_password": $second_password, "token": $body_token, "tokenize": $tokenize, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

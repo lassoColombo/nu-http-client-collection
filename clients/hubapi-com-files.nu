@@ -69,8 +69,8 @@ def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 
 # Completers for enum parameters
 def access-completer [] { ["HIDDEN_INDEXABLE" "HIDDEN_NOT_INDEXABLE" "HIDDEN_PRIVATE" "PRIVATE" "PUBLIC_INDEXABLE" "PUBLIC_NOT_INDEXABLE"] }
-def duplicateValidationScope-completer [] { ["ENTIRE_PORTAL" "EXACT_FOLDER"] }
-def duplicateValidationStrategy-completer [] { ["NONE" "REJECT" "RETURN_EXISTING"] }
+def duplicate-validation-scope-completer [] { ["ENTIRE_PORTAL" "EXACT_FOLDER"] }
+def duplicate-validation-strategy-completer [] { ["NONE" "REJECT" "RETURN_EXISTING"] }
 def size-completer [] { ["icon" "medium" "preview" "thumb"] }
 
 # List all available API commands with their parameters
@@ -109,18 +109,18 @@ export def "files-files upload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --charsetHunch: string # Character set of the uploaded file.
+  --charset-hunch: string # Character set of the uploaded file.
   --file: string # File to be uploaded. (format: binary)
-  --fileName: string # Desired name for the uploaded file.
-  --folderId: string # Either 'folderId' or 'folderPath' is required. folderId is the ID of the folder the file will be uploaded to.
-  --folderPath: string # Either 'folderPath' or 'folderId' is required. This field represents the destination folder path for the uploaded file. If a path doesn't exist, the system will try to create one.
+  --file-name: string # Desired name for the uploaded file.
+  --folder-id: string # Either 'folderId' or 'folderPath' is required. folderId is the ID of the folder the file will be uploaded to.
+  --folder-path: string # Either 'folderPath' or 'folderId' is required. This field represents the destination folder path for the uploaded file. If a path doesn't exist, the system will try to create one.
   --options: string # JSON string representing FileUploadOptions.
 ]: any -> record<access: string, archived: bool, archivedAt: string, createdAt: string, defaultHostingUrl: string, encoding: string, extension: string, height: int, id: string, isUsableInContent: bool, name: string, parentFolderId: string, path: string, size: int, type: string, updatedAt: string, url: string, width: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files/v3/files")
-  let body = {charsetHunch: $charsetHunch, file: $file, fileName: $fileName, folderId: $folderId, folderPath: $folderPath, options: $options} | compact
+  let body = {"charsetHunch": $charset_hunch, "file": $file, "fileName": $file_name, "folderId": $folder_id, "folderPath": $folder_path, "options": $options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,7 +131,7 @@ export def "files-files upload" [
 #
 # POST /files/v3/files/import-from-url/async
 # operationId: post-/files/v3/files/import-from-url/async_importFromUrl
-export def "files-files-import-from-url-async importFromUrl" [
+export def "files-files-import-from-url-async import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,10 +141,10 @@ export def "files-files-import-from-url-async importFromUrl" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   access: string@access-completer # PUBLIC_INDEXABLE: File is publicly accessible by anyone who has the URL. Search engines can index the file. PUBLIC_NOT_INDEXABLE: File is publicly accessible by anyone who has the URL. Search engines *can't* index the file. PRIVATE: File is NOT publicly accessible. Requires a signed URL to see content. Search engines *can't* index the file.
-  duplicateValidationScope: string@duplicateValidationScope-completer # ENTIRE_PORTAL: Look for a duplicate file in the entire account. EXACT_FOLDER: Look for a duplicate file in the provided folder.
-  duplicateValidationStrategy: string@duplicateValidationStrategy-completer # NONE: Do not run any duplicate validation. REJECT: Reject the upload if a duplicate is found. RETURN_EXISTING: If a duplicate file is found, do not upload a new file and return the found duplicate instead.
-  --folderId: string # One of folderId or folderPath is required. Destination folder ID for the uploaded file.
-  --folderPath: string # One of folderPath or folderId is required. Destination folder path for the uploaded file. If the folder path does not exist, there will be an attempt to create the folder path.
+  duplicate_validation_scope: string@duplicate-validation-scope-completer # ENTIRE_PORTAL: Look for a duplicate file in the entire account. EXACT_FOLDER: Look for a duplicate file in the provided folder.
+  duplicate_validation_strategy: string@duplicate-validation-strategy-completer # NONE: Do not run any duplicate validation. REJECT: Reject the upload if a duplicate is found. RETURN_EXISTING: If a duplicate file is found, do not upload a new file and return the found duplicate instead.
+  --folder-id: string # One of folderId or folderPath is required. Destination folder ID for the uploaded file.
+  --folder-path: string # One of folderPath or folderId is required. Destination folder path for the uploaded file. If the folder path does not exist, there will be an attempt to create the folder path.
   --name: string # Name to give the resulting file in the file manager.
   --overwrite: oneof<nothing, bool> # If true, it will overwrite existing files if a file with the same name exists in the given folder.
   --ttl: string # Time to live. If specified the file will be deleted after the given time frame.
@@ -154,7 +154,7 @@ export def "files-files-import-from-url-async importFromUrl" [
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files/v3/files/import-from-url/async")
-  let body = {access: $access, duplicateValidationScope: $duplicateValidationScope, duplicateValidationStrategy: $duplicateValidationStrategy, folderId: $folderId, folderPath: $folderPath, name: $name, overwrite: $overwrite, ttl: $ttl, url: $body_url} | compact
+  let body = {"access": $access, "duplicateValidationScope": $duplicate_validation_scope, "duplicateValidationStrategy": $duplicate_validation_strategy, "folderId": $folder_id, "folderPath": $folder_path, "name": $name, "overwrite": $overwrite, "ttl": $ttl, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -165,8 +165,8 @@ export def "files-files-import-from-url-async importFromUrl" [
 #
 # GET /files/v3/files/import-from-url/async/tasks/{taskId}/status
 # operationId: get-/files/v3/files/import-from-url/async/tasks/{taskId}/status_checkImport
-export def "files-files-import-from-url-async-tasks-status checkImport" [
-  taskId: string
+export def "files-files-import-from-url-async-tasks-status check" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "files-files-import-from-url-async-tasks-status checkImport" [
 ]: nothing -> record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, result: record<access: string, archived: bool, archivedAt: string, createdAt: string, defaultHostingUrl: string, encoding: string, extension: string, height: int, id: string, isUsableInContent: bool, name: string, parentFolderId: string, path: string, size: int, type: string, updatedAt: string, url: string, width: int>, startedAt: string, status: string, taskId: string> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/v3/files/import-from-url/async/tasks/($taskId)/status")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/files/v3/files/import-from-url/async/tasks/{task_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,15 +203,15 @@ export def "files-files-search doSearch" [
   --limit: int # Number of items to return. Maximum limit is 100. (format: int32)
   --qp-sort: list # Sort files by a given field.
   --id: string # Search files by given ID.
-  --createdAt: string # Search files by time of creation. (format: date-time)
-  --createdAtLte: string # format: date-time
-  --createdAtGte: string # format: date-time
-  --updatedAt: string # Search files by time of latest updated. (format: date-time)
-  --updatedAtLte: string # format: date-time
-  --updatedAtGte: string # format: date-time
+  --created-at: string # Search files by time of creation. (format: date-time)
+  --created-at-lte: string # format: date-time
+  --created-at-gte: string # format: date-time
+  --updated-at: string # Search files by time of latest updated. (format: date-time)
+  --updated-at-lte: string # format: date-time
+  --updated-at-gte: string # format: date-time
   --name: string # Search for files containing the given name.
   --path: string # Search files by path.
-  --parentFolderId: int # Search files within given folder ID. (format: int64)
+  --parent-folder-id: int # Search files within given folder ID. (format: int64)
   --size: int # Query by file size. (format: int64)
   --height: int # Search files by height of image or video. (format: int32)
   --width: int # Search files by width of image or video. (format: int32)
@@ -219,12 +219,12 @@ export def "files-files-search doSearch" [
   --type: string # Filter by provided file type.
   --extension: string # Search files by given extension.
   --qp-url: string # Search for given URL
-  --isUsableInContent: oneof<nothing, bool> # If true shows files that have been marked to be used in new content. It false shows files that should not be used in new content.
-  --allowsAnonymousAccess: oneof<nothing, bool> # If 'true' will show private files; if 'false' will show public files
+  --is-usable-in-content: oneof<nothing, bool> # If true shows files that have been marked to be used in new content. It false shows files that should not be used in new content.
+  --allows-anonymous-access: oneof<nothing, bool> # If 'true' will show private files; if 'false' will show public files
 ]: nothing -> record<paging: record<next: record<after: string, link: string>, prev: record<before: string, link: string>>, results: table<access: string, archived: bool, archivedAt: string, createdAt: string, defaultHostingUrl: string, encoding: string, extension: string, height: int, id: string, isUsableInContent: bool, name: string, parentFolderId: string, path: string, size: int, type: string, updatedAt: string, url: string, width: int>> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "properties" $properties "multi") (serialize-qp "after" $after "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "id" $id "scalar") (serialize-qp "createdAt" $createdAt "scalar") (serialize-qp "createdAtLte" $createdAtLte "scalar") (serialize-qp "createdAtGte" $createdAtGte "scalar") (serialize-qp "updatedAt" $updatedAt "scalar") (serialize-qp "updatedAtLte" $updatedAtLte "scalar") (serialize-qp "updatedAtGte" $updatedAtGte "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "parentFolderId" $parentFolderId "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "encoding" $encoding "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "extension" $extension "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "isUsableInContent" $isUsableInContent "scalar") (serialize-qp "allowsAnonymousAccess" $allowsAnonymousAccess "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "properties" $properties "multi") (serialize-qp "after" $after "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "id" $id "scalar") (serialize-qp "createdAt" $created_at "scalar") (serialize-qp "createdAtLte" $created_at_lte "scalar") (serialize-qp "createdAtGte" $created_at_gte "scalar") (serialize-qp "updatedAt" $updated_at "scalar") (serialize-qp "updatedAtLte" $updated_at_lte "scalar") (serialize-qp "updatedAtGte" $updated_at_gte "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "parentFolderId" $parent_folder_id "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "encoding" $encoding "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "extension" $extension "scalar") (serialize-qp "url" $qp_url "scalar") (serialize-qp "isUsableInContent" $is_usable_in_content "scalar") (serialize-qp "allowsAnonymousAccess" $allows_anonymous_access "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/v3/files/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -236,7 +236,7 @@ export def "files-files-search doSearch" [
 # DELETE /files/v3/files/{fileId}
 # operationId: delete-/files/v3/files/{fileId}_archive
 export def "files-files archive" [
-  fileId: string
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "files-files archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/v3/files/($fileId)")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/v3/files/{file_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,8 +258,8 @@ export def "files-files archive" [
 #
 # GET /files/v3/files/{fileId}
 # operationId: get-/files/v3/files/{fileId}_getById
-export def "files-files get" [
-  fileId: string
+export def "files-files get-by" [
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "files-files get" [
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "properties" $properties "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/files/v3/files/($fileId)" $qp)
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/v3/files/{file_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -283,8 +283,8 @@ export def "files-files get" [
 #
 # PATCH /files/v3/files/{fileId}
 # operationId: patch-/files/v3/files/{fileId}_updateProperties
-export def "files-files updateProperties" [
-  fileId: string
+export def "files-files update-properties" [
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,16 +294,16 @@ export def "files-files updateProperties" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --access: string@access-completer # NONE: Do not run any duplicate validation. REJECT: Reject the upload if a duplicate is found. RETURN_EXISTING: If a duplicate file is found, do not upload a new file and return the found duplicate instead.
-  --isUsableInContent: oneof<nothing, bool> # Mark weather the file should be used in new content or not.
+  --is-usable-in-content: oneof<nothing, bool> # Mark weather the file should be used in new content or not.
   --name: string # New name for the file.
-  --parentFolderId: string # Folder ID where the file should be moved to.  folderId and folderPath cannot be set at the same time.
-  --parentFolderPath: string # Folder path where the file should be moved to. folderId and folderPath cannot be set at the same time.
+  --parent-folder-id: string # Folder ID where the file should be moved to.  folderId and folderPath cannot be set at the same time.
+  --parent-folder-path: string # Folder path where the file should be moved to. folderId and folderPath cannot be set at the same time.
 ]: any -> record<access: string, archived: bool, archivedAt: string, createdAt: string, defaultHostingUrl: string, encoding: string, extension: string, height: int, id: string, isUsableInContent: bool, name: string, parentFolderId: string, path: string, size: int, type: string, updatedAt: string, url: string, width: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/v3/files/($fileId)")
-  let body = {access: $access, isUsableInContent: $isUsableInContent, name: $name, parentFolderId: $parentFolderId, parentFolderPath: $parentFolderPath} | compact
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/v3/files/{file_id}"))
+  let body = {"access": $access, "isUsableInContent": $is_usable_in_content, "name": $name, "parentFolderId": $parent_folder_id, "parentFolderPath": $parent_folder_path} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,7 +315,7 @@ export def "files-files updateProperties" [
 # PUT /files/v3/files/{fileId}
 # operationId: put-/files/v3/files/{fileId}_replace
 export def "files-files replace" [
-  fileId: string
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,15 +324,15 @@ export def "files-files replace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --charsetHunch: string # Character set of given file data.
+  --charset-hunch: string # Character set of given file data.
   --file: string # File data that will replace existing file in the file manager. (format: binary)
   --options: string # JSON String representing FileReplaceOptions
 ]: any -> record<access: string, archived: bool, archivedAt: string, createdAt: string, defaultHostingUrl: string, encoding: string, extension: string, height: int, id: string, isUsableInContent: bool, name: string, parentFolderId: string, path: string, size: int, type: string, updatedAt: string, url: string, width: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/v3/files/($fileId)")
-  let body = {charsetHunch: $charsetHunch, file: $file, options: $options} | compact
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/v3/files/{file_id}"))
+  let body = {"charsetHunch": $charset_hunch, "file": $file, "options": $options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -343,8 +343,8 @@ export def "files-files replace" [
 #
 # DELETE /files/v3/files/{fileId}/gdpr-delete
 # operationId: delete-/files/v3/files/{fileId}/gdpr-delete_archiveGDPR
-export def "files-files-gdpr-delete archiveGDPR" [
-  fileId: string
+export def "files-files-gdpr-delete archive" [
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +356,7 @@ export def "files-files-gdpr-delete archiveGDPR" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/v3/files/($fileId)/gdpr-delete")
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/v3/files/{file_id}/gdpr-delete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,7 +367,7 @@ export def "files-files-gdpr-delete archiveGDPR" [
 # GET /files/v3/files/{fileId}/signed-url
 # operationId: get-/files/v3/files/{fileId}/signed-url_getSignedUrl
 export def "files-files-signed-url get" [
-  fileId: string
+  file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,13 +377,13 @@ export def "files-files-signed-url get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --size: string@size-completer # For image files. This will resize the image to the desired size before sharing. Does not affect the original file, just the file served by this signed URL.
-  --expirationSeconds: int # How long in seconds the link will provide access to the file. (format: int64)
+  --expiration-seconds: int # How long in seconds the link will provide access to the file. (format: int64)
   --upscale: oneof<nothing, bool> # If size is provided, this will upscale the image to fit the size dimensions.
 ]: nothing -> record<expiresAt: string, extension: string, height: int, name: string, size: int, type: string, url: string, width: int> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "expirationSeconds" $expirationSeconds "scalar") (serialize-qp "upscale" $upscale "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/files/v3/files/($fileId)/signed-url" $qp)
+  let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "expirationSeconds" $expiration_seconds "scalar") (serialize-qp "upscale" $upscale "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({file_id: $file_id} | format pattern "/files/v3/files/{file_id}/signed-url") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,14 +403,14 @@ export def "files-folders create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Desired name for the folder.
-  --parentFolderId: string # Folder ID of the parent of the created folder. If not specified, the folder will be created at the root level. parentFolderId and parentFolderPath cannot be set at the same time.
-  --parentPath: string # Path of the parent of the created folder. If not specified the folder will be created at the root level. parentFolderPath and parentFolderId cannot be set at the same time.
+  --parent-folder-id: string # Folder ID of the parent of the created folder. If not specified, the folder will be created at the root level. parentFolderId and parentFolderPath cannot be set at the same time.
+  --parent-path: string # Path of the parent of the created folder. If not specified the folder will be created at the root level. parentFolderPath and parentFolderId cannot be set at the same time.
 ]: any -> record<archived: bool, archivedAt: string, createdAt: string, id: string, name: string, parentFolderId: string, path: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files/v3/folders")
-  let body = {name: $name, parentFolderId: $parentFolderId, parentPath: $parentPath} | compact
+  let body = {"name": $name, "parentFolderId": $parent_folder_id, "parentPath": $parent_path} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -436,19 +436,19 @@ export def "files-folders-search doSearch" [
   --limit: int # Limit of results to return. Max limit is 100. (format: int32)
   --qp-sort: list # Sort results by given property. For example -name sorts by name field descending, name sorts by name field ascending.
   --id: string # Search folder by given ID.
-  --createdAt: string # Search for folders with the given creation timestamp. (format: date-time)
-  --createdAtLte: string # format: date-time
-  --createdAtGte: string # format: date-time
-  --updatedAt: string # Search for folder at given update timestamp. (format: date-time)
-  --updatedAtLte: string # format: date-time
-  --updatedAtGte: string # format: date-time
+  --created-at: string # Search for folders with the given creation timestamp. (format: date-time)
+  --created-at-lte: string # format: date-time
+  --created-at-gte: string # format: date-time
+  --updated-at: string # Search for folder at given update timestamp. (format: date-time)
+  --updated-at-lte: string # format: date-time
+  --updated-at-gte: string # format: date-time
   --name: string # Search for folders containing the specified name.
   --path: string # Search for folders by path.
-  --parentFolderId: int # Search for folders with the given parent folder ID. (format: int64)
+  --parent-folder-id: int # Search for folders with the given parent folder ID. (format: int64)
 ]: nothing -> record<paging: record<next: record<after: string, link: string>, prev: record<before: string, link: string>>, results: table<archived: bool, archivedAt: string, createdAt: string, id: string, name: string, parentFolderId: string, path: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "properties" $properties "multi") (serialize-qp "after" $after "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "id" $id "scalar") (serialize-qp "createdAt" $createdAt "scalar") (serialize-qp "createdAtLte" $createdAtLte "scalar") (serialize-qp "createdAtGte" $createdAtGte "scalar") (serialize-qp "updatedAt" $updatedAt "scalar") (serialize-qp "updatedAtLte" $updatedAtLte "scalar") (serialize-qp "updatedAtGte" $updatedAtGte "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "parentFolderId" $parentFolderId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "properties" $properties "multi") (serialize-qp "after" $after "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "id" $id "scalar") (serialize-qp "createdAt" $created_at "scalar") (serialize-qp "createdAtLte" $created_at_lte "scalar") (serialize-qp "createdAtGte" $created_at_gte "scalar") (serialize-qp "updatedAt" $updated_at "scalar") (serialize-qp "updatedAtLte" $updated_at_lte "scalar") (serialize-qp "updatedAtGte" $updated_at_gte "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "parentFolderId" $parent_folder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/files/v3/folders/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -459,7 +459,7 @@ export def "files-folders-search doSearch" [
 #
 # POST /files/v3/folders/update/async
 # operationId: post-/files/v3/folders/update/async_updateProperties
-export def "files-folders-update-async updateProperties" [
+export def "files-folders-update-async update-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,13 +470,13 @@ export def "files-folders-update-async updateProperties" [
   --dry-run(-n) # Return the request that would be sent without executing it
   id: string # Id of the folder to change.
   --name: string # New name. If specified the folder's name and fullPath will change. All children of the folder will be updated accordingly.
-  --parentFolderId: int # New parent folder ID. If changed, the folder and all it's children will be moved into the specified folder. parentFolderId and parentFolderPath cannot be specified at the same time. (format: int64)
+  --parent-folder-id: int # New parent folder ID. If changed, the folder and all it's children will be moved into the specified folder. parentFolderId and parentFolderPath cannot be specified at the same time. (format: int64)
 ]: any -> record<id: string, links: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files/v3/folders/update/async")
-  let body = {id: $id, name: $name, parentFolderId: $parentFolderId} | compact
+  let body = {"id": $id, "name": $name, "parentFolderId": $parent_folder_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,8 +487,8 @@ export def "files-folders-update-async updateProperties" [
 #
 # GET /files/v3/folders/update/async/tasks/{taskId}/status
 # operationId: get-/files/v3/folders/update/async/tasks/{taskId}/status_checkUpdateStatus
-export def "files-folders-update-async-tasks-status checkUpdateStatus" [
-  taskId: string
+export def "files-folders-update-async-tasks-status check" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -500,7 +500,7 @@ export def "files-folders-update-async-tasks-status checkUpdateStatus" [
 ]: nothing -> record<completedAt: string, errors: table<category: record, context: record, errors: list, id: string, links: record, message: string, status: string, subCategory: record>, links: record, numErrors: int, requestedAt: string, result: record<archived: bool, archivedAt: string, createdAt: string, id: string, name: string, parentFolderId: string, path: string, updatedAt: string>, startedAt: string, status: string, taskId: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/v3/folders/update/async/tasks/($taskId)/status")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/files/v3/folders/update/async/tasks/{task_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -511,7 +511,7 @@ export def "files-folders-update-async-tasks-status checkUpdateStatus" [
 # DELETE /files/v3/folders/{folderId}
 # operationId: delete-/files/v3/folders/{folderId}_archive
 export def "files-folders archive" [
-  folderId: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "files-folders archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/v3/folders/($folderId)")
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/files/v3/folders/{folder_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,8 +533,8 @@ export def "files-folders archive" [
 #
 # GET /files/v3/folders/{folderId}
 # operationId: get-/files/v3/folders/{folderId}_getById
-export def "files-folders get-by-folderId" [
-  folderId: string
+export def "files-folders get-by" [
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,7 +548,7 @@ export def "files-folders get-by-folderId" [
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "properties" $properties "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/files/v3/folders/($folderId)" $qp)
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/files/v3/folders/{folder_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,8 +558,8 @@ export def "files-folders get-by-folderId" [
 #
 # DELETE /files/v3/folders/{folderPath}
 # operationId: delete-/files/v3/folders/{folderPath}_archiveByPath
-export def "files-folders archiveByPath" [
-  folderPath: string
+export def "files-folders archive-by-path" [
+  folder_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "files-folders archiveByPath" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/files/v3/folders/($folderPath)")
+  let full_url = (build-url $base ({folder_path: $folder_path} | format pattern "/files/v3/folders/{folder_path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -581,8 +581,8 @@ export def "files-folders archiveByPath" [
 #
 # GET /files/v3/folders/{folderPath}
 # operationId: get-/files/v3/folders/{folderPath}_getByPath
-export def "files-folders get-by-folderPath" [
-  folderPath: string
+export def "files-folders get-by-path" [
+  folder_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -596,7 +596,7 @@ export def "files-folders get-by-folderPath" [
   let auth = (build-auth $token ($auth_scheme | default "private-app-legacy"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "properties" $properties "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/files/v3/folders/($folderPath)" $qp)
+  let full_url = (build-url $base ({folder_path: $folder_path} | format pattern "/files/v3/folders/{folder_path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

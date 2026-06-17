@@ -66,12 +66,12 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/xml"] }
-def searchMode-completer [] { ["findByIdentifier" "scientificNameExact" "scientificNameLike" "vernacularNameExact" "vernacularNameLike"] }
+def search-mode-completer [] { ["findByIdentifier" "scientificNameExact" "scientificNameLike" "vernacularNameExact" "vernacularNameLike"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "capabilities capabilities" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "capabilities get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /capabilities
 # operationId: capabilities
-export def "capabilities capabilities" [
+export def "capabilities get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,7 +118,7 @@ export def "capabilities capabilities" [
 #
 # GET /search
 # operationId: search
-export def "search search" [
+export def "search get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,13 +130,13 @@ export def "search search" [
   --accept: string@accept-completer # Response content type
   --query: string # The scientific name to search for. For example: "Bellis perennis", "Prionus" or "Bolinus brandaris". This is an exact search so wildcard characters are not supported.
   --providers: string # A list of provider id strings concatenated by comma characters. The default : "pesi,bgbm-cdm-server[col]" will be used if this parameter is not set. A list of all available provider ids can be obtained from the '/capabilities' service end point. Providers can be nested, that is a parent provider can have sub providers. If the id of the parent provider is supplied all subproviders will be queried. The query can also be restriced to one or more subproviders by using the following syntax: parent-id[sub-id-1,sub-id2,...] (default: pesi,eunis,bgbm-cdm-server[col])
-  --searchMode: string@searchMode-completer # Specifies the searchMode. Possible search modes are: scientificNameExact, scientificNameLike (begins with), vernacularNameExact, vernacularNameLike (contains), findByIdentifier. If the a provider does not support the chosen searchMode it will be skipped and the status message in the tnrClientStatus will be set to 'unsupported search mode' in this case. (default: scientificNameExact)
-  --addSynonymy: oneof<nothing, bool> # Indicates whether the synonymy of the accepted taxon should be included into the response. Turning this option on may cause an increased response time. (default: false)
+  --search-mode: string@search-mode-completer # Specifies the searchMode. Possible search modes are: scientificNameExact, scientificNameLike (begins with), vernacularNameExact, vernacularNameLike (contains), findByIdentifier. If the a provider does not support the chosen searchMode it will be skipped and the status message in the tnrClientStatus will be set to 'unsupported search mode' in this case. (default: scientificNameExact)
+  --add-synonymy: oneof<nothing, bool> # Indicates whether the synonymy of the accepted taxon should be included into the response. Turning this option on may cause an increased response time. (default: false)
   --timeout: int # The maximum of milliseconds to wait for responses from any of the providers. If the timeout is exceeded the service will jut return the resonses that have been received so far. The default timeout is 0 ms (wait for ever) (format: int64, default: 0)
 ]: nothing -> record<query: table<clientStatus: list, request: record, response: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "providers" $providers "scalar") (serialize-qp "searchMode" $searchMode "scalar") (serialize-qp "addSynonymy" $addSynonymy "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "providers" $providers "scalar") (serialize-qp "searchMode" $search_mode "scalar") (serialize-qp "addSynonymy" $add_synonymy "scalar") (serialize-qp "timeout" $timeout "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -102,11 +102,11 @@ export def "integrations-webhooks get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --teamId: string # A team id in case you want to act on behalf of a team
+  --team-id: string # A team id in case you want to act on behalf of a team
 ]: nothing -> table<configurationId: string, createdAt: int, events: list<string>, id: string, name: string, ownerId: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $teamId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/integrations/webhooks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -117,7 +117,7 @@ export def "integrations-webhooks get" [
 #
 # POST /v1/integrations/webhooks
 # operationId: createWebhook
-export def "integrations-webhooks createWebhook" [
+export def "integrations-webhooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,16 +126,16 @@ export def "integrations-webhooks createWebhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --teamId: string # A team id in case you want to act on behalf of a team
+  --team-id: string # A team id in case you want to act on behalf of a team
   name: string # A name to assign to the webhook
   --body-url: string # The URL ZEIT will post to when events happen
 ]: any -> record<configurationId: string, createdAt: int, events: list<string>, id: string, name: string, ownerId: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $teamId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/integrations/webhooks" $qp)
-  let body = {name: $name, url: $body_url} | compact
+  let body = {"name": $name, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,11 +155,11 @@ export def "integrations-webhooks-id delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --teamId: string # A team id in case you want to act on behalf of a team
+  --team-id: string # A team id in case you want to act on behalf of a team
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $teamId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/integrations/webhooks/:id" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,11 +179,11 @@ export def "domains list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --teamId: string # A team id in case you want to act on behalf of a team
+  --team-id: string # A team id in case you want to act on behalf of a team
 ]: nothing -> record<domains: table<boughtAt: int, cdnEnabled: bool, createdAt: int, expiresAt: int, id: string, intendedNameservers: list, name: string, nameservers: list, nsVerifiedAt: int, orderedAt: int, serviceType: string, transferredAt: int, txtVerifiedAt: int, verificationRecord: string, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $teamId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/domains" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -204,12 +204,12 @@ export def "domains get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --teamId: string # A team id in case you want to act on behalf of a team
+  --team-id: string # A team id in case you want to act on behalf of a team
 ]: nothing -> record<domain: record<aliases: list<record>, boughtAt: int, cdnEnabled: bool, certs: list<record>, createdAt: int, creator: record<customerId: string, email: string, id: string, isDomainReseller: bool, username: string>, expiresAt: int, id: string, intendedNameservers: list<string>, name: string, nameservers: list<string>, nsVerifiedAt: int, orderedAt: int, serviceType: string, suffix: bool, transferredAt: int, txtVerifiedAt: int, verificationRecord: string, verified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "teamId" $teamId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v4/domains/($name)" $qp)
+  let qp = [(serialize-qp "teamId" $team_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({name: $name} | format pattern "/v4/domains/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

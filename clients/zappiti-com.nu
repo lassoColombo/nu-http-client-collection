@@ -100,13 +100,13 @@ export def "check-zappiti-service post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApiKey: string # Client API Key (format: uuid)
+  --api-key: string # Client API Key (format: uuid)
 ]: any -> record<ErrorCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CheckZappitiService")
-  let body = {ApiKey: $ApiKey} | compact
+  let body = {"ApiKey": $api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -125,13 +125,13 @@ export def "connection-details post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApiKey: string # Client API Key (format: uuid)
+  --api-key: string # Client API Key (format: uuid)
 ]: any -> record<AuthKey: string, Collection: string, Email: string, ErrorCode: string, ServerIp: string, ServerPort: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ConnectionDetails")
-  let body = {ApiKey: $ApiKey} | compact
+  let body = {"ApiKey": $api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,13 +150,13 @@ export def "install-zappiti-service post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApiKey: string # Client API Key (format: uuid)
+  --api-key: string # Client API Key (format: uuid)
 ]: any -> record<ErrorCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/InstallZappitiService")
-  let body = {ApiKey: $ApiKey} | compact
+  let body = {"ApiKey": $api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,13 +175,13 @@ export def "is-alive post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApiKey: string # Client API Key (format: uuid)
+  --api-key: string # Client API Key (format: uuid)
 ]: any -> record<ErrorCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/IsAlive")
-  let body = {ApiKey: $ApiKey} | compact
+  let body = {"ApiKey": $api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,13 +200,13 @@ export def "last-media post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApiKey: string # Client API Key (format: uuid)
+  --api-key: string # Client API Key (format: uuid)
 ]: any -> record<Actors: list<string>, BackgroundUrl: string, Directors: list<string>, Episode: int, ErrorCode: string, PosterUrl: string, Runtime: int, Season: int, Synopsis: string, Title: string, TvShowName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/LastMedia")
-  let body = {ApiKey: $ApiKey} | compact
+  let body = {"ApiKey": $api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -225,18 +225,18 @@ export def "start-video post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApiKey: string # Client API Key (format: uuid)
-  --AuthKey: string # User auth key (format: uuid)
-  --Collection: string # Collection id (format: string)
-  --Ip: string # Server Ip (format: string)
-  --MediaId: string # Id of the video to start (format: uuid)
-  --Port: int # Server Port (format: int32)
+  --api-key: string # Client API Key (format: uuid)
+  --auth-key: string # User auth key (format: uuid)
+  --collection: string # Collection id (format: string)
+  --ip: string # Server Ip (format: string)
+  --media-id: string # Id of the video to start (format: uuid)
+  --port: int # Server Port (format: int32)
 ]: any -> record<ErrorCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StartVideo")
-  let body = {ApiKey: $ApiKey, AuthKey: $AuthKey, Collection: $Collection, Ip: $Ip, MediaId: $MediaId, Port: $Port} | compact
+  let body = {"ApiKey": $api_key, "AuthKey": $auth_key, "Collection": $collection, "Ip": $ip, "MediaId": $media_id, "Port": $port} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -255,13 +255,13 @@ export def "start-zappiti-service post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApiKey: string # Client API Key (format: uuid)
+  --api-key: string # Client API Key (format: uuid)
 ]: any -> record<ErrorCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/StartZappitiService")
-  let body = {ApiKey: $ApiKey} | compact
+  let body = {"ApiKey": $api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

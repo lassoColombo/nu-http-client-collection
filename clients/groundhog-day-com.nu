@@ -65,7 +65,7 @@ def base-url-completer [] { ["https://virtserver.swaggerhub.com/pcraig3/groundho
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def isGroundhog-completer [] { ["0" "1" "false" "true"] }
+def is-groundhog-completer [] { ["0" "1" "false" "true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -116,7 +116,7 @@ export def "info root" [
 #
 # GET /api/v1/groundhogs
 # operationId: groundhogs
-export def "groundhogs groundhogs" [
+export def "groundhogs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,11 +126,11 @@ export def "groundhogs groundhogs" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Filter groundhogs by country of origin (USA or Canada). (e.g. Canada or USA)
-  --isGroundhog: string@isGroundhog-completer # Filter groundhogs by type (actual, alive groundhogs, or other prognosticators)
+  --is-groundhog: string@is-groundhog-completer # Filter groundhogs by type (actual, alive groundhogs, or other prognosticators)
 ]: nothing -> record<groundhogs: table<active: int, city: string, contact: string, coordinates: string, country: string, currentPrediction: string, description: string, id: int, image: string, isGroundhog: int, name: string, predictions: list, predictionsCount: int, region: string, shortname: string, slug: string, source: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "isGroundhog" $isGroundhog "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "isGroundhog" $is_groundhog "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/groundhogs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -154,7 +154,7 @@ export def "groundhogs groundhog" [
 ]: nothing -> record<groundhog: record<active: int, city: string, contact: string, coordinates: string, country: string, currentPrediction: string, description: string, id: int, image: string, isGroundhog: int, name: string, predictions: list<record>, predictionsCount: int, region: string, shortname: string, slug: string, source: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/groundhogs/($slug)")
+  let full_url = (build-url $base ({slug: $slug} | format pattern "/api/v1/groundhogs/{slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -164,7 +164,7 @@ export def "groundhogs groundhog" [
 #
 # GET /api/v1/predictions
 # operationId: predictions
-export def "predictions predictions" [
+export def "predictions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "predictions predictions" [
 #
 # GET /api/v1/spec
 # operationId: spec
-export def "spec spec" [
+export def "spec get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

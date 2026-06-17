@@ -71,7 +71,7 @@ def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "events-send post-/events/v3/send" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "events-send send" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # POST /events/v3/send
 # operationId: post-/events/v3/send
-export def "events-send post-/events/v3/send" [
+export def "events-send send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,9 +105,9 @@ export def "events-send post-/events/v3/send" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Email of visitor
-  eventName: string # Internal name of the event-type to trigger
-  --objectId: string # The object id that this event occurred on. Could be a contact id or a visitor id.
-  --occurredAt: string # The time when this event occurred (if any). If this isn't set, the current time will be used (format: date-time)
+  event_name: string # Internal name of the event-type to trigger
+  --object-id: string # The object id that this event occurred on. Could be a contact id or a visitor id.
+  --occurred-at: string # The time when this event occurred (if any). If this isn't set, the current time will be used (format: date-time)
   properties: record # Map of properties for the event in the format property internal name - property value
   --utk: string # User token
 ]: any -> any {
@@ -115,7 +115,7 @@ export def "events-send post-/events/v3/send" [
   let auth = (build-auth $token ($auth_scheme | default "query-hapikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/events/v3/send")
-  let body = {email: $email, eventName: $eventName, objectId: $objectId, occurredAt: $occurredAt, properties: $properties, utk: $utk} | compact
+  let body = {"email": $email, "eventName": $event_name, "objectId": $object_id, "occurredAt": $occurred_at, "properties": $properties, "utk": $utk} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

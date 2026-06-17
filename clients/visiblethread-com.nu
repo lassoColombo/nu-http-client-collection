@@ -114,7 +114,7 @@ export def "dictionaries get" [
 #
 # POST /dictionaries
 # operationId: uploadDictionary
-export def "dictionaries uploadDictionary" [
+export def "dictionaries upload-dictionary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,7 +129,7 @@ export def "dictionaries uploadDictionary" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dictionaries")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -140,7 +140,7 @@ export def "dictionaries uploadDictionary" [
 # Get your list of documents
 #
 # GET /documents
-export def "documents list" [
+export def "documents get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "documents list" [
 #
 # POST /documents
 # operationId: uploadDoc
-export def "documents uploadDoc" [
+export def "documents upload-doc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,14 +172,14 @@ export def "documents uploadDoc" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   file: path # The uploaded file data
-  --longSentenceWordCount: int # Optional setting what constitutes a long sentence (default 25)
-  --veryLongSentenceWordCount: int # Optional setting what constitutes a very long sentence (default 30)
+  --long-sentence-word-count: int # Optional setting what constitutes a long sentence (default 25)
+  --very-long-sentence-word-count: int # Optional setting what constitutes a very long sentence (default 30)
 ]: any -> record<docId: int, scanSettings: record<longSentenceWordCount: int, veryLongSentenceWordCount: int>, task: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/documents")
-  let body = {file: $file, longSentenceWordCount: $longSentenceWordCount, veryLongSentenceWordCount: $veryLongSentenceWordCount} | compact
+  let body = {"file": $file, "longSentenceWordCount": $long_sentence_word_count, "veryLongSentenceWordCount": $very_long_sentence_word_count} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,8 +191,8 @@ export def "documents uploadDoc" [
 #
 # GET /documents/{docId}
 # operationId: getDocById
-export def "documents get" [
-  docId: int
+export def "documents get-doc" [
+  doc_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "documents get" [
 ]: nothing -> record<completed: string, eta: string, id: int, paragraphs: table<paragraphCounter: int, paragraphIndex: int, stats: record, text: string>, scanSettings: record<longSentenceWordCount: int, veryLongSentenceWordCount: int>, started: string, stats: record<avgSentenceLength: int, fleschKincaidGradeLevel: float, fleschReadingLevel: int, longSentenceCount: int, passiveSentenceCount: int, sentenceCount: int, wordCount: int>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($docId)")
+  let full_url = (build-url $base ({doc_id: $doc_id} | format pattern "/documents/{doc_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,14 +244,14 @@ export def "searches runSearch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  dictId: int # format: int64, e.g. 47364
-  docId: int # format: int64, e.g. 56487
+  dict_id: int # format: int64, e.g. 47364
+  doc_id: int # format: int64, e.g. 56487
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/searches")
-  let body = {dictId: $dictId, docId: $docId} | compact
+  let body = {"dictId": $dict_id, "docId": $doc_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -262,9 +262,9 @@ export def "searches runSearch" [
 #
 # GET /searches/{docId}/{dictionaryId}
 # operationId: getSearchResults
-export def "searches get-by-docId-dictionaryId" [
-  docId: int
-  dictionaryId: int
+export def "searches get-search-results" [
+  doc_id: int
+  dictionary_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,12 +273,12 @@ export def "searches get-by-docId-dictionaryId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --matchingOnly: oneof<nothing, bool> # Only returning paragraphs containing a match
+  --matching-only: oneof<nothing, bool> # Only returning paragraphs containing a match
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "matchingOnly" $matchingOnly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/searches/($docId)/($dictionaryId)" $qp)
+  let qp = [(serialize-qp "matchingOnly" $matching_only "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({doc_id: $doc_id, dictionary_id: $dictionary_id} | format pattern "/searches/{doc_id}/{dictionary_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -287,7 +287,7 @@ export def "searches get-by-docId-dictionaryId" [
 # Get your list of scans
 #
 # GET /webscans
-export def "webscans list" [
+export def "webscans get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,15 +320,15 @@ export def "webscans runScan" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --scanSettings: record # shape: {longSentenceWordCount?: int, veryLongSentenceWordCount?: int}
+  --scan-settings: record # shape: {longSentenceWordCount?: int, veryLongSentenceWordCount?: int}
   title: string # e.g. My fancy scan title
-  webUrls: list # item shape: {url: string}
+  web_urls: list # item shape: {url: string}
 ]: any -> record<id: int, title: string, webUrls: table<id: int, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webscans")
-  let body = {scanSettings: $scanSettings, title: $title, webUrls: $webUrls} | compact
+  let body = {"scanSettings": $scan_settings, "title": $title, "webUrls": $web_urls} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -339,8 +339,8 @@ export def "webscans runScan" [
 #
 # GET /webscans/{scanId}
 # operationId: getScanById
-export def "webscans get" [
-  scanId: int
+export def "webscans get-scan" [
+  scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "webscans get" [
 ]: nothing -> record<completed: string, eta: string, id: int, scan: record<stats: record<avgSentenceLength: int, fleschKincaidGradeLevel: float, fleschReadingLevel: int, longSentenceCount: int, passiveSentenceCount: int, sentenceCount: int, wordCount: int>, title: string, webUrls: list<record>>, started: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webscans/($scanId)")
+  let full_url = (build-url $base ({scan_id: $scan_id} | format pattern "/webscans/{scan_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,9 +362,9 @@ export def "webscans get" [
 #
 # GET /webscans/{scanId}/webUrls/{urlId}
 # operationId: getScanUrlById
-export def "webscans-web-urls get" [
-  scanId: int
-  urlId: int
+export def "webscans-web-urls get-scan" [
+  scan_id: int
+  url_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "webscans-web-urls get" [
 ]: nothing -> record<paragraphs: table<paragraphCounter: int, paragraphIndex: int, stats: record, text: string>, stats: record<avgSentenceLength: int, fleschKincaidGradeLevel: float, fleschReadingLevel: int, longSentenceCount: int, passiveSentenceCount: int, sentenceCount: int, wordCount: int>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webscans/($scanId)/webUrls/($urlId)")
+  let full_url = (build-url $base ({scan_id: $scan_id, url_id: $url_id} | format pattern "/webscans/{scan_id}/webUrls/{url_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

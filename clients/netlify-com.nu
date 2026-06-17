@@ -78,7 +78,7 @@ def site-access-completer [] { ["all" "none" "selected"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts listAccountsForUser" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list-accounts-for-user" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 # GET /accounts
 #
 # operationId: listAccountsForUser
-export def "accounts listAccountsForUser" [
+export def "accounts list-accounts-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +122,7 @@ export def "accounts listAccountsForUser" [
 # POST /accounts
 #
 # operationId: createAccount
-export def "accounts createAccount" [
+export def "accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,7 +141,7 @@ export def "accounts createAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
-  let body = {extra_seats_block: $extra_seats_block, name: $name, payment_method_id: $payment_method_id, period: $period, type_id: $type_id} | compact
+  let body = {"extra_seats_block": $extra_seats_block, "name": $name, "payment_method_id": $payment_method_id, "period": $period, "type_id": $type_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,7 +151,7 @@ export def "accounts createAccount" [
 # GET /accounts/types
 #
 # operationId: listAccountTypesForUser
-export def "accounts-types listAccountTypesForUser" [
+export def "accounts-types list-account-types-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "accounts-types listAccountTypesForUser" [
 # DELETE /accounts/{account_id}
 #
 # operationId: cancelAccount
-export def "accounts cancelAccount" [
+export def "accounts cancel" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "accounts cancelAccount" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account_id)")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +207,7 @@ export def "accounts get" [
 ]: nothing -> table<billing_details: string, billing_email: string, billing_name: string, billing_period: string, capabilities: record<collaborators: record, sites: record>, created_at: string, id: string, name: string, owner_ids: list<string>, payment_method_id: string, roles_allowed: list<string>, slug: string, type: string, type_id: string, type_name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account_id)")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,7 +216,7 @@ export def "accounts get" [
 # PUT /accounts/{account_id}
 #
 # operationId: updateAccount
-export def "accounts updateAccount" [
+export def "accounts update" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -237,8 +237,8 @@ export def "accounts updateAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($account_id)")
-  let body = {billing_details: $billing_details, billing_email: $billing_email, billing_name: $billing_name, extra_seats_block: $extra_seats_block, name: $name, slug: $slug, type_id: $type_id} | compact
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}"))
+  let body = {"billing_details": $billing_details, "billing_email": $billing_email, "billing_name": $billing_name, "extra_seats_block": $extra_seats_block, "name": $name, "slug": $slug, "type_id": $type_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -248,7 +248,7 @@ export def "accounts updateAccount" [
 # GET /accounts/{account_id}/audit
 #
 # operationId: listAccountAuditEvents
-export def "accounts-audit listAccountAuditEvents" [
+export def "accounts-audit list-account-audit-events" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "accounts-audit listAccountAuditEvents" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "log_type" $log_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($account_id)/audit" $qp)
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/audit") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -276,7 +276,7 @@ export def "accounts-audit listAccountAuditEvents" [
 #
 # GET /accounts/{account_id}/env
 # operationId: getEnvVars
-export def "accounts-env list" [
+export def "accounts-env get-env-vars" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "accounts-env list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "context_name" $context_name "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($account_id)/env" $qp)
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/env") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,7 +303,7 @@ export def "accounts-env list" [
 #
 # POST /accounts/{account_id}/env
 # operationId: createEnvVars
-export def "accounts-env createEnvVars" [
+export def "accounts-env create-env-vars" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,7 +320,7 @@ export def "accounts-env createEnvVars" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($account_id)/env" $qp)
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/accounts/{account_id}/env") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -331,7 +331,7 @@ export def "accounts-env createEnvVars" [
 #
 # DELETE /accounts/{account_id}/env/{key}
 # operationId: deleteEnvVar
-export def "accounts-env delete" [
+export def "accounts-env delete-env-var" [
   account_id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -347,7 +347,7 @@ export def "accounts-env delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($account_id)/env/($key)" $qp)
+  let full_url = (build-url $base ({account_id: $account_id, key: $key} | format pattern "/accounts/{account_id}/env/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,7 +357,7 @@ export def "accounts-env delete" [
 #
 # GET /accounts/{account_id}/env/{key}
 # operationId: getEnvVar
-export def "accounts-env get" [
+export def "accounts-env get-env-var" [
   account_id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -373,7 +373,7 @@ export def "accounts-env get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($account_id)/env/($key)" $qp)
+  let full_url = (build-url $base ({account_id: $account_id, key: $key} | format pattern "/accounts/{account_id}/env/{key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -402,8 +402,8 @@ export def "accounts-env setEnvVarValue" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($account_id)/env/($key)" $qp)
-  let body = {context: $context, value: $value} | compact
+  let full_url = (build-url $base ({account_id: $account_id, key: $key} | format pattern "/accounts/{account_id}/env/{key}") $qp)
+  let body = {"context": $context, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,7 +415,7 @@ export def "accounts-env setEnvVarValue" [
 # PUT /accounts/{account_id}/env/{key}
 # operationId: updateEnvVar
 # --values item shape: {context?: "all"|"dev"|"branch-deploy"|"deploy-preview"|"production", id?: string, value?: string}
-export def "accounts-env updateEnvVar" [
+export def "accounts-env update-env-var" [
   account_id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -435,8 +435,8 @@ export def "accounts-env updateEnvVar" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($account_id)/env/($key)" $qp)
-  let body = {key: $body_key, scopes: $scopes, values: $values} | compact
+  let full_url = (build-url $base ({account_id: $account_id, key: $key} | format pattern "/accounts/{account_id}/env/{key}") $qp)
+  let body = {"key": $body_key, "scopes": $scopes, "values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -447,10 +447,10 @@ export def "accounts-env updateEnvVar" [
 #
 # DELETE /accounts/{account_id}/env/{key}/value/{id}
 # operationId: deleteEnvVarValue
-export def "accounts-env-value delete" [
+export def "accounts-env-value delete-env-var" [
   account_id: string
-  id: string
   key: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,7 +464,7 @@ export def "accounts-env-value delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/accounts/($account_id)/env/($key)/value/($id)" $qp)
+  let full_url = (build-url $base ({account_id: $account_id, key: $key, id: $id} | format pattern "/accounts/{account_id}/env/{key}/value/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -473,7 +473,7 @@ export def "accounts-env-value delete" [
 # GET /billing/payment_methods
 #
 # operationId: listPaymentMethodsForUser
-export def "billing-payment-methods listPaymentMethodsForUser" [
+export def "billing-payment-methods list-payment-methods-for-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,7 +494,7 @@ export def "billing-payment-methods listPaymentMethodsForUser" [
 # GET /builds/{build_id}
 #
 # operationId: getSiteBuild
-export def "builds get" [
+export def "builds get-site" [
   build_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "builds get" [
 ]: nothing -> record<created_at: string, deploy_id: string, done: bool, error: string, id: string, sha: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/builds/($build_id)")
+  let full_url = (build-url $base ({build_id: $build_id} | format pattern "/builds/{build_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -516,7 +516,7 @@ export def "builds get" [
 # POST /builds/{build_id}/log
 #
 # operationId: updateSiteBuildLog
-export def "builds-log updateSiteBuildLog" [
+export def "builds-log update-site" [
   build_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +529,7 @@ export def "builds-log updateSiteBuildLog" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/builds/($build_id)/log")
+  let full_url = (build-url $base ({build_id: $build_id} | format pattern "/builds/{build_id}/log"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -551,7 +551,7 @@ export def "builds-start notifyBuildStart" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/builds/($build_id)/start")
+  let full_url = (build-url $base ({build_id: $build_id} | format pattern "/builds/{build_id}/start"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -560,7 +560,7 @@ export def "builds-start notifyBuildStart" [
 # GET /deploy_keys
 #
 # operationId: listDeployKeys
-export def "deploy-keys listDeployKeys" [
+export def "deploy-keys list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,7 +581,7 @@ export def "deploy-keys listDeployKeys" [
 # POST /deploy_keys
 #
 # operationId: createDeployKey
-export def "deploy-keys createDeployKey" [
+export def "deploy-keys create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,7 +615,7 @@ export def "deploy-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/deploy_keys/($key_id)")
+  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/deploy_keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -637,7 +637,7 @@ export def "deploy-keys get" [
 ]: nothing -> record<created_at: string, id: string, public_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/deploy_keys/($key_id)")
+  let full_url = (build-url $base ({key_id: $key_id} | format pattern "/deploy_keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -659,7 +659,7 @@ export def "deploys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/deploys/($deploy_id)")
+  let full_url = (build-url $base ({deploy_id: $deploy_id} | format pattern "/deploys/{deploy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -681,7 +681,7 @@ export def "deploys get" [
 ]: nothing -> record<admin_url: string, branch: string, build_id: string, commit_ref: string, commit_url: string, context: string, created_at: string, deploy_ssl_url: string, deploy_url: string, draft: bool, error_message: string, framework: string, function_schedules: table<cron: string, name: string>, id: string, locked: bool, name: string, published_at: string, required: list<string>, required_functions: list<string>, review_id: float, review_url: string, screenshot_url: string, site_capabilities: record<large_media_enabled: bool>, site_id: string, skipped: bool, ssl_url: string, state: string, title: string, updated_at: string, url: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/deploys/($deploy_id)")
+  let full_url = (build-url $base ({deploy_id: $deploy_id} | format pattern "/deploys/{deploy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -690,7 +690,7 @@ export def "deploys get" [
 # POST /deploys/{deploy_id}/cancel
 #
 # operationId: cancelSiteDeploy
-export def "deploys-cancel cancelSiteDeploy" [
+export def "deploys-cancel cancel-site" [
   deploy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "deploys-cancel cancelSiteDeploy" [
 ]: nothing -> record<admin_url: string, branch: string, build_id: string, commit_ref: string, commit_url: string, context: string, created_at: string, deploy_ssl_url: string, deploy_url: string, draft: bool, error_message: string, framework: string, function_schedules: table<cron: string, name: string>, id: string, locked: bool, name: string, published_at: string, required: list<string>, required_functions: list<string>, review_id: float, review_url: string, screenshot_url: string, site_capabilities: record<large_media_enabled: bool>, site_id: string, skipped: bool, ssl_url: string, state: string, title: string, updated_at: string, url: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/deploys/($deploy_id)/cancel")
+  let full_url = (build-url $base ({deploy_id: $deploy_id} | format pattern "/deploys/{deploy_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -712,7 +712,7 @@ export def "deploys-cancel cancelSiteDeploy" [
 # PUT /deploys/{deploy_id}/files/{path}
 #
 # operationId: uploadDeployFile
-export def "deploys-files uploadDeployFile" [
+export def "deploys-files upload" [
   deploy_id: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -730,7 +730,7 @@ export def "deploys-files uploadDeployFile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/deploys/($deploy_id)/files/($path)" $qp)
+  let full_url = (build-url $base ({deploy_id: $deploy_id, path: $path} | format pattern "/deploys/{deploy_id}/files/{path}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -740,7 +740,7 @@ export def "deploys-files uploadDeployFile" [
 # PUT /deploys/{deploy_id}/functions/{name}
 #
 # operationId: uploadDeployFunction
-export def "deploys-functions uploadDeployFunction" [
+export def "deploys-functions upload" [
   deploy_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -753,16 +753,16 @@ export def "deploys-functions uploadDeployFunction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --runtime: string
   --size: int
-  --X-Nf-Retry-Count: int
+  --x-nf-retry-count: int
   --body: record
 ]: any -> record<id: string, name: string, sha: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "runtime" $runtime "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/deploys/($deploy_id)/functions/($name)" $qp)
+  let full_url = (build-url $base ({deploy_id: $deploy_id, name: $name} | format pattern "/deploys/{deploy_id}/functions/{name}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Nf-Retry-Count": $X_Nf_Retry_Count} | compact
+  let extra_headers = {"X-Nf-Retry-Count": $x_nf_retry_count} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -772,7 +772,7 @@ export def "deploys-functions uploadDeployFunction" [
 # POST /deploys/{deploy_id}/lock
 #
 # operationId: lockDeploy
-export def "deploys-lock lockDeploy" [
+export def "deploys-lock lock" [
   deploy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "deploys-lock lockDeploy" [
 ]: nothing -> record<admin_url: string, branch: string, build_id: string, commit_ref: string, commit_url: string, context: string, created_at: string, deploy_ssl_url: string, deploy_url: string, draft: bool, error_message: string, framework: string, function_schedules: table<cron: string, name: string>, id: string, locked: bool, name: string, published_at: string, required: list<string>, required_functions: list<string>, review_id: float, review_url: string, screenshot_url: string, site_capabilities: record<large_media_enabled: bool>, site_id: string, skipped: bool, ssl_url: string, state: string, title: string, updated_at: string, url: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/deploys/($deploy_id)/lock")
+  let full_url = (build-url $base ({deploy_id: $deploy_id} | format pattern "/deploys/{deploy_id}/lock"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -795,7 +795,7 @@ export def "deploys-lock lockDeploy" [
 #
 # POST /deploys/{deploy_id}/plugin_runs
 # operationId: createPluginRun
-export def "deploys-plugin-runs createPluginRun" [
+export def "deploys-plugin-runs create" [
   deploy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,8 +816,8 @@ export def "deploys-plugin-runs createPluginRun" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/deploys/($deploy_id)/plugin_runs")
-  let body = {package: $package, reporting_event: $reporting_event, state: $state, summary: $summary, text: $text, title: $title, version: $version} | compact
+  let full_url = (build-url $base ({deploy_id: $deploy_id} | format pattern "/deploys/{deploy_id}/plugin_runs"))
+  let body = {"package": $package, "reporting_event": $reporting_event, "state": $state, "summary": $summary, "text": $text, "title": $title, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -827,7 +827,7 @@ export def "deploys-plugin-runs createPluginRun" [
 # POST /deploys/{deploy_id}/unlock
 #
 # operationId: unlockDeploy
-export def "deploys-unlock unlockDeploy" [
+export def "deploys-unlock unlock" [
   deploy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -840,7 +840,7 @@ export def "deploys-unlock unlockDeploy" [
 ]: nothing -> record<admin_url: string, branch: string, build_id: string, commit_ref: string, commit_url: string, context: string, created_at: string, deploy_ssl_url: string, deploy_url: string, draft: bool, error_message: string, framework: string, function_schedules: table<cron: string, name: string>, id: string, locked: bool, name: string, published_at: string, required: list<string>, required_functions: list<string>, review_id: float, review_url: string, screenshot_url: string, site_capabilities: record<large_media_enabled: bool>, site_id: string, skipped: bool, ssl_url: string, state: string, title: string, updated_at: string, url: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/deploys/($deploy_id)/unlock")
+  let full_url = (build-url $base ({deploy_id: $deploy_id} | format pattern "/deploys/{deploy_id}/unlock"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -872,7 +872,7 @@ export def "dns-zones list" [
 # POST /dns_zones
 #
 # operationId: createDnsZone
-export def "dns-zones createDnsZone" [
+export def "dns-zones create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -889,7 +889,7 @@ export def "dns-zones createDnsZone" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dns_zones")
-  let body = {account_slug: $account_slug, name: $name, site_id: $site_id} | compact
+  let body = {"account_slug": $account_slug, "name": $name, "site_id": $site_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -912,7 +912,7 @@ export def "dns-zones delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dns_zones/($zone_id)")
+  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/dns_zones/{zone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -934,7 +934,7 @@ export def "dns-zones get" [
 ]: nothing -> record<account_id: string, account_name: string, account_slug: string, created_at: string, dedicated: bool, dns_servers: list<string>, domain: string, errors: list<string>, id: string, ipv6_enabled: bool, name: string, records: table<dns_zone_id: string, flag: int, hostname: string, id: string, managed: bool, priority: int, site_id: string, tag: string, ttl: int, type: string, value: string>, site_id: string, supported_record_types: list<string>, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dns_zones/($zone_id)")
+  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/dns_zones/{zone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -943,7 +943,7 @@ export def "dns-zones get" [
 # GET /dns_zones/{zone_id}/dns_records
 #
 # operationId: getDnsRecords
-export def "dns-zones-dns-records list" [
+export def "dns-zones-dns-records get" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -956,7 +956,7 @@ export def "dns-zones-dns-records list" [
 ]: nothing -> table<dns_zone_id: string, flag: int, hostname: string, id: string, managed: bool, priority: int, site_id: string, tag: string, ttl: int, type: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dns_zones/($zone_id)/dns_records")
+  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/dns_zones/{zone_id}/dns_records"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -965,7 +965,7 @@ export def "dns-zones-dns-records list" [
 # POST /dns_zones/{zone_id}/dns_records
 #
 # operationId: createDnsRecord
-export def "dns-zones-dns-records createDnsRecord" [
+export def "dns-zones-dns-records create" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -988,8 +988,8 @@ export def "dns-zones-dns-records createDnsRecord" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dns_zones/($zone_id)/dns_records")
-  let body = {flag: $flag, hostname: $hostname, port: $port, priority: $priority, tag: $tag, ttl: $ttl, type: $type, value: $value, weight: $weight} | compact
+  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/dns_zones/{zone_id}/dns_records"))
+  let body = {"flag": $flag, "hostname": $hostname, "port": $port, "priority": $priority, "tag": $tag, "ttl": $ttl, "type": $type, "value": $value, "weight": $weight} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1013,7 +1013,7 @@ export def "dns-zones-dns-records delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dns_zones/($zone_id)/dns_records/($dns_record_id)")
+  let full_url = (build-url $base ({zone_id: $zone_id, dns_record_id: $dns_record_id} | format pattern "/dns_zones/{zone_id}/dns_records/{dns_record_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1022,7 +1022,7 @@ export def "dns-zones-dns-records delete" [
 # GET /dns_zones/{zone_id}/dns_records/{dns_record_id}
 #
 # operationId: getIndividualDnsRecord
-export def "dns-zones-dns-records get" [
+export def "dns-zones-dns-records get-individual" [
   zone_id: string
   dns_record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1036,7 +1036,7 @@ export def "dns-zones-dns-records get" [
 ]: nothing -> record<dns_zone_id: string, flag: int, hostname: string, id: string, managed: bool, priority: int, site_id: string, tag: string, ttl: int, type: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dns_zones/($zone_id)/dns_records/($dns_record_id)")
+  let full_url = (build-url $base ({zone_id: $zone_id, dns_record_id: $dns_record_id} | format pattern "/dns_zones/{zone_id}/dns_records/{dns_record_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1062,7 +1062,7 @@ export def "dns-zones-transfer transferDnsZone" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "account_id" $account_id "scalar") (serialize-qp "transfer_account_id" $transfer_account_id "scalar") (serialize-qp "transfer_user_id" $transfer_user_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dns_zones/($zone_id)/transfer" $qp)
+  let full_url = (build-url $base ({zone_id: $zone_id} | format pattern "/dns_zones/{zone_id}/transfer") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1071,7 +1071,7 @@ export def "dns-zones-transfer transferDnsZone" [
 # GET /forms/{form_id}/submissions
 #
 # operationId: listFormSubmissions
-export def "forms-submissions listFormSubmissions" [
+export def "forms-submissions list" [
   form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1087,7 +1087,7 @@ export def "forms-submissions listFormSubmissions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/forms/($form_id)/submissions" $qp)
+  let full_url = (build-url $base ({form_id: $form_id} | format pattern "/forms/{form_id}/submissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1096,7 +1096,7 @@ export def "forms-submissions listFormSubmissions" [
 # GET /hooks
 #
 # operationId: listHooksBySiteId
-export def "hooks listHooksBySiteId" [
+export def "hooks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1119,7 +1119,7 @@ export def "hooks listHooksBySiteId" [
 # POST /hooks
 #
 # operationId: createHookBySiteId
-export def "hooks createHookBySiteId" [
+export def "hooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1143,7 +1143,7 @@ export def "hooks createHookBySiteId" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "site_id" $site_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hooks" $qp)
-  let body = {created_at: $created_at, data: $data, disabled: $disabled, event: $event, id: $id, site_id: $site_id, type: $type, updated_at: $updated_at} | compact
+  let body = {"created_at": $created_at, "data": $data, "disabled": $disabled, "event": $event, "id": $id, "site_id": $site_id, "type": $type, "updated_at": $updated_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1153,7 +1153,7 @@ export def "hooks createHookBySiteId" [
 # GET /hooks/types
 #
 # operationId: listHookTypes
-export def "hooks-types listHookTypes" [
+export def "hooks-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1187,7 +1187,7 @@ export def "hooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hooks/($hook_id)")
+  let full_url = (build-url $base ({hook_id: $hook_id} | format pattern "/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1209,7 +1209,7 @@ export def "hooks get" [
 ]: nothing -> record<created_at: string, data: record, disabled: bool, event: string, id: string, site_id: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hooks/($hook_id)")
+  let full_url = (build-url $base ({hook_id: $hook_id} | format pattern "/hooks/{hook_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1218,7 +1218,7 @@ export def "hooks get" [
 # PUT /hooks/{hook_id}
 #
 # operationId: updateHook
-export def "hooks updateHook" [
+export def "hooks update" [
   hook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1240,8 +1240,8 @@ export def "hooks updateHook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hooks/($hook_id)")
-  let body = {created_at: $created_at, data: $data, disabled: $disabled, event: $event, id: $id, site_id: $site_id, type: $type, updated_at: $updated_at} | compact
+  let full_url = (build-url $base ({hook_id: $hook_id} | format pattern "/hooks/{hook_id}"))
+  let body = {"created_at": $created_at, "data": $data, "disabled": $disabled, "event": $event, "id": $id, "site_id": $site_id, "type": $type, "updated_at": $updated_at} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1251,7 +1251,7 @@ export def "hooks updateHook" [
 # POST /hooks/{hook_id}/enable
 #
 # operationId: enableHook
-export def "hooks-enable enableHook" [
+export def "hooks-enable enable" [
   hook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1264,7 +1264,7 @@ export def "hooks-enable enableHook" [
 ]: nothing -> record<created_at: string, data: record, disabled: bool, event: string, id: string, site_id: string, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hooks/($hook_id)/enable")
+  let full_url = (build-url $base ({hook_id: $hook_id} | format pattern "/hooks/{hook_id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1273,7 +1273,7 @@ export def "hooks-enable enableHook" [
 # POST /oauth/tickets
 #
 # operationId: createTicket
-export def "oauth-tickets createTicket" [
+export def "oauth-tickets create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1309,7 +1309,7 @@ export def "oauth-tickets showTicket" [
 ]: nothing -> record<authorized: bool, client_id: string, created_at: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/oauth/tickets/($ticket_id)")
+  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/oauth/tickets/{ticket_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1331,7 +1331,7 @@ export def "oauth-tickets-exchange exchangeTicket" [
 ]: nothing -> record<access_token: string, created_at: string, id: string, user_email: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/oauth/tickets/($ticket_id)/exchange")
+  let full_url = (build-url $base ({ticket_id: $ticket_id} | format pattern "/oauth/tickets/{ticket_id}/exchange"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1364,7 +1364,7 @@ export def "services get" [
 #
 # operationId: showService
 export def "services showService" [
-  addonName: string
+  addon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,7 +1376,7 @@ export def "services showService" [
 ]: nothing -> record<created_at: string, description: string, environments: list<string>, events: list<record>, icon: string, id: string, long_description: string, manifest_url: string, name: string, service_path: string, slug: string, tags: list<string>, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/services/($addonName)")
+  let full_url = (build-url $base ({addon_name: $addon_name} | format pattern "/services/{addon_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1386,7 +1386,7 @@ export def "services showService" [
 #
 # operationId: showServiceManifest
 export def "services-manifest showServiceManifest" [
-  addonName: string
+  addon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "services-manifest showServiceManifest" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/services/($addonName)/manifest")
+  let full_url = (build-url $base ({addon_name: $addon_name} | format pattern "/services/{addon_name}/manifest"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1408,7 +1408,7 @@ export def "services-manifest showServiceManifest" [
 #
 # GET /sites
 # operationId: listSites
-export def "sites listSites" [
+export def "sites list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1440,7 +1440,7 @@ export def "sites listSites" [
 # --processing_settings shape: {css?: record, html?: record, images?: record, js?: record, skip?: bool}
 # --published_deploy shape: {admin_url?: string, branch?: string, build_id?: string, commit_ref?: string, commit_url?: string, context?: string, created_at?: string, deploy_ssl_url?: string, deploy_url?: string, draft?: bool, error_message?: string, framework?: string, function_schedules?: list, id?: string, locked?: bool, name?: string, published_at?: string, required?: list, required_functions?: list, review_id?: float, review_url?: string, screenshot_url?: string, site_capabilities?: record, site_id?: string, skipped?: bool, ssl_url?: string, state?: string, title?: string, updated_at?: string, url?: string, user_id?: string}
 # --repo shape: {allowed_branches?: list, cmd?: string, deploy_key_id?: string, dir?: string, env?: record, functions_dir?: string, id?: int, installation_id?: int, private_logs?: bool, provider?: string, public_repo?: bool, repo_branch?: string, repo_path?: string, repo_url?: string, stop_builds?: bool}
-export def "sites createSite" [
+export def "sites create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1489,7 +1489,7 @@ export def "sites createSite" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "configure_dns" $configure_dns "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sites" $qp)
-  let body = {account_name: $account_name, account_slug: $account_slug, admin_url: $admin_url, build_image: $build_image, build_settings: $build_settings, capabilities: $capabilities, created_at: $created_at, custom_domain: $custom_domain, default_hooks_data: $default_hooks_data, deploy_hook: $deploy_hook, deploy_url: $deploy_url, domain_aliases: $domain_aliases, force_ssl: $force_ssl, git_provider: $git_provider, id: $id, id_domain: $id_domain, managed_dns: $managed_dns, name: $name, notification_email: $notification_email, password: $password, plan: $plan, prerender: $prerender, processing_settings: $processing_settings, published_deploy: $published_deploy, screenshot_url: $screenshot_url, session_id: $session_id, ssl: $ssl, ssl_url: $ssl_url, state: $state, updated_at: $updated_at, url: $body_url, user_id: $user_id, repo: $repo} | compact
+  let body = {"account_name": $account_name, "account_slug": $account_slug, "admin_url": $admin_url, "build_image": $build_image, "build_settings": $build_settings, "capabilities": $capabilities, "created_at": $created_at, "custom_domain": $custom_domain, "default_hooks_data": $default_hooks_data, "deploy_hook": $deploy_hook, "deploy_url": $deploy_url, "domain_aliases": $domain_aliases, "force_ssl": $force_ssl, "git_provider": $git_provider, "id": $id, "id_domain": $id_domain, "managed_dns": $managed_dns, "name": $name, "notification_email": $notification_email, "password": $password, "plan": $plan, "prerender": $prerender, "processing_settings": $processing_settings, "published_deploy": $published_deploy, "screenshot_url": $screenshot_url, "session_id": $session_id, "ssl": $ssl, "ssl_url": $ssl_url, "state": $state, "updated_at": $updated_at, "url": $body_url, "user_id": $user_id, "repo": $repo} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1512,7 +1512,7 @@ export def "sites delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1535,7 +1535,7 @@ export def "sites get" [
 ]: nothing -> record<account_name: string, account_slug: string, admin_url: string, build_image: string, build_settings: record<allowed_branches: list<string>, cmd: string, deploy_key_id: string, dir: string, env: record, functions_dir: string, id: int, installation_id: int, private_logs: bool, provider: string, public_repo: bool, repo_branch: string, repo_path: string, repo_url: string, stop_builds: bool>, capabilities: record, created_at: string, custom_domain: string, default_hooks_data: record<access_token: string>, deploy_hook: string, deploy_url: string, domain_aliases: list<string>, force_ssl: bool, git_provider: string, id: string, id_domain: string, managed_dns: bool, name: string, notification_email: string, password: string, plan: string, prerender: string, processing_settings: record<css: record<bundle: bool, minify: bool>, html: record<pretty_urls: bool>, images: record<optimize: bool>, js: record<bundle: bool, minify: bool>, skip: bool>, published_deploy: record<admin_url: string, branch: string, build_id: string, commit_ref: string, commit_url: string, context: string, created_at: string, deploy_ssl_url: string, deploy_url: string, draft: bool, error_message: string, framework: string, function_schedules: list<record>, id: string, locked: bool, name: string, published_at: string, required: list<string>, required_functions: list<string>, review_id: float, review_url: string, screenshot_url: string, site_capabilities: record<large_media_enabled: bool>, site_id: string, skipped: bool, ssl_url: string, state: string, title: string, updated_at: string, url: string, user_id: string>, screenshot_url: string, session_id: string, ssl: bool, ssl_url: string, state: string, updated_at: string, url: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1550,7 +1550,7 @@ export def "sites get" [
 # --processing_settings shape: {css?: record, html?: record, images?: record, js?: record, skip?: bool}
 # --published_deploy shape: {admin_url?: string, branch?: string, build_id?: string, commit_ref?: string, commit_url?: string, context?: string, created_at?: string, deploy_ssl_url?: string, deploy_url?: string, draft?: bool, error_message?: string, framework?: string, function_schedules?: list, id?: string, locked?: bool, name?: string, published_at?: string, required?: list, required_functions?: list, review_id?: float, review_url?: string, screenshot_url?: string, site_capabilities?: record, site_id?: string, skipped?: bool, ssl_url?: string, state?: string, title?: string, updated_at?: string, url?: string, user_id?: string}
 # --repo shape: {allowed_branches?: list, cmd?: string, deploy_key_id?: string, dir?: string, env?: record, functions_dir?: string, id?: int, installation_id?: int, private_logs?: bool, provider?: string, public_repo?: bool, repo_branch?: string, repo_path?: string, repo_url?: string, stop_builds?: bool}
-export def "sites updateSite" [
+export def "sites update" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1597,8 +1597,8 @@ export def "sites updateSite" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)")
-  let body = {account_name: $account_name, account_slug: $account_slug, admin_url: $admin_url, build_image: $build_image, build_settings: $build_settings, capabilities: $capabilities, created_at: $created_at, custom_domain: $custom_domain, default_hooks_data: $default_hooks_data, deploy_hook: $deploy_hook, deploy_url: $deploy_url, domain_aliases: $domain_aliases, force_ssl: $force_ssl, git_provider: $git_provider, id: $id, id_domain: $id_domain, managed_dns: $managed_dns, name: $name, notification_email: $notification_email, password: $password, plan: $plan, prerender: $prerender, processing_settings: $processing_settings, published_deploy: $published_deploy, screenshot_url: $screenshot_url, session_id: $session_id, ssl: $ssl, ssl_url: $ssl_url, state: $state, updated_at: $updated_at, url: $body_url, user_id: $user_id, repo: $repo} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}"))
+  let body = {"account_name": $account_name, "account_slug": $account_slug, "admin_url": $admin_url, "build_image": $build_image, "build_settings": $build_settings, "capabilities": $capabilities, "created_at": $created_at, "custom_domain": $custom_domain, "default_hooks_data": $default_hooks_data, "deploy_hook": $deploy_hook, "deploy_url": $deploy_url, "domain_aliases": $domain_aliases, "force_ssl": $force_ssl, "git_provider": $git_provider, "id": $id, "id_domain": $id_domain, "managed_dns": $managed_dns, "name": $name, "notification_email": $notification_email, "password": $password, "plan": $plan, "prerender": $prerender, "processing_settings": $processing_settings, "published_deploy": $published_deploy, "screenshot_url": $screenshot_url, "session_id": $session_id, "ssl": $ssl, "ssl_url": $ssl_url, "state": $state, "updated_at": $updated_at, "url": $body_url, "user_id": $user_id, "repo": $repo} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1608,7 +1608,7 @@ export def "sites updateSite" [
 # GET /sites/{site_id}/assets
 #
 # operationId: listSiteAssets
-export def "sites-assets listSiteAssets" [
+export def "sites-assets list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1621,7 +1621,7 @@ export def "sites-assets listSiteAssets" [
 ]: nothing -> table<content_type: string, created_at: string, creator_id: string, id: string, key: string, name: string, site_id: string, size: int, state: string, updated_at: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/assets")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/assets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1630,7 +1630,7 @@ export def "sites-assets listSiteAssets" [
 # POST /sites/{site_id}/assets
 #
 # operationId: createSiteAsset
-export def "sites-assets createSiteAsset" [
+export def "sites-assets create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1648,7 +1648,7 @@ export def "sites-assets createSiteAsset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "content_type" $content_type "scalar") (serialize-qp "visibility" $visibility "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sites/($site_id)/assets" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1671,7 +1671,7 @@ export def "sites-assets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/assets/($asset_id)")
+  let full_url = (build-url $base ({site_id: $site_id, asset_id: $asset_id} | format pattern "/sites/{site_id}/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1680,7 +1680,7 @@ export def "sites-assets delete" [
 # GET /sites/{site_id}/assets/{asset_id}
 #
 # operationId: getSiteAssetInfo
-export def "sites-assets get" [
+export def "sites-assets get-site-asset-info" [
   site_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1694,7 +1694,7 @@ export def "sites-assets get" [
 ]: nothing -> record<content_type: string, created_at: string, creator_id: string, id: string, key: string, name: string, site_id: string, size: int, state: string, updated_at: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/assets/($asset_id)")
+  let full_url = (build-url $base ({site_id: $site_id, asset_id: $asset_id} | format pattern "/sites/{site_id}/assets/{asset_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1703,7 +1703,7 @@ export def "sites-assets get" [
 # PUT /sites/{site_id}/assets/{asset_id}
 #
 # operationId: updateSiteAsset
-export def "sites-assets updateSiteAsset" [
+export def "sites-assets update" [
   site_id: string
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1719,7 +1719,7 @@ export def "sites-assets updateSiteAsset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sites/($site_id)/assets/($asset_id)" $qp)
+  let full_url = (build-url $base ({site_id: $site_id, asset_id: $asset_id} | format pattern "/sites/{site_id}/assets/{asset_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1742,7 +1742,7 @@ export def "sites-assets-public-signature get" [
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/assets/($asset_id)/public_signature")
+  let full_url = (build-url $base ({site_id: $site_id, asset_id: $asset_id} | format pattern "/sites/{site_id}/assets/{asset_id}/public_signature"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1751,7 +1751,7 @@ export def "sites-assets-public-signature get" [
 # GET /sites/{site_id}/build_hooks
 #
 # operationId: listSiteBuildHooks
-export def "sites-build-hooks listSiteBuildHooks" [
+export def "sites-build-hooks list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1764,7 +1764,7 @@ export def "sites-build-hooks listSiteBuildHooks" [
 ]: nothing -> table<branch: string, created_at: string, id: string, site_id: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/build_hooks")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/build_hooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1773,7 +1773,7 @@ export def "sites-build-hooks listSiteBuildHooks" [
 # POST /sites/{site_id}/build_hooks
 #
 # operationId: createSiteBuildHook
-export def "sites-build-hooks createSiteBuildHook" [
+export def "sites-build-hooks create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1789,8 +1789,8 @@ export def "sites-build-hooks createSiteBuildHook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/build_hooks")
-  let body = {branch: $branch, title: $title} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/build_hooks"))
+  let body = {"branch": $branch, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1814,7 +1814,7 @@ export def "sites-build-hooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/build_hooks/($id)")
+  let full_url = (build-url $base ({site_id: $site_id, id: $id} | format pattern "/sites/{site_id}/build_hooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1837,7 +1837,7 @@ export def "sites-build-hooks get" [
 ]: nothing -> record<branch: string, created_at: string, id: string, site_id: string, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/build_hooks/($id)")
+  let full_url = (build-url $base ({site_id: $site_id, id: $id} | format pattern "/sites/{site_id}/build_hooks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1846,7 +1846,7 @@ export def "sites-build-hooks get" [
 # PUT /sites/{site_id}/build_hooks/{id}
 #
 # operationId: updateSiteBuildHook
-export def "sites-build-hooks updateSiteBuildHook" [
+export def "sites-build-hooks update" [
   site_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1863,8 +1863,8 @@ export def "sites-build-hooks updateSiteBuildHook" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/build_hooks/($id)")
-  let body = {branch: $branch, title: $title} | compact
+  let full_url = (build-url $base ({site_id: $site_id, id: $id} | format pattern "/sites/{site_id}/build_hooks/{id}"))
+  let body = {"branch": $branch, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1874,7 +1874,7 @@ export def "sites-build-hooks updateSiteBuildHook" [
 # GET /sites/{site_id}/builds
 #
 # operationId: listSiteBuilds
-export def "sites-builds listSiteBuilds" [
+export def "sites-builds list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1890,7 +1890,7 @@ export def "sites-builds listSiteBuilds" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sites/($site_id)/builds" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1899,7 +1899,7 @@ export def "sites-builds listSiteBuilds" [
 # POST /sites/{site_id}/builds
 #
 # operationId: createSiteBuild
-export def "sites-builds createSiteBuild" [
+export def "sites-builds create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1915,8 +1915,8 @@ export def "sites-builds createSiteBuild" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/builds")
-  let body = {clear_cache: $clear_cache, image: $image} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/builds"))
+  let body = {"clear_cache": $clear_cache, "image": $image} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1926,7 +1926,7 @@ export def "sites-builds createSiteBuild" [
 # GET /sites/{site_id}/deployed-branches
 #
 # operationId: listSiteDeployedBranches
-export def "sites-deployed-branches listSiteDeployedBranches" [
+export def "sites-deployed-branches list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1939,7 +1939,7 @@ export def "sites-deployed-branches listSiteDeployedBranches" [
 ]: nothing -> table<deploy_id: string, id: string, name: string, slug: string, ssl_url: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/deployed-branches")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/deployed-branches"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1948,7 +1948,7 @@ export def "sites-deployed-branches listSiteDeployedBranches" [
 # GET /sites/{site_id}/deploys
 #
 # operationId: listSiteDeploys
-export def "sites-deploys listSiteDeploys" [
+export def "sites-deploys list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1969,7 +1969,7 @@ export def "sites-deploys listSiteDeploys" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deploy-previews" $deploy_previews "scalar") (serialize-qp "production" $production "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "branch" $branch "scalar") (serialize-qp "latest-published" $latest_published "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sites/($site_id)/deploys" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/deploys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1979,7 +1979,7 @@ export def "sites-deploys listSiteDeploys" [
 #
 # operationId: createSiteDeploy
 # --function_schedules item shape: {cron?: string, name?: string}
-export def "sites-deploys createSiteDeploy" [
+export def "sites-deploys create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2008,8 +2008,8 @@ export def "sites-deploys createSiteDeploy" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deploy-previews" $deploy_previews "scalar") (serialize-qp "production" $production "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "branch" $branch "scalar") (serialize-qp "latest-published" $latest_published "scalar") (serialize-qp "title" $title "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sites/($site_id)/deploys" $qp)
-  let body = {async: $async, branch: $branch, draft: $draft, files: $files, framework: $framework, function_schedules: $function_schedules, functions: $functions, functions_config: $functions_config} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/deploys") $qp)
+  let body = {"async": $async, "branch": $branch, "draft": $draft, "files": $files, "framework": $framework, "function_schedules": $function_schedules, "functions": $functions, "functions_config": $functions_config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2020,8 +2020,8 @@ export def "sites-deploys createSiteDeploy" [
 #
 # operationId: deleteSiteDeploy
 export def "sites-deploys delete" [
-  deploy_id: string
   site_id: string
+  deploy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2033,7 +2033,7 @@ export def "sites-deploys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/deploys/($deploy_id)")
+  let full_url = (build-url $base ({site_id: $site_id, deploy_id: $deploy_id} | format pattern "/sites/{site_id}/deploys/{deploy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2056,7 +2056,7 @@ export def "sites-deploys get" [
 ]: nothing -> record<admin_url: string, branch: string, build_id: string, commit_ref: string, commit_url: string, context: string, created_at: string, deploy_ssl_url: string, deploy_url: string, draft: bool, error_message: string, framework: string, function_schedules: table<cron: string, name: string>, id: string, locked: bool, name: string, published_at: string, required: list<string>, required_functions: list<string>, review_id: float, review_url: string, screenshot_url: string, site_capabilities: record<large_media_enabled: bool>, site_id: string, skipped: bool, ssl_url: string, state: string, title: string, updated_at: string, url: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/deploys/($deploy_id)")
+  let full_url = (build-url $base ({site_id: $site_id, deploy_id: $deploy_id} | format pattern "/sites/{site_id}/deploys/{deploy_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2066,7 +2066,7 @@ export def "sites-deploys get" [
 #
 # operationId: updateSiteDeploy
 # --function_schedules item shape: {cron?: string, name?: string}
-export def "sites-deploys updateSiteDeploy" [
+export def "sites-deploys update" [
   site_id: string
   deploy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2089,8 +2089,8 @@ export def "sites-deploys updateSiteDeploy" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/deploys/($deploy_id)")
-  let body = {async: $async, branch: $branch, draft: $draft, files: $files, framework: $framework, function_schedules: $function_schedules, functions: $functions, functions_config: $functions_config} | compact
+  let full_url = (build-url $base ({site_id: $site_id, deploy_id: $deploy_id} | format pattern "/sites/{site_id}/deploys/{deploy_id}"))
+  let body = {"async": $async, "branch": $branch, "draft": $draft, "files": $files, "framework": $framework, "function_schedules": $function_schedules, "functions": $functions, "functions_config": $functions_config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2114,7 +2114,7 @@ export def "sites-deploys-restore restoreSiteDeploy" [
 ]: nothing -> record<admin_url: string, branch: string, build_id: string, commit_ref: string, commit_url: string, context: string, created_at: string, deploy_ssl_url: string, deploy_url: string, draft: bool, error_message: string, framework: string, function_schedules: table<cron: string, name: string>, id: string, locked: bool, name: string, published_at: string, required: list<string>, required_functions: list<string>, review_id: float, review_url: string, screenshot_url: string, site_capabilities: record<large_media_enabled: bool>, site_id: string, skipped: bool, ssl_url: string, state: string, title: string, updated_at: string, url: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/deploys/($deploy_id)/restore")
+  let full_url = (build-url $base ({site_id: $site_id, deploy_id: $deploy_id} | format pattern "/sites/{site_id}/deploys/{deploy_id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2123,7 +2123,7 @@ export def "sites-deploys-restore restoreSiteDeploy" [
 # GET /sites/{site_id}/dns
 #
 # operationId: getDNSForSite
-export def "sites-dns get" [
+export def "sites-dns get-dns-for" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2136,7 +2136,7 @@ export def "sites-dns get" [
 ]: nothing -> table<account_id: string, account_name: string, account_slug: string, created_at: string, dedicated: bool, dns_servers: list<string>, domain: string, errors: list<string>, id: string, ipv6_enabled: bool, name: string, records: list<record>, site_id: string, supported_record_types: list<string>, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/dns")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/dns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2158,7 +2158,7 @@ export def "sites-dns configureDNSForSite" [
 ]: nothing -> table<account_id: string, account_name: string, account_slug: string, created_at: string, dedicated: bool, dns_servers: list<string>, domain: string, errors: list<string>, id: string, ipv6_enabled: bool, name: string, records: list<record>, site_id: string, supported_record_types: list<string>, updated_at: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/dns")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/dns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2167,7 +2167,7 @@ export def "sites-dns configureDNSForSite" [
 # GET /sites/{site_id}/files
 #
 # operationId: listSiteFiles
-export def "sites-files listSiteFiles" [
+export def "sites-files list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2180,7 +2180,7 @@ export def "sites-files listSiteFiles" [
 ]: nothing -> table<id: string, mime_type: string, path: string, sha: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/files")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/files"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2203,7 +2203,7 @@ export def "sites-files get" [
 ]: nothing -> record<id: string, mime_type: string, path: string, sha: string, size: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/files/($file_path)")
+  let full_url = (build-url $base ({site_id: $site_id, file_path: $file_path} | format pattern "/sites/{site_id}/files/{file_path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2212,7 +2212,7 @@ export def "sites-files get" [
 # GET /sites/{site_id}/forms
 #
 # operationId: listSiteForms
-export def "sites-forms listSiteForms" [
+export def "sites-forms list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2225,7 +2225,7 @@ export def "sites-forms listSiteForms" [
 ]: nothing -> table<created_at: string, fields: list<record>, id: string, name: string, paths: list<string>, site_id: string, submission_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/forms")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/forms"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2248,7 +2248,7 @@ export def "sites-forms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/forms/($form_id)")
+  let full_url = (build-url $base ({site_id: $site_id, form_id: $form_id} | format pattern "/sites/{site_id}/forms/{form_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2270,7 +2270,7 @@ export def "sites-metadata get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/metadata")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2279,7 +2279,7 @@ export def "sites-metadata get" [
 # PUT /sites/{site_id}/metadata
 #
 # operationId: updateSiteMetadata
-export def "sites-metadata updateSiteMetadata" [
+export def "sites-metadata update" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2294,7 +2294,7 @@ export def "sites-metadata updateSiteMetadata" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/metadata")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/metadata"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2321,7 +2321,7 @@ export def "sites-plugin-runs-latest get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "packages" $packages "csv") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sites/($site_id)/plugin_runs/latest" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/plugin_runs/latest") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2331,7 +2331,7 @@ export def "sites-plugin-runs-latest get" [
 #
 # PUT /sites/{site_id}/plugins/{package}
 # operationId: updatePlugin
-export def "sites-plugins updatePlugin" [
+export def "sites-plugins update" [
   site_id: string
   package: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2347,8 +2347,8 @@ export def "sites-plugins updatePlugin" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/plugins/($package)")
-  let body = {pinned_version: $pinned_version} | compact
+  let full_url = (build-url $base ({site_id: $site_id, package: $package} | format pattern "/sites/{site_id}/plugins/{package}"))
+  let body = {"pinned_version": $pinned_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2371,7 +2371,7 @@ export def "sites-rollback rollbackSiteDeploy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/rollback")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/rollback"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2380,7 +2380,7 @@ export def "sites-rollback rollbackSiteDeploy" [
 # GET /sites/{site_id}/service-instances
 #
 # operationId: listServiceInstancesForSite
-export def "sites-service-instances listServiceInstancesForSite" [
+export def "sites-service-instances list-service-instances-for" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2393,7 +2393,7 @@ export def "sites-service-instances listServiceInstancesForSite" [
 ]: nothing -> table<auth_url: string, config: record, created_at: string, env: record, external_attributes: record, id: string, service_name: string, service_path: string, service_slug: string, snippets: list<record>, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/service-instances")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/service-instances"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2402,7 +2402,7 @@ export def "sites-service-instances listServiceInstancesForSite" [
 # POST /sites/{site_id}/services/{addon}/instances
 #
 # operationId: createServiceInstance
-export def "sites-services-instances createServiceInstance" [
+export def "sites-services-instances create" [
   site_id: string
   addon: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2418,7 +2418,7 @@ export def "sites-services-instances createServiceInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/services/($addon)/instances")
+  let full_url = (build-url $base ({site_id: $site_id, addon: $addon} | format pattern "/sites/{site_id}/services/{addon}/instances"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2443,7 +2443,7 @@ export def "sites-services-instances delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/services/($addon)/instances/($instance_id)")
+  let full_url = (build-url $base ({site_id: $site_id, addon: $addon, instance_id: $instance_id} | format pattern "/sites/{site_id}/services/{addon}/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2467,7 +2467,7 @@ export def "sites-services-instances showServiceInstance" [
 ]: nothing -> record<auth_url: string, config: record, created_at: string, env: record, external_attributes: record, id: string, service_name: string, service_path: string, service_slug: string, snippets: list<record>, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/services/($addon)/instances/($instance_id)")
+  let full_url = (build-url $base ({site_id: $site_id, addon: $addon, instance_id: $instance_id} | format pattern "/sites/{site_id}/services/{addon}/instances/{instance_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2476,7 +2476,7 @@ export def "sites-services-instances showServiceInstance" [
 # PUT /sites/{site_id}/services/{addon}/instances/{instance_id}
 #
 # operationId: updateServiceInstance
-export def "sites-services-instances updateServiceInstance" [
+export def "sites-services-instances update" [
   site_id: string
   addon: string
   instance_id: string
@@ -2493,7 +2493,7 @@ export def "sites-services-instances updateServiceInstance" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/services/($addon)/instances/($instance_id)")
+  let full_url = (build-url $base ({site_id: $site_id, addon: $addon, instance_id: $instance_id} | format pattern "/sites/{site_id}/services/{addon}/instances/{instance_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2503,7 +2503,7 @@ export def "sites-services-instances updateServiceInstance" [
 # GET /sites/{site_id}/snippets
 #
 # operationId: listSiteSnippets
-export def "sites-snippets listSiteSnippets" [
+export def "sites-snippets list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2516,7 +2516,7 @@ export def "sites-snippets listSiteSnippets" [
 ]: nothing -> table<general: string, general_position: string, goal: string, goal_position: string, id: int, site_id: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/snippets")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/snippets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2525,7 +2525,7 @@ export def "sites-snippets listSiteSnippets" [
 # POST /sites/{site_id}/snippets
 #
 # operationId: createSiteSnippet
-export def "sites-snippets createSiteSnippet" [
+export def "sites-snippets create" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2546,8 +2546,8 @@ export def "sites-snippets createSiteSnippet" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/snippets")
-  let body = {general: $general, general_position: $general_position, goal: $goal, goal_position: $goal_position, id: $id, site_id: $body_site_id, title: $title} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/snippets"))
+  let body = {"general": $general, "general_position": $general_position, "goal": $goal, "goal_position": $goal_position, "id": $id, "site_id": $body_site_id, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2571,7 +2571,7 @@ export def "sites-snippets delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/snippets/($snippet_id)")
+  let full_url = (build-url $base ({site_id: $site_id, snippet_id: $snippet_id} | format pattern "/sites/{site_id}/snippets/{snippet_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2594,7 +2594,7 @@ export def "sites-snippets get" [
 ]: nothing -> record<general: string, general_position: string, goal: string, goal_position: string, id: int, site_id: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/snippets/($snippet_id)")
+  let full_url = (build-url $base ({site_id: $site_id, snippet_id: $snippet_id} | format pattern "/sites/{site_id}/snippets/{snippet_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2603,7 +2603,7 @@ export def "sites-snippets get" [
 # PUT /sites/{site_id}/snippets/{snippet_id}
 #
 # operationId: updateSiteSnippet
-export def "sites-snippets updateSiteSnippet" [
+export def "sites-snippets update" [
   site_id: string
   snippet_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2625,8 +2625,8 @@ export def "sites-snippets updateSiteSnippet" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/snippets/($snippet_id)")
-  let body = {general: $general, general_position: $general_position, goal: $goal, goal_position: $goal_position, id: $id, site_id: $body_site_id, title: $title} | compact
+  let full_url = (build-url $base ({site_id: $site_id, snippet_id: $snippet_id} | format pattern "/sites/{site_id}/snippets/{snippet_id}"))
+  let body = {"general": $general, "general_position": $general_position, "goal": $goal, "goal_position": $goal_position, "id": $id, "site_id": $body_site_id, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2649,7 +2649,7 @@ export def "sites-ssl showSiteTLSCertificate" [
 ]: nothing -> record<created_at: string, domains: list<string>, expires_at: string, state: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/ssl")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/ssl"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2675,7 +2675,7 @@ export def "sites-ssl provisionSiteTLSCertificate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "certificate" $certificate "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "ca_certificates" $ca_certificates "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sites/($site_id)/ssl" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/ssl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2684,7 +2684,7 @@ export def "sites-ssl provisionSiteTLSCertificate" [
 # GET /sites/{site_id}/submissions
 #
 # operationId: listSiteSubmissions
-export def "sites-submissions listSiteSubmissions" [
+export def "sites-submissions list" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2700,7 +2700,7 @@ export def "sites-submissions listSiteSubmissions" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sites/($site_id)/submissions" $qp)
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/submissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2709,7 +2709,7 @@ export def "sites-submissions listSiteSubmissions" [
 # GET /sites/{site_id}/traffic_splits
 #
 # operationId: getSplitTests
-export def "sites-traffic-splits list" [
+export def "sites-traffic-splits get-split-tests" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2722,7 +2722,7 @@ export def "sites-traffic-splits list" [
 ]: nothing -> table<active: bool, branches: list<record>, created_at: string, id: string, name: string, path: string, site_id: string, unpublished_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/traffic_splits")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/traffic_splits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2731,7 +2731,7 @@ export def "sites-traffic-splits list" [
 # POST /sites/{site_id}/traffic_splits
 #
 # operationId: createSplitTest
-export def "sites-traffic-splits createSplitTest" [
+export def "sites-traffic-splits create-split-test" [
   site_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2746,8 +2746,8 @@ export def "sites-traffic-splits createSplitTest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/traffic_splits")
-  let body = {branch_tests: $branch_tests} | compact
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/traffic_splits"))
+  let body = {"branch_tests": $branch_tests} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2757,7 +2757,7 @@ export def "sites-traffic-splits createSplitTest" [
 # GET /sites/{site_id}/traffic_splits/{split_test_id}
 #
 # operationId: getSplitTest
-export def "sites-traffic-splits get" [
+export def "sites-traffic-splits get-split-test" [
   site_id: string
   split_test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2771,7 +2771,7 @@ export def "sites-traffic-splits get" [
 ]: nothing -> record<active: bool, branches: list<record>, created_at: string, id: string, name: string, path: string, site_id: string, unpublished_at: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/traffic_splits/($split_test_id)")
+  let full_url = (build-url $base ({site_id: $site_id, split_test_id: $split_test_id} | format pattern "/sites/{site_id}/traffic_splits/{split_test_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2780,7 +2780,7 @@ export def "sites-traffic-splits get" [
 # PUT /sites/{site_id}/traffic_splits/{split_test_id}
 #
 # operationId: updateSplitTest
-export def "sites-traffic-splits updateSplitTest" [
+export def "sites-traffic-splits update-split-test" [
   site_id: string
   split_test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2796,8 +2796,8 @@ export def "sites-traffic-splits updateSplitTest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/traffic_splits/($split_test_id)")
-  let body = {branch_tests: $branch_tests} | compact
+  let full_url = (build-url $base ({site_id: $site_id, split_test_id: $split_test_id} | format pattern "/sites/{site_id}/traffic_splits/{split_test_id}"))
+  let body = {"branch_tests": $branch_tests} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2807,7 +2807,7 @@ export def "sites-traffic-splits updateSplitTest" [
 # POST /sites/{site_id}/traffic_splits/{split_test_id}/publish
 #
 # operationId: enableSplitTest
-export def "sites-traffic-splits-publish enableSplitTest" [
+export def "sites-traffic-splits-publish enable-split-test" [
   site_id: string
   split_test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2821,7 +2821,7 @@ export def "sites-traffic-splits-publish enableSplitTest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/traffic_splits/($split_test_id)/publish")
+  let full_url = (build-url $base ({site_id: $site_id, split_test_id: $split_test_id} | format pattern "/sites/{site_id}/traffic_splits/{split_test_id}/publish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2830,7 +2830,7 @@ export def "sites-traffic-splits-publish enableSplitTest" [
 # POST /sites/{site_id}/traffic_splits/{split_test_id}/unpublish
 #
 # operationId: disableSplitTest
-export def "sites-traffic-splits-unpublish disableSplitTest" [
+export def "sites-traffic-splits-unpublish disable-split-test" [
   site_id: string
   split_test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2844,7 +2844,7 @@ export def "sites-traffic-splits-unpublish disableSplitTest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/traffic_splits/($split_test_id)/unpublish")
+  let full_url = (build-url $base ({site_id: $site_id, split_test_id: $split_test_id} | format pattern "/sites/{site_id}/traffic_splits/{split_test_id}/unpublish"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2867,7 +2867,7 @@ export def "sites-unlink-repo unlinkSiteRepo" [
 ]: nothing -> record<account_name: string, account_slug: string, admin_url: string, build_image: string, build_settings: record<allowed_branches: list<string>, cmd: string, deploy_key_id: string, dir: string, env: record, functions_dir: string, id: int, installation_id: int, private_logs: bool, provider: string, public_repo: bool, repo_branch: string, repo_path: string, repo_url: string, stop_builds: bool>, capabilities: record, created_at: string, custom_domain: string, default_hooks_data: record<access_token: string>, deploy_hook: string, deploy_url: string, domain_aliases: list<string>, force_ssl: bool, git_provider: string, id: string, id_domain: string, managed_dns: bool, name: string, notification_email: string, password: string, plan: string, prerender: string, processing_settings: record<css: record<bundle: bool, minify: bool>, html: record<pretty_urls: bool>, images: record<optimize: bool>, js: record<bundle: bool, minify: bool>, skip: bool>, published_deploy: record<admin_url: string, branch: string, build_id: string, commit_ref: string, commit_url: string, context: string, created_at: string, deploy_ssl_url: string, deploy_url: string, draft: bool, error_message: string, framework: string, function_schedules: list<record>, id: string, locked: bool, name: string, published_at: string, required: list<string>, required_functions: list<string>, review_id: float, review_url: string, screenshot_url: string, site_capabilities: record<large_media_enabled: bool>, site_id: string, skipped: bool, ssl_url: string, state: string, title: string, updated_at: string, url: string, user_id: string>, screenshot_url: string, session_id: string, ssl: bool, ssl_url: string, state: string, updated_at: string, url: string, user_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sites/($site_id)/unlink_repo")
+  let full_url = (build-url $base ({site_id: $site_id} | format pattern "/sites/{site_id}/unlink_repo"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2889,7 +2889,7 @@ export def "submissions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/submissions/($submission_id)")
+  let full_url = (build-url $base ({submission_id: $submission_id} | format pattern "/submissions/{submission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2898,7 +2898,7 @@ export def "submissions delete" [
 # GET /submissions/{submission_id}
 #
 # operationId: listFormSubmission
-export def "submissions listFormSubmission" [
+export def "submissions list-form" [
   submission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2915,7 +2915,7 @@ export def "submissions listFormSubmission" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/submissions/($submission_id)" $qp)
+  let full_url = (build-url $base ({submission_id: $submission_id} | format pattern "/submissions/{submission_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2924,7 +2924,7 @@ export def "submissions listFormSubmission" [
 # GET /user
 #
 # operationId: getCurrentUser
-export def "user get" [
+export def "user get-current" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2945,7 +2945,7 @@ export def "user get" [
 # GET /{account_id}/builds/status
 #
 # operationId: getAccountBuildStatus
-export def "builds-status get" [
+export def "builds-status get-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2958,7 +2958,7 @@ export def "builds-status get" [
 ]: nothing -> table<active: int, build_count: int, enqueued: int, minutes: record<current: int, current_average_sec: int, included_minutes: string, included_minutes_with_packs: string, last_updated_at: string, period_end_date: string, period_start_date: string, previous: int>, pending_concurrency: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($account_id)/builds/status")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/{account_id}/builds/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2967,7 +2967,7 @@ export def "builds-status get" [
 # GET /{account_slug}/members
 #
 # operationId: listMembersForAccount
-export def "members listMembersForAccount" [
+export def "members list-members-for-account" [
   account_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2980,7 +2980,7 @@ export def "members listMembersForAccount" [
 ]: nothing -> table<avatar: string, email: string, full_name: string, id: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($account_slug)/members")
+  let full_url = (build-url $base ({account_slug: $account_slug} | format pattern "/{account_slug}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2989,7 +2989,7 @@ export def "members listMembersForAccount" [
 # POST /{account_slug}/members
 #
 # operationId: addMemberToAccount
-export def "members addMemberToAccount" [
+export def "members create-member-to-account" [
   account_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3005,8 +3005,8 @@ export def "members addMemberToAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($account_slug)/members")
-  let body = {email: $email, role: $role} | compact
+  let full_url = (build-url $base ({account_slug: $account_slug} | format pattern "/{account_slug}/members"))
+  let body = {"email": $email, "role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3016,7 +3016,7 @@ export def "members addMemberToAccount" [
 # DELETE /{account_slug}/members/{member_id}
 #
 # operationId: removeAccountMember
-export def "members removeAccountMember" [
+export def "members delete-account" [
   account_slug: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3030,7 +3030,7 @@ export def "members removeAccountMember" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($account_slug)/members/($member_id)")
+  let full_url = (build-url $base ({account_slug: $account_slug, member_id: $member_id} | format pattern "/{account_slug}/members/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3039,7 +3039,7 @@ export def "members removeAccountMember" [
 # GET /{account_slug}/members/{member_id}
 #
 # operationId: getAccountMember
-export def "members get" [
+export def "members get-account" [
   account_slug: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3053,7 +3053,7 @@ export def "members get" [
 ]: nothing -> record<avatar: string, email: string, full_name: string, id: string, role: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($account_slug)/members/($member_id)")
+  let full_url = (build-url $base ({account_slug: $account_slug, member_id: $member_id} | format pattern "/{account_slug}/members/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3062,7 +3062,7 @@ export def "members get" [
 # PUT /{account_slug}/members/{member_id}
 #
 # operationId: updateAccountMember
-export def "members updateAccountMember" [
+export def "members update-account" [
   account_slug: string
   member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3080,8 +3080,8 @@ export def "members updateAccountMember" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($account_slug)/members/($member_id)")
-  let body = {role: $role, site_access: $site_access, site_ids: $site_ids} | compact
+  let full_url = (build-url $base ({account_slug: $account_slug, member_id: $member_id} | format pattern "/{account_slug}/members/{member_id}"))
+  let body = {"role": $role, "site_access": $site_access, "site_ids": $site_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3092,7 +3092,7 @@ export def "members updateAccountMember" [
 #
 # GET /{account_slug}/sites
 # operationId: listSitesForAccount
-export def "sites listSitesForAccount" [
+export def "sites list-sites-for-account" [
   account_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3109,7 +3109,7 @@ export def "sites listSitesForAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($account_slug)/sites" $qp)
+  let full_url = (build-url $base ({account_slug: $account_slug} | format pattern "/{account_slug}/sites") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3124,7 +3124,7 @@ export def "sites listSitesForAccount" [
 # --processing_settings shape: {css?: record, html?: record, images?: record, js?: record, skip?: bool}
 # --published_deploy shape: {admin_url?: string, branch?: string, build_id?: string, commit_ref?: string, commit_url?: string, context?: string, created_at?: string, deploy_ssl_url?: string, deploy_url?: string, draft?: bool, error_message?: string, framework?: string, function_schedules?: list, id?: string, locked?: bool, name?: string, published_at?: string, required?: list, required_functions?: list, review_id?: float, review_url?: string, screenshot_url?: string, site_capabilities?: record, site_id?: string, skipped?: bool, ssl_url?: string, state?: string, title?: string, updated_at?: string, url?: string, user_id?: string}
 # --repo shape: {allowed_branches?: list, cmd?: string, deploy_key_id?: string, dir?: string, env?: record, functions_dir?: string, id?: int, installation_id?: int, private_logs?: bool, provider?: string, public_repo?: bool, repo_branch?: string, repo_path?: string, repo_url?: string, stop_builds?: bool}
-export def "sites createSiteInTeam" [
+export def "sites create-site-in-team" [
   account_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3173,8 +3173,8 @@ export def "sites createSiteInTeam" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "configure_dns" $configure_dns "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($account_slug)/sites" $qp)
-  let body = {account_name: $account_name, account_slug: $body_account_slug, admin_url: $admin_url, build_image: $build_image, build_settings: $build_settings, capabilities: $capabilities, created_at: $created_at, custom_domain: $custom_domain, default_hooks_data: $default_hooks_data, deploy_hook: $deploy_hook, deploy_url: $deploy_url, domain_aliases: $domain_aliases, force_ssl: $force_ssl, git_provider: $git_provider, id: $id, id_domain: $id_domain, managed_dns: $managed_dns, name: $name, notification_email: $notification_email, password: $password, plan: $plan, prerender: $prerender, processing_settings: $processing_settings, published_deploy: $published_deploy, screenshot_url: $screenshot_url, session_id: $session_id, ssl: $ssl, ssl_url: $ssl_url, state: $state, updated_at: $updated_at, url: $body_url, user_id: $user_id, repo: $repo} | compact
+  let full_url = (build-url $base ({account_slug: $account_slug} | format pattern "/{account_slug}/sites") $qp)
+  let body = {"account_name": $account_name, "account_slug": $body_account_slug, "admin_url": $admin_url, "build_image": $build_image, "build_settings": $build_settings, "capabilities": $capabilities, "created_at": $created_at, "custom_domain": $custom_domain, "default_hooks_data": $default_hooks_data, "deploy_hook": $deploy_hook, "deploy_url": $deploy_url, "domain_aliases": $domain_aliases, "force_ssl": $force_ssl, "git_provider": $git_provider, "id": $id, "id_domain": $id_domain, "managed_dns": $managed_dns, "name": $name, "notification_email": $notification_email, "password": $password, "plan": $plan, "prerender": $prerender, "processing_settings": $processing_settings, "published_deploy": $published_deploy, "screenshot_url": $screenshot_url, "session_id": $session_id, "ssl": $ssl, "ssl_url": $ssl_url, "state": $state, "updated_at": $updated_at, "url": $body_url, "user_id": $user_id, "repo": $repo} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -199,7 +199,7 @@ export def "crm-activities activitiesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/activities" $qp)
-  let body = {account_id: $account_id, activity_date: $activity_date, activity_datetime: $activity_datetime, all_day_event: $all_day_event, archived: $archived, asset_id: $asset_id, attendees: $attendees, campaign_id: $campaign_id, case_id: $case_id, child: $child, company_id: $company_id, contact_id: $contact_id, contract_id: $contract_id, custom_fields: $custom_fields, custom_object_id: $custom_object_id, deleted: $deleted, description: $description, done: $done, duration_seconds: $duration_seconds, end_date: $end_date, end_datetime: $end_datetime, event_sub_type: $event_sub_type, group_event: $group_event, group_event_type: $group_event_type, lead_id: $lead_id, location: $location, location_address: $location_address, note: $note, opportunity_id: $opportunity_id, owner_id: $owner_id, private: $private, product_id: $product_id, recurrent: $recurrent, reminder_datetime: $reminder_datetime, reminder_set: $reminder_set, show_as: $show_as, solution_id: $solution_id, start_datetime: $start_datetime, title: $title, type: $type, user_id: $user_id, video_conference_id: $video_conference_id, video_conference_url: $video_conference_url} | compact
+  let body = {"account_id": $account_id, "activity_date": $activity_date, "activity_datetime": $activity_datetime, "all_day_event": $all_day_event, "archived": $archived, "asset_id": $asset_id, "attendees": $attendees, "campaign_id": $campaign_id, "case_id": $case_id, "child": $child, "company_id": $company_id, "contact_id": $contact_id, "contract_id": $contract_id, "custom_fields": $custom_fields, "custom_object_id": $custom_object_id, "deleted": $deleted, "description": $description, "done": $done, "duration_seconds": $duration_seconds, "end_date": $end_date, "end_datetime": $end_datetime, "event_sub_type": $event_sub_type, "group_event": $group_event, "group_event_type": $group_event_type, "lead_id": $lead_id, "location": $location, "location_address": $location_address, "note": $note, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "private": $private, "product_id": $product_id, "recurrent": $recurrent, "reminder_datetime": $reminder_datetime, "reminder_set": $reminder_set, "show_as": $show_as, "solution_id": $solution_id, "start_datetime": $start_datetime, "title": $title, "type": $type, "user_id": $user_id, "video_conference_id": $video_conference_id, "video_conference_url": $video_conference_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -230,7 +230,7 @@ export def "crm-activities activitiesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/activities/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/activities/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -261,7 +261,7 @@ export def "crm-activities activitiesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/activities/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/activities/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -338,8 +338,8 @@ export def "crm-activities activitiesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/activities/($id)" $qp)
-  let body = {account_id: $account_id, activity_date: $activity_date, activity_datetime: $activity_datetime, all_day_event: $all_day_event, archived: $archived, asset_id: $asset_id, attendees: $attendees, campaign_id: $campaign_id, case_id: $case_id, child: $child, company_id: $company_id, contact_id: $contact_id, contract_id: $contract_id, custom_fields: $custom_fields, custom_object_id: $custom_object_id, deleted: $deleted, description: $description, done: $done, duration_seconds: $duration_seconds, end_date: $end_date, end_datetime: $end_datetime, event_sub_type: $event_sub_type, group_event: $group_event, group_event_type: $group_event_type, lead_id: $lead_id, location: $location, location_address: $location_address, note: $note, opportunity_id: $opportunity_id, owner_id: $owner_id, private: $private, product_id: $product_id, recurrent: $recurrent, reminder_datetime: $reminder_datetime, reminder_set: $reminder_set, show_as: $show_as, solution_id: $solution_id, start_datetime: $start_datetime, title: $title, type: $type, user_id: $user_id, video_conference_id: $video_conference_id, video_conference_url: $video_conference_url} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/activities/{id}") $qp)
+  let body = {"account_id": $account_id, "activity_date": $activity_date, "activity_datetime": $activity_datetime, "all_day_event": $all_day_event, "archived": $archived, "asset_id": $asset_id, "attendees": $attendees, "campaign_id": $campaign_id, "case_id": $case_id, "child": $child, "company_id": $company_id, "contact_id": $contact_id, "contract_id": $contract_id, "custom_fields": $custom_fields, "custom_object_id": $custom_object_id, "deleted": $deleted, "description": $description, "done": $done, "duration_seconds": $duration_seconds, "end_date": $end_date, "end_datetime": $end_datetime, "event_sub_type": $event_sub_type, "group_event": $group_event, "group_event_type": $group_event_type, "lead_id": $lead_id, "location": $location, "location_address": $location_address, "note": $note, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "private": $private, "product_id": $product_id, "recurrent": $recurrent, "reminder_datetime": $reminder_datetime, "reminder_set": $reminder_set, "show_as": $show_as, "solution_id": $solution_id, "start_datetime": $start_datetime, "title": $title, "type": $type, "user_id": $user_id, "video_conference_id": $video_conference_id, "video_conference_url": $video_conference_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -444,7 +444,7 @@ export def "crm-companies companiesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/companies" $qp)
-  let body = {abn_branch: $abn_branch, abn_or_tfn: $abn_or_tfn, acn: $acn, addresses: $addresses, annual_revenue: $annual_revenue, bank_accounts: $bank_accounts, birthday: $birthday, currency: $currency, custom_fields: $custom_fields, description: $description, emails: $emails, fax: $fax, first_name: $first_name, image: $image, industry: $industry, last_name: $last_name, name: $name, number_of_employees: $number_of_employees, owner_id: $owner_id, ownership: $ownership, payee_number: $payee_number, phone_numbers: $phone_numbers, read_only: $read_only, row_type: $row_type, sales_tax_number: $sales_tax_number, salutation: $salutation, social_links: $social_links, status: $status, tags: $tags, vat_number: $vat_number, websites: $websites} | compact
+  let body = {"abn_branch": $abn_branch, "abn_or_tfn": $abn_or_tfn, "acn": $acn, "addresses": $addresses, "annual_revenue": $annual_revenue, "bank_accounts": $bank_accounts, "birthday": $birthday, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "image": $image, "industry": $industry, "last_name": $last_name, "name": $name, "number_of_employees": $number_of_employees, "owner_id": $owner_id, "ownership": $ownership, "payee_number": $payee_number, "phone_numbers": $phone_numbers, "read_only": $read_only, "row_type": $row_type, "sales_tax_number": $sales_tax_number, "salutation": $salutation, "social_links": $social_links, "status": $status, "tags": $tags, "vat_number": $vat_number, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -475,7 +475,7 @@ export def "crm-companies companiesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/companies/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/companies/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -506,7 +506,7 @@ export def "crm-companies companiesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/companies/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/companies/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -576,8 +576,8 @@ export def "crm-companies companiesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/companies/($id)" $qp)
-  let body = {abn_branch: $abn_branch, abn_or_tfn: $abn_or_tfn, acn: $acn, addresses: $addresses, annual_revenue: $annual_revenue, bank_accounts: $bank_accounts, birthday: $birthday, currency: $currency, custom_fields: $custom_fields, description: $description, emails: $emails, fax: $fax, first_name: $first_name, image: $image, industry: $industry, last_name: $last_name, name: $name, number_of_employees: $number_of_employees, owner_id: $owner_id, ownership: $ownership, payee_number: $payee_number, phone_numbers: $phone_numbers, read_only: $read_only, row_type: $row_type, sales_tax_number: $sales_tax_number, salutation: $salutation, social_links: $social_links, status: $status, tags: $tags, vat_number: $vat_number, websites: $websites} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/companies/{id}") $qp)
+  let body = {"abn_branch": $abn_branch, "abn_or_tfn": $abn_or_tfn, "acn": $acn, "addresses": $addresses, "annual_revenue": $annual_revenue, "bank_accounts": $bank_accounts, "birthday": $birthday, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "image": $image, "industry": $industry, "last_name": $last_name, "name": $name, "number_of_employees": $number_of_employees, "owner_id": $owner_id, "ownership": $ownership, "payee_number": $payee_number, "phone_numbers": $phone_numbers, "read_only": $read_only, "row_type": $row_type, "sales_tax_number": $sales_tax_number, "salutation": $salutation, "social_links": $social_links, "status": $status, "tags": $tags, "vat_number": $vat_number, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -682,7 +682,7 @@ export def "crm-contacts contactsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/contacts" $qp)
-  let body = {active: $active, addresses: $addresses, birthday: $birthday, company_id: $company_id, company_name: $company_name, current_balance: $current_balance, custom_fields: $custom_fields, department: $department, description: $description, email_domain: $email_domain, emails: $emails, fax: $fax, first_name: $first_name, gender: $gender, image: $image, language: $language, last_name: $last_name, lead_id: $lead_id, lead_source: $lead_source, middle_name: $middle_name, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, photo_url: $photo_url, prefix: $prefix, social_links: $social_links, status: $status, suffix: $suffix, tags: $tags, title: $title, type: $type, websites: $websites} | compact
+  let body = {"active": $active, "addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "current_balance": $current_balance, "custom_fields": $custom_fields, "department": $department, "description": $description, "email_domain": $email_domain, "emails": $emails, "fax": $fax, "first_name": $first_name, "gender": $gender, "image": $image, "language": $language, "last_name": $last_name, "lead_id": $lead_id, "lead_source": $lead_source, "middle_name": $middle_name, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "prefix": $prefix, "social_links": $social_links, "status": $status, "suffix": $suffix, "tags": $tags, "title": $title, "type": $type, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -713,7 +713,7 @@ export def "crm-contacts contactsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/contacts/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/contacts/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -744,7 +744,7 @@ export def "crm-contacts contactsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/contacts/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/contacts/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -814,8 +814,8 @@ export def "crm-contacts contactsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/contacts/($id)" $qp)
-  let body = {active: $active, addresses: $addresses, birthday: $birthday, company_id: $company_id, company_name: $company_name, current_balance: $current_balance, custom_fields: $custom_fields, department: $department, description: $description, email_domain: $email_domain, emails: $emails, fax: $fax, first_name: $first_name, gender: $gender, image: $image, language: $language, last_name: $last_name, lead_id: $lead_id, lead_source: $lead_source, middle_name: $middle_name, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, photo_url: $photo_url, prefix: $prefix, social_links: $social_links, status: $status, suffix: $suffix, tags: $tags, title: $title, type: $type, websites: $websites} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/contacts/{id}") $qp)
+  let body = {"active": $active, "addresses": $addresses, "birthday": $birthday, "company_id": $company_id, "company_name": $company_name, "current_balance": $current_balance, "custom_fields": $custom_fields, "department": $department, "description": $description, "email_domain": $email_domain, "emails": $emails, "fax": $fax, "first_name": $first_name, "gender": $gender, "image": $image, "language": $language, "last_name": $last_name, "lead_id": $lead_id, "lead_source": $lead_source, "middle_name": $middle_name, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "photo_url": $photo_url, "prefix": $prefix, "social_links": $social_links, "status": $status, "suffix": $suffix, "tags": $tags, "title": $title, "type": $type, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -910,7 +910,7 @@ export def "crm-leads leadsAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/leads" $qp)
-  let body = {addresses: $addresses, company_id: $company_id, company_name: $company_name, contact_id: $contact_id, currency: $currency, custom_fields: $custom_fields, description: $description, emails: $emails, fax: $fax, first_name: $first_name, language: $language, last_name: $last_name, lead_source: $lead_source, monetary_amount: $monetary_amount, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, prefix: $prefix, social_links: $social_links, status: $status, tags: $tags, title: $title, websites: $websites} | compact
+  let body = {"addresses": $addresses, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "language": $language, "last_name": $last_name, "lead_source": $lead_source, "monetary_amount": $monetary_amount, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "prefix": $prefix, "social_links": $social_links, "status": $status, "tags": $tags, "title": $title, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -941,7 +941,7 @@ export def "crm-leads leadsDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/leads/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/leads/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -972,7 +972,7 @@ export def "crm-leads leadsOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/leads/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/leads/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1032,8 +1032,8 @@ export def "crm-leads leadsUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/leads/($id)" $qp)
-  let body = {addresses: $addresses, company_id: $company_id, company_name: $company_name, contact_id: $contact_id, currency: $currency, custom_fields: $custom_fields, description: $description, emails: $emails, fax: $fax, first_name: $first_name, language: $language, last_name: $last_name, lead_source: $lead_source, monetary_amount: $monetary_amount, name: $name, owner_id: $owner_id, phone_numbers: $phone_numbers, prefix: $prefix, social_links: $social_links, status: $status, tags: $tags, title: $title, websites: $websites} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/leads/{id}") $qp)
+  let body = {"addresses": $addresses, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "emails": $emails, "fax": $fax, "first_name": $first_name, "language": $language, "last_name": $last_name, "lead_source": $lead_source, "monetary_amount": $monetary_amount, "name": $name, "owner_id": $owner_id, "phone_numbers": $phone_numbers, "prefix": $prefix, "social_links": $social_links, "status": $status, "tags": $tags, "title": $title, "websites": $websites} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1105,7 +1105,7 @@ export def "crm-notes notesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/notes" $qp)
-  let body = {active: $active, company_id: $company_id, contact_id: $contact_id, content: $content, lead_id: $lead_id, opportunity_id: $opportunity_id, owner_id: $owner_id, title: $title} | compact
+  let body = {"active": $active, "company_id": $company_id, "contact_id": $contact_id, "content": $content, "lead_id": $lead_id, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1136,7 +1136,7 @@ export def "crm-notes notesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/notes/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/notes/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1167,7 +1167,7 @@ export def "crm-notes notesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/notes/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/notes/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1206,8 +1206,8 @@ export def "crm-notes notesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/notes/($id)" $qp)
-  let body = {active: $active, company_id: $company_id, contact_id: $contact_id, content: $content, lead_id: $lead_id, opportunity_id: $opportunity_id, owner_id: $owner_id, title: $title} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/notes/{id}") $qp)
+  let body = {"active": $active, "company_id": $company_id, "contact_id": $contact_id, "content": $content, "lead_id": $lead_id, "opportunity_id": $opportunity_id, "owner_id": $owner_id, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1302,7 +1302,7 @@ export def "crm-opportunities opportunitiesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/opportunities" $qp)
-  let body = {close_date: $close_date, company_id: $company_id, company_name: $company_name, contact_id: $contact_id, contact_ids: $contact_ids, currency: $currency, custom_fields: $custom_fields, description: $description, lead_id: $lead_id, lead_source: $lead_source, loss_reason: $loss_reason, loss_reason_id: $loss_reason_id, monetary_amount: $monetary_amount, owner_id: $owner_id, pipeline_id: $pipeline_id, pipeline_stage_id: $pipeline_stage_id, primary_contact_id: $primary_contact_id, priority: $priority, source_id: $source_id, stage_last_changed_at: $stage_last_changed_at, status: $status, status_id: $status_id, tags: $tags, title: $title, type: $type, win_probability: $win_probability, won_reason: $won_reason, won_reason_id: $won_reason_id} | compact
+  let body = {"close_date": $close_date, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "contact_ids": $contact_ids, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "lead_id": $lead_id, "lead_source": $lead_source, "loss_reason": $loss_reason, "loss_reason_id": $loss_reason_id, "monetary_amount": $monetary_amount, "owner_id": $owner_id, "pipeline_id": $pipeline_id, "pipeline_stage_id": $pipeline_stage_id, "primary_contact_id": $primary_contact_id, "priority": $priority, "source_id": $source_id, "stage_last_changed_at": $stage_last_changed_at, "status": $status, "status_id": $status_id, "tags": $tags, "title": $title, "type": $type, "win_probability": $win_probability, "won_reason": $won_reason, "won_reason_id": $won_reason_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1333,7 +1333,7 @@ export def "crm-opportunities opportunitiesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/opportunities/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/opportunities/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1364,7 +1364,7 @@ export def "crm-opportunities opportunitiesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/opportunities/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/opportunities/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1424,8 +1424,8 @@ export def "crm-opportunities opportunitiesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/opportunities/($id)" $qp)
-  let body = {close_date: $close_date, company_id: $company_id, company_name: $company_name, contact_id: $contact_id, contact_ids: $contact_ids, currency: $currency, custom_fields: $custom_fields, description: $description, lead_id: $lead_id, lead_source: $lead_source, loss_reason: $loss_reason, loss_reason_id: $loss_reason_id, monetary_amount: $monetary_amount, owner_id: $owner_id, pipeline_id: $pipeline_id, pipeline_stage_id: $pipeline_stage_id, primary_contact_id: $primary_contact_id, priority: $priority, source_id: $source_id, stage_last_changed_at: $stage_last_changed_at, status: $status, status_id: $status_id, tags: $tags, title: $title, type: $type, win_probability: $win_probability, won_reason: $won_reason, won_reason_id: $won_reason_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/opportunities/{id}") $qp)
+  let body = {"close_date": $close_date, "company_id": $company_id, "company_name": $company_name, "contact_id": $contact_id, "contact_ids": $contact_ids, "currency": $currency, "custom_fields": $custom_fields, "description": $description, "lead_id": $lead_id, "lead_source": $lead_source, "loss_reason": $loss_reason, "loss_reason_id": $loss_reason_id, "monetary_amount": $monetary_amount, "owner_id": $owner_id, "pipeline_id": $pipeline_id, "pipeline_stage_id": $pipeline_stage_id, "primary_contact_id": $primary_contact_id, "priority": $priority, "source_id": $source_id, "stage_last_changed_at": $stage_last_changed_at, "status": $status, "status_id": $status_id, "tags": $tags, "title": $title, "type": $type, "win_probability": $win_probability, "won_reason": $won_reason, "won_reason_id": $won_reason_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1498,7 +1498,7 @@ export def "crm-pipelines pipelinesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/pipelines" $qp)
-  let body = {active: $active, archived: $archived, currency: $currency, display_order: $display_order, id: $id, name: $name, stages: $stages, win_probability_enabled: $win_probability_enabled} | compact
+  let body = {"active": $active, "archived": $archived, "currency": $currency, "display_order": $display_order, "id": $id, "name": $name, "stages": $stages, "win_probability_enabled": $win_probability_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1529,7 +1529,7 @@ export def "crm-pipelines pipelinesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/pipelines/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/pipelines/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1560,7 +1560,7 @@ export def "crm-pipelines pipelinesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/pipelines/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/pipelines/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1600,8 +1600,8 @@ export def "crm-pipelines pipelinesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/pipelines/($id)" $qp)
-  let body = {active: $active, archived: $archived, currency: $currency, display_order: $display_order, id: $body_id, name: $name, stages: $stages, win_probability_enabled: $win_probability_enabled} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/pipelines/{id}") $qp)
+  let body = {"active": $active, "archived": $archived, "currency": $currency, "display_order": $display_order, "id": $body_id, "name": $name, "stages": $stages, "win_probability_enabled": $win_probability_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1686,7 +1686,7 @@ export def "crm-users usersAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/crm/users" $qp)
-  let body = {addresses: $addresses, company_name: $company_name, department: $department, description: $description, division: $division, emails: $emails, employee_number: $employee_number, first_name: $first_name, image: $image, language: $language, last_name: $last_name, parent_id: $parent_id, password: $password, phone_numbers: $phone_numbers, status: $status, title: $title, username: $username} | compact
+  let body = {"addresses": $addresses, "company_name": $company_name, "department": $department, "description": $description, "division": $division, "emails": $emails, "employee_number": $employee_number, "first_name": $first_name, "image": $image, "language": $language, "last_name": $last_name, "parent_id": $parent_id, "password": $password, "phone_numbers": $phone_numbers, "status": $status, "title": $title, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1717,7 +1717,7 @@ export def "crm-users usersDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/users/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/users/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1748,7 +1748,7 @@ export def "crm-users usersOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/users/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/users/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1800,8 +1800,8 @@ export def "crm-users usersUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/crm/users/($id)" $qp)
-  let body = {addresses: $addresses, company_name: $company_name, department: $department, description: $description, division: $division, emails: $emails, employee_number: $employee_number, first_name: $first_name, image: $image, language: $language, last_name: $last_name, parent_id: $parent_id, password: $password, phone_numbers: $phone_numbers, status: $status, title: $title, username: $username} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/crm/users/{id}") $qp)
+  let body = {"addresses": $addresses, "company_name": $company_name, "department": $department, "description": $description, "division": $division, "emails": $emails, "employee_number": $employee_number, "first_name": $first_name, "image": $image, "language": $language, "last_name": $last_name, "parent_id": $parent_id, "password": $password, "phone_numbers": $phone_numbers, "status": $status, "title": $title, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

@@ -66,13 +66,13 @@ def base-url-completer [] { ["https://sync.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
-def Order-completer [] { ["asc" "desc"] }
-def Bounds-completer [] { ["exclusive" "inclusive"] }
+def order-completer [] { ["asc" "desc"] }
+def bounds-completer [] { ["exclusive" "inclusive"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "services ListService" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "services list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 # GET /v1/Services
 #
 # operationId: ListService
-export def "services ListService" [
+export def "services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -104,13 +104,13 @@ export def "services ListService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, services: table<account_sid: string, acl_enabled: bool, date_created: string, date_updated: string, friendly_name: string, links: record, reachability_debouncing_enabled: bool, reachability_debouncing_window: int, reachability_webhooks_enabled: bool, sid: string, unique_name: string, url: string, webhook_url: string, webhooks_from_rest_enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "services ListService" [
 # POST /v1/Services
 #
 # operationId: CreateService
-export def "services CreateService" [
+export def "services create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,19 +129,19 @@ export def "services CreateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AclEnabled: oneof<nothing, bool> # Whether token identities in the Service must be granted access to Sync objects by using the [Permissions](https://www.twilio.com/docs/sync/api/sync-permissions) resource.
-  --FriendlyName: string # A string that you assign to describe the resource.
-  --ReachabilityDebouncingEnabled: oneof<nothing, bool> # Whether every `endpoint_disconnected` event should occur after a configurable delay. The default is `false`, where the `endpoint_disconnected` event occurs immediately after disconnection. When `true`, intervening reconnections can prevent the `endpoint_disconnected` event.
-  --ReachabilityDebouncingWindow: int # The reachability event delay in milliseconds if `reachability_debouncing_enabled` = `true`.  Must be between 1,000 and 30,000 and defaults to 5,000. This is the number of milliseconds after the last running client disconnects, and a Sync identity is declared offline, before the `webhook_url` is called if all endpoints remain offline. A reconnection from the same identity by any endpoint during this interval prevents the call to `webhook_url`.
-  --ReachabilityWebhooksEnabled: oneof<nothing, bool> # Whether the service instance should call `webhook_url` when client endpoints connect to Sync. The default is `false`.
-  --WebhookUrl: string # The URL we should call when Sync objects are manipulated. (format: uri)
-  --WebhooksFromRestEnabled: oneof<nothing, bool> # Whether the Service instance should call `webhook_url` when the REST API is used to update Sync objects. The default is `false`.
+  --acl-enabled: oneof<nothing, bool> # Whether token identities in the Service must be granted access to Sync objects by using the [Permissions](https://www.twilio.com/docs/sync/api/sync-permissions) resource.
+  --friendly-name: string # A string that you assign to describe the resource.
+  --reachability-debouncing-enabled: oneof<nothing, bool> # Whether every `endpoint_disconnected` event should occur after a configurable delay. The default is `false`, where the `endpoint_disconnected` event occurs immediately after disconnection. When `true`, intervening reconnections can prevent the `endpoint_disconnected` event.
+  --reachability-debouncing-window: int # The reachability event delay in milliseconds if `reachability_debouncing_enabled` = `true`.  Must be between 1,000 and 30,000 and defaults to 5,000. This is the number of milliseconds after the last running client disconnects, and a Sync identity is declared offline, before the `webhook_url` is called if all endpoints remain offline. A reconnection from the same identity by any endpoint during this interval prevents the call to `webhook_url`.
+  --reachability-webhooks-enabled: oneof<nothing, bool> # Whether the service instance should call `webhook_url` when client endpoints connect to Sync. The default is `false`.
+  --webhook-url: string # The URL we should call when Sync objects are manipulated. (format: uri)
+  --webhooks-from-rest-enabled: oneof<nothing, bool> # Whether the Service instance should call `webhook_url` when the REST API is used to update Sync objects. The default is `false`.
 ]: any -> record<account_sid: string, acl_enabled: bool, date_created: string, date_updated: string, friendly_name: string, links: record, reachability_debouncing_enabled: bool, reachability_debouncing_window: int, reachability_webhooks_enabled: bool, sid: string, unique_name: string, url: string, webhook_url: string, webhooks_from_rest_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
   let full_url = (build-url $base "/v1/Services")
-  let body = {AclEnabled: $AclEnabled, FriendlyName: $FriendlyName, ReachabilityDebouncingEnabled: $ReachabilityDebouncingEnabled, ReachabilityDebouncingWindow: $ReachabilityDebouncingWindow, ReachabilityWebhooksEnabled: $ReachabilityWebhooksEnabled, WebhookUrl: $WebhookUrl, WebhooksFromRestEnabled: $WebhooksFromRestEnabled} | compact
+  let body = {"AclEnabled": $acl_enabled, "FriendlyName": $friendly_name, "ReachabilityDebouncingEnabled": $reachability_debouncing_enabled, "ReachabilityDebouncingWindow": $reachability_debouncing_window, "ReachabilityWebhooksEnabled": $reachability_webhooks_enabled, "WebhookUrl": $webhook_url, "WebhooksFromRestEnabled": $webhooks_from_rest_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,8 +151,8 @@ export def "services CreateService" [
 # GET /v1/Services/{ServiceSid}/Documents
 #
 # operationId: ListDocument
-export def "services-documents ListDocument" [
-  ServiceSid: string
+export def "services-documents list" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,14 +161,14 @@ export def "services-documents ListDocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<documents: table<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Documents" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,8 +177,8 @@ export def "services-documents ListDocument" [
 # POST /v1/Services/{ServiceSid}/Documents
 #
 # operationId: CreateDocument
-export def "services-documents CreateDocument" [
-  ServiceSid: string
+export def "services-documents create" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,15 +187,15 @@ export def "services-documents CreateDocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Data: any # A JSON string that represents an arbitrary, schema-less object that the Sync Document stores. Can be up to 16 KiB in length.
-  --Ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync Document expires and is deleted (the Sync Document's time-to-live).
-  --UniqueName: string # An application-defined string that uniquely identifies the Sync Document
+  --data: any # A JSON string that represents an arbitrary, schema-less object that the Sync Document stores. Can be up to 16 KiB in length.
+  --ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync Document expires and is deleted (the Sync Document's time-to-live).
+  --unique-name: string # An application-defined string that uniquely identifies the Sync Document
 ]: any -> record<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Documents")
-  let body = {Data: $Data, Ttl: $Ttl, UniqueName: $UniqueName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Documents"))
+  let body = {"Data": $data, "Ttl": $ttl, "UniqueName": $unique_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -206,9 +206,9 @@ export def "services-documents CreateDocument" [
 #
 # GET /v1/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions
 # operationId: ListDocumentPermission
-export def "services-documents-permissions ListDocumentPermission" [
-  ServiceSid: string
-  DocumentSid: string
+export def "services-documents-permissions list" [
+  service_sid: string
+  document_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,14 +217,14 @@ export def "services-documents-permissions ListDocumentPermission" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, permissions: table<account_sid: string, document_sid: string, identity: string, manage: bool, read: bool, service_sid: string, url: string, write: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Documents/($DocumentSid)/Permissions" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, document_sid: $document_sid} | format pattern "/v1/Services/{service_sid}/Documents/{document_sid}/Permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -234,10 +234,10 @@ export def "services-documents-permissions ListDocumentPermission" [
 #
 # DELETE /v1/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions/{Identity}
 # operationId: DeleteDocumentPermission
-export def "services-documents-permissions DeleteDocumentPermission" [
-  ServiceSid: string
-  DocumentSid: string
-  Identity: string
+export def "services-documents-permissions delete" [
+  service_sid: string
+  document_sid: string
+  identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "services-documents-permissions DeleteDocumentPermission" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Documents/($DocumentSid)/Permissions/($Identity)")
+  let full_url = (build-url $base ({service_sid: $service_sid, document_sid: $document_sid, identity: $identity} | format pattern "/v1/Services/{service_sid}/Documents/{document_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,10 +259,10 @@ export def "services-documents-permissions DeleteDocumentPermission" [
 #
 # GET /v1/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions/{Identity}
 # operationId: FetchDocumentPermission
-export def "services-documents-permissions FetchDocumentPermission" [
-  ServiceSid: string
-  DocumentSid: string
-  Identity: string
+export def "services-documents-permissions get" [
+  service_sid: string
+  document_sid: string
+  identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "services-documents-permissions FetchDocumentPermission" [
 ]: nothing -> record<account_sid: string, document_sid: string, identity: string, manage: bool, read: bool, service_sid: string, url: string, write: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Documents/($DocumentSid)/Permissions/($Identity)")
+  let full_url = (build-url $base ({service_sid: $service_sid, document_sid: $document_sid, identity: $identity} | format pattern "/v1/Services/{service_sid}/Documents/{document_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,10 +284,10 @@ export def "services-documents-permissions FetchDocumentPermission" [
 #
 # POST /v1/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions/{Identity}
 # operationId: UpdateDocumentPermission
-export def "services-documents-permissions UpdateDocumentPermission" [
-  ServiceSid: string
-  DocumentSid: string
-  Identity: string
+export def "services-documents-permissions update" [
+  service_sid: string
+  document_sid: string
+  identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,15 +296,15 @@ export def "services-documents-permissions UpdateDocumentPermission" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Manage: oneof<nothing, bool> # Whether the identity can delete the Sync Document. Default value is `false`.
-  --Read: oneof<nothing, bool> # Whether the identity can read the Sync Document. Default value is `false`.
-  --Write: oneof<nothing, bool> # Whether the identity can update the Sync Document. Default value is `false`.
+  --manage: oneof<nothing, bool> # Whether the identity can delete the Sync Document. Default value is `false`.
+  --read: oneof<nothing, bool> # Whether the identity can read the Sync Document. Default value is `false`.
+  --write: oneof<nothing, bool> # Whether the identity can update the Sync Document. Default value is `false`.
 ]: any -> record<account_sid: string, document_sid: string, identity: string, manage: bool, read: bool, service_sid: string, url: string, write: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Documents/($DocumentSid)/Permissions/($Identity)")
-  let body = {Manage: $Manage, Read: $Read, Write: $Write} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, document_sid: $document_sid, identity: $identity} | format pattern "/v1/Services/{service_sid}/Documents/{document_sid}/Permissions/{identity}"))
+  let body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -314,9 +314,9 @@ export def "services-documents-permissions UpdateDocumentPermission" [
 # DELETE /v1/Services/{ServiceSid}/Documents/{Sid}
 #
 # operationId: DeleteDocument
-export def "services-documents DeleteDocument" [
-  ServiceSid: string
-  Sid: string
+export def "services-documents delete" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "services-documents DeleteDocument" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Documents/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Documents/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -337,9 +337,9 @@ export def "services-documents DeleteDocument" [
 # GET /v1/Services/{ServiceSid}/Documents/{Sid}
 #
 # operationId: FetchDocument
-export def "services-documents FetchDocument" [
-  ServiceSid: string
-  Sid: string
+export def "services-documents get" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "services-documents FetchDocument" [
 ]: nothing -> record<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Documents/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Documents/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,9 +360,9 @@ export def "services-documents FetchDocument" [
 # POST /v1/Services/{ServiceSid}/Documents/{Sid}
 #
 # operationId: UpdateDocument
-export def "services-documents UpdateDocument" [
-  ServiceSid: string
-  Sid: string
+export def "services-documents update" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,17 +371,17 @@ export def "services-documents UpdateDocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # The If-Match HTTP request header
-  --Data: any # A JSON string that represents an arbitrary, schema-less object that the Sync Document stores. Can be up to 16 KiB in length.
-  --Ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync Document expires and is deleted (time-to-live).
+  --if-match: string # The If-Match HTTP request header
+  --data: any # A JSON string that represents an arbitrary, schema-less object that the Sync Document stores. Can be up to 16 KiB in length.
+  --ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync Document expires and is deleted (time-to-live).
 ]: any -> record<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Documents/($Sid)")
-  let body = {Data: $Data, Ttl: $Ttl} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Documents/{sid}"))
+  let body = {"Data": $data, "Ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -391,8 +391,8 @@ export def "services-documents UpdateDocument" [
 # GET /v1/Services/{ServiceSid}/Lists
 #
 # operationId: ListSyncList
-export def "services-lists ListSyncList" [
-  ServiceSid: string
+export def "services-lists list-sync" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,14 +401,14 @@ export def "services-lists ListSyncList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<lists: table<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Lists") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -417,8 +417,8 @@ export def "services-lists ListSyncList" [
 # POST /v1/Services/{ServiceSid}/Lists
 #
 # operationId: CreateSyncList
-export def "services-lists CreateSyncList" [
-  ServiceSid: string
+export def "services-lists create-sync" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,15 +427,15 @@ export def "services-lists CreateSyncList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CollectionTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync List expires (time-to-live) and is deleted.
-  --Ttl: int # Alias for collection_ttl. If both are provided, this value is ignored.
-  --UniqueName: string # An application-defined string that uniquely identifies the resource. This value must be unique within its Service and it can be up to 320 characters long. The `unique_name` value can be used as an alternative to the `sid` in the URL path to address the resource.
+  --collection-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync List expires (time-to-live) and is deleted.
+  --ttl: int # Alias for collection_ttl. If both are provided, this value is ignored.
+  --unique-name: string # An application-defined string that uniquely identifies the resource. This value must be unique within its Service and it can be up to 320 characters long. The `unique_name` value can be used as an alternative to the `sid` in the URL path to address the resource.
 ]: any -> record<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists")
-  let body = {CollectionTtl: $CollectionTtl, Ttl: $Ttl, UniqueName: $UniqueName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Lists"))
+  let body = {"CollectionTtl": $collection_ttl, "Ttl": $ttl, "UniqueName": $unique_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -445,9 +445,9 @@ export def "services-lists CreateSyncList" [
 # GET /v1/Services/{ServiceSid}/Lists/{ListSid}/Items
 #
 # operationId: ListSyncListItem
-export def "services-lists-items ListSyncListItem" [
-  ServiceSid: string
-  ListSid: string
+export def "services-lists-items list-sync" [
+  service_sid: string
+  list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,17 +456,17 @@ export def "services-lists-items ListSyncListItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Order: string@Order-completer # How to order the List Items returned by their `index` value. Can be: `asc` (ascending) or `desc` (descending) and the default is ascending.
-  --From: string # The `index` of the first Sync List Item resource to read. See also `bounds`.
-  --Bounds: string@Bounds-completer # Whether to include the List Item referenced by the `from` parameter. Can be: `inclusive` to include the List Item referenced by the `from` parameter or `exclusive` to start with the next List Item. The default value is `inclusive`.
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --order: string@order-completer # How to order the List Items returned by their `index` value. Can be: `asc` (ascending) or `desc` (descending) and the default is ascending.
+  --qp-from: string # The `index` of the first Sync List Item resource to read. See also `bounds`.
+  --bounds: string@bounds-completer # Whether to include the List Item referenced by the `from` parameter. Can be: `inclusive` to include the List Item referenced by the `from` parameter or `exclusive` to start with the next List Item. The default value is `inclusive`.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<items: table<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, index: int, list_sid: string, revision: string, service_sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let qp = [(serialize-qp "Order" $Order "scalar") (serialize-qp "From" $From "scalar") (serialize-qp "Bounds" $Bounds "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($ListSid)/Items" $qp)
+  let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "From" $qp_from "scalar") (serialize-qp "Bounds" $bounds "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid} | format pattern "/v1/Services/{service_sid}/Lists/{list_sid}/Items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,9 +475,9 @@ export def "services-lists-items ListSyncListItem" [
 # POST /v1/Services/{ServiceSid}/Lists/{ListSid}/Items
 #
 # operationId: CreateSyncListItem
-export def "services-lists-items CreateSyncListItem" [
-  ServiceSid: string
-  ListSid: string
+export def "services-lists-items create-sync" [
+  service_sid: string
+  list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,16 +486,16 @@ export def "services-lists-items CreateSyncListItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CollectionTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the List Item's parent Sync List expires (time-to-live) and is deleted.
-  Data: any # A JSON string that represents an arbitrary, schema-less object that the List Item stores. Can be up to 16 KiB in length.
-  --ItemTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the List Item expires (time-to-live) and is deleted.
-  --Ttl: int # An alias for `item_ttl`. If both parameters are provided, this value is ignored.
+  --collection-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the List Item's parent Sync List expires (time-to-live) and is deleted.
+  data: any # A JSON string that represents an arbitrary, schema-less object that the List Item stores. Can be up to 16 KiB in length.
+  --item-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the List Item expires (time-to-live) and is deleted.
+  --ttl: int # An alias for `item_ttl`. If both parameters are provided, this value is ignored.
 ]: any -> record<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, index: int, list_sid: string, revision: string, service_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($ListSid)/Items")
-  let body = {CollectionTtl: $CollectionTtl, Data: $Data, ItemTtl: $ItemTtl, Ttl: $Ttl} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid} | format pattern "/v1/Services/{service_sid}/Lists/{list_sid}/Items"))
+  let body = {"CollectionTtl": $collection_ttl, "Data": $data, "ItemTtl": $item_ttl, "Ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,10 +505,10 @@ export def "services-lists-items CreateSyncListItem" [
 # DELETE /v1/Services/{ServiceSid}/Lists/{ListSid}/Items/{Index}
 #
 # operationId: DeleteSyncListItem
-export def "services-lists-items DeleteSyncListItem" [
-  ServiceSid: string
-  ListSid: string
-  Index: int
+export def "services-lists-items delete-sync" [
+  service_sid: string
+  list_sid: string
+  index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,12 +517,12 @@ export def "services-lists-items DeleteSyncListItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # If provided, applies this mutation if (and only if) the “revision” field of this [map item] matches the provided value. This matches the semantics of (and is implemented with) the HTTP [If-Match header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-Match).
+  --if-match: string # If provided, applies this mutation if (and only if) the “revision” field of this [map item] matches the provided value. This matches the semantics of (and is implemented with) the HTTP [If-Match header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-Match).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($ListSid)/Items/($Index)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, index: $index} | format pattern "/v1/Services/{service_sid}/Lists/{list_sid}/Items/{index}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -532,10 +532,10 @@ export def "services-lists-items DeleteSyncListItem" [
 # GET /v1/Services/{ServiceSid}/Lists/{ListSid}/Items/{Index}
 #
 # operationId: FetchSyncListItem
-export def "services-lists-items FetchSyncListItem" [
-  ServiceSid: string
-  ListSid: string
-  Index: int
+export def "services-lists-items get-sync" [
+  service_sid: string
+  list_sid: string
+  index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "services-lists-items FetchSyncListItem" [
 ]: nothing -> record<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, index: int, list_sid: string, revision: string, service_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($ListSid)/Items/($Index)")
+  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, index: $index} | format pattern "/v1/Services/{service_sid}/Lists/{list_sid}/Items/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -556,10 +556,10 @@ export def "services-lists-items FetchSyncListItem" [
 # POST /v1/Services/{ServiceSid}/Lists/{ListSid}/Items/{Index}
 #
 # operationId: UpdateSyncListItem
-export def "services-lists-items UpdateSyncListItem" [
-  ServiceSid: string
-  ListSid: string
-  Index: int
+export def "services-lists-items update-sync" [
+  service_sid: string
+  list_sid: string
+  index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,19 +568,19 @@ export def "services-lists-items UpdateSyncListItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # If provided, applies this mutation if (and only if) the “revision” field of this [map item] matches the provided value. This matches the semantics of (and is implemented with) the HTTP [If-Match header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-Match).
-  --CollectionTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the List Item's parent Sync List expires (time-to-live) and is deleted. This parameter can only be used when the List Item's `data` or `ttl` is updated in the same request.
-  --Data: any # A JSON string that represents an arbitrary, schema-less object that the List Item stores. Can be up to 16 KiB in length.
-  --ItemTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the List Item expires (time-to-live) and is deleted.
-  --Ttl: int # An alias for `item_ttl`. If both parameters are provided, this value is ignored.
+  --if-match: string # If provided, applies this mutation if (and only if) the “revision” field of this [map item] matches the provided value. This matches the semantics of (and is implemented with) the HTTP [If-Match header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-Match).
+  --collection-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the List Item's parent Sync List expires (time-to-live) and is deleted. This parameter can only be used when the List Item's `data` or `ttl` is updated in the same request.
+  --data: any # A JSON string that represents an arbitrary, schema-less object that the List Item stores. Can be up to 16 KiB in length.
+  --item-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the List Item expires (time-to-live) and is deleted.
+  --ttl: int # An alias for `item_ttl`. If both parameters are provided, this value is ignored.
 ]: any -> record<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, index: int, list_sid: string, revision: string, service_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($ListSid)/Items/($Index)")
-  let body = {CollectionTtl: $CollectionTtl, Data: $Data, ItemTtl: $ItemTtl, Ttl: $Ttl} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, index: $index} | format pattern "/v1/Services/{service_sid}/Lists/{list_sid}/Items/{index}"))
+  let body = {"CollectionTtl": $collection_ttl, "Data": $data, "ItemTtl": $item_ttl, "Ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -591,9 +591,9 @@ export def "services-lists-items UpdateSyncListItem" [
 #
 # GET /v1/Services/{ServiceSid}/Lists/{ListSid}/Permissions
 # operationId: ListSyncListPermission
-export def "services-lists-permissions ListSyncListPermission" [
-  ServiceSid: string
-  ListSid: string
+export def "services-lists-permissions list-sync" [
+  service_sid: string
+  list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,14 +602,14 @@ export def "services-lists-permissions ListSyncListPermission" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, permissions: table<account_sid: string, identity: string, list_sid: string, manage: bool, read: bool, service_sid: string, url: string, write: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($ListSid)/Permissions" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid} | format pattern "/v1/Services/{service_sid}/Lists/{list_sid}/Permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -619,10 +619,10 @@ export def "services-lists-permissions ListSyncListPermission" [
 #
 # DELETE /v1/Services/{ServiceSid}/Lists/{ListSid}/Permissions/{Identity}
 # operationId: DeleteSyncListPermission
-export def "services-lists-permissions DeleteSyncListPermission" [
-  ServiceSid: string
-  ListSid: string
-  Identity: string
+export def "services-lists-permissions delete-sync" [
+  service_sid: string
+  list_sid: string
+  identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -634,7 +634,7 @@ export def "services-lists-permissions DeleteSyncListPermission" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($ListSid)/Permissions/($Identity)")
+  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, identity: $identity} | format pattern "/v1/Services/{service_sid}/Lists/{list_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -644,10 +644,10 @@ export def "services-lists-permissions DeleteSyncListPermission" [
 #
 # GET /v1/Services/{ServiceSid}/Lists/{ListSid}/Permissions/{Identity}
 # operationId: FetchSyncListPermission
-export def "services-lists-permissions FetchSyncListPermission" [
-  ServiceSid: string
-  ListSid: string
-  Identity: string
+export def "services-lists-permissions get-sync" [
+  service_sid: string
+  list_sid: string
+  identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +659,7 @@ export def "services-lists-permissions FetchSyncListPermission" [
 ]: nothing -> record<account_sid: string, identity: string, list_sid: string, manage: bool, read: bool, service_sid: string, url: string, write: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($ListSid)/Permissions/($Identity)")
+  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, identity: $identity} | format pattern "/v1/Services/{service_sid}/Lists/{list_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -669,10 +669,10 @@ export def "services-lists-permissions FetchSyncListPermission" [
 #
 # POST /v1/Services/{ServiceSid}/Lists/{ListSid}/Permissions/{Identity}
 # operationId: UpdateSyncListPermission
-export def "services-lists-permissions UpdateSyncListPermission" [
-  ServiceSid: string
-  ListSid: string
-  Identity: string
+export def "services-lists-permissions update-sync" [
+  service_sid: string
+  list_sid: string
+  identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,15 +681,15 @@ export def "services-lists-permissions UpdateSyncListPermission" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Manage: oneof<nothing, bool> # Whether the identity can delete the Sync List. Default value is `false`.
-  --Read: oneof<nothing, bool> # Whether the identity can read the Sync List and its Items. Default value is `false`.
-  --Write: oneof<nothing, bool> # Whether the identity can create, update, and delete Items in the Sync List. Default value is `false`.
+  --manage: oneof<nothing, bool> # Whether the identity can delete the Sync List. Default value is `false`.
+  --read: oneof<nothing, bool> # Whether the identity can read the Sync List and its Items. Default value is `false`.
+  --write: oneof<nothing, bool> # Whether the identity can create, update, and delete Items in the Sync List. Default value is `false`.
 ]: any -> record<account_sid: string, identity: string, list_sid: string, manage: bool, read: bool, service_sid: string, url: string, write: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($ListSid)/Permissions/($Identity)")
-  let body = {Manage: $Manage, Read: $Read, Write: $Write} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, list_sid: $list_sid, identity: $identity} | format pattern "/v1/Services/{service_sid}/Lists/{list_sid}/Permissions/{identity}"))
+  let body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -699,9 +699,9 @@ export def "services-lists-permissions UpdateSyncListPermission" [
 # DELETE /v1/Services/{ServiceSid}/Lists/{Sid}
 #
 # operationId: DeleteSyncList
-export def "services-lists DeleteSyncList" [
-  ServiceSid: string
-  Sid: string
+export def "services-lists delete-sync" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "services-lists DeleteSyncList" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Lists/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -722,9 +722,9 @@ export def "services-lists DeleteSyncList" [
 # GET /v1/Services/{ServiceSid}/Lists/{Sid}
 #
 # operationId: FetchSyncList
-export def "services-lists FetchSyncList" [
-  ServiceSid: string
-  Sid: string
+export def "services-lists get-sync" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "services-lists FetchSyncList" [
 ]: nothing -> record<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Lists/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -745,9 +745,9 @@ export def "services-lists FetchSyncList" [
 # POST /v1/Services/{ServiceSid}/Lists/{Sid}
 #
 # operationId: UpdateSyncList
-export def "services-lists UpdateSyncList" [
-  ServiceSid: string
-  Sid: string
+export def "services-lists update-sync" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,14 +756,14 @@ export def "services-lists UpdateSyncList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CollectionTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync List expires (time-to-live) and is deleted.
-  --Ttl: int # An alias for `collection_ttl`. If both are provided, this value is ignored.
+  --collection-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync List expires (time-to-live) and is deleted.
+  --ttl: int # An alias for `collection_ttl`. If both are provided, this value is ignored.
 ]: any -> record<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Lists/($Sid)")
-  let body = {CollectionTtl: $CollectionTtl, Ttl: $Ttl} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Lists/{sid}"))
+  let body = {"CollectionTtl": $collection_ttl, "Ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -773,8 +773,8 @@ export def "services-lists UpdateSyncList" [
 # GET /v1/Services/{ServiceSid}/Maps
 #
 # operationId: ListSyncMap
-export def "services-maps ListSyncMap" [
-  ServiceSid: string
+export def "services-maps list-sync" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,14 +783,14 @@ export def "services-maps ListSyncMap" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<maps: table<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Maps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -799,8 +799,8 @@ export def "services-maps ListSyncMap" [
 # POST /v1/Services/{ServiceSid}/Maps
 #
 # operationId: CreateSyncMap
-export def "services-maps CreateSyncMap" [
-  ServiceSid: string
+export def "services-maps create-sync" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,15 +809,15 @@ export def "services-maps CreateSyncMap" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CollectionTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync Map expires (time-to-live) and is deleted.
-  --Ttl: int # An alias for `collection_ttl`. If both parameters are provided, this value is ignored.
-  --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used as an alternative to the `sid` in the URL path to address the resource.
+  --collection-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync Map expires (time-to-live) and is deleted.
+  --ttl: int # An alias for `collection_ttl`. If both parameters are provided, this value is ignored.
+  --unique-name: string # An application-defined string that uniquely identifies the resource. It can be used as an alternative to the `sid` in the URL path to address the resource.
 ]: any -> record<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps")
-  let body = {CollectionTtl: $CollectionTtl, Ttl: $Ttl, UniqueName: $UniqueName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Maps"))
+  let body = {"CollectionTtl": $collection_ttl, "Ttl": $ttl, "UniqueName": $unique_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -827,9 +827,9 @@ export def "services-maps CreateSyncMap" [
 # GET /v1/Services/{ServiceSid}/Maps/{MapSid}/Items
 #
 # operationId: ListSyncMapItem
-export def "services-maps-items ListSyncMapItem" [
-  ServiceSid: string
-  MapSid: string
+export def "services-maps-items list-sync" [
+  service_sid: string
+  map_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,17 +838,17 @@ export def "services-maps-items ListSyncMapItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Order: string@Order-completer # How to order the Map Items returned by their `key` value. Can be: `asc` (ascending) or `desc` (descending) and the default is ascending. Map Items are [ordered lexicographically](https://en.wikipedia.org/wiki/Lexicographical_order) by Item key.
-  --From: string # The `key` of the first Sync Map Item resource to read. See also `bounds`.
-  --Bounds: string@Bounds-completer # Whether to include the Map Item referenced by the `from` parameter. Can be: `inclusive` to include the Map Item referenced by the `from` parameter or `exclusive` to start with the next Map Item. The default value is `inclusive`.
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --order: string@order-completer # How to order the Map Items returned by their `key` value. Can be: `asc` (ascending) or `desc` (descending) and the default is ascending. Map Items are [ordered lexicographically](https://en.wikipedia.org/wiki/Lexicographical_order) by Item key.
+  --qp-from: string # The `key` of the first Sync Map Item resource to read. See also `bounds`.
+  --bounds: string@bounds-completer # Whether to include the Map Item referenced by the `from` parameter. Can be: `inclusive` to include the Map Item referenced by the `from` parameter or `exclusive` to start with the next Map Item. The default value is `inclusive`.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<items: table<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, key: string, map_sid: string, revision: string, service_sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let qp = [(serialize-qp "Order" $Order "scalar") (serialize-qp "From" $From "scalar") (serialize-qp "Bounds" $Bounds "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($MapSid)/Items" $qp)
+  let qp = [(serialize-qp "Order" $order "scalar") (serialize-qp "From" $qp_from "scalar") (serialize-qp "Bounds" $bounds "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid} | format pattern "/v1/Services/{service_sid}/Maps/{map_sid}/Items") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -857,9 +857,9 @@ export def "services-maps-items ListSyncMapItem" [
 # POST /v1/Services/{ServiceSid}/Maps/{MapSid}/Items
 #
 # operationId: CreateSyncMapItem
-export def "services-maps-items CreateSyncMapItem" [
-  ServiceSid: string
-  MapSid: string
+export def "services-maps-items create-sync" [
+  service_sid: string
+  map_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,17 +868,17 @@ export def "services-maps-items CreateSyncMapItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CollectionTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Map Item's parent Sync Map expires (time-to-live) and is deleted.
-  Data: any # A JSON string that represents an arbitrary, schema-less object that the Map Item stores. Can be up to 16 KiB in length.
-  --ItemTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Map Item expires (time-to-live) and is deleted.
-  Key: string # The unique, user-defined key for the Map Item. Can be up to 320 characters long.
-  --Ttl: int # An alias for `item_ttl`. If both parameters are provided, this value is ignored.
+  --collection-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Map Item's parent Sync Map expires (time-to-live) and is deleted.
+  data: any # A JSON string that represents an arbitrary, schema-less object that the Map Item stores. Can be up to 16 KiB in length.
+  --item-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Map Item expires (time-to-live) and is deleted.
+  key: string # The unique, user-defined key for the Map Item. Can be up to 320 characters long.
+  --ttl: int # An alias for `item_ttl`. If both parameters are provided, this value is ignored.
 ]: any -> record<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, key: string, map_sid: string, revision: string, service_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($MapSid)/Items")
-  let body = {CollectionTtl: $CollectionTtl, Data: $Data, ItemTtl: $ItemTtl, Key: $Key, Ttl: $Ttl} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid} | format pattern "/v1/Services/{service_sid}/Maps/{map_sid}/Items"))
+  let body = {"CollectionTtl": $collection_ttl, "Data": $data, "ItemTtl": $item_ttl, "Key": $key, "Ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -888,10 +888,10 @@ export def "services-maps-items CreateSyncMapItem" [
 # DELETE /v1/Services/{ServiceSid}/Maps/{MapSid}/Items/{Key}
 #
 # operationId: DeleteSyncMapItem
-export def "services-maps-items DeleteSyncMapItem" [
-  ServiceSid: string
-  MapSid: string
-  Key: string
+export def "services-maps-items delete-sync" [
+  service_sid: string
+  map_sid: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,12 +900,12 @@ export def "services-maps-items DeleteSyncMapItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # If provided, applies this mutation if (and only if) the “revision” field of this [map item] matches the provided value. This matches the semantics of (and is implemented with) the HTTP [If-Match header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-Match).
+  --if-match: string # If provided, applies this mutation if (and only if) the “revision” field of this [map item] matches the provided value. This matches the semantics of (and is implemented with) the HTTP [If-Match header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-Match).
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($MapSid)/Items/($Key)")
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, key: $key} | format pattern "/v1/Services/{service_sid}/Maps/{map_sid}/Items/{key}"))
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -915,10 +915,10 @@ export def "services-maps-items DeleteSyncMapItem" [
 # GET /v1/Services/{ServiceSid}/Maps/{MapSid}/Items/{Key}
 #
 # operationId: FetchSyncMapItem
-export def "services-maps-items FetchSyncMapItem" [
-  ServiceSid: string
-  MapSid: string
-  Key: string
+export def "services-maps-items get-sync" [
+  service_sid: string
+  map_sid: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,7 +930,7 @@ export def "services-maps-items FetchSyncMapItem" [
 ]: nothing -> record<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, key: string, map_sid: string, revision: string, service_sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($MapSid)/Items/($Key)")
+  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, key: $key} | format pattern "/v1/Services/{service_sid}/Maps/{map_sid}/Items/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -939,10 +939,10 @@ export def "services-maps-items FetchSyncMapItem" [
 # POST /v1/Services/{ServiceSid}/Maps/{MapSid}/Items/{Key}
 #
 # operationId: UpdateSyncMapItem
-export def "services-maps-items UpdateSyncMapItem" [
-  ServiceSid: string
-  MapSid: string
-  Key: string
+export def "services-maps-items update-sync" [
+  service_sid: string
+  map_sid: string
+  key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -951,19 +951,19 @@ export def "services-maps-items UpdateSyncMapItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string # If provided, applies this mutation if (and only if) the “revision” field of this [map item] matches the provided value. This matches the semantics of (and is implemented with) the HTTP [If-Match header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-Match).
-  --CollectionTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Map Item's parent Sync Map expires (time-to-live) and is deleted. This parameter can only be used when the Map Item's `data` or `ttl` is updated in the same request.
-  --Data: any # A JSON string that represents an arbitrary, schema-less object that the Map Item stores. Can be up to 16 KiB in length.
-  --ItemTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Map Item expires (time-to-live) and is deleted.
-  --Ttl: int # An alias for `item_ttl`. If both parameters are provided, this value is ignored.
+  --if-match: string # If provided, applies this mutation if (and only if) the “revision” field of this [map item] matches the provided value. This matches the semantics of (and is implemented with) the HTTP [If-Match header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-Match).
+  --collection-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Map Item's parent Sync Map expires (time-to-live) and is deleted. This parameter can only be used when the Map Item's `data` or `ttl` is updated in the same request.
+  --data: any # A JSON string that represents an arbitrary, schema-less object that the Map Item stores. Can be up to 16 KiB in length.
+  --item-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Map Item expires (time-to-live) and is deleted.
+  --ttl: int # An alias for `item_ttl`. If both parameters are provided, this value is ignored.
 ]: any -> record<account_sid: string, created_by: string, data: any, date_created: string, date_expires: string, date_updated: string, key: string, map_sid: string, revision: string, service_sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($MapSid)/Items/($Key)")
-  let body = {CollectionTtl: $CollectionTtl, Data: $Data, ItemTtl: $ItemTtl, Ttl: $Ttl} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, key: $key} | format pattern "/v1/Services/{service_sid}/Maps/{map_sid}/Items/{key}"))
+  let body = {"CollectionTtl": $collection_ttl, "Data": $data, "ItemTtl": $item_ttl, "Ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -974,9 +974,9 @@ export def "services-maps-items UpdateSyncMapItem" [
 #
 # GET /v1/Services/{ServiceSid}/Maps/{MapSid}/Permissions
 # operationId: ListSyncMapPermission
-export def "services-maps-permissions ListSyncMapPermission" [
-  ServiceSid: string
-  MapSid: string
+export def "services-maps-permissions list-sync" [
+  service_sid: string
+  map_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,14 +985,14 @@ export def "services-maps-permissions ListSyncMapPermission" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, permissions: table<account_sid: string, identity: string, manage: bool, map_sid: string, read: bool, service_sid: string, url: string, write: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($MapSid)/Permissions" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid} | format pattern "/v1/Services/{service_sid}/Maps/{map_sid}/Permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1002,10 +1002,10 @@ export def "services-maps-permissions ListSyncMapPermission" [
 #
 # DELETE /v1/Services/{ServiceSid}/Maps/{MapSid}/Permissions/{Identity}
 # operationId: DeleteSyncMapPermission
-export def "services-maps-permissions DeleteSyncMapPermission" [
-  ServiceSid: string
-  MapSid: string
-  Identity: string
+export def "services-maps-permissions delete-sync" [
+  service_sid: string
+  map_sid: string
+  identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1017,7 +1017,7 @@ export def "services-maps-permissions DeleteSyncMapPermission" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($MapSid)/Permissions/($Identity)")
+  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, identity: $identity} | format pattern "/v1/Services/{service_sid}/Maps/{map_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1027,10 +1027,10 @@ export def "services-maps-permissions DeleteSyncMapPermission" [
 #
 # GET /v1/Services/{ServiceSid}/Maps/{MapSid}/Permissions/{Identity}
 # operationId: FetchSyncMapPermission
-export def "services-maps-permissions FetchSyncMapPermission" [
-  ServiceSid: string
-  MapSid: string
-  Identity: string
+export def "services-maps-permissions get-sync" [
+  service_sid: string
+  map_sid: string
+  identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1042,7 +1042,7 @@ export def "services-maps-permissions FetchSyncMapPermission" [
 ]: nothing -> record<account_sid: string, identity: string, manage: bool, map_sid: string, read: bool, service_sid: string, url: string, write: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($MapSid)/Permissions/($Identity)")
+  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, identity: $identity} | format pattern "/v1/Services/{service_sid}/Maps/{map_sid}/Permissions/{identity}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1052,10 +1052,10 @@ export def "services-maps-permissions FetchSyncMapPermission" [
 #
 # POST /v1/Services/{ServiceSid}/Maps/{MapSid}/Permissions/{Identity}
 # operationId: UpdateSyncMapPermission
-export def "services-maps-permissions UpdateSyncMapPermission" [
-  ServiceSid: string
-  MapSid: string
-  Identity: string
+export def "services-maps-permissions update-sync" [
+  service_sid: string
+  map_sid: string
+  identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1064,15 +1064,15 @@ export def "services-maps-permissions UpdateSyncMapPermission" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Manage: oneof<nothing, bool> # Whether the identity can delete the Sync Map. Default value is `false`.
-  --Read: oneof<nothing, bool> # Whether the identity can read the Sync Map and its Items. Default value is `false`.
-  --Write: oneof<nothing, bool> # Whether the identity can create, update, and delete Items in the Sync Map. Default value is `false`.
+  --manage: oneof<nothing, bool> # Whether the identity can delete the Sync Map. Default value is `false`.
+  --read: oneof<nothing, bool> # Whether the identity can read the Sync Map and its Items. Default value is `false`.
+  --write: oneof<nothing, bool> # Whether the identity can create, update, and delete Items in the Sync Map. Default value is `false`.
 ]: any -> record<account_sid: string, identity: string, manage: bool, map_sid: string, read: bool, service_sid: string, url: string, write: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($MapSid)/Permissions/($Identity)")
-  let body = {Manage: $Manage, Read: $Read, Write: $Write} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, map_sid: $map_sid, identity: $identity} | format pattern "/v1/Services/{service_sid}/Maps/{map_sid}/Permissions/{identity}"))
+  let body = {"Manage": $manage, "Read": $read, "Write": $write} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1082,9 +1082,9 @@ export def "services-maps-permissions UpdateSyncMapPermission" [
 # DELETE /v1/Services/{ServiceSid}/Maps/{Sid}
 #
 # operationId: DeleteSyncMap
-export def "services-maps DeleteSyncMap" [
-  ServiceSid: string
-  Sid: string
+export def "services-maps delete-sync" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,7 +1096,7 @@ export def "services-maps DeleteSyncMap" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Maps/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1105,9 +1105,9 @@ export def "services-maps DeleteSyncMap" [
 # GET /v1/Services/{ServiceSid}/Maps/{Sid}
 #
 # operationId: FetchSyncMap
-export def "services-maps FetchSyncMap" [
-  ServiceSid: string
-  Sid: string
+export def "services-maps get-sync" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1119,7 +1119,7 @@ export def "services-maps FetchSyncMap" [
 ]: nothing -> record<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Maps/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1128,9 +1128,9 @@ export def "services-maps FetchSyncMap" [
 # POST /v1/Services/{ServiceSid}/Maps/{Sid}
 #
 # operationId: UpdateSyncMap
-export def "services-maps UpdateSyncMap" [
-  ServiceSid: string
-  Sid: string
+export def "services-maps update-sync" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1139,14 +1139,14 @@ export def "services-maps UpdateSyncMap" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CollectionTtl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync Map expires (time-to-live) and is deleted.
-  --Ttl: int # An alias for `collection_ttl`. If both parameters are provided, this value is ignored.
+  --collection-ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Sync Map expires (time-to-live) and is deleted.
+  --ttl: int # An alias for `collection_ttl`. If both parameters are provided, this value is ignored.
 ]: any -> record<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, revision: string, service_sid: string, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Maps/($Sid)")
-  let body = {CollectionTtl: $CollectionTtl, Ttl: $Ttl} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Maps/{sid}"))
+  let body = {"CollectionTtl": $collection_ttl, "Ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1157,8 +1157,8 @@ export def "services-maps UpdateSyncMap" [
 #
 # GET /v1/Services/{ServiceSid}/Streams
 # operationId: ListSyncStream
-export def "services-streams ListSyncStream" [
-  ServiceSid: string
+export def "services-streams list-sync" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,14 +1167,14 @@ export def "services-streams ListSyncStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, streams: table<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, service_sid: string, sid: string, unique_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Streams" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Streams") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1184,8 +1184,8 @@ export def "services-streams ListSyncStream" [
 #
 # POST /v1/Services/{ServiceSid}/Streams
 # operationId: CreateSyncStream
-export def "services-streams CreateSyncStream" [
-  ServiceSid: string
+export def "services-streams create-sync" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,14 +1194,14 @@ export def "services-streams CreateSyncStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Stream expires and is deleted (time-to-live).
-  --UniqueName: string # An application-defined string that uniquely identifies the resource. This value must be unique within its Service and it can be up to 320 characters long. The `unique_name` value can be used as an alternative to the `sid` in the URL path to address the resource.
+  --ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Stream expires and is deleted (time-to-live).
+  --unique-name: string # An application-defined string that uniquely identifies the resource. This value must be unique within its Service and it can be up to 320 characters long. The `unique_name` value can be used as an alternative to the `sid` in the URL path to address the resource.
 ]: any -> record<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, service_sid: string, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Streams")
-  let body = {Ttl: $Ttl, UniqueName: $UniqueName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Streams"))
+  let body = {"Ttl": $ttl, "UniqueName": $unique_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1212,9 +1212,9 @@ export def "services-streams CreateSyncStream" [
 #
 # DELETE /v1/Services/{ServiceSid}/Streams/{Sid}
 # operationId: DeleteSyncStream
-export def "services-streams DeleteSyncStream" [
-  ServiceSid: string
-  Sid: string
+export def "services-streams delete-sync" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,7 +1226,7 @@ export def "services-streams DeleteSyncStream" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Streams/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Streams/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1236,9 +1236,9 @@ export def "services-streams DeleteSyncStream" [
 #
 # GET /v1/Services/{ServiceSid}/Streams/{Sid}
 # operationId: FetchSyncStream
-export def "services-streams FetchSyncStream" [
-  ServiceSid: string
-  Sid: string
+export def "services-streams get-sync" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1250,7 +1250,7 @@ export def "services-streams FetchSyncStream" [
 ]: nothing -> record<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, service_sid: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Streams/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Streams/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1260,9 +1260,9 @@ export def "services-streams FetchSyncStream" [
 #
 # POST /v1/Services/{ServiceSid}/Streams/{Sid}
 # operationId: UpdateSyncStream
-export def "services-streams UpdateSyncStream" [
-  ServiceSid: string
-  Sid: string
+export def "services-streams update-sync" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,13 +1271,13 @@ export def "services-streams UpdateSyncStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Stream expires and is deleted (time-to-live).
+  --ttl: int # How long, [in seconds](https://www.twilio.com/docs/sync/limits#sync-payload-limits), before the Stream expires and is deleted (time-to-live).
 ]: any -> record<account_sid: string, created_by: string, date_created: string, date_expires: string, date_updated: string, links: record, service_sid: string, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Streams/($Sid)")
-  let body = {Ttl: $Ttl} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Streams/{sid}"))
+  let body = {"Ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1288,9 +1288,9 @@ export def "services-streams UpdateSyncStream" [
 #
 # POST /v1/Services/{ServiceSid}/Streams/{StreamSid}/Messages
 # operationId: CreateStreamMessage
-export def "services-streams-messages CreateStreamMessage" [
-  ServiceSid: string
-  StreamSid: string
+export def "services-streams-messages create" [
+  service_sid: string
+  stream_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1299,13 +1299,13 @@ export def "services-streams-messages CreateStreamMessage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Data: any # A JSON string that represents an arbitrary, schema-less object that makes up the Stream Message body. Can be up to 4 KiB in length.
+  data: any # A JSON string that represents an arbitrary, schema-less object that makes up the Stream Message body. Can be up to 4 KiB in length.
 ]: any -> record<data: any, sid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Streams/($StreamSid)/Messages")
-  let body = {Data: $Data} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, stream_sid: $stream_sid} | format pattern "/v1/Services/{service_sid}/Streams/{stream_sid}/Messages"))
+  let body = {"Data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1315,8 +1315,8 @@ export def "services-streams-messages CreateStreamMessage" [
 # DELETE /v1/Services/{Sid}
 #
 # operationId: DeleteService
-export def "services DeleteService" [
-  Sid: string
+export def "services delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1328,7 +1328,7 @@ export def "services DeleteService" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1337,8 +1337,8 @@ export def "services DeleteService" [
 # GET /v1/Services/{Sid}
 #
 # operationId: FetchService
-export def "services FetchService" [
-  Sid: string
+export def "services get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,7 +1350,7 @@ export def "services FetchService" [
 ]: nothing -> record<account_sid: string, acl_enabled: bool, date_created: string, date_updated: string, friendly_name: string, links: record, reachability_debouncing_enabled: bool, reachability_debouncing_window: int, reachability_webhooks_enabled: bool, sid: string, unique_name: string, url: string, webhook_url: string, webhooks_from_rest_enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1359,8 +1359,8 @@ export def "services FetchService" [
 # POST /v1/Services/{Sid}
 #
 # operationId: UpdateService
-export def "services UpdateService" [
-  Sid: string
+export def "services update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1369,19 +1369,19 @@ export def "services UpdateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AclEnabled: oneof<nothing, bool> # Whether token identities in the Service must be granted access to Sync objects by using the [Permissions](https://www.twilio.com/docs/sync/api/sync-permissions) resource.
-  --FriendlyName: string # A string that you assign to describe the resource.
-  --ReachabilityDebouncingEnabled: oneof<nothing, bool> # Whether every `endpoint_disconnected` event should occur after a configurable delay. The default is `false`, where the `endpoint_disconnected` event occurs immediately after disconnection. When `true`, intervening reconnections can prevent the `endpoint_disconnected` event.
-  --ReachabilityDebouncingWindow: int # The reachability event delay in milliseconds if `reachability_debouncing_enabled` = `true`.  Must be between 1,000 and 30,000 and defaults to 5,000. This is the number of milliseconds after the last running client disconnects, and a Sync identity is declared offline, before the webhook is called if all endpoints remain offline. A reconnection from the same identity by any endpoint during this interval prevents the webhook from being called.
-  --ReachabilityWebhooksEnabled: oneof<nothing, bool> # Whether the service instance should call `webhook_url` when client endpoints connect to Sync. The default is `false`.
-  --WebhookUrl: string # The URL we should call when Sync objects are manipulated. (format: uri)
-  --WebhooksFromRestEnabled: oneof<nothing, bool> # Whether the Service instance should call `webhook_url` when the REST API is used to update Sync objects. The default is `false`.
+  --acl-enabled: oneof<nothing, bool> # Whether token identities in the Service must be granted access to Sync objects by using the [Permissions](https://www.twilio.com/docs/sync/api/sync-permissions) resource.
+  --friendly-name: string # A string that you assign to describe the resource.
+  --reachability-debouncing-enabled: oneof<nothing, bool> # Whether every `endpoint_disconnected` event should occur after a configurable delay. The default is `false`, where the `endpoint_disconnected` event occurs immediately after disconnection. When `true`, intervening reconnections can prevent the `endpoint_disconnected` event.
+  --reachability-debouncing-window: int # The reachability event delay in milliseconds if `reachability_debouncing_enabled` = `true`.  Must be between 1,000 and 30,000 and defaults to 5,000. This is the number of milliseconds after the last running client disconnects, and a Sync identity is declared offline, before the webhook is called if all endpoints remain offline. A reconnection from the same identity by any endpoint during this interval prevents the webhook from being called.
+  --reachability-webhooks-enabled: oneof<nothing, bool> # Whether the service instance should call `webhook_url` when client endpoints connect to Sync. The default is `false`.
+  --webhook-url: string # The URL we should call when Sync objects are manipulated. (format: uri)
+  --webhooks-from-rest-enabled: oneof<nothing, bool> # Whether the Service instance should call `webhook_url` when the REST API is used to update Sync objects. The default is `false`.
 ]: any -> record<account_sid: string, acl_enabled: bool, date_created: string, date_updated: string, friendly_name: string, links: record, reachability_debouncing_enabled: bool, reachability_debouncing_window: int, reachability_webhooks_enabled: bool, sid: string, unique_name: string, url: string, webhook_url: string, webhooks_from_rest_enabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://sync.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($Sid)")
-  let body = {AclEnabled: $AclEnabled, FriendlyName: $FriendlyName, ReachabilityDebouncingEnabled: $ReachabilityDebouncingEnabled, ReachabilityDebouncingWindow: $ReachabilityDebouncingWindow, ReachabilityWebhooksEnabled: $ReachabilityWebhooksEnabled, WebhookUrl: $WebhookUrl, WebhooksFromRestEnabled: $WebhooksFromRestEnabled} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
+  let body = {"AclEnabled": $acl_enabled, "FriendlyName": $friendly_name, "ReachabilityDebouncingEnabled": $reachability_debouncing_enabled, "ReachabilityDebouncingWindow": $reachability_debouncing_window, "ReachabilityWebhooksEnabled": $reachability_webhooks_enabled, "WebhookUrl": $webhook_url, "WebhooksFromRestEnabled": $webhooks_from_rest_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

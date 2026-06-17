@@ -71,13 +71,13 @@ def search-pattern-completer [] { ["0" "1" "2"] }
 def accept-completer [] { ["application/json" "text/xml"] }
 def type-completer [] { ["landline" "landline-toll-free" "mobile-lvn"] }
 def features-completer [] { ["MMS" "SMS" "SMS,MMS" "SMS,MMS,VOICE" "SMS,VOICE" "VOICE" "VOICE,MMS"] }
-def messagesCallbackType-completer [] { ["app"] }
-def voiceCallbackType-completer [] { ["app" "sip" "tel"] }
+def messages-callback-type-completer [] { ["app"] }
+def voice-callback-type-completer [] { ["app" "sip" "tel"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-numbers get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-numbers get-owned" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /account/numbers
 # operationId: getOwnedNumbers
-export def "account-numbers get" [
+export def "account-numbers get-owned" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,7 +150,7 @@ export def "number-buy buyANumber" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number/buy")
-  let body = {country: $country, msisdn: $msisdn, target_api_key: $target_api_key} | compact
+  let body = {"country": $country, "msisdn": $msisdn, "target_api_key": $target_api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -161,7 +161,7 @@ export def "number-buy buyANumber" [
 #
 # POST /number/cancel
 # operationId: cancelANumber
-export def "number-cancel cancelANumber" [
+export def "number-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +179,7 @@ export def "number-cancel cancelANumber" [
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number/cancel")
-  let body = {country: $country, msisdn: $msisdn, target_api_key: $target_api_key} | compact
+  let body = {"country": $country, "msisdn": $msisdn, "target_api_key": $target_api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -190,7 +190,7 @@ export def "number-cancel cancelANumber" [
 #
 # GET /number/search
 # operationId: getAvailableNumbers
-export def "number-search get" [
+export def "number-search get-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,9 +221,9 @@ export def "number-search get" [
 #
 # POST /number/update
 # operationId: updateANumber
-@deprecated --flag messagesCallbackType
-@deprecated --flag messagesCallbackValue
-export def "number-update updateANumber" [
+@deprecated --flag messages-callback-type
+@deprecated --flag messages-callback-value
+export def "number-update update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,20 +235,20 @@ export def "number-update updateANumber" [
   --accept: string@accept-completer # Response content type
   --app-id: string # The Application that will handle inbound traffic to this number. (e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789abc)
   country: string # The two character country code in ISO 3166-1 alpha-2 format (e.g. GB)
-  --messagesCallbackType: string@messagesCallbackType-completer # <strong>DEPRECATED</strong> - We recommend that you use `app_id` instead.  Specifies the Messages webhook type (always `app`) associated with this number and must be used with the `messagesCallbackValue` parameter.  (DEPRECATED, e.g. app)
-  --messagesCallbackValue: string # <strong>DEPRECATED</strong> - We recommend that you use `app_id` instead.  Specifies the Application ID of your Messages application. It must be used with the `messagesCallbackType` parameter.  (DEPRECATED, e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789ab)
-  --moHttpUrl: string # An URL-encoded URI to the webhook endpoint that handles inbound messages. Your webhook endpoint must be active before you make this request. Vonage makes a `GET` request to the endpoint and checks that it returns a `200 OK` response. Set this parameter's value to an empty string to remove the webhook. (e.g. https://example.com/webhooks/inbound-sms)
-  --moSmppSysType: string # The associated system type for your SMPP client (e.g. inbound)
+  --messages-callback-type: string@messages-callback-type-completer # <strong>DEPRECATED</strong> - We recommend that you use `app_id` instead.  Specifies the Messages webhook type (always `app`) associated with this number and must be used with the `messagesCallbackValue` parameter.  (DEPRECATED, e.g. app)
+  --messages-callback-value: string # <strong>DEPRECATED</strong> - We recommend that you use `app_id` instead.  Specifies the Application ID of your Messages application. It must be used with the `messagesCallbackType` parameter.  (DEPRECATED, e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789ab)
+  --mo-http-url: string # An URL-encoded URI to the webhook endpoint that handles inbound messages. Your webhook endpoint must be active before you make this request. Vonage makes a `GET` request to the endpoint and checks that it returns a `200 OK` response. Set this parameter's value to an empty string to remove the webhook. (e.g. https://example.com/webhooks/inbound-sms)
+  --mo-smpp-sys-type: string # The associated system type for your SMPP client (e.g. inbound)
   msisdn: string # An available inbound virtual number. (e.g. 447700900000)
-  --voiceCallbackType: string@voiceCallbackType-completer # Specify whether inbound voice calls on your number are forwarded to a SIP or a telephone number.  This must be used with the `voiceCallbackValue` parameter. If set, `sip` or `tel` are prioritized over the Voice capability in your Application.  *Note: The `app` value is deprecated and will be removed in future.*  (e.g. tel)
-  --voiceCallbackValue: string # A SIP URI or telephone number. Must be used with the `voiceCallbackType` parameter. (e.g. 447700900000)
-  --voiceStatusCallback: string # A webhook URI for Vonage to send a request to when a call ends (e.g. https://example.com/webhooks/status)
+  --voice-callback-type: string@voice-callback-type-completer # Specify whether inbound voice calls on your number are forwarded to a SIP or a telephone number.  This must be used with the `voiceCallbackValue` parameter. If set, `sip` or `tel` are prioritized over the Voice capability in your Application.  *Note: The `app` value is deprecated and will be removed in future.*  (e.g. tel)
+  --voice-callback-value: string # A SIP URI or telephone number. Must be used with the `voiceCallbackType` parameter. (e.g. 447700900000)
+  --voice-status-callback: string # A webhook URI for Vonage to send a request to when a call ends (e.g. https://example.com/webhooks/status)
 ]: any -> record<error_code: string, error_code_label: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number/update")
-  let body = {app_id: $app_id, country: $country, messagesCallbackType: $messagesCallbackType, messagesCallbackValue: $messagesCallbackValue, moHttpUrl: $moHttpUrl, moSmppSysType: $moSmppSysType, msisdn: $msisdn, voiceCallbackType: $voiceCallbackType, voiceCallbackValue: $voiceCallbackValue, voiceStatusCallback: $voiceStatusCallback} | compact
+  let body = {"app_id": $app_id, "country": $country, "messagesCallbackType": $messages_callback_type, "messagesCallbackValue": $messages_callback_value, "moHttpUrl": $mo_http_url, "moSmppSysType": $mo_smpp_sys_type, "msisdn": $msisdn, "voiceCallbackType": $voice_callback_type, "voiceCallbackValue": $voice_callback_value, "voiceStatusCallback": $voice_status_callback} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

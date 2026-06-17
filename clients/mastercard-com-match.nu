@@ -101,13 +101,13 @@ export def "fraud-merchant-add-merchant post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AddMerchantRequest: any # shape: {AcquirerId: string, Merchant?: any}
+  --add-merchant-request: any # shape: {AcquirerId: string, Merchant?: any}
 ]: any -> record<AddMerchantResponse: record<MerchantReferenceNumber: string, Name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fraud/merchant/v3/add-merchant")
-  let body = {AddMerchantRequest: $AddMerchantRequest} | compact
+  let body = {"AddMerchantRequest": $add_merchant_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,13 +127,13 @@ export def "fraud-merchant-common-contact-details post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ContactRequest: any # shape: {AcquirerId: string}
+  --contact-request: any # shape: {AcquirerId: string}
 ]: any -> record<ContactResponse: record<Contact: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fraud/merchant/v3/common/contact-details")
-  let body = {ContactRequest: $ContactRequest} | compact
+  let body = {"ContactRequest": $contact_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -153,15 +153,15 @@ export def "fraud-merchant-retro-retro-inquiry-details post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AcquirerId: string # The Member ICA number which is used to validate that the application has permission to hit the MATCH database. This number must be obtained from a participating MATCH acquiring bank or entity before a developer can access the MATCH resource.
-  --RetroInquiryRequest: any # shape: {InquiryReferenceNumber?: string}
+  --acquirer-id: string # The Member ICA number which is used to validate that the application has permission to hit the MATCH database. This number must be obtained from a participating MATCH acquiring bank or entity before a developer can access the MATCH resource.
+  --retro-inquiry-request: any # shape: {InquiryReferenceNumber?: string}
 ]: any -> record<RetroInquiryResponse: record<PossibleMerchantMatches: record<TerminatedMerchant: list, TotalLength: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "AcquirerId" $AcquirerId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "AcquirerId" $acquirer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fraud/merchant/v3/retro/retro-inquiry-details" $qp)
-  let body = {RetroInquiryRequest: $RetroInquiryRequest} | compact
+  let body = {"RetroInquiryRequest": $retro_inquiry_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,13 +181,13 @@ export def "fraud-merchant-retro-retro-list post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RetroRequest: any # shape: {AcquirerId?: string}
+  --retro-request: any # shape: {AcquirerId?: string}
 ]: any -> record<RetroResponse: record<BusinessName: string, City: string, Country: string, Date: string, RefNum: string, State: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fraud/merchant/v3/retro/retro-list")
-  let body = {RetroRequest: $RetroRequest} | compact
+  let body = {"RetroRequest": $retro_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,16 +207,16 @@ export def "fraud-merchant-termination-inquiry post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageOffset: float # The zero-based offset to start at. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (e.g. 0)
-  --PageLength: float # The maximum number of items to retrieve within the current "page" of results. (e.g. 10)
-  --TerminationInquiryRequest: any # shape: {AcquirerId: string, Merchant?: any, TransactionReferenceNumber?: string}
+  --page-offset: float # The zero-based offset to start at. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (e.g. 0)
+  --page-length: float # The maximum number of items to retrieve within the current "page" of results. (e.g. 10)
+  --termination-inquiry-request: any # shape: {AcquirerId: string, Merchant?: any, TransactionReferenceNumber?: string}
 ]: any -> record<TerminationInquiry: record<PageOffset: string, PossibleInquiryMatches: record<InquiredMerchant: list, TotalLength: string>, PossibleMerchantMatches: list<record>, TransactionReferenceNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "PageOffset" $PageOffset "scalar") (serialize-qp "PageLength" $PageLength "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageOffset" $page_offset "scalar") (serialize-qp "PageLength" $page_length "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fraud/merchant/v3/termination-inquiry" $qp)
-  let body = {TerminationInquiryRequest: $TerminationInquiryRequest} | compact
+  let body = {"TerminationInquiryRequest": $termination_inquiry_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,7 +227,7 @@ export def "fraud-merchant-termination-inquiry post" [
 #
 # GET /fraud/merchant/v3/termination-inquiry/{IRN}
 export def "fraud-merchant-termination-inquiry get" [
-  IRN: string
+  irn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,14 +236,14 @@ export def "fraud-merchant-termination-inquiry get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageOffset: float # The zero-based offset to start at. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (e.g. 0)
-  --PageLength: float # The maximum number of items to retrieve within the current "page" of results. (e.g. 10)
-  --AcquirerId: string # The Member ICA number which is used to validate that the application has permission to hit the MATCH database. This number must be obtained from a participating MATCH acquiring bank or entity before a developer can access the MATCH resource. (e.g. 1996)
+  --page-offset: float # The zero-based offset to start at. The actual start position is this value +1. An offset of 10 starts at item 11. Combined with the PageLength option this allows pagination to be supported through the service requests. (e.g. 0)
+  --page-length: float # The maximum number of items to retrieve within the current "page" of results. (e.g. 10)
+  --acquirer-id: string # The Member ICA number which is used to validate that the application has permission to hit the MATCH database. This number must be obtained from a participating MATCH acquiring bank or entity before a developer can access the MATCH resource. (e.g. 1996)
 ]: nothing -> record<TerminationInquiry: record<PageOffset: string, PossibleInquiryMatches: record<InquiredMerchant: list, TotalLength: string>, PossibleMerchantMatches: list<record>, TransactionReferenceNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "PageOffset" $PageOffset "scalar") (serialize-qp "PageLength" $PageLength "scalar") (serialize-qp "AcquirerId" $AcquirerId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fraud/merchant/v3/termination-inquiry/($IRN)" $qp)
+  let qp = [(serialize-qp "PageOffset" $page_offset "scalar") (serialize-qp "PageLength" $page_length "scalar") (serialize-qp "AcquirerId" $acquirer_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({irn: $irn} | format pattern "/fraud/merchant/v3/termination-inquiry/{irn}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

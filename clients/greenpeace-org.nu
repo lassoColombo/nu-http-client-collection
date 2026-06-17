@@ -116,7 +116,7 @@ export def "events list" [
 #
 # GET /events/{UUID}
 export def "events get" [
-  UUID: string
+  uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "events get" [
 ]: nothing -> record<data: record<created: string, description: string, end_date: string, groups: list<record>, location: record<city: string, coordinates: record, country: string, postcode: string, state: string, streetname: string>, modified: string, name: string, organizers: list<record>, picture: string, serial: string, start_date: string, uuid: string>, header: record<code: string, error: any, id: int, pagination: record<limit: int, page: int, total: int>, resources: string, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($UUID)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/events/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -162,7 +162,7 @@ export def "groups list" [
 #
 # GET /groups/{UUID}
 export def "groups get" [
-  UUID: string
+  uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "groups get" [
 ]: nothing -> record<data: record<created: string, description: string, group_type: string, location: record<city: string, coordinates: record, country: string, postcode: string, state: string, streetname: string>, mission: string, modified: string, name: string, picture: string, serial: string, uuid: string>, header: record<code: string, error: any, id: int, pagination: record<limit: int, page: int, total: int>, resources: string, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/($UUID)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/groups/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,7 +209,7 @@ export def "volunteers list" [
 #
 # GET /volunteers/{UUID}
 export def "volunteers get" [
-  UUID: string
+  uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "volunteers get" [
 ]: nothing -> record<body: record<avatar: string, locations: list<record>, uuid: string>, header: record<code: string, error: any, id: int, pagination: record<limit: int, page: int, total: int>, resources: string, status: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volunteers/($UUID)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/volunteers/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

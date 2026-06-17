@@ -133,10 +133,10 @@ export def "repository-search-type-2017-boulder-election-expenditures expenditur
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -145,19 +145,19 @@ export def "repository-search-type-2017-boulder-election-expenditures expenditur
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-2017-boulder-election-expenditurescommittee: string # Committee
-  --searchdb-2017-boulder-election-expenditurestransaction-date: string # Transaction Date
-  --searchdb-2017-boulder-election-expendituresname: string # Name
-  --searchdb-2017-boulder-election-expendituresstreet: string # Street
-  --searchdb-2017-boulder-election-expenditurescity: string # City
-  --searchdb-2017-boulder-election-expendituresstate: string # State
-  --searchdb-2017-boulder-election-expenditureszip: string # Zip
-  --searchdb-2017-boulder-election-expendituresexpenditure: float # Expenditure (format: double)
-  --searchdb-2017-boulder-election-expenditurespurpose: string # Purpose
+  --search-db-2017-boulder-election-expenditures-committee: string # Committee
+  --search-db-2017-boulder-election-expenditures-transaction-date: string # Transaction Date
+  --search-db-2017-boulder-election-expenditures-name: string # Name
+  --search-db-2017-boulder-election-expenditures-street: string # Street
+  --search-db-2017-boulder-election-expenditures-city: string # City
+  --search-db-2017-boulder-election-expenditures-state: string # State
+  --search-db-2017-boulder-election-expenditures-zip: string # Zip
+  --search-db-2017-boulder-election-expenditures-expenditure: float # Expenditure (format: double)
+  --search-db-2017-boulder-election-expenditures-purpose: string # Purpose
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.committee" $searchdb_2017_boulder_election_expenditurescommittee "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.transaction_date" $searchdb_2017_boulder_election_expenditurestransaction_date "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.name" $searchdb_2017_boulder_election_expendituresname "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.street" $searchdb_2017_boulder_election_expendituresstreet "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.city" $searchdb_2017_boulder_election_expenditurescity "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.state" $searchdb_2017_boulder_election_expendituresstate "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.zip" $searchdb_2017_boulder_election_expenditureszip "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.expenditure" $searchdb_2017_boulder_election_expendituresexpenditure "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.purpose" $searchdb_2017_boulder_election_expenditurespurpose "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.committee" $search_db_2017_boulder_election_expenditures_committee "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.transaction_date" $search_db_2017_boulder_election_expenditures_transaction_date "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.name" $search_db_2017_boulder_election_expenditures_name "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.street" $search_db_2017_boulder_election_expenditures_street "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.city" $search_db_2017_boulder_election_expenditures_city "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.state" $search_db_2017_boulder_election_expenditures_state "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.zip" $search_db_2017_boulder_election_expenditures_zip "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.expenditure" $search_db_2017_boulder_election_expenditures_expenditure "scalar") (serialize-qp "search.db_2017_boulder_election_expenditures.purpose" $search_db_2017_boulder_election_expenditures_purpose "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/2017_boulder_election_expenditures" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -182,10 +182,10 @@ export def "repository-search-type-any any" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -197,7 +197,7 @@ export def "repository-search-type-any any" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/any" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -222,10 +222,10 @@ export def "repository-search-type-beforeafter beforeafter" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -237,7 +237,7 @@ export def "repository-search-type-beforeafter beforeafter" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/beforeafter" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -262,10 +262,10 @@ export def "repository-search-type-biblio biblio" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -274,15 +274,15 @@ export def "repository-search-type-biblio biblio" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchbiblioprimary-author: string # Primary Author
-  --searchbibliotype: string # Publication Type
-  --searchbiblioinstitution: string # Institution
-  --searchbiblioother-authors: string # Other Authors
-  --searchbibliopublication: string # Publication
+  --search-biblio-primary-author: string # Primary Author
+  --search-biblio-type: string # Publication Type
+  --search-biblio-institution: string # Institution
+  --search-biblio-other-authors: string # Other Authors
+  --search-biblio-publication: string # Publication
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.biblio.primary_author" $searchbiblioprimary_author "scalar") (serialize-qp "search.biblio.type" $searchbibliotype "scalar") (serialize-qp "search.biblio.institution" $searchbiblioinstitution "scalar") (serialize-qp "search.biblio.other_authors" $searchbiblioother_authors "scalar") (serialize-qp "search.biblio.publication" $searchbibliopublication "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.biblio.primary_author" $search_biblio_primary_author "scalar") (serialize-qp "search.biblio.type" $search_biblio_type "scalar") (serialize-qp "search.biblio.institution" $search_biblio_institution "scalar") (serialize-qp "search.biblio.other_authors" $search_biblio_other_authors "scalar") (serialize-qp "search.biblio.publication" $search_biblio_publication "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/biblio" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,10 +307,10 @@ export def "repository-search-type-bio-dicom dicom" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -322,7 +322,7 @@ export def "repository-search-type-bio-dicom dicom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_dicom" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -347,10 +347,10 @@ export def "repository-search-type-bio-dicom-test test" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -359,12 +359,12 @@ export def "repository-search-type-bio-dicom-test test" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchbio-dicom-testPatientName: string # Patient Name
-  --searchbio-dicom-testPatientID: string # Patient ID
+  --search-bio-dicom-test-patient-name: string # Patient Name
+  --search-bio-dicom-test-patient-id: string # Patient ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.bio_dicom_test.PatientName" $searchbio_dicom_testPatientName "scalar") (serialize-qp "search.bio_dicom_test.PatientID" $searchbio_dicom_testPatientID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.bio_dicom_test.PatientName" $search_bio_dicom_test_patient_name "scalar") (serialize-qp "search.bio_dicom_test.PatientID" $search_bio_dicom_test_patient_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_dicom_test" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -389,10 +389,10 @@ export def "repository-search-type-bio-fasta fasta" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -404,7 +404,7 @@ export def "repository-search-type-bio-fasta fasta" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_fasta" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -429,10 +429,10 @@ export def "repository-search-type-bio-fastq fastq" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -444,7 +444,7 @@ export def "repository-search-type-bio-fastq fastq" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_fastq" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -469,10 +469,10 @@ export def "repository-search-type-bio-hmmer-index index" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -484,7 +484,7 @@ export def "repository-search-type-bio-hmmer-index index" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_hmmer_index" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -509,10 +509,10 @@ export def "repository-search-type-bio-ome-tiff tiff" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -524,7 +524,7 @@ export def "repository-search-type-bio-ome-tiff tiff" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_ome_tiff" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -549,10 +549,10 @@ export def "repository-search-type-bio-ontology-assay assay" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -564,7 +564,7 @@ export def "repository-search-type-bio-ontology-assay assay" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_ontology_assay" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -589,10 +589,10 @@ export def "repository-search-type-bio-ontology-cohort cohort" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -604,7 +604,7 @@ export def "repository-search-type-bio-ontology-cohort cohort" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_ontology_cohort" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -629,10 +629,10 @@ export def "repository-search-type-bio-ontology-person person" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -641,11 +641,11 @@ export def "repository-search-type-bio-ontology-person person" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchbio-ontology-persongender: string # Gender
+  --search-bio-ontology-person-gender: string # Gender
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.bio_ontology_person.gender" $searchbio_ontology_persongender "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.bio_ontology_person.gender" $search_bio_ontology_person_gender "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_ontology_person" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -670,10 +670,10 @@ export def "repository-search-type-bio-ontology-sample sample" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -685,7 +685,7 @@ export def "repository-search-type-bio-ontology-sample sample" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_ontology_sample" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -710,10 +710,10 @@ export def "repository-search-type-bio-ontology-series series" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -725,7 +725,7 @@ export def "repository-search-type-bio-ontology-series series" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_ontology_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -750,10 +750,10 @@ export def "repository-search-type-bio-ontology-study study" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -765,7 +765,7 @@ export def "repository-search-type-bio-ontology-study study" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_ontology_study" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -790,10 +790,10 @@ export def "repository-search-type-bio-sam sam" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -805,7 +805,7 @@ export def "repository-search-type-bio-sam sam" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_sam" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,10 +830,10 @@ export def "repository-search-type-bio-sf-pdb pdb" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -845,7 +845,7 @@ export def "repository-search-type-bio-sf-pdb pdb" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_sf_pdb" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -870,10 +870,10 @@ export def "repository-search-type-bio-sra sra" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -885,7 +885,7 @@ export def "repository-search-type-bio-sra sra" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_sra" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -910,10 +910,10 @@ export def "repository-search-type-bio-stockholm stockholm" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -925,7 +925,7 @@ export def "repository-search-type-bio-stockholm stockholm" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_stockholm" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -950,10 +950,10 @@ export def "repository-search-type-bio-taxonomy taxonomy" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -962,15 +962,15 @@ export def "repository-search-type-bio-taxonomy taxonomy" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchbio-taxonomyrank: string # Rank
-  --searchbio-taxonomyembl-code: string # EMBL Code
-  --searchbio-taxonomydivision: string # Divison
-  --searchbio-taxonomyinherited-div: oneof<nothing, bool> # Inheritied division
-  --searchbio-taxonomyaliases: string # Also known
+  --search-bio-taxonomy-rank: string # Rank
+  --search-bio-taxonomy-embl-code: string # EMBL Code
+  --search-bio-taxonomy-division: string # Divison
+  --search-bio-taxonomy-inherited-div: oneof<nothing, bool> # Inheritied division
+  --search-bio-taxonomy-aliases: string # Also known
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.bio_taxonomy.rank" $searchbio_taxonomyrank "scalar") (serialize-qp "search.bio_taxonomy.embl_code" $searchbio_taxonomyembl_code "scalar") (serialize-qp "search.bio_taxonomy.division" $searchbio_taxonomydivision "scalar") (serialize-qp "search.bio_taxonomy.inherited_div" $searchbio_taxonomyinherited_div "scalar") (serialize-qp "search.bio_taxonomy.aliases" $searchbio_taxonomyaliases "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.bio_taxonomy.rank" $search_bio_taxonomy_rank "scalar") (serialize-qp "search.bio_taxonomy.embl_code" $search_bio_taxonomy_embl_code "scalar") (serialize-qp "search.bio_taxonomy.division" $search_bio_taxonomy_division "scalar") (serialize-qp "search.bio_taxonomy.inherited_div" $search_bio_taxonomy_inherited_div "scalar") (serialize-qp "search.bio_taxonomy.aliases" $search_bio_taxonomy_aliases "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bio_taxonomy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -995,10 +995,10 @@ export def "repository-search-type-blogentry blogentry" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1007,11 +1007,11 @@ export def "repository-search-type-blogentry blogentry" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchblogentryblogtext: string # Extra Text
+  --search-blogentry-blogtext: string # Extra Text
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.blogentry.blogtext" $searchblogentryblogtext "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.blogentry.blogtext" $search_blogentry_blogtext "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/blogentry" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1036,10 +1036,10 @@ export def "repository-search-type-bolder-rental-housing housing" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1048,30 +1048,30 @@ export def "repository-search-type-bolder-rental-housing housing" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-bolder-rental-housingpropaddr1: string # Property Address
-  --searchdb-bolder-rental-housingrentaltype: string # Rental Type
-  --searchdb-bolder-rental-housingbldgtype: string # Building Type
-  --searchdb-bolder-rental-housingdwellunits: int # Dwelling Units
-  --searchdb-bolder-rental-housingroomunits: int # Room Units
-  --searchdb-bolder-rental-housingneighbrhd: string # Neighborhood
-  --searchdb-bolder-rental-housingcomplexnm: string # Complex Name
-  --searchdb-bolder-rental-housingname: string # Name
-  --searchdb-bolder-rental-housingpersontype: string # Person Type
-  --searchdb-bolder-rental-housingcompany: string # Company
-  --searchdb-bolder-rental-housingengcompl: string # Engcompl
-  --searchdb-bolder-rental-housinglicenseexp: string # Expiration Date
-  --searchdb-bolder-rental-housinglicensenum: string # Licensenum
-  --searchdb-bolder-rental-housingppl1-coname: string # Ppl1 Coname
-  --searchdb-bolder-rental-housingperson-1: string # Person 1
-  --searchdb-bolder-rental-housingppl1-role: string # Ppl1 Role
-  --searchdb-bolder-rental-housingppl2-coname: string # Ppl2 Coname
-  --searchdb-bolder-rental-housingperson-2: string # Person 2
-  --searchdb-bolder-rental-housingppl2-role: string # Ppl2 Role
-  --searchdb-bolder-rental-housinglocation: string # Location
+  --search-db-bolder-rental-housing-propaddr1: string # Property Address
+  --search-db-bolder-rental-housing-rentaltype: string # Rental Type
+  --search-db-bolder-rental-housing-bldgtype: string # Building Type
+  --search-db-bolder-rental-housing-dwellunits: int # Dwelling Units
+  --search-db-bolder-rental-housing-roomunits: int # Room Units
+  --search-db-bolder-rental-housing-neighbrhd: string # Neighborhood
+  --search-db-bolder-rental-housing-complexnm: string # Complex Name
+  --search-db-bolder-rental-housing-name: string # Name
+  --search-db-bolder-rental-housing-persontype: string # Person Type
+  --search-db-bolder-rental-housing-company: string # Company
+  --search-db-bolder-rental-housing-engcompl: string # Engcompl
+  --search-db-bolder-rental-housing-licenseexp: string # Expiration Date
+  --search-db-bolder-rental-housing-licensenum: string # Licensenum
+  --search-db-bolder-rental-housing-ppl1-coname: string # Ppl1 Coname
+  --search-db-bolder-rental-housing-person-1: string # Person 1
+  --search-db-bolder-rental-housing-ppl1-role: string # Ppl1 Role
+  --search-db-bolder-rental-housing-ppl2-coname: string # Ppl2 Coname
+  --search-db-bolder-rental-housing-person-2: string # Person 2
+  --search-db-bolder-rental-housing-ppl2-role: string # Ppl2 Role
+  --search-db-bolder-rental-housing-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_bolder_rental_housing.propaddr1" $searchdb_bolder_rental_housingpropaddr1 "scalar") (serialize-qp "search.db_bolder_rental_housing.rentaltype" $searchdb_bolder_rental_housingrentaltype "scalar") (serialize-qp "search.db_bolder_rental_housing.bldgtype" $searchdb_bolder_rental_housingbldgtype "scalar") (serialize-qp "search.db_bolder_rental_housing.dwellunits" $searchdb_bolder_rental_housingdwellunits "scalar") (serialize-qp "search.db_bolder_rental_housing.roomunits" $searchdb_bolder_rental_housingroomunits "scalar") (serialize-qp "search.db_bolder_rental_housing.neighbrhd" $searchdb_bolder_rental_housingneighbrhd "scalar") (serialize-qp "search.db_bolder_rental_housing.complexnm" $searchdb_bolder_rental_housingcomplexnm "scalar") (serialize-qp "search.db_bolder_rental_housing.name" $searchdb_bolder_rental_housingname "scalar") (serialize-qp "search.db_bolder_rental_housing.persontype" $searchdb_bolder_rental_housingpersontype "scalar") (serialize-qp "search.db_bolder_rental_housing.company" $searchdb_bolder_rental_housingcompany "scalar") (serialize-qp "search.db_bolder_rental_housing.engcompl" $searchdb_bolder_rental_housingengcompl "scalar") (serialize-qp "search.db_bolder_rental_housing.licenseexp" $searchdb_bolder_rental_housinglicenseexp "scalar") (serialize-qp "search.db_bolder_rental_housing.licensenum" $searchdb_bolder_rental_housinglicensenum "scalar") (serialize-qp "search.db_bolder_rental_housing.ppl1_coname" $searchdb_bolder_rental_housingppl1_coname "scalar") (serialize-qp "search.db_bolder_rental_housing.person_1" $searchdb_bolder_rental_housingperson_1 "scalar") (serialize-qp "search.db_bolder_rental_housing.ppl1_role" $searchdb_bolder_rental_housingppl1_role "scalar") (serialize-qp "search.db_bolder_rental_housing.ppl2_coname" $searchdb_bolder_rental_housingppl2_coname "scalar") (serialize-qp "search.db_bolder_rental_housing.person_2" $searchdb_bolder_rental_housingperson_2 "scalar") (serialize-qp "search.db_bolder_rental_housing.ppl2_role" $searchdb_bolder_rental_housingppl2_role "scalar") (serialize-qp "search.db_bolder_rental_housing.location" $searchdb_bolder_rental_housinglocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_bolder_rental_housing.propaddr1" $search_db_bolder_rental_housing_propaddr1 "scalar") (serialize-qp "search.db_bolder_rental_housing.rentaltype" $search_db_bolder_rental_housing_rentaltype "scalar") (serialize-qp "search.db_bolder_rental_housing.bldgtype" $search_db_bolder_rental_housing_bldgtype "scalar") (serialize-qp "search.db_bolder_rental_housing.dwellunits" $search_db_bolder_rental_housing_dwellunits "scalar") (serialize-qp "search.db_bolder_rental_housing.roomunits" $search_db_bolder_rental_housing_roomunits "scalar") (serialize-qp "search.db_bolder_rental_housing.neighbrhd" $search_db_bolder_rental_housing_neighbrhd "scalar") (serialize-qp "search.db_bolder_rental_housing.complexnm" $search_db_bolder_rental_housing_complexnm "scalar") (serialize-qp "search.db_bolder_rental_housing.name" $search_db_bolder_rental_housing_name "scalar") (serialize-qp "search.db_bolder_rental_housing.persontype" $search_db_bolder_rental_housing_persontype "scalar") (serialize-qp "search.db_bolder_rental_housing.company" $search_db_bolder_rental_housing_company "scalar") (serialize-qp "search.db_bolder_rental_housing.engcompl" $search_db_bolder_rental_housing_engcompl "scalar") (serialize-qp "search.db_bolder_rental_housing.licenseexp" $search_db_bolder_rental_housing_licenseexp "scalar") (serialize-qp "search.db_bolder_rental_housing.licensenum" $search_db_bolder_rental_housing_licensenum "scalar") (serialize-qp "search.db_bolder_rental_housing.ppl1_coname" $search_db_bolder_rental_housing_ppl1_coname "scalar") (serialize-qp "search.db_bolder_rental_housing.person_1" $search_db_bolder_rental_housing_person_1 "scalar") (serialize-qp "search.db_bolder_rental_housing.ppl1_role" $search_db_bolder_rental_housing_ppl1_role "scalar") (serialize-qp "search.db_bolder_rental_housing.ppl2_coname" $search_db_bolder_rental_housing_ppl2_coname "scalar") (serialize-qp "search.db_bolder_rental_housing.person_2" $search_db_bolder_rental_housing_person_2 "scalar") (serialize-qp "search.db_bolder_rental_housing.ppl2_role" $search_db_bolder_rental_housing_ppl2_role "scalar") (serialize-qp "search.db_bolder_rental_housing.location" $search_db_bolder_rental_housing_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bolder_rental_housing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1096,10 +1096,10 @@ export def "repository-search-type-bookmarks bookmarks" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1108,14 +1108,14 @@ export def "repository-search-type-bookmarks bookmarks" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-bookmarkstitle: string # Title
-  --searchdb-bookmarksurl: string # URL
-  --searchdb-bookmarkscategory: string # Category
-  --searchdb-bookmarksdate: string # Date
+  --search-db-bookmarks-title: string # Title
+  --search-db-bookmarks-url: string # URL
+  --search-db-bookmarks-category: string # Category
+  --search-db-bookmarks-date: string # Date
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_bookmarks.title" $searchdb_bookmarkstitle "scalar") (serialize-qp "search.db_bookmarks.url" $searchdb_bookmarksurl "scalar") (serialize-qp "search.db_bookmarks.category" $searchdb_bookmarkscategory "scalar") (serialize-qp "search.db_bookmarks.date" $searchdb_bookmarksdate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_bookmarks.title" $search_db_bookmarks_title "scalar") (serialize-qp "search.db_bookmarks.url" $search_db_bookmarks_url "scalar") (serialize-qp "search.db_bookmarks.category" $search_db_bookmarks_category "scalar") (serialize-qp "search.db_bookmarks.date" $search_db_bookmarks_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/bookmarks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1140,10 +1140,10 @@ export def "repository-search-type-boston-crime crime" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1152,22 +1152,22 @@ export def "repository-search-type-boston-crime crime" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-boston-crimeoffense: string # Offense
-  --searchdb-boston-crimeoffense-code-group: string # Offense Code Group
-  --searchdb-boston-crimeoffense-description: string # Offense Description
-  --searchdb-boston-crimedistrict: string # District
-  --searchdb-boston-crimereporting-area: string # Reporting Area
-  --searchdb-boston-crimeshooting: string # Shooting
-  --searchdb-boston-crimeyear: float # Year (format: double)
-  --searchdb-boston-crimemonth: float # Month (format: double)
-  --searchdb-boston-crimeday-of-week: string # Day Of Week
-  --searchdb-boston-crimehour: float # Hour (format: double)
-  --searchdb-boston-crimestreet: string # Street
-  --searchdb-boston-crimelocation: string # Location
+  --search-db-boston-crime-offense: string # Offense
+  --search-db-boston-crime-offense-code-group: string # Offense Code Group
+  --search-db-boston-crime-offense-description: string # Offense Description
+  --search-db-boston-crime-district: string # District
+  --search-db-boston-crime-reporting-area: string # Reporting Area
+  --search-db-boston-crime-shooting: string # Shooting
+  --search-db-boston-crime-year: float # Year (format: double)
+  --search-db-boston-crime-month: float # Month (format: double)
+  --search-db-boston-crime-day-of-week: string # Day Of Week
+  --search-db-boston-crime-hour: float # Hour (format: double)
+  --search-db-boston-crime-street: string # Street
+  --search-db-boston-crime-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boston_crime.offense" $searchdb_boston_crimeoffense "scalar") (serialize-qp "search.db_boston_crime.offense_code_group" $searchdb_boston_crimeoffense_code_group "scalar") (serialize-qp "search.db_boston_crime.offense_description" $searchdb_boston_crimeoffense_description "scalar") (serialize-qp "search.db_boston_crime.district" $searchdb_boston_crimedistrict "scalar") (serialize-qp "search.db_boston_crime.reporting_area" $searchdb_boston_crimereporting_area "scalar") (serialize-qp "search.db_boston_crime.shooting" $searchdb_boston_crimeshooting "scalar") (serialize-qp "search.db_boston_crime.year" $searchdb_boston_crimeyear "scalar") (serialize-qp "search.db_boston_crime.month" $searchdb_boston_crimemonth "scalar") (serialize-qp "search.db_boston_crime.day_of_week" $searchdb_boston_crimeday_of_week "scalar") (serialize-qp "search.db_boston_crime.hour" $searchdb_boston_crimehour "scalar") (serialize-qp "search.db_boston_crime.street" $searchdb_boston_crimestreet "scalar") (serialize-qp "search.db_boston_crime.location" $searchdb_boston_crimelocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boston_crime.offense" $search_db_boston_crime_offense "scalar") (serialize-qp "search.db_boston_crime.offense_code_group" $search_db_boston_crime_offense_code_group "scalar") (serialize-qp "search.db_boston_crime.offense_description" $search_db_boston_crime_offense_description "scalar") (serialize-qp "search.db_boston_crime.district" $search_db_boston_crime_district "scalar") (serialize-qp "search.db_boston_crime.reporting_area" $search_db_boston_crime_reporting_area "scalar") (serialize-qp "search.db_boston_crime.shooting" $search_db_boston_crime_shooting "scalar") (serialize-qp "search.db_boston_crime.year" $search_db_boston_crime_year "scalar") (serialize-qp "search.db_boston_crime.month" $search_db_boston_crime_month "scalar") (serialize-qp "search.db_boston_crime.day_of_week" $search_db_boston_crime_day_of_week "scalar") (serialize-qp "search.db_boston_crime.hour" $search_db_boston_crime_hour "scalar") (serialize-qp "search.db_boston_crime.street" $search_db_boston_crime_street "scalar") (serialize-qp "search.db_boston_crime.location" $search_db_boston_crime_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/boston_crime" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1192,10 +1192,10 @@ export def "repository-search-type-boulder-2017-election-contributions contribut
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1204,24 +1204,24 @@ export def "repository-search-type-boulder-2017-election-contributions contribut
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-boulder-2017-election-contributionscommittee: string # Committee
-  --searchdb-boulder-2017-election-contributionslast-name: string # Last Name
-  --searchdb-boulder-2017-election-contributionsfirst-name: string # First Name
-  --searchdb-boulder-2017-election-contributionsstreet: string # Street
-  --searchdb-boulder-2017-election-contributionscity: string # City
-  --searchdb-boulder-2017-election-contributionsstate: string # State
-  --searchdb-boulder-2017-election-contributionszip: string # Zip
-  --searchdb-boulder-2017-election-contributionscontribution-type: string # Contribution Type
-  --searchdb-boulder-2017-election-contributionsfrom-candidate: string # From Candidate
-  --searchdb-boulder-2017-election-contributionsdate: string # Date
-  --searchdb-boulder-2017-election-contributionsamount: float # Amount (format: double)
-  --searchdb-boulder-2017-election-contributionsmatch-amount: float # Match Amount (format: double)
-  --searchdb-boulder-2017-election-contributionsytd-amount: float # Ytd Amount (format: double)
-  --searchdb-boulder-2017-election-contributionslocation: string # Location
+  --search-db-boulder-2017-election-contributions-committee: string # Committee
+  --search-db-boulder-2017-election-contributions-last-name: string # Last Name
+  --search-db-boulder-2017-election-contributions-first-name: string # First Name
+  --search-db-boulder-2017-election-contributions-street: string # Street
+  --search-db-boulder-2017-election-contributions-city: string # City
+  --search-db-boulder-2017-election-contributions-state: string # State
+  --search-db-boulder-2017-election-contributions-zip: string # Zip
+  --search-db-boulder-2017-election-contributions-contribution-type: string # Contribution Type
+  --search-db-boulder-2017-election-contributions-from-candidate: string # From Candidate
+  --search-db-boulder-2017-election-contributions-date: string # Date
+  --search-db-boulder-2017-election-contributions-amount: float # Amount (format: double)
+  --search-db-boulder-2017-election-contributions-match-amount: float # Match Amount (format: double)
+  --search-db-boulder-2017-election-contributions-ytd-amount: float # Ytd Amount (format: double)
+  --search-db-boulder-2017-election-contributions-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.committee" $searchdb_boulder_2017_election_contributionscommittee "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.last_name" $searchdb_boulder_2017_election_contributionslast_name "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.first_name" $searchdb_boulder_2017_election_contributionsfirst_name "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.street" $searchdb_boulder_2017_election_contributionsstreet "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.city" $searchdb_boulder_2017_election_contributionscity "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.state" $searchdb_boulder_2017_election_contributionsstate "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.zip" $searchdb_boulder_2017_election_contributionszip "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.contribution_type" $searchdb_boulder_2017_election_contributionscontribution_type "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.from_candidate" $searchdb_boulder_2017_election_contributionsfrom_candidate "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.date" $searchdb_boulder_2017_election_contributionsdate "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.amount" $searchdb_boulder_2017_election_contributionsamount "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.match_amount" $searchdb_boulder_2017_election_contributionsmatch_amount "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.ytd_amount" $searchdb_boulder_2017_election_contributionsytd_amount "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.location" $searchdb_boulder_2017_election_contributionslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.committee" $search_db_boulder_2017_election_contributions_committee "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.last_name" $search_db_boulder_2017_election_contributions_last_name "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.first_name" $search_db_boulder_2017_election_contributions_first_name "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.street" $search_db_boulder_2017_election_contributions_street "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.city" $search_db_boulder_2017_election_contributions_city "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.state" $search_db_boulder_2017_election_contributions_state "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.zip" $search_db_boulder_2017_election_contributions_zip "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.contribution_type" $search_db_boulder_2017_election_contributions_contribution_type "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.from_candidate" $search_db_boulder_2017_election_contributions_from_candidate "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.date" $search_db_boulder_2017_election_contributions_date "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.amount" $search_db_boulder_2017_election_contributions_amount "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.match_amount" $search_db_boulder_2017_election_contributions_match_amount "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.ytd_amount" $search_db_boulder_2017_election_contributions_ytd_amount "scalar") (serialize-qp "search.db_boulder_2017_election_contributions.location" $search_db_boulder_2017_election_contributions_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/boulder_2017_election_contributions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1246,10 +1246,10 @@ export def "repository-search-type-boulder-campaign-contributions contributions"
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1258,29 +1258,29 @@ export def "repository-search-type-boulder-campaign-contributions contributions"
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-boulder-campaign-contributionscommittee: string # Committee
-  --searchdb-boulder-campaign-contributionstype: string # Type
-  --searchdb-boulder-campaign-contributionscommittee-num: string # Committee Num
-  --searchdb-boulder-campaign-contributionscandidate: string # Candidate
-  --searchdb-boulder-campaign-contributionsfiling-date: string # Filing Date
-  --searchdb-boulder-campaign-contributionsamended-date: string # Amended Date
-  --searchdb-boulder-campaign-contributionsofficial-filing: string # Official Filing
-  --searchdb-boulder-campaign-contributionstransaction-date: string # Transaction Date
-  --searchdb-boulder-campaign-contributionslast-name: string # Last Name
-  --searchdb-boulder-campaign-contributionsfirst-name: string # First Name
-  --searchdb-boulder-campaign-contributionsstreet: string # Street
-  --searchdb-boulder-campaign-contributionscity: string # City
-  --searchdb-boulder-campaign-contributionsstate: string # State
-  --searchdb-boulder-campaign-contributionszip: string # Zip
-  --searchdb-boulder-campaign-contributionscontribution: float # Contribution (format: double)
-  --searchdb-boulder-campaign-contributionscontribution-type: string # Contribution Type
-  --searchdb-boulder-campaign-contributionsanonymous: string # Anonymous
-  --searchdb-boulder-campaign-contributionsfrom-candidate: string # From Candidate
-  --searchdb-boulder-campaign-contributionsmatch: float # Match (format: double)
+  --search-db-boulder-campaign-contributions-committee: string # Committee
+  --search-db-boulder-campaign-contributions-type: string # Type
+  --search-db-boulder-campaign-contributions-committee-num: string # Committee Num
+  --search-db-boulder-campaign-contributions-candidate: string # Candidate
+  --search-db-boulder-campaign-contributions-filing-date: string # Filing Date
+  --search-db-boulder-campaign-contributions-amended-date: string # Amended Date
+  --search-db-boulder-campaign-contributions-official-filing: string # Official Filing
+  --search-db-boulder-campaign-contributions-transaction-date: string # Transaction Date
+  --search-db-boulder-campaign-contributions-last-name: string # Last Name
+  --search-db-boulder-campaign-contributions-first-name: string # First Name
+  --search-db-boulder-campaign-contributions-street: string # Street
+  --search-db-boulder-campaign-contributions-city: string # City
+  --search-db-boulder-campaign-contributions-state: string # State
+  --search-db-boulder-campaign-contributions-zip: string # Zip
+  --search-db-boulder-campaign-contributions-contribution: float # Contribution (format: double)
+  --search-db-boulder-campaign-contributions-contribution-type: string # Contribution Type
+  --search-db-boulder-campaign-contributions-anonymous: string # Anonymous
+  --search-db-boulder-campaign-contributions-from-candidate: string # From Candidate
+  --search-db-boulder-campaign-contributions-match: float # Match (format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_campaign_contributions.committee" $searchdb_boulder_campaign_contributionscommittee "scalar") (serialize-qp "search.db_boulder_campaign_contributions.type" $searchdb_boulder_campaign_contributionstype "scalar") (serialize-qp "search.db_boulder_campaign_contributions.committee_num" $searchdb_boulder_campaign_contributionscommittee_num "scalar") (serialize-qp "search.db_boulder_campaign_contributions.candidate" $searchdb_boulder_campaign_contributionscandidate "scalar") (serialize-qp "search.db_boulder_campaign_contributions.filing_date" $searchdb_boulder_campaign_contributionsfiling_date "scalar") (serialize-qp "search.db_boulder_campaign_contributions.amended_date" $searchdb_boulder_campaign_contributionsamended_date "scalar") (serialize-qp "search.db_boulder_campaign_contributions.official_filing" $searchdb_boulder_campaign_contributionsofficial_filing "scalar") (serialize-qp "search.db_boulder_campaign_contributions.transaction_date" $searchdb_boulder_campaign_contributionstransaction_date "scalar") (serialize-qp "search.db_boulder_campaign_contributions.last_name" $searchdb_boulder_campaign_contributionslast_name "scalar") (serialize-qp "search.db_boulder_campaign_contributions.first_name" $searchdb_boulder_campaign_contributionsfirst_name "scalar") (serialize-qp "search.db_boulder_campaign_contributions.street" $searchdb_boulder_campaign_contributionsstreet "scalar") (serialize-qp "search.db_boulder_campaign_contributions.city" $searchdb_boulder_campaign_contributionscity "scalar") (serialize-qp "search.db_boulder_campaign_contributions.state" $searchdb_boulder_campaign_contributionsstate "scalar") (serialize-qp "search.db_boulder_campaign_contributions.zip" $searchdb_boulder_campaign_contributionszip "scalar") (serialize-qp "search.db_boulder_campaign_contributions.contribution" $searchdb_boulder_campaign_contributionscontribution "scalar") (serialize-qp "search.db_boulder_campaign_contributions.contribution_type" $searchdb_boulder_campaign_contributionscontribution_type "scalar") (serialize-qp "search.db_boulder_campaign_contributions.anonymous" $searchdb_boulder_campaign_contributionsanonymous "scalar") (serialize-qp "search.db_boulder_campaign_contributions.from_candidate" $searchdb_boulder_campaign_contributionsfrom_candidate "scalar") (serialize-qp "search.db_boulder_campaign_contributions.match" $searchdb_boulder_campaign_contributionsmatch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_campaign_contributions.committee" $search_db_boulder_campaign_contributions_committee "scalar") (serialize-qp "search.db_boulder_campaign_contributions.type" $search_db_boulder_campaign_contributions_type "scalar") (serialize-qp "search.db_boulder_campaign_contributions.committee_num" $search_db_boulder_campaign_contributions_committee_num "scalar") (serialize-qp "search.db_boulder_campaign_contributions.candidate" $search_db_boulder_campaign_contributions_candidate "scalar") (serialize-qp "search.db_boulder_campaign_contributions.filing_date" $search_db_boulder_campaign_contributions_filing_date "scalar") (serialize-qp "search.db_boulder_campaign_contributions.amended_date" $search_db_boulder_campaign_contributions_amended_date "scalar") (serialize-qp "search.db_boulder_campaign_contributions.official_filing" $search_db_boulder_campaign_contributions_official_filing "scalar") (serialize-qp "search.db_boulder_campaign_contributions.transaction_date" $search_db_boulder_campaign_contributions_transaction_date "scalar") (serialize-qp "search.db_boulder_campaign_contributions.last_name" $search_db_boulder_campaign_contributions_last_name "scalar") (serialize-qp "search.db_boulder_campaign_contributions.first_name" $search_db_boulder_campaign_contributions_first_name "scalar") (serialize-qp "search.db_boulder_campaign_contributions.street" $search_db_boulder_campaign_contributions_street "scalar") (serialize-qp "search.db_boulder_campaign_contributions.city" $search_db_boulder_campaign_contributions_city "scalar") (serialize-qp "search.db_boulder_campaign_contributions.state" $search_db_boulder_campaign_contributions_state "scalar") (serialize-qp "search.db_boulder_campaign_contributions.zip" $search_db_boulder_campaign_contributions_zip "scalar") (serialize-qp "search.db_boulder_campaign_contributions.contribution" $search_db_boulder_campaign_contributions_contribution "scalar") (serialize-qp "search.db_boulder_campaign_contributions.contribution_type" $search_db_boulder_campaign_contributions_contribution_type "scalar") (serialize-qp "search.db_boulder_campaign_contributions.anonymous" $search_db_boulder_campaign_contributions_anonymous "scalar") (serialize-qp "search.db_boulder_campaign_contributions.from_candidate" $search_db_boulder_campaign_contributions_from_candidate "scalar") (serialize-qp "search.db_boulder_campaign_contributions.match" $search_db_boulder_campaign_contributions_match "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/boulder_campaign_contributions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1305,10 +1305,10 @@ export def "repository-search-type-boulder-consulting-services services" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1317,21 +1317,21 @@ export def "repository-search-type-boulder-consulting-services services" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-boulder-consulting-servicesfund: string # Fund
-  --searchdb-boulder-consulting-servicesdepartment: string # Department
-  --searchdb-boulder-consulting-servicesorganization: string # Organization
-  --searchdb-boulder-consulting-servicesobject: string # Object
-  --searchdb-boulder-consulting-servicesproject: string # Project
-  --searchdb-boulder-consulting-servicesaccount-description: string # Account Description
-  --searchdb-boulder-consulting-servicesdate: string # Date
-  --searchdb-boulder-consulting-servicesamount: float # Amount (format: double)
-  --searchdb-boulder-consulting-servicespurchase-order: string # Purchase Order
-  --searchdb-boulder-consulting-servicesvendor-name: string # Vendor Name
-  --searchdb-boulder-consulting-servicescomment: string # Comment
+  --search-db-boulder-consulting-services-fund: string # Fund
+  --search-db-boulder-consulting-services-department: string # Department
+  --search-db-boulder-consulting-services-organization: string # Organization
+  --search-db-boulder-consulting-services-object: string # Object
+  --search-db-boulder-consulting-services-project: string # Project
+  --search-db-boulder-consulting-services-account-description: string # Account Description
+  --search-db-boulder-consulting-services-date: string # Date
+  --search-db-boulder-consulting-services-amount: float # Amount (format: double)
+  --search-db-boulder-consulting-services-purchase-order: string # Purchase Order
+  --search-db-boulder-consulting-services-vendor-name: string # Vendor Name
+  --search-db-boulder-consulting-services-comment: string # Comment
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_consulting_services.fund" $searchdb_boulder_consulting_servicesfund "scalar") (serialize-qp "search.db_boulder_consulting_services.department" $searchdb_boulder_consulting_servicesdepartment "scalar") (serialize-qp "search.db_boulder_consulting_services.organization" $searchdb_boulder_consulting_servicesorganization "scalar") (serialize-qp "search.db_boulder_consulting_services.object" $searchdb_boulder_consulting_servicesobject "scalar") (serialize-qp "search.db_boulder_consulting_services.project" $searchdb_boulder_consulting_servicesproject "scalar") (serialize-qp "search.db_boulder_consulting_services.account_description" $searchdb_boulder_consulting_servicesaccount_description "scalar") (serialize-qp "search.db_boulder_consulting_services.date" $searchdb_boulder_consulting_servicesdate "scalar") (serialize-qp "search.db_boulder_consulting_services.amount" $searchdb_boulder_consulting_servicesamount "scalar") (serialize-qp "search.db_boulder_consulting_services.purchase_order" $searchdb_boulder_consulting_servicespurchase_order "scalar") (serialize-qp "search.db_boulder_consulting_services.vendor_name" $searchdb_boulder_consulting_servicesvendor_name "scalar") (serialize-qp "search.db_boulder_consulting_services.comment" $searchdb_boulder_consulting_servicescomment "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_consulting_services.fund" $search_db_boulder_consulting_services_fund "scalar") (serialize-qp "search.db_boulder_consulting_services.department" $search_db_boulder_consulting_services_department "scalar") (serialize-qp "search.db_boulder_consulting_services.organization" $search_db_boulder_consulting_services_organization "scalar") (serialize-qp "search.db_boulder_consulting_services.object" $search_db_boulder_consulting_services_object "scalar") (serialize-qp "search.db_boulder_consulting_services.project" $search_db_boulder_consulting_services_project "scalar") (serialize-qp "search.db_boulder_consulting_services.account_description" $search_db_boulder_consulting_services_account_description "scalar") (serialize-qp "search.db_boulder_consulting_services.date" $search_db_boulder_consulting_services_date "scalar") (serialize-qp "search.db_boulder_consulting_services.amount" $search_db_boulder_consulting_services_amount "scalar") (serialize-qp "search.db_boulder_consulting_services.purchase_order" $search_db_boulder_consulting_services_purchase_order "scalar") (serialize-qp "search.db_boulder_consulting_services.vendor_name" $search_db_boulder_consulting_services_vendor_name "scalar") (serialize-qp "search.db_boulder_consulting_services.comment" $search_db_boulder_consulting_services_comment "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/boulder_consulting_services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1356,10 +1356,10 @@ export def "repository-search-type-boulder-county-voter-details details" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1368,29 +1368,29 @@ export def "repository-search-type-boulder-county-voter-details details" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-boulder-county-voter-detailsfirst-name: string # First Name
-  --searchdb-boulder-county-voter-detailslast-name: string # Last Name
-  --searchdb-boulder-county-voter-detailsregistration-date: string # Registration Date
-  --searchdb-boulder-county-voter-detailslast-updated-date: string # Last Updated Date
-  --searchdb-boulder-county-voter-detailsresidential-address: string # Residential Address
-  --searchdb-boulder-county-voter-detailsresidential-city: string # Residential City
-  --searchdb-boulder-county-voter-detailsmailing-zip-code: string # Mailing Zip Code
-  --searchdb-boulder-county-voter-detailsvoter-status: string # Voter Status
-  --searchdb-boulder-county-voter-detailsparty: string # Party
-  --searchdb-boulder-county-voter-detailsgender: string # Gender
-  --searchdb-boulder-county-voter-detailsbirth-year: int # Birth Year
-  --searchdb-boulder-county-voter-detailsprecinct-code: string # Precinct Code
-  --searchdb-boulder-county-voter-detailscongressional: string # Congressional
-  --searchdb-boulder-county-voter-detailsstate-senate: string # State Senate
-  --searchdb-boulder-county-voter-detailsstate-house: string # State House
-  --searchdb-boulder-county-voter-detailsmunicipality: string # Municipality
-  --searchdb-boulder-county-voter-detailscity-ward-district: string # City Ward/district
-  --searchdb-boulder-county-voter-detailsschool-district: string # School District
-  --searchdb-boulder-county-voter-detailslocation: string # Location
+  --search-db-boulder-county-voter-details-first-name: string # First Name
+  --search-db-boulder-county-voter-details-last-name: string # Last Name
+  --search-db-boulder-county-voter-details-registration-date: string # Registration Date
+  --search-db-boulder-county-voter-details-last-updated-date: string # Last Updated Date
+  --search-db-boulder-county-voter-details-residential-address: string # Residential Address
+  --search-db-boulder-county-voter-details-residential-city: string # Residential City
+  --search-db-boulder-county-voter-details-mailing-zip-code: string # Mailing Zip Code
+  --search-db-boulder-county-voter-details-voter-status: string # Voter Status
+  --search-db-boulder-county-voter-details-party: string # Party
+  --search-db-boulder-county-voter-details-gender: string # Gender
+  --search-db-boulder-county-voter-details-birth-year: int # Birth Year
+  --search-db-boulder-county-voter-details-precinct-code: string # Precinct Code
+  --search-db-boulder-county-voter-details-congressional: string # Congressional
+  --search-db-boulder-county-voter-details-state-senate: string # State Senate
+  --search-db-boulder-county-voter-details-state-house: string # State House
+  --search-db-boulder-county-voter-details-municipality: string # Municipality
+  --search-db-boulder-county-voter-details-city-ward-district: string # City Ward/district
+  --search-db-boulder-county-voter-details-school-district: string # School District
+  --search-db-boulder-county-voter-details-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_county_voter_details.first_name" $searchdb_boulder_county_voter_detailsfirst_name "scalar") (serialize-qp "search.db_boulder_county_voter_details.last_name" $searchdb_boulder_county_voter_detailslast_name "scalar") (serialize-qp "search.db_boulder_county_voter_details.registration_date" $searchdb_boulder_county_voter_detailsregistration_date "scalar") (serialize-qp "search.db_boulder_county_voter_details.last_updated_date" $searchdb_boulder_county_voter_detailslast_updated_date "scalar") (serialize-qp "search.db_boulder_county_voter_details.residential_address" $searchdb_boulder_county_voter_detailsresidential_address "scalar") (serialize-qp "search.db_boulder_county_voter_details.residential_city" $searchdb_boulder_county_voter_detailsresidential_city "scalar") (serialize-qp "search.db_boulder_county_voter_details.mailing_zip_code" $searchdb_boulder_county_voter_detailsmailing_zip_code "scalar") (serialize-qp "search.db_boulder_county_voter_details.voter_status" $searchdb_boulder_county_voter_detailsvoter_status "scalar") (serialize-qp "search.db_boulder_county_voter_details.party" $searchdb_boulder_county_voter_detailsparty "scalar") (serialize-qp "search.db_boulder_county_voter_details.gender" $searchdb_boulder_county_voter_detailsgender "scalar") (serialize-qp "search.db_boulder_county_voter_details.birth_year" $searchdb_boulder_county_voter_detailsbirth_year "scalar") (serialize-qp "search.db_boulder_county_voter_details.precinct_code" $searchdb_boulder_county_voter_detailsprecinct_code "scalar") (serialize-qp "search.db_boulder_county_voter_details.congressional" $searchdb_boulder_county_voter_detailscongressional "scalar") (serialize-qp "search.db_boulder_county_voter_details.state_senate" $searchdb_boulder_county_voter_detailsstate_senate "scalar") (serialize-qp "search.db_boulder_county_voter_details.state_house" $searchdb_boulder_county_voter_detailsstate_house "scalar") (serialize-qp "search.db_boulder_county_voter_details.municipality" $searchdb_boulder_county_voter_detailsmunicipality "scalar") (serialize-qp "search.db_boulder_county_voter_details.city_ward_district" $searchdb_boulder_county_voter_detailscity_ward_district "scalar") (serialize-qp "search.db_boulder_county_voter_details.school_district" $searchdb_boulder_county_voter_detailsschool_district "scalar") (serialize-qp "search.db_boulder_county_voter_details.location" $searchdb_boulder_county_voter_detailslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_county_voter_details.first_name" $search_db_boulder_county_voter_details_first_name "scalar") (serialize-qp "search.db_boulder_county_voter_details.last_name" $search_db_boulder_county_voter_details_last_name "scalar") (serialize-qp "search.db_boulder_county_voter_details.registration_date" $search_db_boulder_county_voter_details_registration_date "scalar") (serialize-qp "search.db_boulder_county_voter_details.last_updated_date" $search_db_boulder_county_voter_details_last_updated_date "scalar") (serialize-qp "search.db_boulder_county_voter_details.residential_address" $search_db_boulder_county_voter_details_residential_address "scalar") (serialize-qp "search.db_boulder_county_voter_details.residential_city" $search_db_boulder_county_voter_details_residential_city "scalar") (serialize-qp "search.db_boulder_county_voter_details.mailing_zip_code" $search_db_boulder_county_voter_details_mailing_zip_code "scalar") (serialize-qp "search.db_boulder_county_voter_details.voter_status" $search_db_boulder_county_voter_details_voter_status "scalar") (serialize-qp "search.db_boulder_county_voter_details.party" $search_db_boulder_county_voter_details_party "scalar") (serialize-qp "search.db_boulder_county_voter_details.gender" $search_db_boulder_county_voter_details_gender "scalar") (serialize-qp "search.db_boulder_county_voter_details.birth_year" $search_db_boulder_county_voter_details_birth_year "scalar") (serialize-qp "search.db_boulder_county_voter_details.precinct_code" $search_db_boulder_county_voter_details_precinct_code "scalar") (serialize-qp "search.db_boulder_county_voter_details.congressional" $search_db_boulder_county_voter_details_congressional "scalar") (serialize-qp "search.db_boulder_county_voter_details.state_senate" $search_db_boulder_county_voter_details_state_senate "scalar") (serialize-qp "search.db_boulder_county_voter_details.state_house" $search_db_boulder_county_voter_details_state_house "scalar") (serialize-qp "search.db_boulder_county_voter_details.municipality" $search_db_boulder_county_voter_details_municipality "scalar") (serialize-qp "search.db_boulder_county_voter_details.city_ward_district" $search_db_boulder_county_voter_details_city_ward_district "scalar") (serialize-qp "search.db_boulder_county_voter_details.school_district" $search_db_boulder_county_voter_details_school_district "scalar") (serialize-qp "search.db_boulder_county_voter_details.location" $search_db_boulder_county_voter_details_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/boulder_county_voter_details" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1415,10 +1415,10 @@ export def "repository-search-type-boulder-crimes crimes" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1427,14 +1427,14 @@ export def "repository-search-type-boulder-crimes crimes" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-boulder-crimesoffense: string # Offense
-  --searchdb-boulder-crimesreportdate: string # Report Date
-  --searchdb-boulder-crimesblockadd: string # Address
-  --searchdb-boulder-crimeslocation: string # Location
+  --search-db-boulder-crimes-offense: string # Offense
+  --search-db-boulder-crimes-reportdate: string # Report Date
+  --search-db-boulder-crimes-blockadd: string # Address
+  --search-db-boulder-crimes-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_crimes.offense" $searchdb_boulder_crimesoffense "scalar") (serialize-qp "search.db_boulder_crimes.reportdate" $searchdb_boulder_crimesreportdate "scalar") (serialize-qp "search.db_boulder_crimes.blockadd" $searchdb_boulder_crimesblockadd "scalar") (serialize-qp "search.db_boulder_crimes.location" $searchdb_boulder_crimeslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_crimes.offense" $search_db_boulder_crimes_offense "scalar") (serialize-qp "search.db_boulder_crimes.reportdate" $search_db_boulder_crimes_reportdate "scalar") (serialize-qp "search.db_boulder_crimes.blockadd" $search_db_boulder_crimes_blockadd "scalar") (serialize-qp "search.db_boulder_crimes.location" $search_db_boulder_crimes_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/boulder_crimes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1459,10 +1459,10 @@ export def "repository-search-type-boulder-emails emails" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1471,16 +1471,16 @@ export def "repository-search-type-boulder-emails emails" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-boulder-emailssent-from: string # Sent From
-  --searchdb-boulder-emailssent-to: string # Sent To
-  --searchdb-boulder-emailssent-cc: string # Sent Cc
-  --searchdb-boulder-emailsreceived-date: string # Received Date
-  --searchdb-boulder-emailsemail-subject: string # Email Subject
-  --searchdb-boulder-emailsplain-text-body: string # Email Body
+  --search-db-boulder-emails-sent-from: string # Sent From
+  --search-db-boulder-emails-sent-to: string # Sent To
+  --search-db-boulder-emails-sent-cc: string # Sent Cc
+  --search-db-boulder-emails-received-date: string # Received Date
+  --search-db-boulder-emails-email-subject: string # Email Subject
+  --search-db-boulder-emails-plain-text-body: string # Email Body
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_emails.sent_from" $searchdb_boulder_emailssent_from "scalar") (serialize-qp "search.db_boulder_emails.sent_to" $searchdb_boulder_emailssent_to "scalar") (serialize-qp "search.db_boulder_emails.sent_cc" $searchdb_boulder_emailssent_cc "scalar") (serialize-qp "search.db_boulder_emails.received_date" $searchdb_boulder_emailsreceived_date "scalar") (serialize-qp "search.db_boulder_emails.email_subject" $searchdb_boulder_emailsemail_subject "scalar") (serialize-qp "search.db_boulder_emails.plain_text_body" $searchdb_boulder_emailsplain_text_body "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_emails.sent_from" $search_db_boulder_emails_sent_from "scalar") (serialize-qp "search.db_boulder_emails.sent_to" $search_db_boulder_emails_sent_to "scalar") (serialize-qp "search.db_boulder_emails.sent_cc" $search_db_boulder_emails_sent_cc "scalar") (serialize-qp "search.db_boulder_emails.received_date" $search_db_boulder_emails_received_date "scalar") (serialize-qp "search.db_boulder_emails.email_subject" $search_db_boulder_emails_email_subject "scalar") (serialize-qp "search.db_boulder_emails.plain_text_body" $search_db_boulder_emails_plain_text_body "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/boulder_emails" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1505,10 +1505,10 @@ export def "repository-search-type-boulder-employee-salaries salaries" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1517,18 +1517,18 @@ export def "repository-search-type-boulder-employee-salaries salaries" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-boulder-employee-salariesposition-description: string # Position Description
-  --searchdb-boulder-employee-salariesdepartment: string # Department
-  --searchdb-boulder-employee-salariesemployee-flsa-exempt-y-n: string # Employee Flsa Exempt Y N
-  --searchdb-boulder-employee-salariespay-range-min: float # Pay Range Min (format: double)
-  --searchdb-boulder-employee-salariespay-range-max: float # Pay Range Max (format: double)
-  --searchdb-boulder-employee-salariesemployee-hourly-pay-rate: float # Employee Hourly Pay Rate (format: double)
-  --searchdb-boulder-employee-salariesemployee-fte-in-this-position: float # Employee Fte In This Position (format: double)
-  --searchdb-boulder-employee-salariesemployee-annual-base-salary: float # Employee Annual Base Salary (format: double)
+  --search-db-boulder-employee-salaries-position-description: string # Position Description
+  --search-db-boulder-employee-salaries-department: string # Department
+  --search-db-boulder-employee-salaries-employee-flsa-exempt-y-n: string # Employee Flsa Exempt Y N
+  --search-db-boulder-employee-salaries-pay-range-min: float # Pay Range Min (format: double)
+  --search-db-boulder-employee-salaries-pay-range-max: float # Pay Range Max (format: double)
+  --search-db-boulder-employee-salaries-employee-hourly-pay-rate: float # Employee Hourly Pay Rate (format: double)
+  --search-db-boulder-employee-salaries-employee-fte-in-this-position: float # Employee Fte In This Position (format: double)
+  --search-db-boulder-employee-salaries-employee-annual-base-salary: float # Employee Annual Base Salary (format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_employee_salaries.position_description" $searchdb_boulder_employee_salariesposition_description "scalar") (serialize-qp "search.db_boulder_employee_salaries.department" $searchdb_boulder_employee_salariesdepartment "scalar") (serialize-qp "search.db_boulder_employee_salaries.employee_flsa_exempt_y_n" $searchdb_boulder_employee_salariesemployee_flsa_exempt_y_n "scalar") (serialize-qp "search.db_boulder_employee_salaries.pay_range_min" $searchdb_boulder_employee_salariespay_range_min "scalar") (serialize-qp "search.db_boulder_employee_salaries.pay_range_max" $searchdb_boulder_employee_salariespay_range_max "scalar") (serialize-qp "search.db_boulder_employee_salaries.employee_hourly_pay_rate" $searchdb_boulder_employee_salariesemployee_hourly_pay_rate "scalar") (serialize-qp "search.db_boulder_employee_salaries.employee_fte_in_this_position" $searchdb_boulder_employee_salariesemployee_fte_in_this_position "scalar") (serialize-qp "search.db_boulder_employee_salaries.employee_annual_base_salary" $searchdb_boulder_employee_salariesemployee_annual_base_salary "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_boulder_employee_salaries.position_description" $search_db_boulder_employee_salaries_position_description "scalar") (serialize-qp "search.db_boulder_employee_salaries.department" $search_db_boulder_employee_salaries_department "scalar") (serialize-qp "search.db_boulder_employee_salaries.employee_flsa_exempt_y_n" $search_db_boulder_employee_salaries_employee_flsa_exempt_y_n "scalar") (serialize-qp "search.db_boulder_employee_salaries.pay_range_min" $search_db_boulder_employee_salaries_pay_range_min "scalar") (serialize-qp "search.db_boulder_employee_salaries.pay_range_max" $search_db_boulder_employee_salaries_pay_range_max "scalar") (serialize-qp "search.db_boulder_employee_salaries.employee_hourly_pay_rate" $search_db_boulder_employee_salaries_employee_hourly_pay_rate "scalar") (serialize-qp "search.db_boulder_employee_salaries.employee_fte_in_this_position" $search_db_boulder_employee_salaries_employee_fte_in_this_position "scalar") (serialize-qp "search.db_boulder_employee_salaries.employee_annual_base_salary" $search_db_boulder_employee_salaries_employee_annual_base_salary "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/boulder_employee_salaries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1553,10 +1553,10 @@ export def "repository-search-type-calendar calendar" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1568,7 +1568,7 @@ export def "repository-search-type-calendar calendar" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/calendar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1593,10 +1593,10 @@ export def "repository-search-type-campaign-donors donors" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1605,22 +1605,22 @@ export def "repository-search-type-campaign-donors donors" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-campaign-donorscommittee: string # Committee
-  --searchdb-campaign-donorsamount: float # Amount (format: double)
-  --searchdb-campaign-donorsparty: string # Party
-  --searchdb-campaign-donorsdonor: string # Donor
-  --searchdb-campaign-donorsgender: string # Gender
-  --searchdb-campaign-donorscity: string # City
-  --searchdb-campaign-donorsstate: string # State
-  --searchdb-campaign-donorszip-code: string # Zip Code
-  --searchdb-campaign-donorsemployer: string # Employer
-  --searchdb-campaign-donorsoccupation: string # Occupation
-  --searchdb-campaign-donorsdate: string # Date
-  --searchdb-campaign-donorslocation: string # Location
+  --search-db-campaign-donors-committee: string # Committee
+  --search-db-campaign-donors-amount: float # Amount (format: double)
+  --search-db-campaign-donors-party: string # Party
+  --search-db-campaign-donors-donor: string # Donor
+  --search-db-campaign-donors-gender: string # Gender
+  --search-db-campaign-donors-city: string # City
+  --search-db-campaign-donors-state: string # State
+  --search-db-campaign-donors-zip-code: string # Zip Code
+  --search-db-campaign-donors-employer: string # Employer
+  --search-db-campaign-donors-occupation: string # Occupation
+  --search-db-campaign-donors-date: string # Date
+  --search-db-campaign-donors-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_campaign_donors.committee" $searchdb_campaign_donorscommittee "scalar") (serialize-qp "search.db_campaign_donors.amount" $searchdb_campaign_donorsamount "scalar") (serialize-qp "search.db_campaign_donors.party" $searchdb_campaign_donorsparty "scalar") (serialize-qp "search.db_campaign_donors.donor" $searchdb_campaign_donorsdonor "scalar") (serialize-qp "search.db_campaign_donors.gender" $searchdb_campaign_donorsgender "scalar") (serialize-qp "search.db_campaign_donors.city" $searchdb_campaign_donorscity "scalar") (serialize-qp "search.db_campaign_donors.state" $searchdb_campaign_donorsstate "scalar") (serialize-qp "search.db_campaign_donors.zip_code" $searchdb_campaign_donorszip_code "scalar") (serialize-qp "search.db_campaign_donors.employer" $searchdb_campaign_donorsemployer "scalar") (serialize-qp "search.db_campaign_donors.occupation" $searchdb_campaign_donorsoccupation "scalar") (serialize-qp "search.db_campaign_donors.date" $searchdb_campaign_donorsdate "scalar") (serialize-qp "search.db_campaign_donors.location" $searchdb_campaign_donorslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_campaign_donors.committee" $search_db_campaign_donors_committee "scalar") (serialize-qp "search.db_campaign_donors.amount" $search_db_campaign_donors_amount "scalar") (serialize-qp "search.db_campaign_donors.party" $search_db_campaign_donors_party "scalar") (serialize-qp "search.db_campaign_donors.donor" $search_db_campaign_donors_donor "scalar") (serialize-qp "search.db_campaign_donors.gender" $search_db_campaign_donors_gender "scalar") (serialize-qp "search.db_campaign_donors.city" $search_db_campaign_donors_city "scalar") (serialize-qp "search.db_campaign_donors.state" $search_db_campaign_donors_state "scalar") (serialize-qp "search.db_campaign_donors.zip_code" $search_db_campaign_donors_zip_code "scalar") (serialize-qp "search.db_campaign_donors.employer" $search_db_campaign_donors_employer "scalar") (serialize-qp "search.db_campaign_donors.occupation" $search_db_campaign_donors_occupation "scalar") (serialize-qp "search.db_campaign_donors.date" $search_db_campaign_donors_date "scalar") (serialize-qp "search.db_campaign_donors.location" $search_db_campaign_donors_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/campaign_donors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1645,10 +1645,10 @@ export def "repository-search-type-campaign-expenditures expenditures" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1657,21 +1657,21 @@ export def "repository-search-type-campaign-expenditures expenditures" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-campaign-expenditurescommittee: string # Committee
-  --searchdb-campaign-expendituresamount: float # Amount (format: double)
-  --searchdb-campaign-expendituresparty: string # Party
-  --searchdb-campaign-expendituresrecipient: string # Recipient
-  --searchdb-campaign-expenditurescity: string # City
-  --searchdb-campaign-expendituresstate: string # State
-  --searchdb-campaign-expenditureszip-code: string # Zip Code
-  --searchdb-campaign-expenditurestransaction-date: string # Transaction Date
-  --searchdb-campaign-expenditurespurpose: string # Purpose
-  --searchdb-campaign-expendituresmemo-text: string # Memo Text
-  --searchdb-campaign-expenditureslocation: string # Location
+  --search-db-campaign-expenditures-committee: string # Committee
+  --search-db-campaign-expenditures-amount: float # Amount (format: double)
+  --search-db-campaign-expenditures-party: string # Party
+  --search-db-campaign-expenditures-recipient: string # Recipient
+  --search-db-campaign-expenditures-city: string # City
+  --search-db-campaign-expenditures-state: string # State
+  --search-db-campaign-expenditures-zip-code: string # Zip Code
+  --search-db-campaign-expenditures-transaction-date: string # Transaction Date
+  --search-db-campaign-expenditures-purpose: string # Purpose
+  --search-db-campaign-expenditures-memo-text: string # Memo Text
+  --search-db-campaign-expenditures-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_campaign_expenditures.committee" $searchdb_campaign_expenditurescommittee "scalar") (serialize-qp "search.db_campaign_expenditures.amount" $searchdb_campaign_expendituresamount "scalar") (serialize-qp "search.db_campaign_expenditures.party" $searchdb_campaign_expendituresparty "scalar") (serialize-qp "search.db_campaign_expenditures.recipient" $searchdb_campaign_expendituresrecipient "scalar") (serialize-qp "search.db_campaign_expenditures.city" $searchdb_campaign_expenditurescity "scalar") (serialize-qp "search.db_campaign_expenditures.state" $searchdb_campaign_expendituresstate "scalar") (serialize-qp "search.db_campaign_expenditures.zip_code" $searchdb_campaign_expenditureszip_code "scalar") (serialize-qp "search.db_campaign_expenditures.transaction_date" $searchdb_campaign_expenditurestransaction_date "scalar") (serialize-qp "search.db_campaign_expenditures.purpose" $searchdb_campaign_expenditurespurpose "scalar") (serialize-qp "search.db_campaign_expenditures.memo_text" $searchdb_campaign_expendituresmemo_text "scalar") (serialize-qp "search.db_campaign_expenditures.location" $searchdb_campaign_expenditureslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_campaign_expenditures.committee" $search_db_campaign_expenditures_committee "scalar") (serialize-qp "search.db_campaign_expenditures.amount" $search_db_campaign_expenditures_amount "scalar") (serialize-qp "search.db_campaign_expenditures.party" $search_db_campaign_expenditures_party "scalar") (serialize-qp "search.db_campaign_expenditures.recipient" $search_db_campaign_expenditures_recipient "scalar") (serialize-qp "search.db_campaign_expenditures.city" $search_db_campaign_expenditures_city "scalar") (serialize-qp "search.db_campaign_expenditures.state" $search_db_campaign_expenditures_state "scalar") (serialize-qp "search.db_campaign_expenditures.zip_code" $search_db_campaign_expenditures_zip_code "scalar") (serialize-qp "search.db_campaign_expenditures.transaction_date" $search_db_campaign_expenditures_transaction_date "scalar") (serialize-qp "search.db_campaign_expenditures.purpose" $search_db_campaign_expenditures_purpose "scalar") (serialize-qp "search.db_campaign_expenditures.memo_text" $search_db_campaign_expenditures_memo_text "scalar") (serialize-qp "search.db_campaign_expenditures.location" $search_db_campaign_expenditures_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/campaign_expenditures" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1696,10 +1696,10 @@ export def "repository-search-type-cataloglink cataloglink" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1711,7 +1711,7 @@ export def "repository-search-type-cataloglink cataloglink" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/cataloglink" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1736,10 +1736,10 @@ export def "repository-search-type-cdm-grid grid" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1751,7 +1751,7 @@ export def "repository-search-type-cdm-grid grid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/cdm_grid" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1776,10 +1776,10 @@ export def "repository-search-type-chatroom chatroom" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1791,7 +1791,7 @@ export def "repository-search-type-chatroom chatroom" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/chatroom" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1816,10 +1816,10 @@ export def "repository-search-type-colorado-water-rights rights" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1828,27 +1828,27 @@ export def "repository-search-type-colorado-water-rights rights" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-colorado-water-rightsstructure-name: string # Structure Name
-  --searchdb-colorado-water-rightsstructure-type: string # Structure Type
-  --searchdb-colorado-water-rightswater-source: string # Water Source
-  --searchdb-colorado-water-rightscounty: string # County
-  --searchdb-colorado-water-rightsadjudication-date: string # Adjudication Date
-  --searchdb-colorado-water-rightsappropriation-date: string # Appropriation Date
-  --searchdb-colorado-water-rightspriority-no: string # Priority No
-  --searchdb-colorado-water-rightsdecreed-uses: string # Decreed Uses
-  --searchdb-colorado-water-rightsnet-absolute: float # Net Absolute (format: double)
-  --searchdb-colorado-water-rightsnet-conditional: float # Net Conditional (format: double)
-  --searchdb-colorado-water-rightsnet-apex-absolute: float # Net Apex Absolute (format: double)
-  --searchdb-colorado-water-rightsnet-apex-conditional: float # Net Apex Conditional (format: double)
-  --searchdb-colorado-water-rightsdecreed-units: string # Decreed Units
-  --searchdb-colorado-water-rightsseasonal-limits: string # Seasonal Limits
-  --searchdb-colorado-water-rightscomments: string # Comments
-  --searchdb-colorado-water-rightsmore-information: string # More Information
-  --searchdb-colorado-water-rightslocation: string # Location
+  --search-db-colorado-water-rights-structure-name: string # Structure Name
+  --search-db-colorado-water-rights-structure-type: string # Structure Type
+  --search-db-colorado-water-rights-water-source: string # Water Source
+  --search-db-colorado-water-rights-county: string # County
+  --search-db-colorado-water-rights-adjudication-date: string # Adjudication Date
+  --search-db-colorado-water-rights-appropriation-date: string # Appropriation Date
+  --search-db-colorado-water-rights-priority-no: string # Priority No
+  --search-db-colorado-water-rights-decreed-uses: string # Decreed Uses
+  --search-db-colorado-water-rights-net-absolute: float # Net Absolute (format: double)
+  --search-db-colorado-water-rights-net-conditional: float # Net Conditional (format: double)
+  --search-db-colorado-water-rights-net-apex-absolute: float # Net Apex Absolute (format: double)
+  --search-db-colorado-water-rights-net-apex-conditional: float # Net Apex Conditional (format: double)
+  --search-db-colorado-water-rights-decreed-units: string # Decreed Units
+  --search-db-colorado-water-rights-seasonal-limits: string # Seasonal Limits
+  --search-db-colorado-water-rights-comments: string # Comments
+  --search-db-colorado-water-rights-more-information: string # More Information
+  --search-db-colorado-water-rights-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_colorado_water_rights.structure_name" $searchdb_colorado_water_rightsstructure_name "scalar") (serialize-qp "search.db_colorado_water_rights.structure_type" $searchdb_colorado_water_rightsstructure_type "scalar") (serialize-qp "search.db_colorado_water_rights.water_source" $searchdb_colorado_water_rightswater_source "scalar") (serialize-qp "search.db_colorado_water_rights.county" $searchdb_colorado_water_rightscounty "scalar") (serialize-qp "search.db_colorado_water_rights.adjudication_date" $searchdb_colorado_water_rightsadjudication_date "scalar") (serialize-qp "search.db_colorado_water_rights.appropriation_date" $searchdb_colorado_water_rightsappropriation_date "scalar") (serialize-qp "search.db_colorado_water_rights.priority_no" $searchdb_colorado_water_rightspriority_no "scalar") (serialize-qp "search.db_colorado_water_rights.decreed_uses" $searchdb_colorado_water_rightsdecreed_uses "scalar") (serialize-qp "search.db_colorado_water_rights.net_absolute" $searchdb_colorado_water_rightsnet_absolute "scalar") (serialize-qp "search.db_colorado_water_rights.net_conditional" $searchdb_colorado_water_rightsnet_conditional "scalar") (serialize-qp "search.db_colorado_water_rights.net_apex_absolute" $searchdb_colorado_water_rightsnet_apex_absolute "scalar") (serialize-qp "search.db_colorado_water_rights.net_apex_conditional" $searchdb_colorado_water_rightsnet_apex_conditional "scalar") (serialize-qp "search.db_colorado_water_rights.decreed_units" $searchdb_colorado_water_rightsdecreed_units "scalar") (serialize-qp "search.db_colorado_water_rights.seasonal_limits" $searchdb_colorado_water_rightsseasonal_limits "scalar") (serialize-qp "search.db_colorado_water_rights.comments" $searchdb_colorado_water_rightscomments "scalar") (serialize-qp "search.db_colorado_water_rights.more_information" $searchdb_colorado_water_rightsmore_information "scalar") (serialize-qp "search.db_colorado_water_rights.location" $searchdb_colorado_water_rightslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_colorado_water_rights.structure_name" $search_db_colorado_water_rights_structure_name "scalar") (serialize-qp "search.db_colorado_water_rights.structure_type" $search_db_colorado_water_rights_structure_type "scalar") (serialize-qp "search.db_colorado_water_rights.water_source" $search_db_colorado_water_rights_water_source "scalar") (serialize-qp "search.db_colorado_water_rights.county" $search_db_colorado_water_rights_county "scalar") (serialize-qp "search.db_colorado_water_rights.adjudication_date" $search_db_colorado_water_rights_adjudication_date "scalar") (serialize-qp "search.db_colorado_water_rights.appropriation_date" $search_db_colorado_water_rights_appropriation_date "scalar") (serialize-qp "search.db_colorado_water_rights.priority_no" $search_db_colorado_water_rights_priority_no "scalar") (serialize-qp "search.db_colorado_water_rights.decreed_uses" $search_db_colorado_water_rights_decreed_uses "scalar") (serialize-qp "search.db_colorado_water_rights.net_absolute" $search_db_colorado_water_rights_net_absolute "scalar") (serialize-qp "search.db_colorado_water_rights.net_conditional" $search_db_colorado_water_rights_net_conditional "scalar") (serialize-qp "search.db_colorado_water_rights.net_apex_absolute" $search_db_colorado_water_rights_net_apex_absolute "scalar") (serialize-qp "search.db_colorado_water_rights.net_apex_conditional" $search_db_colorado_water_rights_net_apex_conditional "scalar") (serialize-qp "search.db_colorado_water_rights.decreed_units" $search_db_colorado_water_rights_decreed_units "scalar") (serialize-qp "search.db_colorado_water_rights.seasonal_limits" $search_db_colorado_water_rights_seasonal_limits "scalar") (serialize-qp "search.db_colorado_water_rights.comments" $search_db_colorado_water_rights_comments "scalar") (serialize-qp "search.db_colorado_water_rights.more_information" $search_db_colorado_water_rights_more_information "scalar") (serialize-qp "search.db_colorado_water_rights.location" $search_db_colorado_water_rights_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/colorado_water_rights" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1873,10 +1873,10 @@ export def "repository-search-type-committee-donations donations" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1885,20 +1885,20 @@ export def "repository-search-type-committee-donations donations" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-committee-donationscommittee: string # Committee
-  --searchdb-committee-donationsamount: float # Amount (format: double)
-  --searchdb-committee-donationsrecipient: string # Recipient
-  --searchdb-committee-donationsdate: string # Date
-  --searchdb-committee-donationscity: string # City
-  --searchdb-committee-donationsstate: string # State
-  --searchdb-committee-donationszip-code: string # Zip Code
-  --searchdb-committee-donationsemployer: string # Employer
-  --searchdb-committee-donationsoccupation: string # Occupation
-  --searchdb-committee-donationslocation: string # Location
+  --search-db-committee-donations-committee: string # Committee
+  --search-db-committee-donations-amount: float # Amount (format: double)
+  --search-db-committee-donations-recipient: string # Recipient
+  --search-db-committee-donations-date: string # Date
+  --search-db-committee-donations-city: string # City
+  --search-db-committee-donations-state: string # State
+  --search-db-committee-donations-zip-code: string # Zip Code
+  --search-db-committee-donations-employer: string # Employer
+  --search-db-committee-donations-occupation: string # Occupation
+  --search-db-committee-donations-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_committee_donations.committee" $searchdb_committee_donationscommittee "scalar") (serialize-qp "search.db_committee_donations.amount" $searchdb_committee_donationsamount "scalar") (serialize-qp "search.db_committee_donations.recipient" $searchdb_committee_donationsrecipient "scalar") (serialize-qp "search.db_committee_donations.date" $searchdb_committee_donationsdate "scalar") (serialize-qp "search.db_committee_donations.city" $searchdb_committee_donationscity "scalar") (serialize-qp "search.db_committee_donations.state" $searchdb_committee_donationsstate "scalar") (serialize-qp "search.db_committee_donations.zip_code" $searchdb_committee_donationszip_code "scalar") (serialize-qp "search.db_committee_donations.employer" $searchdb_committee_donationsemployer "scalar") (serialize-qp "search.db_committee_donations.occupation" $searchdb_committee_donationsoccupation "scalar") (serialize-qp "search.db_committee_donations.location" $searchdb_committee_donationslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_committee_donations.committee" $search_db_committee_donations_committee "scalar") (serialize-qp "search.db_committee_donations.amount" $search_db_committee_donations_amount "scalar") (serialize-qp "search.db_committee_donations.recipient" $search_db_committee_donations_recipient "scalar") (serialize-qp "search.db_committee_donations.date" $search_db_committee_donations_date "scalar") (serialize-qp "search.db_committee_donations.city" $search_db_committee_donations_city "scalar") (serialize-qp "search.db_committee_donations.state" $search_db_committee_donations_state "scalar") (serialize-qp "search.db_committee_donations.zip_code" $search_db_committee_donations_zip_code "scalar") (serialize-qp "search.db_committee_donations.employer" $search_db_committee_donations_employer "scalar") (serialize-qp "search.db_committee_donations.occupation" $search_db_committee_donations_occupation "scalar") (serialize-qp "search.db_committee_donations.location" $search_db_committee_donations_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/committee_donations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1923,10 +1923,10 @@ export def "repository-search-type-community-datahub datahub" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1938,7 +1938,7 @@ export def "repository-search-type-community-datahub datahub" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/community_datahub" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1963,10 +1963,10 @@ export def "repository-search-type-community-resource resource" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -1975,15 +1975,15 @@ export def "repository-search-type-community-resource resource" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchcommunity-resourceresource-type: string # Type
-  --searchcommunity-resourceaddress: string # Address
-  --searchcommunity-resourcecity: string # City
-  --searchcommunity-resourcestate: string # State or Province
-  --searchcommunity-resourcezipcode: string # Zip Code
+  --search-community-resource-resource-type: string # Type
+  --search-community-resource-address: string # Address
+  --search-community-resource-city: string # City
+  --search-community-resource-state: string # State or Province
+  --search-community-resource-zipcode: string # Zip Code
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.community_resource.resource_type" $searchcommunity_resourceresource_type "scalar") (serialize-qp "search.community_resource.address" $searchcommunity_resourceaddress "scalar") (serialize-qp "search.community_resource.city" $searchcommunity_resourcecity "scalar") (serialize-qp "search.community_resource.state" $searchcommunity_resourcestate "scalar") (serialize-qp "search.community_resource.zipcode" $searchcommunity_resourcezipcode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.community_resource.resource_type" $search_community_resource_resource_type "scalar") (serialize-qp "search.community_resource.address" $search_community_resource_address "scalar") (serialize-qp "search.community_resource.city" $search_community_resource_city "scalar") (serialize-qp "search.community_resource.state" $search_community_resource_state "scalar") (serialize-qp "search.community_resource.zipcode" $search_community_resource_zipcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/community_resource" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2008,10 +2008,10 @@ export def "repository-search-type-construction-permits permits" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2020,40 +2020,40 @@ export def "repository-search-type-construction-permits permits" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-construction-permitsaddress: string # Address
-  --searchdb-construction-permitscase-status: string # Case Status
-  --searchdb-construction-permitscategory: string # Category
-  --searchdb-construction-permitsbuilding-uses-and-work-scopes: string # Building Uses And Work Scopes
-  --searchdb-construction-permitspermit-types: string # Permit Types
-  --searchdb-construction-permitstotal-project-value: float # Total Project Value (format: double)
-  --searchdb-construction-permitstotal-subpermit-value: float # Total Subpermit Value (format: double)
-  --searchdb-construction-permitsapplied: string # Applied
-  --searchdb-construction-permitsapproved: string # Approved
-  --searchdb-construction-permitsissued: string # Issued
-  --searchdb-construction-permitsco-date: string # Co Date
-  --searchdb-construction-permitscompletion-date: string # Completion Date
-  --searchdb-construction-permitsnew-res-unit: int # New Res Unit
-  --searchdb-construction-permitsexisting-res-unit: int # Existing Res Unit
-  --searchdb-construction-permitsaffordable-hsg-unit: int # Affordable Hsg Unit
-  --searchdb-construction-permitsnew-sf: int # New Sf
-  --searchdb-construction-permitsremodel-sf: int # Remodel Sf
-  --searchdb-construction-permitsnarrative-description: string # Narrative Description
-  --searchdb-construction-permitsprimary-first-name: string # Primary First Name
-  --searchdb-construction-permitsprimary-last-name: string # Primary Last Name
-  --searchdb-construction-permitsprimary-company: string # Primary Company
-  --searchdb-construction-permitscontractor-first-name: string # Contractor First Name
-  --searchdb-construction-permitscontractor-last-name: string # Contractor Last Name
-  --searchdb-construction-permitscontractor-company: string # Contractor Company
-  --searchdb-construction-permitsowner1-first-name: string # Owner1 First Name
-  --searchdb-construction-permitsowner1-last-name: string # Owner1 Last Name
-  --searchdb-construction-permitsowner1-company: string # Owner1 Company
-  --searchdb-construction-permitsowner2-first-name: string # Owner2 First Name
-  --searchdb-construction-permitsowner2-last-name: string # Owner2 Last Name
-  --searchdb-construction-permitsowner2-company: string # Owner2 Company
+  --search-db-construction-permits-address: string # Address
+  --search-db-construction-permits-case-status: string # Case Status
+  --search-db-construction-permits-category: string # Category
+  --search-db-construction-permits-building-uses-and-work-scopes: string # Building Uses And Work Scopes
+  --search-db-construction-permits-permit-types: string # Permit Types
+  --search-db-construction-permits-total-project-value: float # Total Project Value (format: double)
+  --search-db-construction-permits-total-subpermit-value: float # Total Subpermit Value (format: double)
+  --search-db-construction-permits-applied: string # Applied
+  --search-db-construction-permits-approved: string # Approved
+  --search-db-construction-permits-issued: string # Issued
+  --search-db-construction-permits-co-date: string # Co Date
+  --search-db-construction-permits-completion-date: string # Completion Date
+  --search-db-construction-permits-new-res-unit: int # New Res Unit
+  --search-db-construction-permits-existing-res-unit: int # Existing Res Unit
+  --search-db-construction-permits-affordable-hsg-unit: int # Affordable Hsg Unit
+  --search-db-construction-permits-new-sf: int # New Sf
+  --search-db-construction-permits-remodel-sf: int # Remodel Sf
+  --search-db-construction-permits-narrative-description: string # Narrative Description
+  --search-db-construction-permits-primary-first-name: string # Primary First Name
+  --search-db-construction-permits-primary-last-name: string # Primary Last Name
+  --search-db-construction-permits-primary-company: string # Primary Company
+  --search-db-construction-permits-contractor-first-name: string # Contractor First Name
+  --search-db-construction-permits-contractor-last-name: string # Contractor Last Name
+  --search-db-construction-permits-contractor-company: string # Contractor Company
+  --search-db-construction-permits-owner1-first-name: string # Owner1 First Name
+  --search-db-construction-permits-owner1-last-name: string # Owner1 Last Name
+  --search-db-construction-permits-owner1-company: string # Owner1 Company
+  --search-db-construction-permits-owner2-first-name: string # Owner2 First Name
+  --search-db-construction-permits-owner2-last-name: string # Owner2 Last Name
+  --search-db-construction-permits-owner2-company: string # Owner2 Company
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_construction_permits.address" $searchdb_construction_permitsaddress "scalar") (serialize-qp "search.db_construction_permits.case_status" $searchdb_construction_permitscase_status "scalar") (serialize-qp "search.db_construction_permits.category" $searchdb_construction_permitscategory "scalar") (serialize-qp "search.db_construction_permits.building_uses_and_work_scopes" $searchdb_construction_permitsbuilding_uses_and_work_scopes "scalar") (serialize-qp "search.db_construction_permits.permit_types" $searchdb_construction_permitspermit_types "scalar") (serialize-qp "search.db_construction_permits.total_project_value" $searchdb_construction_permitstotal_project_value "scalar") (serialize-qp "search.db_construction_permits.total_subpermit_value" $searchdb_construction_permitstotal_subpermit_value "scalar") (serialize-qp "search.db_construction_permits.applied" $searchdb_construction_permitsapplied "scalar") (serialize-qp "search.db_construction_permits.approved" $searchdb_construction_permitsapproved "scalar") (serialize-qp "search.db_construction_permits.issued" $searchdb_construction_permitsissued "scalar") (serialize-qp "search.db_construction_permits.co_date" $searchdb_construction_permitsco_date "scalar") (serialize-qp "search.db_construction_permits.completion_date" $searchdb_construction_permitscompletion_date "scalar") (serialize-qp "search.db_construction_permits.new_res_unit" $searchdb_construction_permitsnew_res_unit "scalar") (serialize-qp "search.db_construction_permits.existing_res_unit" $searchdb_construction_permitsexisting_res_unit "scalar") (serialize-qp "search.db_construction_permits.affordable_hsg_unit" $searchdb_construction_permitsaffordable_hsg_unit "scalar") (serialize-qp "search.db_construction_permits.new_sf" $searchdb_construction_permitsnew_sf "scalar") (serialize-qp "search.db_construction_permits.remodel_sf" $searchdb_construction_permitsremodel_sf "scalar") (serialize-qp "search.db_construction_permits.narrative_description" $searchdb_construction_permitsnarrative_description "scalar") (serialize-qp "search.db_construction_permits.primary_first_name" $searchdb_construction_permitsprimary_first_name "scalar") (serialize-qp "search.db_construction_permits.primary_last_name" $searchdb_construction_permitsprimary_last_name "scalar") (serialize-qp "search.db_construction_permits.primary_company" $searchdb_construction_permitsprimary_company "scalar") (serialize-qp "search.db_construction_permits.contractor_first_name" $searchdb_construction_permitscontractor_first_name "scalar") (serialize-qp "search.db_construction_permits.contractor_last_name" $searchdb_construction_permitscontractor_last_name "scalar") (serialize-qp "search.db_construction_permits.contractor_company" $searchdb_construction_permitscontractor_company "scalar") (serialize-qp "search.db_construction_permits.owner1_first_name" $searchdb_construction_permitsowner1_first_name "scalar") (serialize-qp "search.db_construction_permits.owner1_last_name" $searchdb_construction_permitsowner1_last_name "scalar") (serialize-qp "search.db_construction_permits.owner1_company" $searchdb_construction_permitsowner1_company "scalar") (serialize-qp "search.db_construction_permits.owner2_first_name" $searchdb_construction_permitsowner2_first_name "scalar") (serialize-qp "search.db_construction_permits.owner2_last_name" $searchdb_construction_permitsowner2_last_name "scalar") (serialize-qp "search.db_construction_permits.owner2_company" $searchdb_construction_permitsowner2_company "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_construction_permits.address" $search_db_construction_permits_address "scalar") (serialize-qp "search.db_construction_permits.case_status" $search_db_construction_permits_case_status "scalar") (serialize-qp "search.db_construction_permits.category" $search_db_construction_permits_category "scalar") (serialize-qp "search.db_construction_permits.building_uses_and_work_scopes" $search_db_construction_permits_building_uses_and_work_scopes "scalar") (serialize-qp "search.db_construction_permits.permit_types" $search_db_construction_permits_permit_types "scalar") (serialize-qp "search.db_construction_permits.total_project_value" $search_db_construction_permits_total_project_value "scalar") (serialize-qp "search.db_construction_permits.total_subpermit_value" $search_db_construction_permits_total_subpermit_value "scalar") (serialize-qp "search.db_construction_permits.applied" $search_db_construction_permits_applied "scalar") (serialize-qp "search.db_construction_permits.approved" $search_db_construction_permits_approved "scalar") (serialize-qp "search.db_construction_permits.issued" $search_db_construction_permits_issued "scalar") (serialize-qp "search.db_construction_permits.co_date" $search_db_construction_permits_co_date "scalar") (serialize-qp "search.db_construction_permits.completion_date" $search_db_construction_permits_completion_date "scalar") (serialize-qp "search.db_construction_permits.new_res_unit" $search_db_construction_permits_new_res_unit "scalar") (serialize-qp "search.db_construction_permits.existing_res_unit" $search_db_construction_permits_existing_res_unit "scalar") (serialize-qp "search.db_construction_permits.affordable_hsg_unit" $search_db_construction_permits_affordable_hsg_unit "scalar") (serialize-qp "search.db_construction_permits.new_sf" $search_db_construction_permits_new_sf "scalar") (serialize-qp "search.db_construction_permits.remodel_sf" $search_db_construction_permits_remodel_sf "scalar") (serialize-qp "search.db_construction_permits.narrative_description" $search_db_construction_permits_narrative_description "scalar") (serialize-qp "search.db_construction_permits.primary_first_name" $search_db_construction_permits_primary_first_name "scalar") (serialize-qp "search.db_construction_permits.primary_last_name" $search_db_construction_permits_primary_last_name "scalar") (serialize-qp "search.db_construction_permits.primary_company" $search_db_construction_permits_primary_company "scalar") (serialize-qp "search.db_construction_permits.contractor_first_name" $search_db_construction_permits_contractor_first_name "scalar") (serialize-qp "search.db_construction_permits.contractor_last_name" $search_db_construction_permits_contractor_last_name "scalar") (serialize-qp "search.db_construction_permits.contractor_company" $search_db_construction_permits_contractor_company "scalar") (serialize-qp "search.db_construction_permits.owner1_first_name" $search_db_construction_permits_owner1_first_name "scalar") (serialize-qp "search.db_construction_permits.owner1_last_name" $search_db_construction_permits_owner1_last_name "scalar") (serialize-qp "search.db_construction_permits.owner1_company" $search_db_construction_permits_owner1_company "scalar") (serialize-qp "search.db_construction_permits.owner2_first_name" $search_db_construction_permits_owner2_first_name "scalar") (serialize-qp "search.db_construction_permits.owner2_last_name" $search_db_construction_permits_owner2_last_name "scalar") (serialize-qp "search.db_construction_permits.owner2_company" $search_db_construction_permits_owner2_company "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/construction_permits" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2078,10 +2078,10 @@ export def "repository-search-type-contact contact" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2090,13 +2090,13 @@ export def "repository-search-type-contact contact" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-contactname: string # Name
-  --searchdb-contactinstitution: string # Institution
-  --searchdb-contactemail: string # Email
+  --search-db-contact-name: string # Name
+  --search-db-contact-institution: string # Institution
+  --search-db-contact-email: string # Email
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_contact.name" $searchdb_contactname "scalar") (serialize-qp "search.db_contact.institution" $searchdb_contactinstitution "scalar") (serialize-qp "search.db_contact.email" $searchdb_contactemail "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_contact.name" $search_db_contact_name "scalar") (serialize-qp "search.db_contact.institution" $search_db_contact_institution "scalar") (serialize-qp "search.db_contact.email" $search_db_contact_email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/contact" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2121,10 +2121,10 @@ export def "repository-search-type-db-co-indicators indicators" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2133,17 +2133,17 @@ export def "repository-search-type-db-co-indicators indicators" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-db-co-indicatorsgeo-name: string # County
-  --searchdb-db-co-indicatorsdomain: string # Domain
-  --searchdb-db-co-indicatorssubdomain: string # Subdomain
-  --searchdb-db-co-indicatorsindicatorName: string # Indicator
-  --searchdb-db-co-indicatorsdescription: string # Description
-  --searchdb-db-co-indicatorsmeasure: float # Measure (format: double)
-  --searchdb-db-co-indicatorslocation: string # Location
+  --search-db-db-co-indicators-geo-name: string # County
+  --search-db-db-co-indicators-domain: string # Domain
+  --search-db-db-co-indicators-subdomain: string # Subdomain
+  --search-db-db-co-indicators-indicator-name: string # Indicator
+  --search-db-db-co-indicators-description: string # Description
+  --search-db-db-co-indicators-measure: float # Measure (format: double)
+  --search-db-db-co-indicators-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_db_co_indicators.geo_name" $searchdb_db_co_indicatorsgeo_name "scalar") (serialize-qp "search.db_db_co_indicators.domain" $searchdb_db_co_indicatorsdomain "scalar") (serialize-qp "search.db_db_co_indicators.subdomain" $searchdb_db_co_indicatorssubdomain "scalar") (serialize-qp "search.db_db_co_indicators.indicatorName" $searchdb_db_co_indicatorsindicatorName "scalar") (serialize-qp "search.db_db_co_indicators.description" $searchdb_db_co_indicatorsdescription "scalar") (serialize-qp "search.db_db_co_indicators.measure" $searchdb_db_co_indicatorsmeasure "scalar") (serialize-qp "search.db_db_co_indicators.location" $searchdb_db_co_indicatorslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_db_co_indicators.geo_name" $search_db_db_co_indicators_geo_name "scalar") (serialize-qp "search.db_db_co_indicators.domain" $search_db_db_co_indicators_domain "scalar") (serialize-qp "search.db_db_co_indicators.subdomain" $search_db_db_co_indicators_subdomain "scalar") (serialize-qp "search.db_db_co_indicators.indicatorName" $search_db_db_co_indicators_indicator_name "scalar") (serialize-qp "search.db_db_co_indicators.description" $search_db_db_co_indicators_description "scalar") (serialize-qp "search.db_db_co_indicators.measure" $search_db_db_co_indicators_measure "scalar") (serialize-qp "search.db_db_co_indicators.location" $search_db_db_co_indicators_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/db_co_indicators" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2168,10 +2168,10 @@ export def "repository-search-type-earth-satellite-landsat landsat" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2180,16 +2180,16 @@ export def "repository-search-type-earth-satellite-landsat landsat" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchearth-satellite-landsatsensor: string # Sensor
-  --searchearth-satellite-landsatsatellite: string # Satellite
-  --searchearth-satellite-landsatwrs-path-number: int # WRS Path
-  --searchearth-satellite-landsatwrs-row-number: int # WRS Row
-  --searchearth-satellite-landsatground-station: string # Ground Station
-  --searchearth-satellite-landsatarchive-version-number: int # Archive Version Number
+  --search-earth-satellite-landsat-sensor: string # Sensor
+  --search-earth-satellite-landsat-satellite: string # Satellite
+  --search-earth-satellite-landsat-wrs-path-number: int # WRS Path
+  --search-earth-satellite-landsat-wrs-row-number: int # WRS Row
+  --search-earth-satellite-landsat-ground-station: string # Ground Station
+  --search-earth-satellite-landsat-archive-version-number: int # Archive Version Number
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.earth_satellite_landsat.sensor" $searchearth_satellite_landsatsensor "scalar") (serialize-qp "search.earth_satellite_landsat.satellite" $searchearth_satellite_landsatsatellite "scalar") (serialize-qp "search.earth_satellite_landsat.wrs_path_number" $searchearth_satellite_landsatwrs_path_number "scalar") (serialize-qp "search.earth_satellite_landsat.wrs_row_number" $searchearth_satellite_landsatwrs_row_number "scalar") (serialize-qp "search.earth_satellite_landsat.ground_station" $searchearth_satellite_landsatground_station "scalar") (serialize-qp "search.earth_satellite_landsat.archive_version_number" $searchearth_satellite_landsatarchive_version_number "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.earth_satellite_landsat.sensor" $search_earth_satellite_landsat_sensor "scalar") (serialize-qp "search.earth_satellite_landsat.satellite" $search_earth_satellite_landsat_satellite "scalar") (serialize-qp "search.earth_satellite_landsat.wrs_path_number" $search_earth_satellite_landsat_wrs_path_number "scalar") (serialize-qp "search.earth_satellite_landsat.wrs_row_number" $search_earth_satellite_landsat_wrs_row_number "scalar") (serialize-qp "search.earth_satellite_landsat.ground_station" $search_earth_satellite_landsat_ground_station "scalar") (serialize-qp "search.earth_satellite_landsat.archive_version_number" $search_earth_satellite_landsat_archive_version_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/earth_satellite_landsat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2214,10 +2214,10 @@ export def "repository-search-type-faq faq" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2229,7 +2229,7 @@ export def "repository-search-type-faq faq" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/faq" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2254,10 +2254,10 @@ export def "repository-search-type-fec-pacs pacs" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2266,27 +2266,27 @@ export def "repository-search-type-fec-pacs pacs" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-fec-pacscommittee: string # Committee
-  --searchdb-fec-pacstotal-receipts: float # Total Receipts (format: double)
-  --searchdb-fec-pacsbeginning-cash: float # Beginning Cash (format: double)
-  --searchdb-fec-pacsending-cash: float # Ending Cash (format: double)
-  --searchdb-fec-pacscontributions-from-individuals: float # Contributions From Individuals (format: double)
-  --searchdb-fec-pacscontributions-from-other-committees: float # Contributions From Other Committees (format: double)
-  --searchdb-fec-pacstrans-from-affiliates: float # Trans From Affiliates (format: double)
-  --searchdb-fec-pacscontributions-to-other-committee: float # Contributions To Other Committee (format: double)
-  --searchdb-fec-pacscontributions-from-candidate: float # Contributions From Candidate (format: double)
-  --searchdb-fec-pacsloans-from-candidate: float # Loans From Candidate (format: double)
-  --searchdb-fec-pacstotal-loans-received: float # Total Loans Received (format: double)
-  --searchdb-fec-pacstotal-distributions: float # Total Distributions (format: double)
-  --searchdb-fec-pacstransfers-to-affiliates: float # Transfers To Affiliates (format: double)
-  --searchdb-fec-pacsrefunds-to-individuals: float # Refunds To Individuals (format: double)
-  --searchdb-fec-pacsrefends-to-othercommittees: float # Refends To Othercommittees (format: double)
-  --searchdb-fec-pacscandidate-loan-repayments: float # Candidate Loan Repayments (format: double)
-  --searchdb-fec-pacsloan-repayments: float # Loan Repayments (format: double)
+  --search-db-fec-pacs-committee: string # Committee
+  --search-db-fec-pacs-total-receipts: float # Total Receipts (format: double)
+  --search-db-fec-pacs-beginning-cash: float # Beginning Cash (format: double)
+  --search-db-fec-pacs-ending-cash: float # Ending Cash (format: double)
+  --search-db-fec-pacs-contributions-from-individuals: float # Contributions From Individuals (format: double)
+  --search-db-fec-pacs-contributions-from-other-committees: float # Contributions From Other Committees (format: double)
+  --search-db-fec-pacs-trans-from-affiliates: float # Trans From Affiliates (format: double)
+  --search-db-fec-pacs-contributions-to-other-committee: float # Contributions To Other Committee (format: double)
+  --search-db-fec-pacs-contributions-from-candidate: float # Contributions From Candidate (format: double)
+  --search-db-fec-pacs-loans-from-candidate: float # Loans From Candidate (format: double)
+  --search-db-fec-pacs-total-loans-received: float # Total Loans Received (format: double)
+  --search-db-fec-pacs-total-distributions: float # Total Distributions (format: double)
+  --search-db-fec-pacs-transfers-to-affiliates: float # Transfers To Affiliates (format: double)
+  --search-db-fec-pacs-refunds-to-individuals: float # Refunds To Individuals (format: double)
+  --search-db-fec-pacs-refends-to-othercommittees: float # Refends To Othercommittees (format: double)
+  --search-db-fec-pacs-candidate-loan-repayments: float # Candidate Loan Repayments (format: double)
+  --search-db-fec-pacs-loan-repayments: float # Loan Repayments (format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_fec_pacs.committee" $searchdb_fec_pacscommittee "scalar") (serialize-qp "search.db_fec_pacs.total_receipts" $searchdb_fec_pacstotal_receipts "scalar") (serialize-qp "search.db_fec_pacs.beginning_cash" $searchdb_fec_pacsbeginning_cash "scalar") (serialize-qp "search.db_fec_pacs.ending_cash" $searchdb_fec_pacsending_cash "scalar") (serialize-qp "search.db_fec_pacs.contributions_from_individuals" $searchdb_fec_pacscontributions_from_individuals "scalar") (serialize-qp "search.db_fec_pacs.contributions_from_other_committees" $searchdb_fec_pacscontributions_from_other_committees "scalar") (serialize-qp "search.db_fec_pacs.trans_from_affiliates" $searchdb_fec_pacstrans_from_affiliates "scalar") (serialize-qp "search.db_fec_pacs.contributions_to_other_committee" $searchdb_fec_pacscontributions_to_other_committee "scalar") (serialize-qp "search.db_fec_pacs.contributions_from_candidate" $searchdb_fec_pacscontributions_from_candidate "scalar") (serialize-qp "search.db_fec_pacs.loans_from_candidate" $searchdb_fec_pacsloans_from_candidate "scalar") (serialize-qp "search.db_fec_pacs.total_loans_received" $searchdb_fec_pacstotal_loans_received "scalar") (serialize-qp "search.db_fec_pacs.total_distributions" $searchdb_fec_pacstotal_distributions "scalar") (serialize-qp "search.db_fec_pacs.transfers_to_affiliates" $searchdb_fec_pacstransfers_to_affiliates "scalar") (serialize-qp "search.db_fec_pacs.refunds_to_individuals" $searchdb_fec_pacsrefunds_to_individuals "scalar") (serialize-qp "search.db_fec_pacs.refends_to_othercommittees" $searchdb_fec_pacsrefends_to_othercommittees "scalar") (serialize-qp "search.db_fec_pacs.candidate_loan_repayments" $searchdb_fec_pacscandidate_loan_repayments "scalar") (serialize-qp "search.db_fec_pacs.loan_repayments" $searchdb_fec_pacsloan_repayments "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_fec_pacs.committee" $search_db_fec_pacs_committee "scalar") (serialize-qp "search.db_fec_pacs.total_receipts" $search_db_fec_pacs_total_receipts "scalar") (serialize-qp "search.db_fec_pacs.beginning_cash" $search_db_fec_pacs_beginning_cash "scalar") (serialize-qp "search.db_fec_pacs.ending_cash" $search_db_fec_pacs_ending_cash "scalar") (serialize-qp "search.db_fec_pacs.contributions_from_individuals" $search_db_fec_pacs_contributions_from_individuals "scalar") (serialize-qp "search.db_fec_pacs.contributions_from_other_committees" $search_db_fec_pacs_contributions_from_other_committees "scalar") (serialize-qp "search.db_fec_pacs.trans_from_affiliates" $search_db_fec_pacs_trans_from_affiliates "scalar") (serialize-qp "search.db_fec_pacs.contributions_to_other_committee" $search_db_fec_pacs_contributions_to_other_committee "scalar") (serialize-qp "search.db_fec_pacs.contributions_from_candidate" $search_db_fec_pacs_contributions_from_candidate "scalar") (serialize-qp "search.db_fec_pacs.loans_from_candidate" $search_db_fec_pacs_loans_from_candidate "scalar") (serialize-qp "search.db_fec_pacs.total_loans_received" $search_db_fec_pacs_total_loans_received "scalar") (serialize-qp "search.db_fec_pacs.total_distributions" $search_db_fec_pacs_total_distributions "scalar") (serialize-qp "search.db_fec_pacs.transfers_to_affiliates" $search_db_fec_pacs_transfers_to_affiliates "scalar") (serialize-qp "search.db_fec_pacs.refunds_to_individuals" $search_db_fec_pacs_refunds_to_individuals "scalar") (serialize-qp "search.db_fec_pacs.refends_to_othercommittees" $search_db_fec_pacs_refends_to_othercommittees "scalar") (serialize-qp "search.db_fec_pacs.candidate_loan_repayments" $search_db_fec_pacs_candidate_loan_repayments "scalar") (serialize-qp "search.db_fec_pacs.loan_repayments" $search_db_fec_pacs_loan_repayments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/fec_pacs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2311,10 +2311,10 @@ export def "repository-search-type-feccandidates feccandidates" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2323,33 +2323,33 @@ export def "repository-search-type-feccandidates feccandidates" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-feccandidatesname: string # Name
-  --searchdb-feccandidatesparty: string # Party
-  --searchdb-feccandidatesstate: string # State
-  --searchdb-feccandidatesdistrict: string # District
-  --searchdb-feccandidatesgender: string # Gender
-  --searchdb-feccandidatesbeginning-cash: float # Beginning Cash (format: double)
-  --searchdb-feccandidatesending-cash: float # Ending Cash (format: double)
-  --searchdb-feccandidatestotal-receipts: float # Total Receipts (format: double)
-  --searchdb-feccandidatestotal-indivual-contributions: float # Total Indivual Contributions (format: double)
-  --searchdb-feccandidatestransfers-from-committees: float # Transfers From Committees (format: double)
-  --searchdb-feccandidatestransfers-to-committees: float # Transfers To Committees (format: double)
-  --searchdb-feccandidatestotal-disbursements: float # Total Disbursements (format: double)
-  --searchdb-feccandidatescontributions-from-candidate: float # Contributions From Candidate (format: double)
-  --searchdb-feccandidatesloans-from-candidates: float # Loans From Candidates (format: double)
-  --searchdb-feccandidatesother-loans: float # Other Loans (format: double)
-  --searchdb-feccandidatescandidate-loan-repayments: float # Candidate Loan Repayments (format: double)
-  --searchdb-feccandidatesother-loan-repayments: float # Other Loan Repayments (format: double)
-  --searchdb-feccandidatesdebts-owed-by: float # Debts Owed By (format: double)
-  --searchdb-feccandidatescontributions-from-other-committees: float # Contributions From Other Committees (format: double)
-  --searchdb-feccandidatescontributions-from-party-committees: float # Contributions From Party Committees (format: double)
-  --searchdb-feccandidatescoverage-end-date: string # Coverage End Date
-  --searchdb-feccandidatesindividual-refunds: float # Individual Refunds (format: double)
-  --searchdb-feccandidatescommittee-refunds: float # Committee Refunds (format: double)
+  --search-db-feccandidates-name: string # Name
+  --search-db-feccandidates-party: string # Party
+  --search-db-feccandidates-state: string # State
+  --search-db-feccandidates-district: string # District
+  --search-db-feccandidates-gender: string # Gender
+  --search-db-feccandidates-beginning-cash: float # Beginning Cash (format: double)
+  --search-db-feccandidates-ending-cash: float # Ending Cash (format: double)
+  --search-db-feccandidates-total-receipts: float # Total Receipts (format: double)
+  --search-db-feccandidates-total-indivual-contributions: float # Total Indivual Contributions (format: double)
+  --search-db-feccandidates-transfers-from-committees: float # Transfers From Committees (format: double)
+  --search-db-feccandidates-transfers-to-committees: float # Transfers To Committees (format: double)
+  --search-db-feccandidates-total-disbursements: float # Total Disbursements (format: double)
+  --search-db-feccandidates-contributions-from-candidate: float # Contributions From Candidate (format: double)
+  --search-db-feccandidates-loans-from-candidates: float # Loans From Candidates (format: double)
+  --search-db-feccandidates-other-loans: float # Other Loans (format: double)
+  --search-db-feccandidates-candidate-loan-repayments: float # Candidate Loan Repayments (format: double)
+  --search-db-feccandidates-other-loan-repayments: float # Other Loan Repayments (format: double)
+  --search-db-feccandidates-debts-owed-by: float # Debts Owed By (format: double)
+  --search-db-feccandidates-contributions-from-other-committees: float # Contributions From Other Committees (format: double)
+  --search-db-feccandidates-contributions-from-party-committees: float # Contributions From Party Committees (format: double)
+  --search-db-feccandidates-coverage-end-date: string # Coverage End Date
+  --search-db-feccandidates-individual-refunds: float # Individual Refunds (format: double)
+  --search-db-feccandidates-committee-refunds: float # Committee Refunds (format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_feccandidates.name" $searchdb_feccandidatesname "scalar") (serialize-qp "search.db_feccandidates.party" $searchdb_feccandidatesparty "scalar") (serialize-qp "search.db_feccandidates.state" $searchdb_feccandidatesstate "scalar") (serialize-qp "search.db_feccandidates.district" $searchdb_feccandidatesdistrict "scalar") (serialize-qp "search.db_feccandidates.gender" $searchdb_feccandidatesgender "scalar") (serialize-qp "search.db_feccandidates.beginning_cash" $searchdb_feccandidatesbeginning_cash "scalar") (serialize-qp "search.db_feccandidates.ending_cash" $searchdb_feccandidatesending_cash "scalar") (serialize-qp "search.db_feccandidates.total_receipts" $searchdb_feccandidatestotal_receipts "scalar") (serialize-qp "search.db_feccandidates.total_indivual_contributions" $searchdb_feccandidatestotal_indivual_contributions "scalar") (serialize-qp "search.db_feccandidates.transfers_from_committees" $searchdb_feccandidatestransfers_from_committees "scalar") (serialize-qp "search.db_feccandidates.transfers_to_committees" $searchdb_feccandidatestransfers_to_committees "scalar") (serialize-qp "search.db_feccandidates.total_disbursements" $searchdb_feccandidatestotal_disbursements "scalar") (serialize-qp "search.db_feccandidates.contributions_from_candidate" $searchdb_feccandidatescontributions_from_candidate "scalar") (serialize-qp "search.db_feccandidates.loans_from_candidates" $searchdb_feccandidatesloans_from_candidates "scalar") (serialize-qp "search.db_feccandidates.other_loans" $searchdb_feccandidatesother_loans "scalar") (serialize-qp "search.db_feccandidates.candidate_loan_repayments" $searchdb_feccandidatescandidate_loan_repayments "scalar") (serialize-qp "search.db_feccandidates.other_loan_repayments" $searchdb_feccandidatesother_loan_repayments "scalar") (serialize-qp "search.db_feccandidates.debts_owed_by" $searchdb_feccandidatesdebts_owed_by "scalar") (serialize-qp "search.db_feccandidates.contributions_from_other_committees" $searchdb_feccandidatescontributions_from_other_committees "scalar") (serialize-qp "search.db_feccandidates.contributions_from_party_committees" $searchdb_feccandidatescontributions_from_party_committees "scalar") (serialize-qp "search.db_feccandidates.coverage_end_date" $searchdb_feccandidatescoverage_end_date "scalar") (serialize-qp "search.db_feccandidates.individual_refunds" $searchdb_feccandidatesindividual_refunds "scalar") (serialize-qp "search.db_feccandidates.committee_refunds" $searchdb_feccandidatescommittee_refunds "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_feccandidates.name" $search_db_feccandidates_name "scalar") (serialize-qp "search.db_feccandidates.party" $search_db_feccandidates_party "scalar") (serialize-qp "search.db_feccandidates.state" $search_db_feccandidates_state "scalar") (serialize-qp "search.db_feccandidates.district" $search_db_feccandidates_district "scalar") (serialize-qp "search.db_feccandidates.gender" $search_db_feccandidates_gender "scalar") (serialize-qp "search.db_feccandidates.beginning_cash" $search_db_feccandidates_beginning_cash "scalar") (serialize-qp "search.db_feccandidates.ending_cash" $search_db_feccandidates_ending_cash "scalar") (serialize-qp "search.db_feccandidates.total_receipts" $search_db_feccandidates_total_receipts "scalar") (serialize-qp "search.db_feccandidates.total_indivual_contributions" $search_db_feccandidates_total_indivual_contributions "scalar") (serialize-qp "search.db_feccandidates.transfers_from_committees" $search_db_feccandidates_transfers_from_committees "scalar") (serialize-qp "search.db_feccandidates.transfers_to_committees" $search_db_feccandidates_transfers_to_committees "scalar") (serialize-qp "search.db_feccandidates.total_disbursements" $search_db_feccandidates_total_disbursements "scalar") (serialize-qp "search.db_feccandidates.contributions_from_candidate" $search_db_feccandidates_contributions_from_candidate "scalar") (serialize-qp "search.db_feccandidates.loans_from_candidates" $search_db_feccandidates_loans_from_candidates "scalar") (serialize-qp "search.db_feccandidates.other_loans" $search_db_feccandidates_other_loans "scalar") (serialize-qp "search.db_feccandidates.candidate_loan_repayments" $search_db_feccandidates_candidate_loan_repayments "scalar") (serialize-qp "search.db_feccandidates.other_loan_repayments" $search_db_feccandidates_other_loan_repayments "scalar") (serialize-qp "search.db_feccandidates.debts_owed_by" $search_db_feccandidates_debts_owed_by "scalar") (serialize-qp "search.db_feccandidates.contributions_from_other_committees" $search_db_feccandidates_contributions_from_other_committees "scalar") (serialize-qp "search.db_feccandidates.contributions_from_party_committees" $search_db_feccandidates_contributions_from_party_committees "scalar") (serialize-qp "search.db_feccandidates.coverage_end_date" $search_db_feccandidates_coverage_end_date "scalar") (serialize-qp "search.db_feccandidates.individual_refunds" $search_db_feccandidates_individual_refunds "scalar") (serialize-qp "search.db_feccandidates.committee_refunds" $search_db_feccandidates_committee_refunds "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/feccandidates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2374,10 +2374,10 @@ export def "repository-search-type-feed feed" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2389,7 +2389,7 @@ export def "repository-search-type-feed feed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/feed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2414,10 +2414,10 @@ export def "repository-search-type-file file" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2429,7 +2429,7 @@ export def "repository-search-type-file file" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/file" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2454,10 +2454,10 @@ export def "repository-search-type-fits-data data" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2466,13 +2466,13 @@ export def "repository-search-type-fits-data data" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchfits-dataorigin: string # Origin
-  --searchfits-datatelescope: string # Telescope
-  --searchfits-datainstrument: string # Instrument
+  --search-fits-data-origin: string # Origin
+  --search-fits-data-telescope: string # Telescope
+  --search-fits-data-instrument: string # Instrument
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.fits_data.origin" $searchfits_dataorigin "scalar") (serialize-qp "search.fits_data.telescope" $searchfits_datatelescope "scalar") (serialize-qp "search.fits_data.instrument" $searchfits_datainstrument "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.fits_data.origin" $search_fits_data_origin "scalar") (serialize-qp "search.fits_data.telescope" $search_fits_data_telescope "scalar") (serialize-qp "search.fits_data.instrument" $search_fits_data_instrument "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/fits_data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2497,10 +2497,10 @@ export def "repository-search-type-ftp ftp" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2512,7 +2512,7 @@ export def "repository-search-type-ftp ftp" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/ftp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2537,10 +2537,10 @@ export def "repository-search-type-gadgets-countdown countdown" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2552,7 +2552,7 @@ export def "repository-search-type-gadgets-countdown countdown" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/gadgets_countdown" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2577,10 +2577,10 @@ export def "repository-search-type-gadgets-stock stock" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2592,7 +2592,7 @@ export def "repository-search-type-gadgets-stock stock" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/gadgets_stock" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2617,10 +2617,10 @@ export def "repository-search-type-gadgets-weather weather" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2632,7 +2632,7 @@ export def "repository-search-type-gadgets-weather weather" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/gadgets_weather" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2657,10 +2657,10 @@ export def "repository-search-type-gazeteer-census-tracts tracts" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2669,19 +2669,19 @@ export def "repository-search-type-gazeteer-census-tracts tracts" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-gazeteer-census-tractsstate: string # State
-  --searchdb-gazeteer-census-tractsstate-fips: string # State Fips
-  --searchdb-gazeteer-census-tractscounty-name: string # County Name
-  --searchdb-gazeteer-census-tractscounty-fips: string # County Fips
-  --searchdb-gazeteer-census-tractscensus-tract-id: string # Census Tract Id
-  --searchdb-gazeteer-census-tractsfull-census-tract-id: string # Full Census Tract Id
-  --searchdb-gazeteer-census-tractsland-area: float # Land Area (format: double)
-  --searchdb-gazeteer-census-tractswater-area: float # Water Area (format: double)
-  --searchdb-gazeteer-census-tractslocation: string # Location
+  --search-db-gazeteer-census-tracts-state: string # State
+  --search-db-gazeteer-census-tracts-state-fips: string # State Fips
+  --search-db-gazeteer-census-tracts-county-name: string # County Name
+  --search-db-gazeteer-census-tracts-county-fips: string # County Fips
+  --search-db-gazeteer-census-tracts-census-tract-id: string # Census Tract Id
+  --search-db-gazeteer-census-tracts-full-census-tract-id: string # Full Census Tract Id
+  --search-db-gazeteer-census-tracts-land-area: float # Land Area (format: double)
+  --search-db-gazeteer-census-tracts-water-area: float # Water Area (format: double)
+  --search-db-gazeteer-census-tracts-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_gazeteer_census_tracts.state" $searchdb_gazeteer_census_tractsstate "scalar") (serialize-qp "search.db_gazeteer_census_tracts.state_fips" $searchdb_gazeteer_census_tractsstate_fips "scalar") (serialize-qp "search.db_gazeteer_census_tracts.county_name" $searchdb_gazeteer_census_tractscounty_name "scalar") (serialize-qp "search.db_gazeteer_census_tracts.county_fips" $searchdb_gazeteer_census_tractscounty_fips "scalar") (serialize-qp "search.db_gazeteer_census_tracts.census_tract_id" $searchdb_gazeteer_census_tractscensus_tract_id "scalar") (serialize-qp "search.db_gazeteer_census_tracts.full_census_tract_id" $searchdb_gazeteer_census_tractsfull_census_tract_id "scalar") (serialize-qp "search.db_gazeteer_census_tracts.land_area" $searchdb_gazeteer_census_tractsland_area "scalar") (serialize-qp "search.db_gazeteer_census_tracts.water_area" $searchdb_gazeteer_census_tractswater_area "scalar") (serialize-qp "search.db_gazeteer_census_tracts.location" $searchdb_gazeteer_census_tractslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_gazeteer_census_tracts.state" $search_db_gazeteer_census_tracts_state "scalar") (serialize-qp "search.db_gazeteer_census_tracts.state_fips" $search_db_gazeteer_census_tracts_state_fips "scalar") (serialize-qp "search.db_gazeteer_census_tracts.county_name" $search_db_gazeteer_census_tracts_county_name "scalar") (serialize-qp "search.db_gazeteer_census_tracts.county_fips" $search_db_gazeteer_census_tracts_county_fips "scalar") (serialize-qp "search.db_gazeteer_census_tracts.census_tract_id" $search_db_gazeteer_census_tracts_census_tract_id "scalar") (serialize-qp "search.db_gazeteer_census_tracts.full_census_tract_id" $search_db_gazeteer_census_tracts_full_census_tract_id "scalar") (serialize-qp "search.db_gazeteer_census_tracts.land_area" $search_db_gazeteer_census_tracts_land_area "scalar") (serialize-qp "search.db_gazeteer_census_tracts.water_area" $search_db_gazeteer_census_tracts_water_area "scalar") (serialize-qp "search.db_gazeteer_census_tracts.location" $search_db_gazeteer_census_tracts_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/gazeteer_census_tracts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2706,10 +2706,10 @@ export def "repository-search-type-gazeteer-counties counties" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2718,18 +2718,18 @@ export def "repository-search-type-gazeteer-counties counties" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-gazeteer-countiesstate-abbreviation: string # State Abbreviation
-  --searchdb-gazeteer-countiesstate-fips: string # State Fips
-  --searchdb-gazeteer-countiescounty-fips: string # County Fips
-  --searchdb-gazeteer-countiesfull-county-fips: string # Full County Fips
-  --searchdb-gazeteer-countiescounty-name: string # County Name
-  --searchdb-gazeteer-countiesarea-land: float # Area Land (format: double)
-  --searchdb-gazeteer-countiesarea-water: float # Area Water (format: double)
-  --searchdb-gazeteer-countieslocation: string # Location
+  --search-db-gazeteer-counties-state-abbreviation: string # State Abbreviation
+  --search-db-gazeteer-counties-state-fips: string # State Fips
+  --search-db-gazeteer-counties-county-fips: string # County Fips
+  --search-db-gazeteer-counties-full-county-fips: string # Full County Fips
+  --search-db-gazeteer-counties-county-name: string # County Name
+  --search-db-gazeteer-counties-area-land: float # Area Land (format: double)
+  --search-db-gazeteer-counties-area-water: float # Area Water (format: double)
+  --search-db-gazeteer-counties-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_gazeteer_counties.state_abbreviation" $searchdb_gazeteer_countiesstate_abbreviation "scalar") (serialize-qp "search.db_gazeteer_counties.state_fips" $searchdb_gazeteer_countiesstate_fips "scalar") (serialize-qp "search.db_gazeteer_counties.county_fips" $searchdb_gazeteer_countiescounty_fips "scalar") (serialize-qp "search.db_gazeteer_counties.full_county_fips" $searchdb_gazeteer_countiesfull_county_fips "scalar") (serialize-qp "search.db_gazeteer_counties.county_name" $searchdb_gazeteer_countiescounty_name "scalar") (serialize-qp "search.db_gazeteer_counties.area_land" $searchdb_gazeteer_countiesarea_land "scalar") (serialize-qp "search.db_gazeteer_counties.area_water" $searchdb_gazeteer_countiesarea_water "scalar") (serialize-qp "search.db_gazeteer_counties.location" $searchdb_gazeteer_countieslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_gazeteer_counties.state_abbreviation" $search_db_gazeteer_counties_state_abbreviation "scalar") (serialize-qp "search.db_gazeteer_counties.state_fips" $search_db_gazeteer_counties_state_fips "scalar") (serialize-qp "search.db_gazeteer_counties.county_fips" $search_db_gazeteer_counties_county_fips "scalar") (serialize-qp "search.db_gazeteer_counties.full_county_fips" $search_db_gazeteer_counties_full_county_fips "scalar") (serialize-qp "search.db_gazeteer_counties.county_name" $search_db_gazeteer_counties_county_name "scalar") (serialize-qp "search.db_gazeteer_counties.area_land" $search_db_gazeteer_counties_area_land "scalar") (serialize-qp "search.db_gazeteer_counties.area_water" $search_db_gazeteer_counties_area_water "scalar") (serialize-qp "search.db_gazeteer_counties.location" $search_db_gazeteer_counties_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/gazeteer_counties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2754,10 +2754,10 @@ export def "repository-search-type-geo-geojson geojson" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2769,7 +2769,7 @@ export def "repository-search-type-geo-geojson geojson" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/geo_geojson" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2794,10 +2794,10 @@ export def "repository-search-type-geo-geotiff geotiff" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2809,7 +2809,7 @@ export def "repository-search-type-geo-geotiff geotiff" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/geo_geotiff" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2834,10 +2834,10 @@ export def "repository-search-type-geo-gpx gpx" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2846,16 +2846,16 @@ export def "repository-search-type-geo-gpx gpx" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchgeo-gpxdistance: float # Distance (format: double)
-  --searchgeo-gpxtotal-time: float # Total Time (format: double)
-  --searchgeo-gpxmoving-time: float # Moving Time (format: double)
-  --searchgeo-gpxspeed: float # Average Speed (format: double)
-  --searchgeo-gpxelevation-gain: float # Elevation Gain (format: double)
-  --searchgeo-gpxelevation-loss: float # Elevation Loss (format: double)
+  --search-geo-gpx-distance: float # Distance (format: double)
+  --search-geo-gpx-total-time: float # Total Time (format: double)
+  --search-geo-gpx-moving-time: float # Moving Time (format: double)
+  --search-geo-gpx-speed: float # Average Speed (format: double)
+  --search-geo-gpx-elevation-gain: float # Elevation Gain (format: double)
+  --search-geo-gpx-elevation-loss: float # Elevation Loss (format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.geo_gpx.distance" $searchgeo_gpxdistance "scalar") (serialize-qp "search.geo_gpx.total_time" $searchgeo_gpxtotal_time "scalar") (serialize-qp "search.geo_gpx.moving_time" $searchgeo_gpxmoving_time "scalar") (serialize-qp "search.geo_gpx.speed" $searchgeo_gpxspeed "scalar") (serialize-qp "search.geo_gpx.elevation_gain" $searchgeo_gpxelevation_gain "scalar") (serialize-qp "search.geo_gpx.elevation_loss" $searchgeo_gpxelevation_loss "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.geo_gpx.distance" $search_geo_gpx_distance "scalar") (serialize-qp "search.geo_gpx.total_time" $search_geo_gpx_total_time "scalar") (serialize-qp "search.geo_gpx.moving_time" $search_geo_gpx_moving_time "scalar") (serialize-qp "search.geo_gpx.speed" $search_geo_gpx_speed "scalar") (serialize-qp "search.geo_gpx.elevation_gain" $search_geo_gpx_elevation_gain "scalar") (serialize-qp "search.geo_gpx.elevation_loss" $search_geo_gpx_elevation_loss "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/geo_gpx" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2880,10 +2880,10 @@ export def "repository-search-type-geo-hdf5 hdf5" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2895,7 +2895,7 @@ export def "repository-search-type-geo-hdf5 hdf5" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/geo_hdf5" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2920,10 +2920,10 @@ export def "repository-search-type-geo-kml kml" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2935,7 +2935,7 @@ export def "repository-search-type-geo-kml kml" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/geo_kml" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2960,10 +2960,10 @@ export def "repository-search-type-geo-shapefile shapefile" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -2975,7 +2975,7 @@ export def "repository-search-type-geo-shapefile shapefile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/geo_shapefile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3000,10 +3000,10 @@ export def "repository-search-type-geo-shapefile-fips fips" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3015,7 +3015,7 @@ export def "repository-search-type-geo-shapefile-fips fips" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/geo_shapefile_fips" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3040,10 +3040,10 @@ export def "repository-search-type-glossary glossary" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3055,7 +3055,7 @@ export def "repository-search-type-glossary glossary" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/glossary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3080,10 +3080,10 @@ export def "repository-search-type-gridaggregation gridaggregation" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3095,7 +3095,7 @@ export def "repository-search-type-gridaggregation gridaggregation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/gridaggregation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3120,10 +3120,10 @@ export def "repository-search-type-group group" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3135,7 +3135,7 @@ export def "repository-search-type-group group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3160,10 +3160,10 @@ export def "repository-search-type-hipchat-group group" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3175,7 +3175,7 @@ export def "repository-search-type-hipchat-group group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/hipchat_group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3200,10 +3200,10 @@ export def "repository-search-type-homepage homepage" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3215,7 +3215,7 @@ export def "repository-search-type-homepage homepage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/homepage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3240,10 +3240,10 @@ export def "repository-search-type-incident incident" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3252,13 +3252,13 @@ export def "repository-search-type-incident incident" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchincidentincidenttype: string # Incident Type
-  --searchincidentcause: string # Cause
-  --searchincidentstate: string # State
+  --search-incident-incidenttype: string # Incident Type
+  --search-incident-cause: string # Cause
+  --search-incident-state: string # State
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.incident.incidenttype" $searchincidentincidenttype "scalar") (serialize-qp "search.incident.cause" $searchincidentcause "scalar") (serialize-qp "search.incident.state" $searchincidentstate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.incident.incidenttype" $search_incident_incidenttype "scalar") (serialize-qp "search.incident.cause" $search_incident_cause "scalar") (serialize-qp "search.incident.state" $search_incident_state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/incident" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3283,10 +3283,10 @@ export def "repository-search-type-jeopardy jeopardy" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3295,15 +3295,15 @@ export def "repository-search-type-jeopardy jeopardy" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-jeopardyquestion: string # Question
-  --searchdb-jeopardyanswer: string # Answer
-  --searchdb-jeopardyround: string # Round
-  --searchdb-jeopardycategory: string # Category
-  --searchdb-jeopardyair-date: string # Air Date
+  --search-db-jeopardy-question: string # Question
+  --search-db-jeopardy-answer: string # Answer
+  --search-db-jeopardy-round: string # Round
+  --search-db-jeopardy-category: string # Category
+  --search-db-jeopardy-air-date: string # Air Date
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_jeopardy.question" $searchdb_jeopardyquestion "scalar") (serialize-qp "search.db_jeopardy.answer" $searchdb_jeopardyanswer "scalar") (serialize-qp "search.db_jeopardy.round" $searchdb_jeopardyround "scalar") (serialize-qp "search.db_jeopardy.category" $searchdb_jeopardycategory "scalar") (serialize-qp "search.db_jeopardy.air_date" $searchdb_jeopardyair_date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_jeopardy.question" $search_db_jeopardy_question "scalar") (serialize-qp "search.db_jeopardy.answer" $search_db_jeopardy_answer "scalar") (serialize-qp "search.db_jeopardy.round" $search_db_jeopardy_round "scalar") (serialize-qp "search.db_jeopardy.category" $search_db_jeopardy_category "scalar") (serialize-qp "search.db_jeopardy.air_date" $search_db_jeopardy_air_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/jeopardy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3328,10 +3328,10 @@ export def "repository-search-type-latlonimage latlonimage" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3343,7 +3343,7 @@ export def "repository-search-type-latlonimage latlonimage" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/latlonimage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3368,10 +3368,10 @@ export def "repository-search-type-lidar-collection collection" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3383,7 +3383,7 @@ export def "repository-search-type-lidar-collection collection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/lidar_collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3408,10 +3408,10 @@ export def "repository-search-type-lidar-las las" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3423,7 +3423,7 @@ export def "repository-search-type-lidar-las las" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/lidar_las" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3448,10 +3448,10 @@ export def "repository-search-type-lidar-lvis lvis" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3463,7 +3463,7 @@ export def "repository-search-type-lidar-lvis lvis" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/lidar_lvis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3488,10 +3488,10 @@ export def "repository-search-type-link link" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3503,7 +3503,7 @@ export def "repository-search-type-link link" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3528,10 +3528,10 @@ export def "repository-search-type-localfiles localfiles" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3543,7 +3543,7 @@ export def "repository-search-type-localfiles localfiles" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/localfiles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3568,10 +3568,10 @@ export def "repository-search-type-locations locations" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3580,13 +3580,13 @@ export def "repository-search-type-locations locations" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-locationsname: string # Name
-  --searchdb-locationstype: string # Type
-  --searchdb-locationslocation: string # Location
+  --search-db-locations-name: string # Name
+  --search-db-locations-type: string # Type
+  --search-db-locations-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_locations.name" $searchdb_locationsname "scalar") (serialize-qp "search.db_locations.type" $searchdb_locationstype "scalar") (serialize-qp "search.db_locations.location" $searchdb_locationslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_locations.name" $search_db_locations_name "scalar") (serialize-qp "search.db_locations.type" $search_db_locations_type "scalar") (serialize-qp "search.db_locations.location" $search_db_locations_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/locations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3611,10 +3611,10 @@ export def "repository-search-type-map-googlemap googlemap" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3626,7 +3626,7 @@ export def "repository-search-type-map-googlemap googlemap" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/map_googlemap" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3651,10 +3651,10 @@ export def "repository-search-type-media-audiofile audiofile" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3666,7 +3666,7 @@ export def "repository-search-type-media-audiofile audiofile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/media_audiofile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3691,10 +3691,10 @@ export def "repository-search-type-media-imageloop imageloop" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3706,7 +3706,7 @@ export def "repository-search-type-media-imageloop imageloop" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/media_imageloop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3731,10 +3731,10 @@ export def "repository-search-type-media-photoalbum photoalbum" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3746,7 +3746,7 @@ export def "repository-search-type-media-photoalbum photoalbum" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/media_photoalbum" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3771,10 +3771,10 @@ export def "repository-search-type-media-video-channel channel" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3786,7 +3786,7 @@ export def "repository-search-type-media-video-channel channel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/media_video_channel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3811,10 +3811,10 @@ export def "repository-search-type-media-video-quicktime quicktime" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3826,7 +3826,7 @@ export def "repository-search-type-media-video-quicktime quicktime" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/media_video_quicktime" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3851,10 +3851,10 @@ export def "repository-search-type-media-youtubevideo youtubevideo" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3866,7 +3866,7 @@ export def "repository-search-type-media-youtubevideo youtubevideo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/media_youtubevideo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3891,10 +3891,10 @@ export def "repository-search-type-notes notes" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3903,11 +3903,11 @@ export def "repository-search-type-notes notes" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-notesnote: string # Note
+  --search-db-notes-note: string # Note
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_notes.note" $searchdb_notesnote "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_notes.note" $search_db_notes_note "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/notes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3932,10 +3932,10 @@ export def "repository-search-type-notes-jsonfile jsonfile" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3947,7 +3947,7 @@ export def "repository-search-type-notes-jsonfile jsonfile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/notes_jsonfile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3972,10 +3972,10 @@ export def "repository-search-type-notes-note note" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -3987,7 +3987,7 @@ export def "repository-search-type-notes-note note" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/notes_note" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4012,10 +4012,10 @@ export def "repository-search-type-notes-notebook notebook" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4027,7 +4027,7 @@ export def "repository-search-type-notes-notebook notebook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/notes_notebook" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4052,10 +4052,10 @@ export def "repository-search-type-nwsfeed nwsfeed" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4067,7 +4067,7 @@ export def "repository-search-type-nwsfeed nwsfeed" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/nwsfeed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4078,7 +4078,7 @@ export def "repository-search-type-nwsfeed nwsfeed" [
 #
 # GET /repository/search/type/opendaplink
 # operationId: search_opendaplink
-export def "repository-search-type-opendaplink opendaplink" [
+export def "repository-search-type-opendaplink open-daplink" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4092,10 +4092,10 @@ export def "repository-search-type-opendaplink opendaplink" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4107,7 +4107,7 @@ export def "repository-search-type-opendaplink opendaplink" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/opendaplink" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4132,10 +4132,10 @@ export def "repository-search-type-owlclass owlclass" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4147,7 +4147,7 @@ export def "repository-search-type-owlclass owlclass" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/owl.class" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4172,10 +4172,10 @@ export def "repository-search-type-owlontology owlontology" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4187,7 +4187,7 @@ export def "repository-search-type-owlontology owlontology" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/owl.ontology" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4212,10 +4212,10 @@ export def "repository-search-type-pasteitentry pasteitentry" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4227,7 +4227,7 @@ export def "repository-search-type-pasteitentry pasteitentry" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/pasteitentry" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4252,10 +4252,10 @@ export def "repository-search-type-point-text text" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4267,7 +4267,7 @@ export def "repository-search-type-point-text text" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/point_text" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4292,10 +4292,10 @@ export def "repository-search-type-police-stop-data data" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4304,17 +4304,17 @@ export def "repository-search-type-police-stop-data data" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-police-stop-datarace: string # Race
-  --searchdb-police-stop-dataethnicity: string # Ethnicity
-  --searchdb-police-stop-datasex: string # Sex
-  --searchdb-police-stop-dataminutes: int # Minutes
-  --searchdb-police-stop-datadate: string # Date
-  --searchdb-police-stop-dataaddress: string # Address
-  --searchdb-police-stop-dataresident: string # Resident
+  --search-db-police-stop-data-race: string # Race
+  --search-db-police-stop-data-ethnicity: string # Ethnicity
+  --search-db-police-stop-data-sex: string # Sex
+  --search-db-police-stop-data-minutes: int # Minutes
+  --search-db-police-stop-data-date: string # Date
+  --search-db-police-stop-data-address: string # Address
+  --search-db-police-stop-data-resident: string # Resident
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_police_stop_data.race" $searchdb_police_stop_datarace "scalar") (serialize-qp "search.db_police_stop_data.ethnicity" $searchdb_police_stop_dataethnicity "scalar") (serialize-qp "search.db_police_stop_data.sex" $searchdb_police_stop_datasex "scalar") (serialize-qp "search.db_police_stop_data.minutes" $searchdb_police_stop_dataminutes "scalar") (serialize-qp "search.db_police_stop_data.date" $searchdb_police_stop_datadate "scalar") (serialize-qp "search.db_police_stop_data.address" $searchdb_police_stop_dataaddress "scalar") (serialize-qp "search.db_police_stop_data.resident" $searchdb_police_stop_dataresident "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_police_stop_data.race" $search_db_police_stop_data_race "scalar") (serialize-qp "search.db_police_stop_data.ethnicity" $search_db_police_stop_data_ethnicity "scalar") (serialize-qp "search.db_police_stop_data.sex" $search_db_police_stop_data_sex "scalar") (serialize-qp "search.db_police_stop_data.minutes" $search_db_police_stop_data_minutes "scalar") (serialize-qp "search.db_police_stop_data.date" $search_db_police_stop_data_date "scalar") (serialize-qp "search.db_police_stop_data.address" $search_db_police_stop_data_address "scalar") (serialize-qp "search.db_police_stop_data.resident" $search_db_police_stop_data_resident "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/police_stop_data" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4339,10 +4339,10 @@ export def "repository-search-type-poll poll" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4354,7 +4354,7 @@ export def "repository-search-type-poll poll" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/poll" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4379,10 +4379,10 @@ export def "repository-search-type-project-campaign campaign" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4394,7 +4394,7 @@ export def "repository-search-type-project-campaign campaign" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_campaign" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4419,10 +4419,10 @@ export def "repository-search-type-project-casestudy casestudy" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4431,12 +4431,12 @@ export def "repository-search-type-project-casestudy casestudy" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-casestudyintended-use: string # Intended Use
-  --searchproject-casestudylocation: string # Where
+  --search-project-casestudy-intended-use: string # Intended Use
+  --search-project-casestudy-location: string # Where
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_casestudy.intended_use" $searchproject_casestudyintended_use "scalar") (serialize-qp "search.project_casestudy.location" $searchproject_casestudylocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_casestudy.intended_use" $search_project_casestudy_intended_use "scalar") (serialize-qp "search.project_casestudy.location" $search_project_casestudy_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_casestudy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4461,10 +4461,10 @@ export def "repository-search-type-project-contribution contribution" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4476,7 +4476,7 @@ export def "repository-search-type-project-contribution contribution" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_contribution" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4501,10 +4501,10 @@ export def "repository-search-type-project-dataformat dataformat" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4513,12 +4513,12 @@ export def "repository-search-type-project-dataformat dataformat" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-dataformatdata-type: string # Data Type
-  --searchproject-dataformatfield: string # Field
+  --search-project-dataformat-data-type: string # Data Type
+  --search-project-dataformat-field: string # Field
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_dataformat.data_type" $searchproject_dataformatdata_type "scalar") (serialize-qp "search.project_dataformat.field" $searchproject_dataformatfield "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_dataformat.data_type" $search_project_dataformat_data_type "scalar") (serialize-qp "search.project_dataformat.field" $search_project_dataformat_field "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_dataformat" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4543,10 +4543,10 @@ export def "repository-search-type-project-dataset dataset" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4555,13 +4555,13 @@ export def "repository-search-type-project-dataset dataset" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-datasetdataset-id: string # Dataset ID
-  --searchproject-datasetdata-type: string # Data Type
-  --searchproject-datasetdata-level: string # Data Level
+  --search-project-dataset-dataset-id: string # Dataset ID
+  --search-project-dataset-data-type: string # Data Type
+  --search-project-dataset-data-level: string # Data Level
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_dataset.dataset_id" $searchproject_datasetdataset_id "scalar") (serialize-qp "search.project_dataset.data_type" $searchproject_datasetdata_type "scalar") (serialize-qp "search.project_dataset.data_level" $searchproject_datasetdata_level "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_dataset.dataset_id" $search_project_dataset_dataset_id "scalar") (serialize-qp "search.project_dataset.data_type" $search_project_dataset_data_type "scalar") (serialize-qp "search.project_dataset.data_level" $search_project_dataset_data_level "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_dataset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4586,10 +4586,10 @@ export def "repository-search-type-project-deployment deployment" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4601,7 +4601,7 @@ export def "repository-search-type-project-deployment deployment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_deployment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4626,10 +4626,10 @@ export def "repository-search-type-project-experiment experiment" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4641,7 +4641,7 @@ export def "repository-search-type-project-experiment experiment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_experiment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4666,10 +4666,10 @@ export def "repository-search-type-project-fieldnote fieldnote" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4681,7 +4681,7 @@ export def "repository-search-type-project-fieldnote fieldnote" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_fieldnote" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4706,10 +4706,10 @@ export def "repository-search-type-project-gps-controlpoints controlpoints" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4721,7 +4721,7 @@ export def "repository-search-type-project-gps-controlpoints controlpoints" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_gps_controlpoints" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4746,10 +4746,10 @@ export def "repository-search-type-project-gps-raw raw" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4761,7 +4761,7 @@ export def "repository-search-type-project-gps-raw raw" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_gps_raw" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4786,10 +4786,10 @@ export def "repository-search-type-project-gps-rinex rinex" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4801,7 +4801,7 @@ export def "repository-search-type-project-gps-rinex rinex" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_gps_rinex" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4826,10 +4826,10 @@ export def "repository-search-type-project-instrument instrument" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4841,7 +4841,7 @@ export def "repository-search-type-project-instrument instrument" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_instrument" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4866,10 +4866,10 @@ export def "repository-search-type-project-learning-resource resource" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4878,12 +4878,12 @@ export def "repository-search-type-project-learning-resource resource" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-learning-resourcetopic: string # Topic
-  --searchproject-learning-resourcegrade-level: string # Grade Level
+  --search-project-learning-resource-topic: string # Topic
+  --search-project-learning-resource-grade-level: string # Grade Level
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_learning_resource.topic" $searchproject_learning_resourcetopic "scalar") (serialize-qp "search.project_learning_resource.grade_level" $searchproject_learning_resourcegrade_level "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_learning_resource.topic" $search_project_learning_resource_topic "scalar") (serialize-qp "search.project_learning_resource.grade_level" $search_project_learning_resource_grade_level "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_learning_resource" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4908,10 +4908,10 @@ export def "repository-search-type-project-meeting meeting" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4920,13 +4920,13 @@ export def "repository-search-type-project-meeting meeting" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-meetingtopic: string # Topic
-  --searchproject-meetinglocation: string # Location
-  --searchproject-meetingparticipants: string # Participants
+  --search-project-meeting-topic: string # Topic
+  --search-project-meeting-location: string # Location
+  --search-project-meeting-participants: string # Participants
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_meeting.topic" $searchproject_meetingtopic "scalar") (serialize-qp "search.project_meeting.location" $searchproject_meetinglocation "scalar") (serialize-qp "search.project_meeting.participants" $searchproject_meetingparticipants "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_meeting.topic" $search_project_meeting_topic "scalar") (serialize-qp "search.project_meeting.location" $search_project_meeting_location "scalar") (serialize-qp "search.project_meeting.participants" $search_project_meeting_participants "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_meeting" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4951,10 +4951,10 @@ export def "repository-search-type-project-organization organization" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -4963,12 +4963,12 @@ export def "repository-search-type-project-organization organization" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-organizationorganization-type: string # Organization Type
-  --searchproject-organizationstatus: string # Status
+  --search-project-organization-organization-type: string # Organization Type
+  --search-project-organization-status: string # Status
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_organization.organization_type" $searchproject_organizationorganization_type "scalar") (serialize-qp "search.project_organization.status" $searchproject_organizationstatus "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_organization.organization_type" $search_project_organization_organization_type "scalar") (serialize-qp "search.project_organization.status" $search_project_organization_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_organization" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4993,10 +4993,10 @@ export def "repository-search-type-project-program program" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5008,7 +5008,7 @@ export def "repository-search-type-project-program program" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_program" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5033,10 +5033,10 @@ export def "repository-search-type-project-project project" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5048,7 +5048,7 @@ export def "repository-search-type-project-project project" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5073,10 +5073,10 @@ export def "repository-search-type-project-service service" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5085,12 +5085,12 @@ export def "repository-search-type-project-service service" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-serviceservice-type: string # Service Type
-  --searchproject-serviceprovider: string # Provider
+  --search-project-service-service-type: string # Service Type
+  --search-project-service-provider: string # Provider
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_service.service_type" $searchproject_serviceservice_type "scalar") (serialize-qp "search.project_service.provider" $searchproject_serviceprovider "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_service.service_type" $search_project_service_service_type "scalar") (serialize-qp "search.project_service.provider" $search_project_service_provider "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_service" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5115,10 +5115,10 @@ export def "repository-search-type-project-site site" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5127,17 +5127,17 @@ export def "repository-search-type-project-site site" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-siteshort-name: string # Short Name
-  --searchproject-sitesite-type: string # Site Type
-  --searchproject-sitestatus: string # Status
-  --searchproject-sitenetwork: string # Network
-  --searchproject-sitecountry: string # Country
-  --searchproject-sitestate: string # State/Province
-  --searchproject-sitecounty: string # County
+  --search-project-site-short-name: string # Short Name
+  --search-project-site-site-type: string # Site Type
+  --search-project-site-status: string # Status
+  --search-project-site-network: string # Network
+  --search-project-site-country: string # Country
+  --search-project-site-state: string # State/Province
+  --search-project-site-county: string # County
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_site.short_name" $searchproject_siteshort_name "scalar") (serialize-qp "search.project_site.site_type" $searchproject_sitesite_type "scalar") (serialize-qp "search.project_site.status" $searchproject_sitestatus "scalar") (serialize-qp "search.project_site.network" $searchproject_sitenetwork "scalar") (serialize-qp "search.project_site.country" $searchproject_sitecountry "scalar") (serialize-qp "search.project_site.state" $searchproject_sitestate "scalar") (serialize-qp "search.project_site.county" $searchproject_sitecounty "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_site.short_name" $search_project_site_short_name "scalar") (serialize-qp "search.project_site.site_type" $search_project_site_site_type "scalar") (serialize-qp "search.project_site.status" $search_project_site_status "scalar") (serialize-qp "search.project_site.network" $search_project_site_network "scalar") (serialize-qp "search.project_site.country" $search_project_site_country "scalar") (serialize-qp "search.project_site.state" $search_project_site_state "scalar") (serialize-qp "search.project_site.county" $search_project_site_county "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_site" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5162,10 +5162,10 @@ export def "repository-search-type-project-softwarepackage softwarepackage" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5174,17 +5174,17 @@ export def "repository-search-type-project-softwarepackage softwarepackage" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-softwarepackagesoftware-use: string # Software Use
-  --searchproject-softwarepackagesoftware-type: string # Software Type
-  --searchproject-softwarepackagedomain: string # Science Domain
-  --searchproject-softwarepackageplatform: string # Platform
-  --searchproject-softwarepackagelicense: string # License
-  --searchproject-softwarepackagestatus: string # Development Status
-  --searchproject-softwarepackagecapabilities: string # Capabilities
+  --search-project-softwarepackage-software-use: string # Software Use
+  --search-project-softwarepackage-software-type: string # Software Type
+  --search-project-softwarepackage-domain: string # Science Domain
+  --search-project-softwarepackage-platform: string # Platform
+  --search-project-softwarepackage-license: string # License
+  --search-project-softwarepackage-status: string # Development Status
+  --search-project-softwarepackage-capabilities: string # Capabilities
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_softwarepackage.software_use" $searchproject_softwarepackagesoftware_use "scalar") (serialize-qp "search.project_softwarepackage.software_type" $searchproject_softwarepackagesoftware_type "scalar") (serialize-qp "search.project_softwarepackage.domain" $searchproject_softwarepackagedomain "scalar") (serialize-qp "search.project_softwarepackage.platform" $searchproject_softwarepackageplatform "scalar") (serialize-qp "search.project_softwarepackage.license" $searchproject_softwarepackagelicense "scalar") (serialize-qp "search.project_softwarepackage.status" $searchproject_softwarepackagestatus "scalar") (serialize-qp "search.project_softwarepackage.capabilities" $searchproject_softwarepackagecapabilities "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_softwarepackage.software_use" $search_project_softwarepackage_software_use "scalar") (serialize-qp "search.project_softwarepackage.software_type" $search_project_softwarepackage_software_type "scalar") (serialize-qp "search.project_softwarepackage.domain" $search_project_softwarepackage_domain "scalar") (serialize-qp "search.project_softwarepackage.platform" $search_project_softwarepackage_platform "scalar") (serialize-qp "search.project_softwarepackage.license" $search_project_softwarepackage_license "scalar") (serialize-qp "search.project_softwarepackage.status" $search_project_softwarepackage_status "scalar") (serialize-qp "search.project_softwarepackage.capabilities" $search_project_softwarepackage_capabilities "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_softwarepackage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5209,10 +5209,10 @@ export def "repository-search-type-project-standard-name name" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5221,12 +5221,12 @@ export def "repository-search-type-project-standard-name name" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-standard-nameunit: string # Canonical Unit
-  --searchproject-standard-namealiases: string # Aliases
+  --search-project-standard-name-unit: string # Canonical Unit
+  --search-project-standard-name-aliases: string # Aliases
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_standard_name.unit" $searchproject_standard_nameunit "scalar") (serialize-qp "search.project_standard_name.aliases" $searchproject_standard_namealiases "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_standard_name.unit" $search_project_standard_name_unit "scalar") (serialize-qp "search.project_standard_name.aliases" $search_project_standard_name_aliases "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_standard_name" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5251,10 +5251,10 @@ export def "repository-search-type-project-surveylocation surveylocation" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5266,7 +5266,7 @@ export def "repository-search-type-project-surveylocation surveylocation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_surveylocation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5291,10 +5291,10 @@ export def "repository-search-type-project-term term" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5303,11 +5303,11 @@ export def "repository-search-type-project-term term" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchproject-termvalue: string # Term Value
+  --search-project-term-value: string # Term Value
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_term.value" $searchproject_termvalue "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.project_term.value" $search_project_term_value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_term" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5332,10 +5332,10 @@ export def "repository-search-type-project-visit visit" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5347,7 +5347,7 @@ export def "repository-search-type-project-visit visit" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_visit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5372,10 +5372,10 @@ export def "repository-search-type-project-vocabulary vocabulary" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5387,7 +5387,7 @@ export def "repository-search-type-project-vocabulary vocabulary" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/project_vocabulary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5412,10 +5412,10 @@ export def "repository-search-type-property-sales sales" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5424,22 +5424,22 @@ export def "repository-search-type-property-sales sales" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-property-salesproperty-address: string # Property Address
-  --searchdb-property-salescity: string # City
-  --searchdb-property-saleszipcode: string # Zip Code
-  --searchdb-property-salessale-price: float # Sale Price (format: double)
-  --searchdb-property-salessale-date: string # Sale Date
-  --searchdb-property-salesseller: string # Seller
-  --searchdb-property-salesbuyer: string # Buyer
-  --searchdb-property-salestype: string # Property Type
-  --searchdb-property-salesbuilding-description: string # Building Description
-  --searchdb-property-salesbuilding-design: string # Building Design
-  --searchdb-property-salessubdivision: string # Subdivision
-  --searchdb-property-saleslocation: string # Location
+  --search-db-property-sales-property-address: string # Property Address
+  --search-db-property-sales-city: string # City
+  --search-db-property-sales-zipcode: string # Zip Code
+  --search-db-property-sales-sale-price: float # Sale Price (format: double)
+  --search-db-property-sales-sale-date: string # Sale Date
+  --search-db-property-sales-seller: string # Seller
+  --search-db-property-sales-buyer: string # Buyer
+  --search-db-property-sales-type: string # Property Type
+  --search-db-property-sales-building-description: string # Building Description
+  --search-db-property-sales-building-design: string # Building Design
+  --search-db-property-sales-subdivision: string # Subdivision
+  --search-db-property-sales-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_property_sales.property_address" $searchdb_property_salesproperty_address "scalar") (serialize-qp "search.db_property_sales.city" $searchdb_property_salescity "scalar") (serialize-qp "search.db_property_sales.zipcode" $searchdb_property_saleszipcode "scalar") (serialize-qp "search.db_property_sales.sale_price" $searchdb_property_salessale_price "scalar") (serialize-qp "search.db_property_sales.sale_date" $searchdb_property_salessale_date "scalar") (serialize-qp "search.db_property_sales.seller" $searchdb_property_salesseller "scalar") (serialize-qp "search.db_property_sales.buyer" $searchdb_property_salesbuyer "scalar") (serialize-qp "search.db_property_sales.type" $searchdb_property_salestype "scalar") (serialize-qp "search.db_property_sales.building_description" $searchdb_property_salesbuilding_description "scalar") (serialize-qp "search.db_property_sales.building_design" $searchdb_property_salesbuilding_design "scalar") (serialize-qp "search.db_property_sales.subdivision" $searchdb_property_salessubdivision "scalar") (serialize-qp "search.db_property_sales.location" $searchdb_property_saleslocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_property_sales.property_address" $search_db_property_sales_property_address "scalar") (serialize-qp "search.db_property_sales.city" $search_db_property_sales_city "scalar") (serialize-qp "search.db_property_sales.zipcode" $search_db_property_sales_zipcode "scalar") (serialize-qp "search.db_property_sales.sale_price" $search_db_property_sales_sale_price "scalar") (serialize-qp "search.db_property_sales.sale_date" $search_db_property_sales_sale_date "scalar") (serialize-qp "search.db_property_sales.seller" $search_db_property_sales_seller "scalar") (serialize-qp "search.db_property_sales.buyer" $search_db_property_sales_buyer "scalar") (serialize-qp "search.db_property_sales.type" $search_db_property_sales_type "scalar") (serialize-qp "search.db_property_sales.building_description" $search_db_property_sales_building_description "scalar") (serialize-qp "search.db_property_sales.building_design" $search_db_property_sales_building_design "scalar") (serialize-qp "search.db_property_sales.subdivision" $search_db_property_sales_subdivision "scalar") (serialize-qp "search.db_property_sales.location" $search_db_property_sales_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/property_sales" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5464,10 +5464,10 @@ export def "repository-search-type-propertydb propertydb" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5476,22 +5476,22 @@ export def "repository-search-type-propertydb propertydb" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-propertydbproperty-id: string # Property ID
-  --searchdb-propertydbowner: string # Owner
-  --searchdb-propertydbaddress: string # Address
-  --searchdb-propertydbcity: string # City
-  --searchdb-propertydbstate: string # State
-  --searchdb-propertydbvalue: int # Property Value
-  --searchdb-propertydbbuilding-type: string # Building Type
-  --searchdb-propertydbhouse-size: int # Building Sq Ft
-  --searchdb-propertydblot-sqft: int # Lot Size Sq Ft
-  --searchdb-propertydblot-acres: float # Lot Size Acres (format: double)
-  --searchdb-propertydbprice-sqft: float # $-sqft (format: double)
-  --searchdb-propertydblocation: string # Location
+  --search-db-propertydb-property-id: string # Property ID
+  --search-db-propertydb-owner: string # Owner
+  --search-db-propertydb-address: string # Address
+  --search-db-propertydb-city: string # City
+  --search-db-propertydb-state: string # State
+  --search-db-propertydb-value: int # Property Value
+  --search-db-propertydb-building-type: string # Building Type
+  --search-db-propertydb-house-size: int # Building Sq Ft
+  --search-db-propertydb-lot-sqft: int # Lot Size Sq Ft
+  --search-db-propertydb-lot-acres: float # Lot Size Acres (format: double)
+  --search-db-propertydb-price-sqft: float # $-sqft (format: double)
+  --search-db-propertydb-location: string # Location
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_propertydb.property_id" $searchdb_propertydbproperty_id "scalar") (serialize-qp "search.db_propertydb.owner" $searchdb_propertydbowner "scalar") (serialize-qp "search.db_propertydb.address" $searchdb_propertydbaddress "scalar") (serialize-qp "search.db_propertydb.city" $searchdb_propertydbcity "scalar") (serialize-qp "search.db_propertydb.state" $searchdb_propertydbstate "scalar") (serialize-qp "search.db_propertydb.value" $searchdb_propertydbvalue "scalar") (serialize-qp "search.db_propertydb.building_type" $searchdb_propertydbbuilding_type "scalar") (serialize-qp "search.db_propertydb.house_size" $searchdb_propertydbhouse_size "scalar") (serialize-qp "search.db_propertydb.lot_sqft" $searchdb_propertydblot_sqft "scalar") (serialize-qp "search.db_propertydb.lot_acres" $searchdb_propertydblot_acres "scalar") (serialize-qp "search.db_propertydb.price_sqft" $searchdb_propertydbprice_sqft "scalar") (serialize-qp "search.db_propertydb.location" $searchdb_propertydblocation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_propertydb.property_id" $search_db_propertydb_property_id "scalar") (serialize-qp "search.db_propertydb.owner" $search_db_propertydb_owner "scalar") (serialize-qp "search.db_propertydb.address" $search_db_propertydb_address "scalar") (serialize-qp "search.db_propertydb.city" $search_db_propertydb_city "scalar") (serialize-qp "search.db_propertydb.state" $search_db_propertydb_state "scalar") (serialize-qp "search.db_propertydb.value" $search_db_propertydb_value "scalar") (serialize-qp "search.db_propertydb.building_type" $search_db_propertydb_building_type "scalar") (serialize-qp "search.db_propertydb.house_size" $search_db_propertydb_house_size "scalar") (serialize-qp "search.db_propertydb.lot_sqft" $search_db_propertydb_lot_sqft "scalar") (serialize-qp "search.db_propertydb.lot_acres" $search_db_propertydb_lot_acres "scalar") (serialize-qp "search.db_propertydb.price_sqft" $search_db_propertydb_price_sqft "scalar") (serialize-qp "search.db_propertydb.location" $search_db_propertydb_location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/propertydb" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5516,10 +5516,10 @@ export def "repository-search-type-python-notebook notebook" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5531,7 +5531,7 @@ export def "repository-search-type-python-notebook notebook" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/python_notebook" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5556,10 +5556,10 @@ export def "repository-search-type-slack-team team" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5571,7 +5571,7 @@ export def "repository-search-type-slack-team team" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/slack_team" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5596,10 +5596,10 @@ export def "repository-search-type-statusboard statusboard" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5608,12 +5608,12 @@ export def "repository-search-type-statusboard statusboard" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-statusboardwhat: string # What
-  --searchdb-statusboardstatus: string # Status
+  --search-db-statusboard-what: string # What
+  --search-db-statusboard-status: string # Status
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_statusboard.what" $searchdb_statusboardwhat "scalar") (serialize-qp "search.db_statusboard.status" $searchdb_statusboardstatus "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_statusboard.what" $search_db_statusboard_what "scalar") (serialize-qp "search.db_statusboard.status" $search_db_statusboard_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/statusboard" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5638,10 +5638,10 @@ export def "repository-search-type-sunrisesunset sunrisesunset" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5653,7 +5653,7 @@ export def "repository-search-type-sunrisesunset sunrisesunset" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/sunrisesunset" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5678,10 +5678,10 @@ export def "repository-search-type-tasks tasks" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5690,17 +5690,17 @@ export def "repository-search-type-tasks tasks" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-taskstitle: string # Title
-  --searchdb-taskspriority: string # Priority
-  --searchdb-tasksstatus: string # Status
-  --searchdb-taskscomplete: float # % Complete (format: double)
-  --searchdb-tasksassignedto: string # Assigned To
-  --searchdb-tasksstartdate: string # Start Date
-  --searchdb-tasksenddate: string # End Date
+  --search-db-tasks-title: string # Title
+  --search-db-tasks-priority: string # Priority
+  --search-db-tasks-status: string # Status
+  --search-db-tasks-complete: float # % Complete (format: double)
+  --search-db-tasks-assignedto: string # Assigned To
+  --search-db-tasks-startdate: string # Start Date
+  --search-db-tasks-enddate: string # End Date
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_tasks.title" $searchdb_taskstitle "scalar") (serialize-qp "search.db_tasks.priority" $searchdb_taskspriority "scalar") (serialize-qp "search.db_tasks.status" $searchdb_tasksstatus "scalar") (serialize-qp "search.db_tasks.complete" $searchdb_taskscomplete "scalar") (serialize-qp "search.db_tasks.assignedto" $searchdb_tasksassignedto "scalar") (serialize-qp "search.db_tasks.startdate" $searchdb_tasksstartdate "scalar") (serialize-qp "search.db_tasks.enddate" $searchdb_tasksenddate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_tasks.title" $search_db_tasks_title "scalar") (serialize-qp "search.db_tasks.priority" $search_db_tasks_priority "scalar") (serialize-qp "search.db_tasks.status" $search_db_tasks_status "scalar") (serialize-qp "search.db_tasks.complete" $search_db_tasks_complete "scalar") (serialize-qp "search.db_tasks.assignedto" $search_db_tasks_assignedto "scalar") (serialize-qp "search.db_tasks.startdate" $search_db_tasks_startdate "scalar") (serialize-qp "search.db_tasks.enddate" $search_db_tasks_enddate "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/tasks" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5725,10 +5725,10 @@ export def "repository-search-type-tmdbmovies tmdbmovies" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5737,30 +5737,30 @@ export def "repository-search-type-tmdbmovies tmdbmovies" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-tmdbmoviesoriginal-title: string # Original Title
-  --searchdb-tmdbmoviesoverview: string # Overview
-  --searchdb-tmdbmoviesbudget: float # Budget (format: double)
-  --searchdb-tmdbmoviesgenres: string # Genres
-  --searchdb-tmdbmovieshomepage: string # Homepage
-  --searchdb-tmdbmoviesmovie-id: string # Id
-  --searchdb-tmdbmovieskeywords: string # Keywords
-  --searchdb-tmdbmoviesoriginal-language: string # Original Language
-  --searchdb-tmdbmoviespopularity: float # Popularity (format: double)
-  --searchdb-tmdbmoviesproduction-companies: string # Production Companies
-  --searchdb-tmdbmoviesproduction-countries: string # Production Countries
-  --searchdb-tmdbmoviesrelease-date: string # Release Date
-  --searchdb-tmdbmoviesrevenue: float # Revenue (format: double)
-  --searchdb-tmdbmoviesruntime: float # Runtime (format: double)
-  --searchdb-tmdbmoviesspoken-languages: string # Spoken Languages
-  --searchdb-tmdbmoviesstatus: string # Status
-  --searchdb-tmdbmoviestagline: string # Tagline
-  --searchdb-tmdbmoviestitle: string # Title
-  --searchdb-tmdbmoviesvote-average: float # Vote Average (format: double)
-  --searchdb-tmdbmoviesvote-count: float # Vote Count (format: double)
+  --search-db-tmdbmovies-original-title: string # Original Title
+  --search-db-tmdbmovies-overview: string # Overview
+  --search-db-tmdbmovies-budget: float # Budget (format: double)
+  --search-db-tmdbmovies-genres: string # Genres
+  --search-db-tmdbmovies-homepage: string # Homepage
+  --search-db-tmdbmovies-movie-id: string # Id
+  --search-db-tmdbmovies-keywords: string # Keywords
+  --search-db-tmdbmovies-original-language: string # Original Language
+  --search-db-tmdbmovies-popularity: float # Popularity (format: double)
+  --search-db-tmdbmovies-production-companies: string # Production Companies
+  --search-db-tmdbmovies-production-countries: string # Production Countries
+  --search-db-tmdbmovies-release-date: string # Release Date
+  --search-db-tmdbmovies-revenue: float # Revenue (format: double)
+  --search-db-tmdbmovies-runtime: float # Runtime (format: double)
+  --search-db-tmdbmovies-spoken-languages: string # Spoken Languages
+  --search-db-tmdbmovies-status: string # Status
+  --search-db-tmdbmovies-tagline: string # Tagline
+  --search-db-tmdbmovies-title: string # Title
+  --search-db-tmdbmovies-vote-average: float # Vote Average (format: double)
+  --search-db-tmdbmovies-vote-count: float # Vote Count (format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_tmdbmovies.original_title" $searchdb_tmdbmoviesoriginal_title "scalar") (serialize-qp "search.db_tmdbmovies.overview" $searchdb_tmdbmoviesoverview "scalar") (serialize-qp "search.db_tmdbmovies.budget" $searchdb_tmdbmoviesbudget "scalar") (serialize-qp "search.db_tmdbmovies.genres" $searchdb_tmdbmoviesgenres "scalar") (serialize-qp "search.db_tmdbmovies.homepage" $searchdb_tmdbmovieshomepage "scalar") (serialize-qp "search.db_tmdbmovies.movie_id" $searchdb_tmdbmoviesmovie_id "scalar") (serialize-qp "search.db_tmdbmovies.keywords" $searchdb_tmdbmovieskeywords "scalar") (serialize-qp "search.db_tmdbmovies.original_language" $searchdb_tmdbmoviesoriginal_language "scalar") (serialize-qp "search.db_tmdbmovies.popularity" $searchdb_tmdbmoviespopularity "scalar") (serialize-qp "search.db_tmdbmovies.production_companies" $searchdb_tmdbmoviesproduction_companies "scalar") (serialize-qp "search.db_tmdbmovies.production_countries" $searchdb_tmdbmoviesproduction_countries "scalar") (serialize-qp "search.db_tmdbmovies.release_date" $searchdb_tmdbmoviesrelease_date "scalar") (serialize-qp "search.db_tmdbmovies.revenue" $searchdb_tmdbmoviesrevenue "scalar") (serialize-qp "search.db_tmdbmovies.runtime" $searchdb_tmdbmoviesruntime "scalar") (serialize-qp "search.db_tmdbmovies.spoken_languages" $searchdb_tmdbmoviesspoken_languages "scalar") (serialize-qp "search.db_tmdbmovies.status" $searchdb_tmdbmoviesstatus "scalar") (serialize-qp "search.db_tmdbmovies.tagline" $searchdb_tmdbmoviestagline "scalar") (serialize-qp "search.db_tmdbmovies.title" $searchdb_tmdbmoviestitle "scalar") (serialize-qp "search.db_tmdbmovies.vote_average" $searchdb_tmdbmoviesvote_average "scalar") (serialize-qp "search.db_tmdbmovies.vote_count" $searchdb_tmdbmoviesvote_count "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_tmdbmovies.original_title" $search_db_tmdbmovies_original_title "scalar") (serialize-qp "search.db_tmdbmovies.overview" $search_db_tmdbmovies_overview "scalar") (serialize-qp "search.db_tmdbmovies.budget" $search_db_tmdbmovies_budget "scalar") (serialize-qp "search.db_tmdbmovies.genres" $search_db_tmdbmovies_genres "scalar") (serialize-qp "search.db_tmdbmovies.homepage" $search_db_tmdbmovies_homepage "scalar") (serialize-qp "search.db_tmdbmovies.movie_id" $search_db_tmdbmovies_movie_id "scalar") (serialize-qp "search.db_tmdbmovies.keywords" $search_db_tmdbmovies_keywords "scalar") (serialize-qp "search.db_tmdbmovies.original_language" $search_db_tmdbmovies_original_language "scalar") (serialize-qp "search.db_tmdbmovies.popularity" $search_db_tmdbmovies_popularity "scalar") (serialize-qp "search.db_tmdbmovies.production_companies" $search_db_tmdbmovies_production_companies "scalar") (serialize-qp "search.db_tmdbmovies.production_countries" $search_db_tmdbmovies_production_countries "scalar") (serialize-qp "search.db_tmdbmovies.release_date" $search_db_tmdbmovies_release_date "scalar") (serialize-qp "search.db_tmdbmovies.revenue" $search_db_tmdbmovies_revenue "scalar") (serialize-qp "search.db_tmdbmovies.runtime" $search_db_tmdbmovies_runtime "scalar") (serialize-qp "search.db_tmdbmovies.spoken_languages" $search_db_tmdbmovies_spoken_languages "scalar") (serialize-qp "search.db_tmdbmovies.status" $search_db_tmdbmovies_status "scalar") (serialize-qp "search.db_tmdbmovies.tagline" $search_db_tmdbmovies_tagline "scalar") (serialize-qp "search.db_tmdbmovies.title" $search_db_tmdbmovies_title "scalar") (serialize-qp "search.db_tmdbmovies.vote_average" $search_db_tmdbmovies_vote_average "scalar") (serialize-qp "search.db_tmdbmovies.vote_count" $search_db_tmdbmovies_vote_count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/tmdbmovies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5785,10 +5785,10 @@ export def "repository-search-type-todo todo" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5797,13 +5797,13 @@ export def "repository-search-type-todo todo" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-todochecked: oneof<nothing, bool> # Done
-  --searchdb-todotitle: string # What
-  --searchdb-todocategory: string # Category
+  --search-db-todo-checked: oneof<nothing, bool> # Done
+  --search-db-todo-title: string # What
+  --search-db-todo-category: string # Category
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_todo.checked" $searchdb_todochecked "scalar") (serialize-qp "search.db_todo.title" $searchdb_todotitle "scalar") (serialize-qp "search.db_todo.category" $searchdb_todocategory "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_todo.checked" $search_db_todo_checked "scalar") (serialize-qp "search.db_todo.title" $search_db_todo_title "scalar") (serialize-qp "search.db_todo.category" $search_db_todo_category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/todo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5828,10 +5828,10 @@ export def "repository-search-type-trip-event event" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5843,7 +5843,7 @@ export def "repository-search-type-trip-event event" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/trip_event" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5868,10 +5868,10 @@ export def "repository-search-type-trip-flight flight" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5883,7 +5883,7 @@ export def "repository-search-type-trip-flight flight" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/trip_flight" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5908,10 +5908,10 @@ export def "repository-search-type-trip-hotel hotel" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5923,7 +5923,7 @@ export def "repository-search-type-trip-hotel hotel" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/trip_hotel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5948,10 +5948,10 @@ export def "repository-search-type-trip-report report" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -5963,7 +5963,7 @@ export def "repository-search-type-trip-report report" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/trip_report" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5988,10 +5988,10 @@ export def "repository-search-type-trip-trip trip" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6003,7 +6003,7 @@ export def "repository-search-type-trip-trip trip" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/trip_trip" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6028,10 +6028,10 @@ export def "repository-search-type-type-awc-metar metar" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6040,11 +6040,11 @@ export def "repository-search-type-type-awc-metar metar" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-awc-metarsite-id: string # Site ID
+  --search-type-awc-metar-site-id: string # Site ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_awc_metar.site_id" $searchtype_awc_metarsite_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_awc_metar.site_id" $search_type_awc_metar_site_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_awc_metar" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6069,10 +6069,10 @@ export def "repository-search-type-type-biz-stockseries stockseries" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6084,7 +6084,7 @@ export def "repository-search-type-type-biz-stockseries stockseries" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_biz_stockseries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6109,10 +6109,10 @@ export def "repository-search-type-type-bls-series series" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6121,17 +6121,17 @@ export def "repository-search-type-type-bls-series series" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-bls-seriessurvey-name: string # Survey Name
-  --searchtype-bls-seriesmeasure-data-type: string # Measure Data Type
-  --searchtype-bls-seriesindustry: string # Industry
-  --searchtype-bls-seriessector: string # Sector
-  --searchtype-bls-seriesarea: string # Area
-  --searchtype-bls-seriesitem: string # Item
-  --searchtype-bls-seriesseasonality: string # Seasonality
+  --search-type-bls-series-survey-name: string # Survey Name
+  --search-type-bls-series-measure-data-type: string # Measure Data Type
+  --search-type-bls-series-industry: string # Industry
+  --search-type-bls-series-sector: string # Sector
+  --search-type-bls-series-area: string # Area
+  --search-type-bls-series-item: string # Item
+  --search-type-bls-series-seasonality: string # Seasonality
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_bls_series.survey_name" $searchtype_bls_seriessurvey_name "scalar") (serialize-qp "search.type_bls_series.measure_data_type" $searchtype_bls_seriesmeasure_data_type "scalar") (serialize-qp "search.type_bls_series.industry" $searchtype_bls_seriesindustry "scalar") (serialize-qp "search.type_bls_series.sector" $searchtype_bls_seriessector "scalar") (serialize-qp "search.type_bls_series.area" $searchtype_bls_seriesarea "scalar") (serialize-qp "search.type_bls_series.item" $searchtype_bls_seriesitem "scalar") (serialize-qp "search.type_bls_series.seasonality" $searchtype_bls_seriesseasonality "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_bls_series.survey_name" $search_type_bls_series_survey_name "scalar") (serialize-qp "search.type_bls_series.measure_data_type" $search_type_bls_series_measure_data_type "scalar") (serialize-qp "search.type_bls_series.industry" $search_type_bls_series_industry "scalar") (serialize-qp "search.type_bls_series.sector" $search_type_bls_series_sector "scalar") (serialize-qp "search.type_bls_series.area" $search_type_bls_series_area "scalar") (serialize-qp "search.type_bls_series.item" $search_type_bls_series_item "scalar") (serialize-qp "search.type_bls_series.seasonality" $search_type_bls_series_seasonality "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_bls_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6156,10 +6156,10 @@ export def "repository-search-type-type-bls-survey survey" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6171,7 +6171,7 @@ export def "repository-search-type-type-bls-survey survey" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_bls_survey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6196,10 +6196,10 @@ export def "repository-search-type-type-census-acs acs" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6208,14 +6208,14 @@ export def "repository-search-type-type-census-acs acs" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-census-acsfields: string # Indicators
-  --searchtype-census-acsfor-type: string # For
-  --searchtype-census-acsin-type1: string # In
-  --searchtype-census-acsin-type2: string # In #2
+  --search-type-census-acs-fields: string # Indicators
+  --search-type-census-acs-for-type: string # For
+  --search-type-census-acs-in-type1: string # In
+  --search-type-census-acs-in-type2: string # In #2
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_census_acs.fields" $searchtype_census_acsfields "scalar") (serialize-qp "search.type_census_acs.for_type" $searchtype_census_acsfor_type "scalar") (serialize-qp "search.type_census_acs.in_type1" $searchtype_census_acsin_type1 "scalar") (serialize-qp "search.type_census_acs.in_type2" $searchtype_census_acsin_type2 "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_census_acs.fields" $search_type_census_acs_fields "scalar") (serialize-qp "search.type_census_acs.for_type" $search_type_census_acs_for_type "scalar") (serialize-qp "search.type_census_acs.in_type1" $search_type_census_acs_in_type1 "scalar") (serialize-qp "search.type_census_acs.in_type2" $search_type_census_acs_in_type2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_census_acs" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6240,10 +6240,10 @@ export def "repository-search-type-type-daymet daymet" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6255,7 +6255,7 @@ export def "repository-search-type-type-daymet daymet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_daymet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6280,10 +6280,10 @@ export def "repository-search-type-type-db-table table" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6295,7 +6295,7 @@ export def "repository-search-type-type-db-table table" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_db_table" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6320,10 +6320,10 @@ export def "repository-search-type-type-document-csv csv" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6335,7 +6335,7 @@ export def "repository-search-type-type-document-csv csv" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_document_csv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6360,10 +6360,10 @@ export def "repository-search-type-type-document-doc doc" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6375,7 +6375,7 @@ export def "repository-search-type-type-document-doc doc" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_document_doc" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6400,10 +6400,10 @@ export def "repository-search-type-type-document-html html" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6415,7 +6415,7 @@ export def "repository-search-type-type-document-html html" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_document_html" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6440,10 +6440,10 @@ export def "repository-search-type-type-document-pdf pdf" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6455,7 +6455,7 @@ export def "repository-search-type-type-document-pdf pdf" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_document_pdf" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6480,10 +6480,10 @@ export def "repository-search-type-type-document-ppt ppt" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6495,7 +6495,7 @@ export def "repository-search-type-type-document-ppt ppt" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_document_ppt" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6520,10 +6520,10 @@ export def "repository-search-type-type-document-xls xls" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6535,7 +6535,7 @@ export def "repository-search-type-type-document-xls xls" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_document_xls" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6560,10 +6560,10 @@ export def "repository-search-type-type-drilsdown-casestudy casestudy" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6575,7 +6575,7 @@ export def "repository-search-type-type-drilsdown-casestudy casestudy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_drilsdown_casestudy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6600,10 +6600,10 @@ export def "repository-search-type-type-edgar-filing filing" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6612,16 +6612,16 @@ export def "repository-search-type-type-edgar-filing filing" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-edgar-filingform-type: string # Form Type
-  --searchtype-edgar-filingcompany-name: string # Company Name
-  --searchtype-edgar-filingcik-number: string # CIK Number
-  --searchtype-edgar-filingstandard-industrial-classification: string # Standard Industrial Classification
-  --searchtype-edgar-filingirs-number: string # IRS Number
-  --searchtype-edgar-filingstate: string # State of Incorporation
+  --search-type-edgar-filing-form-type: string # Form Type
+  --search-type-edgar-filing-company-name: string # Company Name
+  --search-type-edgar-filing-cik-number: string # CIK Number
+  --search-type-edgar-filing-standard-industrial-classification: string # Standard Industrial Classification
+  --search-type-edgar-filing-irs-number: string # IRS Number
+  --search-type-edgar-filing-state: string # State of Incorporation
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_edgar_filing.form_type" $searchtype_edgar_filingform_type "scalar") (serialize-qp "search.type_edgar_filing.company_name" $searchtype_edgar_filingcompany_name "scalar") (serialize-qp "search.type_edgar_filing.cik_number" $searchtype_edgar_filingcik_number "scalar") (serialize-qp "search.type_edgar_filing.standard_industrial_classification" $searchtype_edgar_filingstandard_industrial_classification "scalar") (serialize-qp "search.type_edgar_filing.irs_number" $searchtype_edgar_filingirs_number "scalar") (serialize-qp "search.type_edgar_filing.state" $searchtype_edgar_filingstate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_edgar_filing.form_type" $search_type_edgar_filing_form_type "scalar") (serialize-qp "search.type_edgar_filing.company_name" $search_type_edgar_filing_company_name "scalar") (serialize-qp "search.type_edgar_filing.cik_number" $search_type_edgar_filing_cik_number "scalar") (serialize-qp "search.type_edgar_filing.standard_industrial_classification" $search_type_edgar_filing_standard_industrial_classification "scalar") (serialize-qp "search.type_edgar_filing.irs_number" $search_type_edgar_filing_irs_number "scalar") (serialize-qp "search.type_edgar_filing.state" $search_type_edgar_filing_state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_edgar_filing" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6646,10 +6646,10 @@ export def "repository-search-type-type-eia-category category" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6661,7 +6661,7 @@ export def "repository-search-type-type-eia-category category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_eia_category" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6686,10 +6686,10 @@ export def "repository-search-type-type-eia-series series" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6701,7 +6701,7 @@ export def "repository-search-type-type-eia-series series" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_eia_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6726,10 +6726,10 @@ export def "repository-search-type-type-esri-featureserver featureserver" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6741,7 +6741,7 @@ export def "repository-search-type-type-esri-featureserver featureserver" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_esri_featureserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6766,10 +6766,10 @@ export def "repository-search-type-type-esri-geometryserver geometryserver" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6781,7 +6781,7 @@ export def "repository-search-type-type-esri-geometryserver geometryserver" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_esri_geometryserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6806,10 +6806,10 @@ export def "repository-search-type-type-esri-gpserver gpserver" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6821,7 +6821,7 @@ export def "repository-search-type-type-esri-gpserver gpserver" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_esri_gpserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6846,10 +6846,10 @@ export def "repository-search-type-type-esri-imageserver imageserver" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6861,7 +6861,7 @@ export def "repository-search-type-type-esri-imageserver imageserver" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_esri_imageserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6886,10 +6886,10 @@ export def "repository-search-type-type-esri-layer layer" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6898,11 +6898,11 @@ export def "repository-search-type-type-esri-layer layer" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-esri-layerlayer-type: string # Layer Type
+  --search-type-esri-layer-layer-type: string # Layer Type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_esri_layer.layer_type" $searchtype_esri_layerlayer_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_esri_layer.layer_type" $search_type_esri_layer_layer_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_esri_layer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6927,10 +6927,10 @@ export def "repository-search-type-type-esri-mapserver mapserver" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6942,7 +6942,7 @@ export def "repository-search-type-type-esri-mapserver mapserver" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_esri_mapserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6967,10 +6967,10 @@ export def "repository-search-type-type-esri-restfolder restfolder" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -6982,7 +6982,7 @@ export def "repository-search-type-type-esri-restfolder restfolder" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_esri_restfolder" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7007,10 +7007,10 @@ export def "repository-search-type-type-esri-restserver restserver" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7022,7 +7022,7 @@ export def "repository-search-type-type-esri-restserver restserver" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_esri_restserver" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7047,10 +7047,10 @@ export def "repository-search-type-type-esri-restservice restservice" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7062,7 +7062,7 @@ export def "repository-search-type-type-esri-restservice restservice" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_esri_restservice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7087,10 +7087,10 @@ export def "repository-search-type-type-extremes extremes" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7099,12 +7099,12 @@ export def "repository-search-type-type-extremes extremes" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-extremesregion: string # US Climate Region
-  --searchtype-extremesvariable: string # Variable
+  --search-type-extremes-region: string # US Climate Region
+  --search-type-extremes-variable: string # Variable
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_extremes.region" $searchtype_extremesregion "scalar") (serialize-qp "search.type_extremes.variable" $searchtype_extremesvariable "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_extremes.region" $search_type_extremes_region "scalar") (serialize-qp "search.type_extremes.variable" $search_type_extremes_variable "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_extremes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7129,10 +7129,10 @@ export def "repository-search-type-type-fred-category category" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7144,7 +7144,7 @@ export def "repository-search-type-type-fred-category category" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_fred_category" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7169,10 +7169,10 @@ export def "repository-search-type-type-fred-series series" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7184,7 +7184,7 @@ export def "repository-search-type-type-fred-series series" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_fred_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7209,10 +7209,10 @@ export def "repository-search-type-type-gtfs-agency agency" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7224,7 +7224,7 @@ export def "repository-search-type-type-gtfs-agency agency" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_gtfs_agency" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7249,10 +7249,10 @@ export def "repository-search-type-type-gtfs-route route" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7261,12 +7261,12 @@ export def "repository-search-type-type-gtfs-route route" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-gtfs-routeroute-id: string # Route ID
-  --searchtype-gtfs-routestop-names: string # Stop Names
+  --search-type-gtfs-route-route-id: string # Route ID
+  --search-type-gtfs-route-stop-names: string # Stop Names
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_gtfs_route.route_id" $searchtype_gtfs_routeroute_id "scalar") (serialize-qp "search.type_gtfs_route.stop_names" $searchtype_gtfs_routestop_names "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_gtfs_route.route_id" $search_type_gtfs_route_route_id "scalar") (serialize-qp "search.type_gtfs_route.stop_names" $search_type_gtfs_route_stop_names "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_gtfs_route" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7291,10 +7291,10 @@ export def "repository-search-type-type-gtfs-routes routes" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7306,7 +7306,7 @@ export def "repository-search-type-type-gtfs-routes routes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_gtfs_routes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7331,10 +7331,10 @@ export def "repository-search-type-type-gtfs-stop stop" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7343,15 +7343,15 @@ export def "repository-search-type-type-gtfs-stop stop" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-gtfs-stopstop-id: string # Stop ID
-  --searchtype-gtfs-stopstop-code: string # Stop Code
-  --searchtype-gtfs-stopzone-id: string # Zone ID
-  --searchtype-gtfs-stoplocation-type: string # Location Type
-  --searchtype-gtfs-stopwheelchair-boarding: string # Wheelchair Boarding
+  --search-type-gtfs-stop-stop-id: string # Stop ID
+  --search-type-gtfs-stop-stop-code: string # Stop Code
+  --search-type-gtfs-stop-zone-id: string # Zone ID
+  --search-type-gtfs-stop-location-type: string # Location Type
+  --search-type-gtfs-stop-wheelchair-boarding: string # Wheelchair Boarding
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_gtfs_stop.stop_id" $searchtype_gtfs_stopstop_id "scalar") (serialize-qp "search.type_gtfs_stop.stop_code" $searchtype_gtfs_stopstop_code "scalar") (serialize-qp "search.type_gtfs_stop.zone_id" $searchtype_gtfs_stopzone_id "scalar") (serialize-qp "search.type_gtfs_stop.location_type" $searchtype_gtfs_stoplocation_type "scalar") (serialize-qp "search.type_gtfs_stop.wheelchair_boarding" $searchtype_gtfs_stopwheelchair_boarding "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_gtfs_stop.stop_id" $search_type_gtfs_stop_stop_id "scalar") (serialize-qp "search.type_gtfs_stop.stop_code" $search_type_gtfs_stop_stop_code "scalar") (serialize-qp "search.type_gtfs_stop.zone_id" $search_type_gtfs_stop_zone_id "scalar") (serialize-qp "search.type_gtfs_stop.location_type" $search_type_gtfs_stop_location_type "scalar") (serialize-qp "search.type_gtfs_stop.wheelchair_boarding" $search_type_gtfs_stop_wheelchair_boarding "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_gtfs_stop" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7362,7 +7362,7 @@ export def "repository-search-type-type-gtfs-stop stop" [
 #
 # GET /repository/search/type/type_gtfs_stops
 # operationId: search_type_gtfs_stops
-export def "repository-search-type-type-gtfs-stops stops" [
+export def "repository-search-type-type-gtfs-stops stop-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7376,10 +7376,10 @@ export def "repository-search-type-type-gtfs-stops stops" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7391,7 +7391,7 @@ export def "repository-search-type-type-gtfs-stops stops" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_gtfs_stops" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7416,10 +7416,10 @@ export def "repository-search-type-type-gtfs-trip trip" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7428,14 +7428,14 @@ export def "repository-search-type-type-gtfs-trip trip" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-gtfs-triptrip-id: string # Trip ID
-  --searchtype-gtfs-tripstop-ids: string # Stop IDS
-  --searchtype-gtfs-tripwheelchair-accessible: string # Wheelchair Accessible
-  --searchtype-gtfs-tripbikes-allowed: string # Bikes Allowed
+  --search-type-gtfs-trip-trip-id: string # Trip ID
+  --search-type-gtfs-trip-stop-ids: string # Stop IDS
+  --search-type-gtfs-trip-wheelchair-accessible: string # Wheelchair Accessible
+  --search-type-gtfs-trip-bikes-allowed: string # Bikes Allowed
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_gtfs_trip.trip_id" $searchtype_gtfs_triptrip_id "scalar") (serialize-qp "search.type_gtfs_trip.stop_ids" $searchtype_gtfs_tripstop_ids "scalar") (serialize-qp "search.type_gtfs_trip.wheelchair_accessible" $searchtype_gtfs_tripwheelchair_accessible "scalar") (serialize-qp "search.type_gtfs_trip.bikes_allowed" $searchtype_gtfs_tripbikes_allowed "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_gtfs_trip.trip_id" $search_type_gtfs_trip_trip_id "scalar") (serialize-qp "search.type_gtfs_trip.stop_ids" $search_type_gtfs_trip_stop_ids "scalar") (serialize-qp "search.type_gtfs_trip.wheelchair_accessible" $search_type_gtfs_trip_wheelchair_accessible "scalar") (serialize-qp "search.type_gtfs_trip.bikes_allowed" $search_type_gtfs_trip_bikes_allowed "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_gtfs_trip" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7460,10 +7460,10 @@ export def "repository-search-type-type-hazarddata hazarddata" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7472,11 +7472,11 @@ export def "repository-search-type-type-hazarddata hazarddata" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-hazarddatasource: string # Source Agency
+  --search-type-hazarddata-source: string # Source Agency
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_hazarddata.source" $searchtype_hazarddatasource "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_hazarddata.source" $search_type_hazarddata_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_hazarddata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7501,10 +7501,10 @@ export def "repository-search-type-type-hydro-colorado colorado" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7513,11 +7513,11 @@ export def "repository-search-type-type-hydro-colorado colorado" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-hydro-coloradosite-id: string # Site ID
+  --search-type-hydro-colorado-site-id: string # Site ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_hydro_colorado.site_id" $searchtype_hydro_coloradosite_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_hydro_colorado.site_id" $search_type_hydro_colorado_site_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_hydro_colorado" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7542,10 +7542,10 @@ export def "repository-search-type-type-idv-bundle bundle" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7557,7 +7557,7 @@ export def "repository-search-type-type-idv-bundle bundle" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_idv_bundle" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7582,10 +7582,10 @@ export def "repository-search-type-type-image image" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7597,7 +7597,7 @@ export def "repository-search-type-type-image image" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_image" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7622,10 +7622,10 @@ export def "repository-search-type-type-image-airport airport" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7637,7 +7637,7 @@ export def "repository-search-type-type-image-airport airport" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_image_airport" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7662,10 +7662,10 @@ export def "repository-search-type-type-image-webcam webcam" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7677,7 +7677,7 @@ export def "repository-search-type-type-image-webcam webcam" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_image_webcam" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7702,10 +7702,10 @@ export def "repository-search-type-type-mb mb" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7717,7 +7717,7 @@ export def "repository-search-type-type-mb mb" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_mb" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7742,10 +7742,10 @@ export def "repository-search-type-type-mb-collection collection" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7757,7 +7757,7 @@ export def "repository-search-type-type-mb-collection collection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_mb_collection" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7782,10 +7782,10 @@ export def "repository-search-type-type-mb-point-basic basic" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7797,7 +7797,7 @@ export def "repository-search-type-type-mb-point-basic basic" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_mb_point_basic" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7822,10 +7822,10 @@ export def "repository-search-type-type-metameta-dictionary dictionary" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7834,18 +7834,18 @@ export def "repository-search-type-type-metameta-dictionary dictionary" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-metameta-dictionaryfield-index: int # Index
-  --searchtype-metameta-dictionarydictionary-type: string # Type
-  --searchtype-metameta-dictionaryshort-name: string # Short Name
-  --searchtype-metameta-dictionarysuper-type: string # Super Type
-  --searchtype-metameta-dictionaryisgroup: oneof<nothing, bool> # Is Group
-  --searchtype-metameta-dictionaryhandler-class: string # Handler Class
-  --searchtype-metameta-dictionaryproperties: string # Properties
-  --searchtype-metameta-dictionarywiki-text: string # Wiki Text
+  --search-type-metameta-dictionary-field-index: int # Index
+  --search-type-metameta-dictionary-dictionary-type: string # Type
+  --search-type-metameta-dictionary-short-name: string # Short Name
+  --search-type-metameta-dictionary-super-type: string # Super Type
+  --search-type-metameta-dictionary-isgroup: oneof<nothing, bool> # Is Group
+  --search-type-metameta-dictionary-handler-class: string # Handler Class
+  --search-type-metameta-dictionary-properties: string # Properties
+  --search-type-metameta-dictionary-wiki-text: string # Wiki Text
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_metameta_dictionary.field_index" $searchtype_metameta_dictionaryfield_index "scalar") (serialize-qp "search.type_metameta_dictionary.dictionary_type" $searchtype_metameta_dictionarydictionary_type "scalar") (serialize-qp "search.type_metameta_dictionary.short_name" $searchtype_metameta_dictionaryshort_name "scalar") (serialize-qp "search.type_metameta_dictionary.super_type" $searchtype_metameta_dictionarysuper_type "scalar") (serialize-qp "search.type_metameta_dictionary.isgroup" $searchtype_metameta_dictionaryisgroup "scalar") (serialize-qp "search.type_metameta_dictionary.handler_class" $searchtype_metameta_dictionaryhandler_class "scalar") (serialize-qp "search.type_metameta_dictionary.properties" $searchtype_metameta_dictionaryproperties "scalar") (serialize-qp "search.type_metameta_dictionary.wiki_text" $searchtype_metameta_dictionarywiki_text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_metameta_dictionary.field_index" $search_type_metameta_dictionary_field_index "scalar") (serialize-qp "search.type_metameta_dictionary.dictionary_type" $search_type_metameta_dictionary_dictionary_type "scalar") (serialize-qp "search.type_metameta_dictionary.short_name" $search_type_metameta_dictionary_short_name "scalar") (serialize-qp "search.type_metameta_dictionary.super_type" $search_type_metameta_dictionary_super_type "scalar") (serialize-qp "search.type_metameta_dictionary.isgroup" $search_type_metameta_dictionary_isgroup "scalar") (serialize-qp "search.type_metameta_dictionary.handler_class" $search_type_metameta_dictionary_handler_class "scalar") (serialize-qp "search.type_metameta_dictionary.properties" $search_type_metameta_dictionary_properties "scalar") (serialize-qp "search.type_metameta_dictionary.wiki_text" $search_type_metameta_dictionary_wiki_text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_metameta_dictionary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7870,10 +7870,10 @@ export def "repository-search-type-type-metameta-field field" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7882,18 +7882,18 @@ export def "repository-search-type-type-metameta-field field" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-metameta-fieldfield-index: int # Index
-  --searchtype-metameta-fieldfield-id: string # Field ID
-  --searchtype-metameta-fielddatatype: string # Data Type
-  --searchtype-metameta-fieldenumeration-values: string # Enumeration Values
-  --searchtype-metameta-fieldproperties: string # Properties
-  --searchtype-metameta-fielddatabase-column-size: int # Database Column Size
-  --searchtype-metameta-fieldmissing: string # Missing Value
-  --searchtype-metameta-fieldunit: string # Unit
+  --search-type-metameta-field-field-index: int # Index
+  --search-type-metameta-field-field-id: string # Field ID
+  --search-type-metameta-field-datatype: string # Data Type
+  --search-type-metameta-field-enumeration-values: string # Enumeration Values
+  --search-type-metameta-field-properties: string # Properties
+  --search-type-metameta-field-database-column-size: int # Database Column Size
+  --search-type-metameta-field-missing: string # Missing Value
+  --search-type-metameta-field-unit: string # Unit
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_metameta_field.field_index" $searchtype_metameta_fieldfield_index "scalar") (serialize-qp "search.type_metameta_field.field_id" $searchtype_metameta_fieldfield_id "scalar") (serialize-qp "search.type_metameta_field.datatype" $searchtype_metameta_fielddatatype "scalar") (serialize-qp "search.type_metameta_field.enumeration_values" $searchtype_metameta_fieldenumeration_values "scalar") (serialize-qp "search.type_metameta_field.properties" $searchtype_metameta_fieldproperties "scalar") (serialize-qp "search.type_metameta_field.database_column_size" $searchtype_metameta_fielddatabase_column_size "scalar") (serialize-qp "search.type_metameta_field.missing" $searchtype_metameta_fieldmissing "scalar") (serialize-qp "search.type_metameta_field.unit" $searchtype_metameta_fieldunit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_metameta_field.field_index" $search_type_metameta_field_field_index "scalar") (serialize-qp "search.type_metameta_field.field_id" $search_type_metameta_field_field_id "scalar") (serialize-qp "search.type_metameta_field.datatype" $search_type_metameta_field_datatype "scalar") (serialize-qp "search.type_metameta_field.enumeration_values" $search_type_metameta_field_enumeration_values "scalar") (serialize-qp "search.type_metameta_field.properties" $search_type_metameta_field_properties "scalar") (serialize-qp "search.type_metameta_field.database_column_size" $search_type_metameta_field_database_column_size "scalar") (serialize-qp "search.type_metameta_field.missing" $search_type_metameta_field_missing "scalar") (serialize-qp "search.type_metameta_field.unit" $search_type_metameta_field_unit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_metameta_field" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7918,10 +7918,10 @@ export def "repository-search-type-type-nasaames nasaames" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7933,7 +7933,7 @@ export def "repository-search-type-type-nasaames nasaames" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_nasaames" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7958,10 +7958,10 @@ export def "repository-search-type-type-ncss ncss" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -7973,7 +7973,7 @@ export def "repository-search-type-type-ncss ncss" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_ncss" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7998,10 +7998,10 @@ export def "repository-search-type-type-nitf nitf" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8013,7 +8013,7 @@ export def "repository-search-type-type-nitf nitf" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_nitf" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8038,10 +8038,10 @@ export def "repository-search-type-type-point-ameriflux-level2 level2" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8050,13 +8050,13 @@ export def "repository-search-type-type-point-ameriflux-level2 level2" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-ameriflux-level2site-id: string # Site ID
-  --searchtype-point-ameriflux-level2contact: string # Contact
-  --searchtype-point-ameriflux-level2ecosystem-type: string # Ecosystem Type
+  --search-type-point-ameriflux-level2-site-id: string # Site ID
+  --search-type-point-ameriflux-level2-contact: string # Contact
+  --search-type-point-ameriflux-level2-ecosystem-type: string # Ecosystem Type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_ameriflux_level2.site_id" $searchtype_point_ameriflux_level2site_id "scalar") (serialize-qp "search.type_point_ameriflux_level2.contact" $searchtype_point_ameriflux_level2contact "scalar") (serialize-qp "search.type_point_ameriflux_level2.ecosystem_type" $searchtype_point_ameriflux_level2ecosystem_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_ameriflux_level2.site_id" $search_type_point_ameriflux_level2_site_id "scalar") (serialize-qp "search.type_point_ameriflux_level2.contact" $search_type_point_ameriflux_level2_contact "scalar") (serialize-qp "search.type_point_ameriflux_level2.ecosystem_type" $search_type_point_ameriflux_level2_ecosystem_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_ameriflux_level2" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8081,10 +8081,10 @@ export def "repository-search-type-type-point-amrc-final final" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8093,13 +8093,13 @@ export def "repository-search-type-type-point-amrc-final final" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-amrc-finalsite-id: string # Site ID
-  --searchtype-point-amrc-finalsite-name: string # Site Name
-  --searchtype-point-amrc-finalargos-id: string # Argos ID
+  --search-type-point-amrc-final-site-id: string # Site ID
+  --search-type-point-amrc-final-site-name: string # Site Name
+  --search-type-point-amrc-final-argos-id: string # Argos ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_amrc_final.site_id" $searchtype_point_amrc_finalsite_id "scalar") (serialize-qp "search.type_point_amrc_final.site_name" $searchtype_point_amrc_finalsite_name "scalar") (serialize-qp "search.type_point_amrc_final.argos_id" $searchtype_point_amrc_finalargos_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_amrc_final.site_id" $search_type_point_amrc_final_site_id "scalar") (serialize-qp "search.type_point_amrc_final.site_name" $search_type_point_amrc_final_site_name "scalar") (serialize-qp "search.type_point_amrc_final.argos_id" $search_type_point_amrc_final_argos_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_amrc_final" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8124,10 +8124,10 @@ export def "repository-search-type-type-point-amrc-freewave freewave" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8136,14 +8136,14 @@ export def "repository-search-type-type-point-amrc-freewave freewave" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-amrc-freewavestation-name: string # Station Name
-  --searchtype-point-amrc-freewaveformat: string # File Format
-  --searchtype-point-amrc-freewavedatalogger-model: string # Data Logger Model
-  --searchtype-point-amrc-freewavedatalogger-serial: string # Data Logger Serial
+  --search-type-point-amrc-freewave-station-name: string # Station Name
+  --search-type-point-amrc-freewave-format: string # File Format
+  --search-type-point-amrc-freewave-datalogger-model: string # Data Logger Model
+  --search-type-point-amrc-freewave-datalogger-serial: string # Data Logger Serial
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_amrc_freewave.station_name" $searchtype_point_amrc_freewavestation_name "scalar") (serialize-qp "search.type_point_amrc_freewave.format" $searchtype_point_amrc_freewaveformat "scalar") (serialize-qp "search.type_point_amrc_freewave.datalogger_model" $searchtype_point_amrc_freewavedatalogger_model "scalar") (serialize-qp "search.type_point_amrc_freewave.datalogger_serial" $searchtype_point_amrc_freewavedatalogger_serial "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_amrc_freewave.station_name" $search_type_point_amrc_freewave_station_name "scalar") (serialize-qp "search.type_point_amrc_freewave.format" $search_type_point_amrc_freewave_format "scalar") (serialize-qp "search.type_point_amrc_freewave.datalogger_model" $search_type_point_amrc_freewave_datalogger_model "scalar") (serialize-qp "search.type_point_amrc_freewave.datalogger_serial" $search_type_point_amrc_freewave_datalogger_serial "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_amrc_freewave" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8168,10 +8168,10 @@ export def "repository-search-type-type-point-czo czo" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8183,7 +8183,7 @@ export def "repository-search-type-type-point-czo czo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_czo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8208,10 +8208,10 @@ export def "repository-search-type-type-point-gcnet gcnet" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8223,7 +8223,7 @@ export def "repository-search-type-type-point-gcnet gcnet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_gcnet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8248,10 +8248,10 @@ export def "repository-search-type-type-point-geomag-iaga2002 iaga2002" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8260,16 +8260,16 @@ export def "repository-search-type-type-point-geomag-iaga2002 iaga2002" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-geomag-iaga2002iaga-code: string # IAGA Code
-  --searchtype-point-geomag-iaga2002station-name: string # Station Name
-  --searchtype-point-geomag-iaga2002source-of-data: string # Source of data
-  --searchtype-point-geomag-iaga2002digital-sampling: string # Digital Sampling
-  --searchtype-point-geomag-iaga2002data-interval: string # Data Interval
-  --searchtype-point-geomag-iaga2002data-type: string # Data Type
+  --search-type-point-geomag-iaga2002-iaga-code: string # IAGA Code
+  --search-type-point-geomag-iaga2002-station-name: string # Station Name
+  --search-type-point-geomag-iaga2002-source-of-data: string # Source of data
+  --search-type-point-geomag-iaga2002-digital-sampling: string # Digital Sampling
+  --search-type-point-geomag-iaga2002-data-interval: string # Data Interval
+  --search-type-point-geomag-iaga2002-data-type: string # Data Type
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_geomag_iaga2002.iaga_code" $searchtype_point_geomag_iaga2002iaga_code "scalar") (serialize-qp "search.type_point_geomag_iaga2002.station_name" $searchtype_point_geomag_iaga2002station_name "scalar") (serialize-qp "search.type_point_geomag_iaga2002.source_of_data" $searchtype_point_geomag_iaga2002source_of_data "scalar") (serialize-qp "search.type_point_geomag_iaga2002.digital_sampling" $searchtype_point_geomag_iaga2002digital_sampling "scalar") (serialize-qp "search.type_point_geomag_iaga2002.data_interval" $searchtype_point_geomag_iaga2002data_interval "scalar") (serialize-qp "search.type_point_geomag_iaga2002.data_type" $searchtype_point_geomag_iaga2002data_type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_geomag_iaga2002.iaga_code" $search_type_point_geomag_iaga2002_iaga_code "scalar") (serialize-qp "search.type_point_geomag_iaga2002.station_name" $search_type_point_geomag_iaga2002_station_name "scalar") (serialize-qp "search.type_point_geomag_iaga2002.source_of_data" $search_type_point_geomag_iaga2002_source_of_data "scalar") (serialize-qp "search.type_point_geomag_iaga2002.digital_sampling" $search_type_point_geomag_iaga2002_digital_sampling "scalar") (serialize-qp "search.type_point_geomag_iaga2002.data_interval" $search_type_point_geomag_iaga2002_data_interval "scalar") (serialize-qp "search.type_point_geomag_iaga2002.data_type" $search_type_point_geomag_iaga2002_data_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_geomag_iaga2002" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8294,10 +8294,10 @@ export def "repository-search-type-type-point-hydro-waterml waterml" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8306,12 +8306,12 @@ export def "repository-search-type-type-point-hydro-waterml waterml" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-hydro-watermlsite-code: string # Site Code
-  --searchtype-point-hydro-watermlsite-name: string # Site Name
+  --search-type-point-hydro-waterml-site-code: string # Site Code
+  --search-type-point-hydro-waterml-site-name: string # Site Name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_hydro_waterml.site_code" $searchtype_point_hydro_watermlsite_code "scalar") (serialize-qp "search.type_point_hydro_waterml.site_name" $searchtype_point_hydro_watermlsite_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_hydro_waterml.site_code" $search_type_point_hydro_waterml_site_code "scalar") (serialize-qp "search.type_point_hydro_waterml.site_name" $search_type_point_hydro_waterml_site_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_hydro_waterml" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8336,10 +8336,10 @@ export def "repository-search-type-type-point-icebridge-atm-icessn icessn" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8351,7 +8351,7 @@ export def "repository-search-type-type-point-icebridge-atm-icessn icessn" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_icebridge_atm_icessn" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8376,10 +8376,10 @@ export def "repository-search-type-type-point-icebridge-atm-qfit qfit" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8391,7 +8391,7 @@ export def "repository-search-type-type-point-icebridge-atm-qfit qfit" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_icebridge_atm_qfit" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8416,10 +8416,10 @@ export def "repository-search-type-type-point-icebridge-mccords-irmcr2 irmcr2" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8431,7 +8431,7 @@ export def "repository-search-type-type-point-icebridge-mccords-irmcr2 irmcr2" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_icebridge_mccords_irmcr2" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8456,10 +8456,10 @@ export def "repository-search-type-type-point-icebridge-mccords-irmcr3 irmcr3" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8471,7 +8471,7 @@ export def "repository-search-type-type-point-icebridge-mccords-irmcr3 irmcr3" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_icebridge_mccords_irmcr3" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8496,10 +8496,10 @@ export def "repository-search-type-type-point-icebridge-paris paris" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8511,7 +8511,7 @@ export def "repository-search-type-type-point-icebridge-paris paris" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_icebridge_paris" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8536,10 +8536,10 @@ export def "repository-search-type-type-point-idv idv" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8551,7 +8551,7 @@ export def "repository-search-type-type-point-idv idv" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_idv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8576,10 +8576,10 @@ export def "repository-search-type-type-point-inline inline" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8591,7 +8591,7 @@ export def "repository-search-type-type-point-inline inline" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_inline" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8616,10 +8616,10 @@ export def "repository-search-type-type-point-ncdc-climate climate" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8631,7 +8631,7 @@ export def "repository-search-type-type-point-ncdc-climate climate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_ncdc_climate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8656,10 +8656,10 @@ export def "repository-search-type-type-point-netcdf netcdf" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8671,7 +8671,7 @@ export def "repository-search-type-type-point-netcdf netcdf" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_netcdf" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8696,10 +8696,10 @@ export def "repository-search-type-type-point-noaa-carbon carbon" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8708,15 +8708,15 @@ export def "repository-search-type-type-point-noaa-carbon carbon" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-noaa-carbonsite-id: string # Site ID
-  --searchtype-point-noaa-carbonparameter: string # Parameter
-  --searchtype-point-noaa-carbonproject: string # Project
-  --searchtype-point-noaa-carbonlab-id-number: string # Lab ID Number
-  --searchtype-point-noaa-carbonmeasurement-group: string # Measurement Group
+  --search-type-point-noaa-carbon-site-id: string # Site ID
+  --search-type-point-noaa-carbon-parameter: string # Parameter
+  --search-type-point-noaa-carbon-project: string # Project
+  --search-type-point-noaa-carbon-lab-id-number: string # Lab ID Number
+  --search-type-point-noaa-carbon-measurement-group: string # Measurement Group
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_noaa_carbon.site_id" $searchtype_point_noaa_carbonsite_id "scalar") (serialize-qp "search.type_point_noaa_carbon.parameter" $searchtype_point_noaa_carbonparameter "scalar") (serialize-qp "search.type_point_noaa_carbon.project" $searchtype_point_noaa_carbonproject "scalar") (serialize-qp "search.type_point_noaa_carbon.lab_id_number" $searchtype_point_noaa_carbonlab_id_number "scalar") (serialize-qp "search.type_point_noaa_carbon.measurement_group" $searchtype_point_noaa_carbonmeasurement_group "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_noaa_carbon.site_id" $search_type_point_noaa_carbon_site_id "scalar") (serialize-qp "search.type_point_noaa_carbon.parameter" $search_type_point_noaa_carbon_parameter "scalar") (serialize-qp "search.type_point_noaa_carbon.project" $search_type_point_noaa_carbon_project "scalar") (serialize-qp "search.type_point_noaa_carbon.lab_id_number" $search_type_point_noaa_carbon_lab_id_number "scalar") (serialize-qp "search.type_point_noaa_carbon.measurement_group" $search_type_point_noaa_carbon_measurement_group "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_noaa_carbon" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8741,10 +8741,10 @@ export def "repository-search-type-type-point-noaa-flask-event event" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8753,15 +8753,15 @@ export def "repository-search-type-type-point-noaa-flask-event event" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-noaa-flask-eventsite-id: string # Site ID
-  --searchtype-point-noaa-flask-eventparameter: string # Parameter
-  --searchtype-point-noaa-flask-eventproject: string # Project
-  --searchtype-point-noaa-flask-eventlab-id-number: string # Lab ID Number
-  --searchtype-point-noaa-flask-eventmeasurement-group: string # Measurement Group
+  --search-type-point-noaa-flask-event-site-id: string # Site ID
+  --search-type-point-noaa-flask-event-parameter: string # Parameter
+  --search-type-point-noaa-flask-event-project: string # Project
+  --search-type-point-noaa-flask-event-lab-id-number: string # Lab ID Number
+  --search-type-point-noaa-flask-event-measurement-group: string # Measurement Group
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_noaa_flask_event.site_id" $searchtype_point_noaa_flask_eventsite_id "scalar") (serialize-qp "search.type_point_noaa_flask_event.parameter" $searchtype_point_noaa_flask_eventparameter "scalar") (serialize-qp "search.type_point_noaa_flask_event.project" $searchtype_point_noaa_flask_eventproject "scalar") (serialize-qp "search.type_point_noaa_flask_event.lab_id_number" $searchtype_point_noaa_flask_eventlab_id_number "scalar") (serialize-qp "search.type_point_noaa_flask_event.measurement_group" $searchtype_point_noaa_flask_eventmeasurement_group "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_noaa_flask_event.site_id" $search_type_point_noaa_flask_event_site_id "scalar") (serialize-qp "search.type_point_noaa_flask_event.parameter" $search_type_point_noaa_flask_event_parameter "scalar") (serialize-qp "search.type_point_noaa_flask_event.project" $search_type_point_noaa_flask_event_project "scalar") (serialize-qp "search.type_point_noaa_flask_event.lab_id_number" $search_type_point_noaa_flask_event_lab_id_number "scalar") (serialize-qp "search.type_point_noaa_flask_event.measurement_group" $search_type_point_noaa_flask_event_measurement_group "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_noaa_flask_event" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8786,10 +8786,10 @@ export def "repository-search-type-type-point-noaa-flask-month month" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8798,15 +8798,15 @@ export def "repository-search-type-type-point-noaa-flask-month month" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-noaa-flask-monthsite-id: string # Site ID
-  --searchtype-point-noaa-flask-monthparameter: string # Parameter
-  --searchtype-point-noaa-flask-monthproject: string # Project
-  --searchtype-point-noaa-flask-monthlab-id-number: string # Lab ID Number
-  --searchtype-point-noaa-flask-monthmeasurement-group: string # Measurement Group
+  --search-type-point-noaa-flask-month-site-id: string # Site ID
+  --search-type-point-noaa-flask-month-parameter: string # Parameter
+  --search-type-point-noaa-flask-month-project: string # Project
+  --search-type-point-noaa-flask-month-lab-id-number: string # Lab ID Number
+  --search-type-point-noaa-flask-month-measurement-group: string # Measurement Group
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_noaa_flask_month.site_id" $searchtype_point_noaa_flask_monthsite_id "scalar") (serialize-qp "search.type_point_noaa_flask_month.parameter" $searchtype_point_noaa_flask_monthparameter "scalar") (serialize-qp "search.type_point_noaa_flask_month.project" $searchtype_point_noaa_flask_monthproject "scalar") (serialize-qp "search.type_point_noaa_flask_month.lab_id_number" $searchtype_point_noaa_flask_monthlab_id_number "scalar") (serialize-qp "search.type_point_noaa_flask_month.measurement_group" $searchtype_point_noaa_flask_monthmeasurement_group "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_noaa_flask_month.site_id" $search_type_point_noaa_flask_month_site_id "scalar") (serialize-qp "search.type_point_noaa_flask_month.parameter" $search_type_point_noaa_flask_month_parameter "scalar") (serialize-qp "search.type_point_noaa_flask_month.project" $search_type_point_noaa_flask_month_project "scalar") (serialize-qp "search.type_point_noaa_flask_month.lab_id_number" $search_type_point_noaa_flask_month_lab_id_number "scalar") (serialize-qp "search.type_point_noaa_flask_month.measurement_group" $search_type_point_noaa_flask_month_measurement_group "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_noaa_flask_month" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8831,10 +8831,10 @@ export def "repository-search-type-type-point-noaa-madis madis" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8846,7 +8846,7 @@ export def "repository-search-type-type-point-noaa-madis madis" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_noaa_madis" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8871,10 +8871,10 @@ export def "repository-search-type-type-point-noaa-tower tower" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8883,11 +8883,11 @@ export def "repository-search-type-type-point-noaa-tower tower" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-noaa-towersite-id: string # Site ID
+  --search-type-point-noaa-tower-site-id: string # Site ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_noaa_tower.site_id" $searchtype_point_noaa_towersite_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_noaa_tower.site_id" $search_type_point_noaa_tower_site_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_noaa_tower" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8912,10 +8912,10 @@ export def "repository-search-type-type-point-ocean-cnv cnv" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8927,7 +8927,7 @@ export def "repository-search-type-type-point-ocean-cnv cnv" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_cnv" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8938,7 +8938,7 @@ export def "repository-search-type-type-point-ocean-cnv cnv" [
 #
 # GET /repository/search/type/type_point_ocean_csv_sado_TTS
 # operationId: search_type_point_ocean_csv_sado_TTS
-export def "repository-search-type-type-point-ocean-csv-sado-tts TTS" [
+export def "repository-search-type-type-point-ocean-csv-sado-tts get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8952,10 +8952,10 @@ export def "repository-search-type-type-point-ocean-csv-sado-tts TTS" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -8967,7 +8967,7 @@ export def "repository-search-type-type-point-ocean-csv-sado-tts TTS" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_csv_sado_TTS" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8992,10 +8992,10 @@ export def "repository-search-type-type-point-ocean-csv-sado-meteo meteo" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9007,7 +9007,7 @@ export def "repository-search-type-type-point-ocean-csv-sado-meteo meteo" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_csv_sado_meteo" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9032,10 +9032,10 @@ export def "repository-search-type-type-point-ocean-csv-sado-position position" 
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9047,7 +9047,7 @@ export def "repository-search-type-type-point-ocean-csv-sado-position position" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_csv_sado_position" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9072,10 +9072,10 @@ export def "repository-search-type-type-point-ocean-netcdf-glider glider" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9084,11 +9084,11 @@ export def "repository-search-type-type-point-ocean-netcdf-glider glider" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-ocean-netcdf-trackplatform: string # Platform
+  --search-type-point-ocean-netcdf-track-platform: string # Platform
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_ocean_netcdf_track.platform" $searchtype_point_ocean_netcdf_trackplatform "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_ocean_netcdf_track.platform" $search_type_point_ocean_netcdf_track_platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_netcdf_glider" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9113,10 +9113,10 @@ export def "repository-search-type-type-point-ocean-netcdf-track track" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9125,11 +9125,11 @@ export def "repository-search-type-type-point-ocean-netcdf-track track" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-ocean-netcdf-trackplatform: string # Platform
+  --search-type-point-ocean-netcdf-track-platform: string # Platform
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_ocean_netcdf_track.platform" $searchtype_point_ocean_netcdf_trackplatform "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_ocean_netcdf_track.platform" $search_type_point_ocean_netcdf_track_platform "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_netcdf_track" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9154,10 +9154,10 @@ export def "repository-search-type-type-point-ocean-ooi-dmgx dmgx" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9169,7 +9169,7 @@ export def "repository-search-type-type-point-ocean-ooi-dmgx dmgx" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_ocean_ooi_dmgx" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9180,7 +9180,7 @@ export def "repository-search-type-type-point-ocean-ooi-dmgx dmgx" [
 #
 # GET /repository/search/type/type_point_openaq
 # operationId: search_type_point_openaq
-export def "repository-search-type-type-point-openaq openaq" [
+export def "repository-search-type-type-point-openaq open-aq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9194,10 +9194,10 @@ export def "repository-search-type-type-point-openaq openaq" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9206,14 +9206,14 @@ export def "repository-search-type-type-point-openaq openaq" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-openaqlocation: string # Location
-  --searchtype-point-openaqcountry: string # Country
-  --searchtype-point-openaqcity: string # City
-  --searchtype-point-openaqhours-offset: int # Offset Hours
+  --search-type-point-openaq-location: string # Location
+  --search-type-point-openaq-country: string # Country
+  --search-type-point-openaq-city: string # City
+  --search-type-point-openaq-hours-offset: int # Offset Hours
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_openaq.location" $searchtype_point_openaqlocation "scalar") (serialize-qp "search.type_point_openaq.country" $searchtype_point_openaqcountry "scalar") (serialize-qp "search.type_point_openaq.city" $searchtype_point_openaqcity "scalar") (serialize-qp "search.type_point_openaq.hours_offset" $searchtype_point_openaqhours_offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_openaq.location" $search_type_point_openaq_location "scalar") (serialize-qp "search.type_point_openaq.country" $search_type_point_openaq_country "scalar") (serialize-qp "search.type_point_openaq.city" $search_type_point_openaq_city "scalar") (serialize-qp "search.type_point_openaq.hours_offset" $search_type_point_openaq_hours_offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_openaq" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9238,10 +9238,10 @@ export def "repository-search-type-type-point-pbo-position-time-series series" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9250,15 +9250,15 @@ export def "repository-search-type-type-point-pbo-position-time-series series" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-pbo-position-time-seriesfour-char-id: string # Four Char ID
-  --searchtype-point-pbo-position-time-seriesstation-name: string # Station Name
-  --searchtype-point-pbo-position-time-seriesreference-frame: string # Reference Frame
-  --searchtype-point-pbo-position-time-seriesformat-version: string # Format Version
-  --searchtype-point-pbo-position-time-seriesprocessing-center: string # Processing Center
+  --search-type-point-pbo-position-time-series-four-char-id: string # Four Char ID
+  --search-type-point-pbo-position-time-series-station-name: string # Station Name
+  --search-type-point-pbo-position-time-series-reference-frame: string # Reference Frame
+  --search-type-point-pbo-position-time-series-format-version: string # Format Version
+  --search-type-point-pbo-position-time-series-processing-center: string # Processing Center
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_pbo_position_time_series.four_char_id" $searchtype_point_pbo_position_time_seriesfour_char_id "scalar") (serialize-qp "search.type_point_pbo_position_time_series.station_name" $searchtype_point_pbo_position_time_seriesstation_name "scalar") (serialize-qp "search.type_point_pbo_position_time_series.reference_frame" $searchtype_point_pbo_position_time_seriesreference_frame "scalar") (serialize-qp "search.type_point_pbo_position_time_series.format_version" $searchtype_point_pbo_position_time_seriesformat_version "scalar") (serialize-qp "search.type_point_pbo_position_time_series.processing_center" $searchtype_point_pbo_position_time_seriesprocessing_center "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_pbo_position_time_series.four_char_id" $search_type_point_pbo_position_time_series_four_char_id "scalar") (serialize-qp "search.type_point_pbo_position_time_series.station_name" $search_type_point_pbo_position_time_series_station_name "scalar") (serialize-qp "search.type_point_pbo_position_time_series.reference_frame" $search_type_point_pbo_position_time_series_reference_frame "scalar") (serialize-qp "search.type_point_pbo_position_time_series.format_version" $search_type_point_pbo_position_time_series_format_version "scalar") (serialize-qp "search.type_point_pbo_position_time_series.processing_center" $search_type_point_pbo_position_time_series_processing_center "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_pbo_position_time_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9283,10 +9283,10 @@ export def "repository-search-type-type-point-simple-records records" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9298,7 +9298,7 @@ export def "repository-search-type-type-point-simple-records records" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_simple_records" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9323,10 +9323,10 @@ export def "repository-search-type-type-point-snotel snotel" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9335,16 +9335,16 @@ export def "repository-search-type-type-point-snotel snotel" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-snotelsite-id: string # Site ID
-  --searchtype-point-snotelsite-number: string # Site Number
-  --searchtype-point-snotelstate: string # State
-  --searchtype-point-snotelnetwork: string # Network
-  --searchtype-point-snotelhuc-name: string # HUC Name
-  --searchtype-point-snotelhuc-id: string # HUC ID
+  --search-type-point-snotel-site-id: string # Site ID
+  --search-type-point-snotel-site-number: string # Site Number
+  --search-type-point-snotel-state: string # State
+  --search-type-point-snotel-network: string # Network
+  --search-type-point-snotel-huc-name: string # HUC Name
+  --search-type-point-snotel-huc-id: string # HUC ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_snotel.site_id" $searchtype_point_snotelsite_id "scalar") (serialize-qp "search.type_point_snotel.site_number" $searchtype_point_snotelsite_number "scalar") (serialize-qp "search.type_point_snotel.state" $searchtype_point_snotelstate "scalar") (serialize-qp "search.type_point_snotel.network" $searchtype_point_snotelnetwork "scalar") (serialize-qp "search.type_point_snotel.huc_name" $searchtype_point_snotelhuc_name "scalar") (serialize-qp "search.type_point_snotel.huc_id" $searchtype_point_snotelhuc_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_snotel.site_id" $search_type_point_snotel_site_id "scalar") (serialize-qp "search.type_point_snotel.site_number" $search_type_point_snotel_site_number "scalar") (serialize-qp "search.type_point_snotel.state" $search_type_point_snotel_state "scalar") (serialize-qp "search.type_point_snotel.network" $search_type_point_snotel_network "scalar") (serialize-qp "search.type_point_snotel.huc_name" $search_type_point_snotel_huc_name "scalar") (serialize-qp "search.type_point_snotel.huc_id" $search_type_point_snotel_huc_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_snotel" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9369,10 +9369,10 @@ export def "repository-search-type-type-point-text text" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9384,7 +9384,7 @@ export def "repository-search-type-type-point-text text" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_text" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9409,10 +9409,10 @@ export def "repository-search-type-type-point-wsbb-ggp ggp" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9421,13 +9421,13 @@ export def "repository-search-type-type-point-wsbb-ggp ggp" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-point-wsbb-ggpstation: string # Station
-  --searchtype-point-wsbb-ggpinstrument: string # Instrument
-  --searchtype-point-wsbb-ggpauthor: string # Author
+  --search-type-point-wsbb-ggp-station: string # Station
+  --search-type-point-wsbb-ggp-instrument: string # Instrument
+  --search-type-point-wsbb-ggp-author: string # Author
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_wsbb_ggp.station" $searchtype_point_wsbb_ggpstation "scalar") (serialize-qp "search.type_point_wsbb_ggp.instrument" $searchtype_point_wsbb_ggpinstrument "scalar") (serialize-qp "search.type_point_wsbb_ggp.author" $searchtype_point_wsbb_ggpauthor "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_point_wsbb_ggp.station" $search_type_point_wsbb_ggp_station "scalar") (serialize-qp "search.type_point_wsbb_ggp.instrument" $search_type_point_wsbb_ggp_instrument "scalar") (serialize-qp "search.type_point_wsbb_ggp.author" $search_type_point_wsbb_ggp_author "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_point_wsbb_ggp" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9452,10 +9452,10 @@ export def "repository-search-type-type-psd-monthly-climate-index index" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9464,11 +9464,11 @@ export def "repository-search-type-type-psd-monthly-climate-index index" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchtype-psd-monthly-climate-indexunits: string # Units
+  --search-type-psd-monthly-climate-index-units: string # Units
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_psd_monthly_climate_index.units" $searchtype_psd_monthly_climate_indexunits "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.type_psd_monthly_climate_index.units" $search_type_psd_monthly_climate_index_units "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_psd_monthly_climate_index" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9493,10 +9493,10 @@ export def "repository-search-type-type-quandl-series series" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9508,7 +9508,7 @@ export def "repository-search-type-type-quandl-series series" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_quandl_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9533,10 +9533,10 @@ export def "repository-search-type-type-service-group group" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9548,7 +9548,7 @@ export def "repository-search-type-type-service-group group" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_service_group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9573,10 +9573,10 @@ export def "repository-search-type-type-service-link link" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9588,7 +9588,7 @@ export def "repository-search-type-type-service-link link" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_service_link" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9613,10 +9613,10 @@ export def "repository-search-type-type-socrata-series series" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9628,7 +9628,7 @@ export def "repository-search-type-type-socrata-series series" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_socrata_series" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9653,10 +9653,10 @@ export def "repository-search-type-type-sounding-cod cod" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9668,7 +9668,7 @@ export def "repository-search-type-type-sounding-cod cod" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_sounding_cod" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9693,10 +9693,10 @@ export def "repository-search-type-type-sounding-frd frd" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9708,7 +9708,7 @@ export def "repository-search-type-type-sounding-frd frd" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_sounding_frd" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9733,10 +9733,10 @@ export def "repository-search-type-type-sounding-gsd gsd" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9748,7 +9748,7 @@ export def "repository-search-type-type-sounding-gsd gsd" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_sounding_gsd" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9773,10 +9773,10 @@ export def "repository-search-type-type-sounding-wyoming wyoming" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9788,7 +9788,7 @@ export def "repository-search-type-type-sounding-wyoming wyoming" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_sounding_wyoming" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9813,10 +9813,10 @@ export def "repository-search-type-type-tmy tmy" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9828,7 +9828,7 @@ export def "repository-search-type-type-tmy tmy" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_tmy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9853,10 +9853,10 @@ export def "repository-search-type-type-tweet tweet" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9868,7 +9868,7 @@ export def "repository-search-type-type-tweet tweet" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_tweet" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9893,10 +9893,10 @@ export def "repository-search-type-type-usgs-gauge gauge" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9908,7 +9908,7 @@ export def "repository-search-type-type-usgs-gauge gauge" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_usgs_gauge" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9933,10 +9933,10 @@ export def "repository-search-type-type-virtual virtual" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9948,7 +9948,7 @@ export def "repository-search-type-type-virtual virtual" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_virtual" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9973,10 +9973,10 @@ export def "repository-search-type-type-wms-capabilities capabilities" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -9988,7 +9988,7 @@ export def "repository-search-type-type-wms-capabilities capabilities" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_wms_capabilities" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10013,10 +10013,10 @@ export def "repository-search-type-type-wms-layer layer" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -10028,7 +10028,7 @@ export def "repository-search-type-type-wms-layer layer" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/type_wms_layer" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10053,10 +10053,10 @@ export def "repository-search-type-ufo-sightings sightings" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -10065,21 +10065,21 @@ export def "repository-search-type-ufo-sightings sightings" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-ufo-sightingsdatetime: string # Datetime
-  --searchdb-ufo-sightingscity: string # City
-  --searchdb-ufo-sightingsstate: string # State
-  --searchdb-ufo-sightingscountry: string # Country
-  --searchdb-ufo-sightingsshape: string # Shape
-  --searchdb-ufo-sightingsduration-seconds: float # Duration (seconds) (format: double)
-  --searchdb-ufo-sightingsduration-hours-min: string # Duration (hours/min)
-  --searchdb-ufo-sightingscomments: string # Comments
-  --searchdb-ufo-sightingsdate-posted: string # Date Posted
-  --searchdb-ufo-sightingslatitude: float # Latitude (format: double)
-  --searchdb-ufo-sightingslongitude: float # Longitude (format: double)
+  --search-db-ufo-sightings-datetime: string # Datetime
+  --search-db-ufo-sightings-city: string # City
+  --search-db-ufo-sightings-state: string # State
+  --search-db-ufo-sightings-country: string # Country
+  --search-db-ufo-sightings-shape: string # Shape
+  --search-db-ufo-sightings-duration-seconds: float # Duration (seconds) (format: double)
+  --search-db-ufo-sightings-duration-hours-min: string # Duration (hours/min)
+  --search-db-ufo-sightings-comments: string # Comments
+  --search-db-ufo-sightings-date-posted: string # Date Posted
+  --search-db-ufo-sightings-latitude: float # Latitude (format: double)
+  --search-db-ufo-sightings-longitude: float # Longitude (format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_ufo_sightings.datetime" $searchdb_ufo_sightingsdatetime "scalar") (serialize-qp "search.db_ufo_sightings.city" $searchdb_ufo_sightingscity "scalar") (serialize-qp "search.db_ufo_sightings.state" $searchdb_ufo_sightingsstate "scalar") (serialize-qp "search.db_ufo_sightings.country" $searchdb_ufo_sightingscountry "scalar") (serialize-qp "search.db_ufo_sightings.shape" $searchdb_ufo_sightingsshape "scalar") (serialize-qp "search.db_ufo_sightings.duration_seconds" $searchdb_ufo_sightingsduration_seconds "scalar") (serialize-qp "search.db_ufo_sightings.duration_hours_min" $searchdb_ufo_sightingsduration_hours_min "scalar") (serialize-qp "search.db_ufo_sightings.comments" $searchdb_ufo_sightingscomments "scalar") (serialize-qp "search.db_ufo_sightings.date_posted" $searchdb_ufo_sightingsdate_posted "scalar") (serialize-qp "search.db_ufo_sightings.latitude" $searchdb_ufo_sightingslatitude "scalar") (serialize-qp "search.db_ufo_sightings.longitude" $searchdb_ufo_sightingslongitude "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_ufo_sightings.datetime" $search_db_ufo_sightings_datetime "scalar") (serialize-qp "search.db_ufo_sightings.city" $search_db_ufo_sightings_city "scalar") (serialize-qp "search.db_ufo_sightings.state" $search_db_ufo_sightings_state "scalar") (serialize-qp "search.db_ufo_sightings.country" $search_db_ufo_sightings_country "scalar") (serialize-qp "search.db_ufo_sightings.shape" $search_db_ufo_sightings_shape "scalar") (serialize-qp "search.db_ufo_sightings.duration_seconds" $search_db_ufo_sightings_duration_seconds "scalar") (serialize-qp "search.db_ufo_sightings.duration_hours_min" $search_db_ufo_sightings_duration_hours_min "scalar") (serialize-qp "search.db_ufo_sightings.comments" $search_db_ufo_sightings_comments "scalar") (serialize-qp "search.db_ufo_sightings.date_posted" $search_db_ufo_sightings_date_posted "scalar") (serialize-qp "search.db_ufo_sightings.latitude" $search_db_ufo_sightings_latitude "scalar") (serialize-qp "search.db_ufo_sightings.longitude" $search_db_ufo_sightings_longitude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/ufo_sightings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10104,10 +10104,10 @@ export def "repository-search-type-us-places places" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -10116,16 +10116,16 @@ export def "repository-search-type-us-places places" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-us-placesfeature-name: string # Place Name
-  --searchdb-us-placesfeature-class: string # Place Type
-  --searchdb-us-placesstate-alpha: string # State
-  --searchdb-us-placescounty-name: string # County Name
-  --searchdb-us-placeslocation: string # Location
-  --searchdb-us-placeselev-in-ft: float # Elev In Ft (format: double)
+  --search-db-us-places-feature-name: string # Place Name
+  --search-db-us-places-feature-class: string # Place Type
+  --search-db-us-places-state-alpha: string # State
+  --search-db-us-places-county-name: string # County Name
+  --search-db-us-places-location: string # Location
+  --search-db-us-places-elev-in-ft: float # Elev In Ft (format: double)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_us_places.feature_name" $searchdb_us_placesfeature_name "scalar") (serialize-qp "search.db_us_places.feature_class" $searchdb_us_placesfeature_class "scalar") (serialize-qp "search.db_us_places.state_alpha" $searchdb_us_placesstate_alpha "scalar") (serialize-qp "search.db_us_places.county_name" $searchdb_us_placescounty_name "scalar") (serialize-qp "search.db_us_places.location" $searchdb_us_placeslocation "scalar") (serialize-qp "search.db_us_places.elev_in_ft" $searchdb_us_placeselev_in_ft "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_us_places.feature_name" $search_db_us_places_feature_name "scalar") (serialize-qp "search.db_us_places.feature_class" $search_db_us_places_feature_class "scalar") (serialize-qp "search.db_us_places.state_alpha" $search_db_us_places_state_alpha "scalar") (serialize-qp "search.db_us_places.county_name" $search_db_us_places_county_name "scalar") (serialize-qp "search.db_us_places.location" $search_db_us_places_location "scalar") (serialize-qp "search.db_us_places.elev_in_ft" $search_db_us_places_elev_in_ft "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/us_places" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10150,10 +10150,10 @@ export def "repository-search-type-vote-yesno yesno" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -10162,11 +10162,11 @@ export def "repository-search-type-vote-yesno yesno" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchdb-vote-yesnovote: string # My Vote
+  --search-db-vote-yesno-vote: string # My Vote
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_vote_yesno.vote" $searchdb_vote_yesnovote "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.db_vote_yesno.vote" $search_db_vote_yesno_vote "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/vote_yesno" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10191,10 +10191,10 @@ export def "repository-search-type-weblog weblog" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -10206,7 +10206,7 @@ export def "repository-search-type-weblog weblog" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/weblog" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10231,10 +10231,10 @@ export def "repository-search-type-wikipage wikipage" [
   --description: string # Search description
   --fromdate: string # From date (format: date-time)
   --todate: string # To date (format: date-time)
-  --createdatefrom: string # Archive create date from (format: date-time)
-  --createdateto: string # Archive create date to (format: date-time)
-  --changedatefrom: string # Archive change date from (format: date-time)
-  --changedateto: string # Archive change date to (format: date-time)
+  --createdate-from: string # Archive create date from (format: date-time)
+  --createdate-to: string # Archive create date to (format: date-time)
+  --changedate-from: string # Archive change date from (format: date-time)
+  --changedate-to: string # Archive change date to (format: date-time)
   --group: string # Parent entry
   --filesuffix: string # File suffix
   --maxlatitude: float # Northern bounds of search (format: float)
@@ -10243,12 +10243,12 @@ export def "repository-search-type-wikipage wikipage" [
   --maxlongitude: float # Eastern bounds of search (format: float)
   --max: int # Max number of results
   --skip: int # Number to skip
-  --searchwikipagewikitext: string # Wiki Text
-  --searchwikipagecategory: string # Wiki Page Category
+  --search-wikipage-wikitext: string # Wiki Text
+  --search-wikipage-category: string # Wiki Page Category
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdatefrom "scalar") (serialize-qp "createdate.to" $createdateto "scalar") (serialize-qp "changedate.from" $changedatefrom "scalar") (serialize-qp "changedate.to" $changedateto "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.wikipage.wikitext" $searchwikipagewikitext "scalar") (serialize-qp "search.wikipage.category" $searchwikipagecategory "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "fromdate" $fromdate "scalar") (serialize-qp "todate" $todate "scalar") (serialize-qp "createdate.from" $createdate_from "scalar") (serialize-qp "createdate.to" $createdate_to "scalar") (serialize-qp "changedate.from" $changedate_from "scalar") (serialize-qp "changedate.to" $changedate_to "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "filesuffix" $filesuffix "scalar") (serialize-qp "maxlatitude" $maxlatitude "scalar") (serialize-qp "minlongitude" $minlongitude "scalar") (serialize-qp "minlatitude" $minlatitude "scalar") (serialize-qp "maxlongitude" $maxlongitude "scalar") (serialize-qp "max" $max "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "search.wikipage.wikitext" $search_wikipage_wikitext "scalar") (serialize-qp "search.wikipage.category" $search_wikipage_category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/repository/search/type/wikipage" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

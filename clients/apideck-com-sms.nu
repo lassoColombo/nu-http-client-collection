@@ -156,7 +156,7 @@ export def "sms-messages messagesAdd" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sms/messages" $qp)
-  let body = {body: $body_body, from: $body_from, messaging_service_id: $messaging_service_id, reference: $reference, scheduled_at: $scheduled_at, subject: $subject, to: $body_to, type: $type, webhook_url: $webhook_url} | compact
+  let body = {"body": $body_body, "from": $body_from, "messaging_service_id": $messaging_service_id, "reference": $reference, "scheduled_at": $scheduled_at, "subject": $subject, "to": $body_to, "type": $type, "webhook_url": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -187,7 +187,7 @@ export def "sms-messages messagesDelete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sms/messages/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/sms/messages/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -218,7 +218,7 @@ export def "sms-messages messagesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sms/messages/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/sms/messages/{id}") $qp)
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -259,8 +259,8 @@ export def "sms-messages messagesUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "raw" $qp_raw "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sms/messages/($id)" $qp)
-  let body = {body: $body_body, from: $body_from, messaging_service_id: $messaging_service_id, reference: $reference, scheduled_at: $scheduled_at, subject: $subject, to: $body_to, type: $type, webhook_url: $webhook_url} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/sms/messages/{id}") $qp)
+  let body = {"body": $body_body, "from": $body_from, "messaging_service_id": $messaging_service_id, "reference": $reference, "scheduled_at": $scheduled_at, "subject": $subject, "to": $body_to, "type": $type, "webhook_url": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id, "x-apideck-service-id": $x_apideck_service_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

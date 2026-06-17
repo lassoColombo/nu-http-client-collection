@@ -67,7 +67,7 @@ def base-url-completer [] { ["http://api.wmata.com/NextBusService.svc" "https://
 def auth-scheme-completer [] { ["api_key" "query-api_key"] }
 
 # Completers for enum parameters
-def StopID-completer [] { ["1001195"] }
+def stop-id-completer [] { ["1001195"] }
 def accept-completer [] { ["application/xml" "text/xml"] }
 
 # List all available API commands with their parameters
@@ -107,11 +107,11 @@ export def "predictions 5476365e031f5909e4fe331e" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --StopID: string@StopID-completer # 7-digit regional stop ID. (default: 1001195)
+  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StopID" $StopID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StopID" $stop_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/Predictions" $qp)
   let accept_val = ($accept | default "text/xml")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,11 +131,11 @@ export def "json-j-predictions 5476365e031f5909e4fe331d" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --StopID: string@StopID-completer # 7-digit regional stop ID. (default: 1001195)
+  --stop-id: string@stop-id-completer # 7-digit regional stop ID. (default: 1001195)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "StopID" $StopID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "StopID" $stop_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/json/jPredictions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

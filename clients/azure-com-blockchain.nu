@@ -71,7 +71,7 @@ def api-version-completer [] { ["2018-06-01-preview"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-blockchain-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-blockchain-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Blockchain/operations
 # operationId: Operations_List
-export def "providers-microsoft-blockchain-operations List" [
+export def "providers-microsoft-blockchain-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-blockchain-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/blockchainMembers
 # operationId: BlockchainMembers_ListAll
-export def "subscriptions-providers-microsoft-blockchain-blockchain-members ListAll" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-blockchain-blockchain-members list-all" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,7 +134,7 @@ export def "subscriptions-providers-microsoft-blockchain-blockchain-members List
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Blockchain/blockchainMembers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/blockchainMembers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,10 +144,10 @@ export def "subscriptions-providers-microsoft-blockchain-blockchain-members List
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/blockchainMemberOperationResults/{operationId}
 # operationId: BlockchainMemberOperationResults_Get
-export def "subscriptions-providers-microsoft-blockchain-locations-blockchain-member-operation-results Get" [
-  locationName: string
-  operationId: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-blockchain-locations-blockchain-member-operation-results get" [
+  subscription_id: string
+  location_name: string
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "subscriptions-providers-microsoft-blockchain-locations-blockchain-me
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Blockchain/locations/($locationName)/blockchainMemberOperationResults/($operationId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/locations/{location_name}/blockchainMemberOperationResults/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,9 +171,9 @@ export def "subscriptions-providers-microsoft-blockchain-locations-blockchain-me
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/checkNameAvailability
 # operationId: Locations_CheckNameAvailability
-export def "subscriptions-providers-microsoft-blockchain-locations-check-name-availability CheckNameAvailability" [
-  locationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-blockchain-locations-check-name-availability check" [
+  subscription_id: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,8 +190,8 @@ export def "subscriptions-providers-microsoft-blockchain-locations-check-name-av
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Blockchain/locations/($locationName)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/locations/{location_name}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -202,9 +202,9 @@ export def "subscriptions-providers-microsoft-blockchain-locations-check-name-av
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/locations/{locationName}/listConsortiums
 # operationId: Locations_ListConsortiums
-export def "subscriptions-providers-microsoft-blockchain-locations-list-consortiums ListConsortiums" [
-  locationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-blockchain-locations-list-consortiums list" [
+  subscription_id: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "subscriptions-providers-microsoft-blockchain-locations-list-consorti
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Blockchain/locations/($locationName)/listConsortiums" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/locations/{location_name}/listConsortiums") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,8 +228,8 @@ export def "subscriptions-providers-microsoft-blockchain-locations-list-consorti
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Blockchain/skus
 # operationId: Skus_List
-export def "subscriptions-providers-microsoft-blockchain-skus List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-blockchain-skus list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "subscriptions-providers-microsoft-blockchain-skus List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Blockchain/skus" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Blockchain/skus") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,9 +253,9 @@ export def "subscriptions-providers-microsoft-blockchain-skus List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers
 # operationId: BlockchainMembers_List
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members List" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,10 +279,10 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}
 # operationId: BlockchainMembers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members Delete" [
-  blockchainMemberName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members delete" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,7 +296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -306,10 +306,10 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}
 # operationId: BlockchainMembers_Get
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members Get" [
-  blockchainMemberName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members get" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,10 +334,10 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}
 # operationId: BlockchainMembers_Update
 # --properties shape: {consortiumManagementAccountPassword?: string, firewallRules?: list, password?: string}
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members Update" [
-  blockchainMemberName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members update" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,8 +354,8 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)" $qp)
-  let body = {properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp)
+  let body = {"properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -368,10 +368,10 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 # operationId: BlockchainMembers_Create
 # --properties shape: {consortium?: string, consortiumManagementAccountPassword?: string, consortiumMemberDisplayName?: string, consortiumRole?: string, firewallRules?: list, password?: string, protocol?: "NotSpecified"|"Parity"|"Quorum"|"Corda", validatorNodesSku?: record}
 # --sku shape: {name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members Create" [
-  blockchainMemberName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members create" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,8 +390,8 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)" $qp)
-  let body = {properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -402,10 +402,10 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/consortiumMembers
 # operationId: BlockchainMembers_ListConsortiumMembers
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-consortium-members ListConsortiumMembers" [
-  blockchainMemberName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-consortium-members list" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)/consortiumMembers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/consortiumMembers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,10 +429,10 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/listApiKeys
 # operationId: BlockchainMembers_ListApiKeys
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-list-api-keys ListApiKeys" [
-  blockchainMemberName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-list-api-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)/listApiKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/listApiKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,10 +456,10 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/regenerateApiKeys
 # operationId: BlockchainMembers_ListRegenerateApiKeys
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-regenerate-api-keys ListRegenerateApiKeys" [
-  blockchainMemberName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-regenerate-api-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,15 +469,15 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version.
-  --keyName: string # Gets or sets the API key name.
+  --key-name: string # Gets or sets the API key name.
   --value: string # Gets or sets the API key value.
 ]: any -> record<keys: table<keyName: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)/regenerateApiKeys" $qp)
-  let body = {keyName: $keyName, value: $value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/regenerateApiKeys") $qp)
+  let body = {"keyName": $key_name, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -488,10 +488,10 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes
 # operationId: TransactionNodes_List
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes List" [
-  blockchainMemberName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes list" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)/transactionNodes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -515,11 +515,11 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
 # operationId: TransactionNodes_Delete
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes Delete" [
-  blockchainMemberName: string
-  transactionNodeName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes delete" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
+  transaction_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,7 +533,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)/transactionNodes/($transactionNodeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -543,11 +543,11 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
 # operationId: TransactionNodes_Get
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes Get" [
-  blockchainMemberName: string
-  transactionNodeName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes get" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
+  transaction_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +561,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)/transactionNodes/($transactionNodeName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -572,11 +572,11 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
 # operationId: TransactionNodes_Update
 # --properties shape: {firewallRules?: list, password?: string}
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes Update" [
-  blockchainMemberName: string
-  transactionNodeName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes update" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
+  transaction_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,8 +592,8 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)/transactionNodes/($transactionNodeName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -605,11 +605,11 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}
 # operationId: TransactionNodes_Create
 # --properties shape: {firewallRules?: list, password?: string}
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes Create" [
-  blockchainMemberName: string
-  transactionNodeName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes create" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
+  transaction_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,8 +626,8 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)/transactionNodes/($transactionNodeName)" $qp)
-  let body = {location: $location, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}") $qp)
+  let body = {"location": $location, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -638,11 +638,11 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}/listApiKeys
 # operationId: TransactionNodes_ListApiKeys
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes-list-api-keys ListApiKeys" [
-  blockchainMemberName: string
-  transactionNodeName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes-list-api-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
+  transaction_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +656,7 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)/transactionNodes/($transactionNodeName)/listApiKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}/listApiKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -666,11 +666,11 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Blockchain/blockchainMembers/{blockchainMemberName}/transactionNodes/{transactionNodeName}/regenerateApiKeys
 # operationId: TransactionNodes_ListRegenerateApiKeys
-export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes-regenerate-api-keys ListRegenerateApiKeys" [
-  blockchainMemberName: string
-  transactionNodeName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockchain-members-transaction-nodes-regenerate-api-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  blockchain_member_name: string
+  transaction_node_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,15 +680,15 @@ export def "subscriptions-resource-groups-providers-microsoft-blockchain-blockch
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client API Version.
-  --keyName: string # Gets or sets the API key name.
+  --key-name: string # Gets or sets the API key name.
   --value: string # Gets or sets the API key value.
 ]: any -> record<keys: table<keyName: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Blockchain/blockchainMembers/($blockchainMemberName)/transactionNodes/($transactionNodeName)/regenerateApiKeys" $qp)
-  let body = {keyName: $keyName, value: $value} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, blockchain_member_name: $blockchain_member_name, transaction_node_name: $transaction_node_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Blockchain/blockchainMembers/{blockchain_member_name}/transactionNodes/{transaction_node_name}/regenerateApiKeys") $qp)
+  let body = {"keyName": $key_name, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

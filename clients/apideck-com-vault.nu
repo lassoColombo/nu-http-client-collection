@@ -112,7 +112,7 @@ export def "vault-authorize connectionsAuthorize" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "scope" $scope "ssv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/vault/authorize/($service_id)/($application_id)" $qp)
+  let full_url = (build-url $base ({service_id: $service_id, application_id: $application_id} | format pattern "/vault/authorize/{service_id}/{application_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,8 +177,8 @@ export def "vault-connections connectionsAll" [
 # DELETE /vault/connections/{unified_api}/{service_id}
 # operationId: connectionsDelete
 export def "vault-connections connectionsDelete" [
-  service_id: string
   unified_api: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "vault-connections connectionsDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)")
+  let full_url = (build-url $base ({unified_api: $unified_api, service_id: $service_id} | format pattern "/vault/connections/{unified_api}/{service_id}"))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -205,8 +205,8 @@ export def "vault-connections connectionsDelete" [
 # GET /vault/connections/{unified_api}/{service_id}
 # operationId: connectionsOne
 export def "vault-connections connectionsOne" [
-  service_id: string
   unified_api: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "vault-connections connectionsOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)")
+  let full_url = (build-url $base ({unified_api: $unified_api, service_id: $service_id} | format pattern "/vault/connections/{unified_api}/{service_id}"))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -236,8 +236,8 @@ export def "vault-connections connectionsOne" [
 # --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
 # --subscriptions item shape: {created_at?: string, downstream_event_types?: list, downstream_id?: string, execute_url?: string, unify_event_types?: list}
 export def "vault-connections connectionsUpdate" [
-  service_id: string
   unified_api: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,8 +256,8 @@ export def "vault-connections connectionsUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)")
-  let body = {configuration: $configuration, enabled: $enabled, metadata: $metadata, settings: $settings} | compact
+  let full_url = (build-url $base ({unified_api: $unified_api, service_id: $service_id} | format pattern "/vault/connections/{unified_api}/{service_id}"))
+  let body = {"configuration": $configuration, "enabled": $enabled, "metadata": $metadata, "settings": $settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -274,8 +274,8 @@ export def "vault-connections connectionsUpdate" [
 # --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
 # --subscriptions item shape: {created_at?: string, downstream_event_types?: list, downstream_id?: string, execute_url?: string, unify_event_types?: list}
 export def "vault-connections connectionsAdd" [
-  service_id: string
   unified_api: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,8 +294,8 @@ export def "vault-connections connectionsAdd" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)")
-  let body = {configuration: $configuration, enabled: $enabled, metadata: $metadata, settings: $settings} | compact
+  let full_url = (build-url $base ({unified_api: $unified_api, service_id: $service_id} | format pattern "/vault/connections/{unified_api}/{service_id}"))
+  let body = {"configuration": $configuration, "enabled": $enabled, "metadata": $metadata, "settings": $settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -310,8 +310,8 @@ export def "vault-connections connectionsAdd" [
 # operationId: connectionsImport
 # --credentials shape: {access_token?: string, expires_in?: int, issued_at?: string, refresh_token: string}
 export def "vault-connections-import connectionsImport" [
-  service_id: string
   unified_api: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,8 +329,8 @@ export def "vault-connections-import connectionsImport" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)/import")
-  let body = {credentials: $credentials, metadata: $metadata, settings: $settings} | compact
+  let full_url = (build-url $base ({unified_api: $unified_api, service_id: $service_id} | format pattern "/vault/connections/{unified_api}/{service_id}/import"))
+  let body = {"credentials": $credentials, "metadata": $metadata, "settings": $settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -344,8 +344,8 @@ export def "vault-connections-import connectionsImport" [
 # POST /vault/connections/{unified_api}/{service_id}/token
 # operationId: connectionsToken
 export def "vault-connections-token connectionsToken" [
-  service_id: string
   unified_api: string
+  service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "vault-connections-token connectionsToken" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)/token")
+  let full_url = (build-url $base ({unified_api: $unified_api, service_id: $service_id} | format pattern "/vault/connections/{unified_api}/{service_id}/token"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -391,7 +391,7 @@ export def "vault-connections-config connectionSettingsAll" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)/($resource)/config")
+  let full_url = (build-url $base ({unified_api: $unified_api, service_id: $service_id, resource: $resource} | format pattern "/vault/connections/{unified_api}/{service_id}/{resource}/config"))
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -407,8 +407,8 @@ export def "vault-connections-config connectionSettingsAll" [
 # --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
 # --subscriptions item shape: {created_at?: string, downstream_event_types?: list, downstream_id?: string, execute_url?: string, unify_event_types?: list}
 export def "vault-connections-config connectionSettingsUpdate" [
-  service_id: string
   unified_api: string
+  service_id: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -428,8 +428,8 @@ export def "vault-connections-config connectionSettingsUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)/($resource)/config")
-  let body = {configuration: $configuration, enabled: $enabled, metadata: $metadata, settings: $settings} | compact
+  let full_url = (build-url $base ({unified_api: $unified_api, service_id: $service_id, resource: $resource} | format pattern "/vault/connections/{unified_api}/{service_id}/{resource}/config"))
+  let body = {"configuration": $configuration, "enabled": $enabled, "metadata": $metadata, "settings": $settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -490,7 +490,7 @@ export def "vault-consumers consumersAdd" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vault/consumers")
-  let body = {consumer_id: $consumer_id, metadata: $metadata} | compact
+  let body = {"consumer_id": $consumer_id, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -517,7 +517,7 @@ export def "vault-consumers consumersDelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/consumers/($consumer_id)")
+  let full_url = (build-url $base ({consumer_id: $consumer_id} | format pattern "/vault/consumers/{consumer_id}"))
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -543,7 +543,7 @@ export def "vault-consumers consumersOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/consumers/($consumer_id)")
+  let full_url = (build-url $base ({consumer_id: $consumer_id} | format pattern "/vault/consumers/{consumer_id}"))
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -572,8 +572,8 @@ export def "vault-consumers consumersUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vault/consumers/($consumer_id)")
-  let body = {metadata: $metadata} | compact
+  let full_url = (build-url $base ({consumer_id: $consumer_id} | format pattern "/vault/consumers/{consumer_id}"))
+  let body = {"metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -603,7 +603,7 @@ export def "vault-consumers-stats consumerRequestCountsAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_datetime" $start_datetime "scalar") (serialize-qp "end_datetime" $end_datetime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/vault/consumers/($consumer_id)/stats" $qp)
+  let full_url = (build-url $base ({consumer_id: $consumer_id} | format pattern "/vault/consumers/{consumer_id}/stats") $qp)
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -615,7 +615,7 @@ export def "vault-consumers-stats consumerRequestCountsAll" [
 #
 # GET /vault/logs
 # operationId: logsAll
-export def "vault-logs logsAll" [
+export def "vault-logs logs-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -662,7 +662,7 @@ export def "vault-revoke connectionsRevoke" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/vault/revoke/($service_id)/($application_id)" $qp)
+  let full_url = (build-url $base ({service_id: $service_id, application_id: $application_id} | format pattern "/vault/revoke/{service_id}/{application_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -696,7 +696,7 @@ export def "vault-sessions sessionsCreate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vault/sessions")
-  let body = {consumer_metadata: $consumer_metadata, custom_consumer_settings: $custom_consumer_settings, redirect_uri: $redirect_uri, settings: $settings, theme: $theme} | compact
+  let body = {"consumer_metadata": $consumer_metadata, "custom_consumer_settings": $custom_consumer_settings, "redirect_uri": $redirect_uri, "settings": $settings, "theme": $theme} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

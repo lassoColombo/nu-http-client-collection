@@ -66,46 +66,46 @@ def base-url-completer [] { ["http://apprunner.us-east-1.amazonaws.com" "http://
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AppRunner.AssociateCustomDomain"] }
-def X-Amz-Target-completer-1 [] { ["AppRunner.CreateAutoScalingConfiguration"] }
-def X-Amz-Target-completer-2 [] { ["AppRunner.CreateConnection"] }
-def X-Amz-Target-completer-3 [] { ["AppRunner.CreateObservabilityConfiguration"] }
-def X-Amz-Target-completer-4 [] { ["AppRunner.CreateService"] }
-def X-Amz-Target-completer-5 [] { ["AppRunner.CreateVpcConnector"] }
-def X-Amz-Target-completer-6 [] { ["AppRunner.CreateVpcIngressConnection"] }
-def X-Amz-Target-completer-7 [] { ["AppRunner.DeleteAutoScalingConfiguration"] }
-def X-Amz-Target-completer-8 [] { ["AppRunner.DeleteConnection"] }
-def X-Amz-Target-completer-9 [] { ["AppRunner.DeleteObservabilityConfiguration"] }
-def X-Amz-Target-completer-10 [] { ["AppRunner.DeleteService"] }
-def X-Amz-Target-completer-11 [] { ["AppRunner.DeleteVpcConnector"] }
-def X-Amz-Target-completer-12 [] { ["AppRunner.DeleteVpcIngressConnection"] }
-def X-Amz-Target-completer-13 [] { ["AppRunner.DescribeAutoScalingConfiguration"] }
-def X-Amz-Target-completer-14 [] { ["AppRunner.DescribeCustomDomains"] }
-def X-Amz-Target-completer-15 [] { ["AppRunner.DescribeObservabilityConfiguration"] }
-def X-Amz-Target-completer-16 [] { ["AppRunner.DescribeService"] }
-def X-Amz-Target-completer-17 [] { ["AppRunner.DescribeVpcConnector"] }
-def X-Amz-Target-completer-18 [] { ["AppRunner.DescribeVpcIngressConnection"] }
-def X-Amz-Target-completer-19 [] { ["AppRunner.DisassociateCustomDomain"] }
-def X-Amz-Target-completer-20 [] { ["AppRunner.ListAutoScalingConfigurations"] }
-def X-Amz-Target-completer-21 [] { ["AppRunner.ListConnections"] }
-def X-Amz-Target-completer-22 [] { ["AppRunner.ListObservabilityConfigurations"] }
-def X-Amz-Target-completer-23 [] { ["AppRunner.ListOperations"] }
-def X-Amz-Target-completer-24 [] { ["AppRunner.ListServices"] }
-def X-Amz-Target-completer-25 [] { ["AppRunner.ListTagsForResource"] }
-def X-Amz-Target-completer-26 [] { ["AppRunner.ListVpcConnectors"] }
-def X-Amz-Target-completer-27 [] { ["AppRunner.ListVpcIngressConnections"] }
-def X-Amz-Target-completer-28 [] { ["AppRunner.PauseService"] }
-def X-Amz-Target-completer-29 [] { ["AppRunner.ResumeService"] }
-def X-Amz-Target-completer-30 [] { ["AppRunner.StartDeployment"] }
-def X-Amz-Target-completer-31 [] { ["AppRunner.TagResource"] }
-def X-Amz-Target-completer-32 [] { ["AppRunner.UntagResource"] }
-def X-Amz-Target-completer-33 [] { ["AppRunner.UpdateService"] }
-def X-Amz-Target-completer-34 [] { ["AppRunner.UpdateVpcIngressConnection"] }
+def x-amz-target-completer [] { ["AppRunner.AssociateCustomDomain"] }
+def x-amz-target-completer-1 [] { ["AppRunner.CreateAutoScalingConfiguration"] }
+def x-amz-target-completer-2 [] { ["AppRunner.CreateConnection"] }
+def x-amz-target-completer-3 [] { ["AppRunner.CreateObservabilityConfiguration"] }
+def x-amz-target-completer-4 [] { ["AppRunner.CreateService"] }
+def x-amz-target-completer-5 [] { ["AppRunner.CreateVpcConnector"] }
+def x-amz-target-completer-6 [] { ["AppRunner.CreateVpcIngressConnection"] }
+def x-amz-target-completer-7 [] { ["AppRunner.DeleteAutoScalingConfiguration"] }
+def x-amz-target-completer-8 [] { ["AppRunner.DeleteConnection"] }
+def x-amz-target-completer-9 [] { ["AppRunner.DeleteObservabilityConfiguration"] }
+def x-amz-target-completer-10 [] { ["AppRunner.DeleteService"] }
+def x-amz-target-completer-11 [] { ["AppRunner.DeleteVpcConnector"] }
+def x-amz-target-completer-12 [] { ["AppRunner.DeleteVpcIngressConnection"] }
+def x-amz-target-completer-13 [] { ["AppRunner.DescribeAutoScalingConfiguration"] }
+def x-amz-target-completer-14 [] { ["AppRunner.DescribeCustomDomains"] }
+def x-amz-target-completer-15 [] { ["AppRunner.DescribeObservabilityConfiguration"] }
+def x-amz-target-completer-16 [] { ["AppRunner.DescribeService"] }
+def x-amz-target-completer-17 [] { ["AppRunner.DescribeVpcConnector"] }
+def x-amz-target-completer-18 [] { ["AppRunner.DescribeVpcIngressConnection"] }
+def x-amz-target-completer-19 [] { ["AppRunner.DisassociateCustomDomain"] }
+def x-amz-target-completer-20 [] { ["AppRunner.ListAutoScalingConfigurations"] }
+def x-amz-target-completer-21 [] { ["AppRunner.ListConnections"] }
+def x-amz-target-completer-22 [] { ["AppRunner.ListObservabilityConfigurations"] }
+def x-amz-target-completer-23 [] { ["AppRunner.ListOperations"] }
+def x-amz-target-completer-24 [] { ["AppRunner.ListServices"] }
+def x-amz-target-completer-25 [] { ["AppRunner.ListTagsForResource"] }
+def x-amz-target-completer-26 [] { ["AppRunner.ListVpcConnectors"] }
+def x-amz-target-completer-27 [] { ["AppRunner.ListVpcIngressConnections"] }
+def x-amz-target-completer-28 [] { ["AppRunner.PauseService"] }
+def x-amz-target-completer-29 [] { ["AppRunner.ResumeService"] }
+def x-amz-target-completer-30 [] { ["AppRunner.StartDeployment"] }
+def x-amz-target-completer-31 [] { ["AppRunner.TagResource"] }
+def x-amz-target-completer-32 [] { ["AppRunner.UntagResource"] }
+def x-amz-target-completer-33 [] { ["AppRunner.UpdateService"] }
+def x-amz-target-completer-34 [] { ["AppRunner.UpdateVpcIngressConnection"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-app-runner-associate-custom-domain AssociateCustomDomain" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-app-runner-associate-custom-domain post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AppRunner.AssociateCustomDomain
 # operationId: AssociateCustomDomain
-export def "x-amz-target-app-runner-associate-custom-domain AssociateCustomDomain" [
+export def "x-amz-target-app-runner-associate-custom-domain post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,25 +138,25 @@ export def "x-amz-target-app-runner-associate-custom-domain AssociateCustomDomai
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ServiceArn: any
-  DomainName: any
-  --EnableWWWSubdomain: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  service_arn: any
+  domain_name: any
+  --enable-www-subdomain: any
 ]: any -> record<DNSTarget: record, ServiceArn: record, CustomDomain: record<DomainName: record, EnableWWWSubdomain: record, CertificateValidationRecords: record, Status: record>, VpcDNSTargets: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.AssociateCustomDomain")
-  let body = {ServiceArn: $ServiceArn, DomainName: $DomainName, EnableWWWSubdomain: $EnableWWWSubdomain} | compact
+  let body = {"ServiceArn": $service_arn, "DomainName": $domain_name, "EnableWWWSubdomain": $enable_www_subdomain} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -167,7 +167,7 @@ export def "x-amz-target-app-runner-associate-custom-domain AssociateCustomDomai
 #
 # POST /#X-Amz-Target=AppRunner.CreateAutoScalingConfiguration
 # operationId: CreateAutoScalingConfiguration
-export def "x-amz-target-app-runner-create-auto-scaling-configuration CreateAutoScalingConfiguration" [
+export def "x-amz-target-app-runner-create-auto-scaling-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,27 +176,27 @@ export def "x-amz-target-app-runner-create-auto-scaling-configuration CreateAuto
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  AutoScalingConfigurationName: any
-  --MaxConcurrency: any
-  --MinSize: any
-  --MaxSize: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  auto_scaling_configuration_name: any
+  --max-concurrency: any
+  --min-size: any
+  --max-size: any
+  --tags: any
 ]: any -> record<AutoScalingConfiguration: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record, Latest: record, Status: record, MaxConcurrency: record, MinSize: record, MaxSize: record, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.CreateAutoScalingConfiguration")
-  let body = {AutoScalingConfigurationName: $AutoScalingConfigurationName, MaxConcurrency: $MaxConcurrency, MinSize: $MinSize, MaxSize: $MaxSize, Tags: $Tags} | compact
+  let body = {"AutoScalingConfigurationName": $auto_scaling_configuration_name, "MaxConcurrency": $max_concurrency, "MinSize": $min_size, "MaxSize": $max_size, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,7 +207,7 @@ export def "x-amz-target-app-runner-create-auto-scaling-configuration CreateAuto
 #
 # POST /#X-Amz-Target=AppRunner.CreateConnection
 # operationId: CreateConnection
-export def "x-amz-target-app-runner-create-connection CreateConnection" [
+export def "x-amz-target-app-runner-create-connection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,25 +216,25 @@ export def "x-amz-target-app-runner-create-connection CreateConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ConnectionName: any
-  ProviderType: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  connection_name: any
+  provider_type: any
+  --tags: any
 ]: any -> record<Connection: record<ConnectionName: record, ConnectionArn: record, ProviderType: record, Status: record, CreatedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.CreateConnection")
-  let body = {ConnectionName: $ConnectionName, ProviderType: $ProviderType, Tags: $Tags} | compact
+  let body = {"ConnectionName": $connection_name, "ProviderType": $provider_type, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,7 +245,7 @@ export def "x-amz-target-app-runner-create-connection CreateConnection" [
 #
 # POST /#X-Amz-Target=AppRunner.CreateObservabilityConfiguration
 # operationId: CreateObservabilityConfiguration
-export def "x-amz-target-app-runner-create-observability-configuration CreateObservabilityConfiguration" [
+export def "x-amz-target-app-runner-create-observability-configuration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,25 +254,25 @@ export def "x-amz-target-app-runner-create-observability-configuration CreateObs
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ObservabilityConfigurationName: any
-  --TraceConfiguration: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  observability_configuration_name: any
+  --trace-configuration: any
+  --tags: any
 ]: any -> record<ObservabilityConfiguration: record<ObservabilityConfigurationArn: record, ObservabilityConfigurationName: record, TraceConfiguration: record<Vendor: record>, ObservabilityConfigurationRevision: record, Latest: record, Status: record, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.CreateObservabilityConfiguration")
-  let body = {ObservabilityConfigurationName: $ObservabilityConfigurationName, TraceConfiguration: $TraceConfiguration, Tags: $Tags} | compact
+  let body = {"ObservabilityConfigurationName": $observability_configuration_name, "TraceConfiguration": $trace_configuration, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,7 +283,7 @@ export def "x-amz-target-app-runner-create-observability-configuration CreateObs
 #
 # POST /#X-Amz-Target=AppRunner.CreateService
 # operationId: CreateService
-export def "x-amz-target-app-runner-create-service CreateService" [
+export def "x-amz-target-app-runner-create-service create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,31 +292,31 @@ export def "x-amz-target-app-runner-create-service CreateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ServiceName: any
-  SourceConfiguration: any
-  --InstanceConfiguration: any
-  --Tags: any
-  --EncryptionConfiguration: any
-  --HealthCheckConfiguration: any
-  --AutoScalingConfigurationArn: any
-  --NetworkConfiguration: any
-  --ObservabilityConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  service_name: any
+  source_configuration: any
+  --instance-configuration: any
+  --tags: any
+  --encryption-configuration: any
+  --health-check-configuration: any
+  --auto-scaling-configuration-arn: any
+  --network-configuration: any
+  --observability-configuration: any
 ]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>, OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.CreateService")
-  let body = {ServiceName: $ServiceName, SourceConfiguration: $SourceConfiguration, InstanceConfiguration: $InstanceConfiguration, Tags: $Tags, EncryptionConfiguration: $EncryptionConfiguration, HealthCheckConfiguration: $HealthCheckConfiguration, AutoScalingConfigurationArn: $AutoScalingConfigurationArn, NetworkConfiguration: $NetworkConfiguration, ObservabilityConfiguration: $ObservabilityConfiguration} | compact
+  let body = {"ServiceName": $service_name, "SourceConfiguration": $source_configuration, "InstanceConfiguration": $instance_configuration, "Tags": $tags, "EncryptionConfiguration": $encryption_configuration, "HealthCheckConfiguration": $health_check_configuration, "AutoScalingConfigurationArn": $auto_scaling_configuration_arn, "NetworkConfiguration": $network_configuration, "ObservabilityConfiguration": $observability_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -327,7 +327,7 @@ export def "x-amz-target-app-runner-create-service CreateService" [
 #
 # POST /#X-Amz-Target=AppRunner.CreateVpcConnector
 # operationId: CreateVpcConnector
-export def "x-amz-target-app-runner-create-vpc-connector CreateVpcConnector" [
+export def "x-amz-target-app-runner-create-vpc-connector create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,26 +336,26 @@ export def "x-amz-target-app-runner-create-vpc-connector CreateVpcConnector" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  VpcConnectorName: any
-  Subnets: any
-  --SecurityGroups: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  vpc_connector_name: any
+  subnets: any
+  --security-groups: any
+  --tags: any
 ]: any -> record<VpcConnector: record<VpcConnectorName: record, VpcConnectorArn: record, VpcConnectorRevision: record, Subnets: record, SecurityGroups: record, Status: record, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.CreateVpcConnector")
-  let body = {VpcConnectorName: $VpcConnectorName, Subnets: $Subnets, SecurityGroups: $SecurityGroups, Tags: $Tags} | compact
+  let body = {"VpcConnectorName": $vpc_connector_name, "Subnets": $subnets, "SecurityGroups": $security_groups, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,7 +366,7 @@ export def "x-amz-target-app-runner-create-vpc-connector CreateVpcConnector" [
 #
 # POST /#X-Amz-Target=AppRunner.CreateVpcIngressConnection
 # operationId: CreateVpcIngressConnection
-export def "x-amz-target-app-runner-create-vpc-ingress-connection CreateVpcIngressConnection" [
+export def "x-amz-target-app-runner-create-vpc-ingress-connection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,26 +375,26 @@ export def "x-amz-target-app-runner-create-vpc-ingress-connection CreateVpcIngre
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  ServiceArn: any
-  VpcIngressConnectionName: any
-  IngressVpcConfiguration: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  service_arn: any
+  vpc_ingress_connection_name: any
+  ingress_vpc_configuration: any
+  --tags: any
 ]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: record, VpcIngressConnectionName: record, ServiceArn: record, Status: record, AccountId: record, DomainName: record, IngressVpcConfiguration: record<VpcId: record, VpcEndpointId: record>, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.CreateVpcIngressConnection")
-  let body = {ServiceArn: $ServiceArn, VpcIngressConnectionName: $VpcIngressConnectionName, IngressVpcConfiguration: $IngressVpcConfiguration, Tags: $Tags} | compact
+  let body = {"ServiceArn": $service_arn, "VpcIngressConnectionName": $vpc_ingress_connection_name, "IngressVpcConfiguration": $ingress_vpc_configuration, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -405,7 +405,7 @@ export def "x-amz-target-app-runner-create-vpc-ingress-connection CreateVpcIngre
 #
 # POST /#X-Amz-Target=AppRunner.DeleteAutoScalingConfiguration
 # operationId: DeleteAutoScalingConfiguration
-export def "x-amz-target-app-runner-delete-auto-scaling-configuration DeleteAutoScalingConfiguration" [
+export def "x-amz-target-app-runner-delete-auto-scaling-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,23 +414,23 @@ export def "x-amz-target-app-runner-delete-auto-scaling-configuration DeleteAuto
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  AutoScalingConfigurationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  auto_scaling_configuration_arn: any
 ]: any -> record<AutoScalingConfiguration: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record, Latest: record, Status: record, MaxConcurrency: record, MinSize: record, MaxSize: record, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DeleteAutoScalingConfiguration")
-  let body = {AutoScalingConfigurationArn: $AutoScalingConfigurationArn} | compact
+  let body = {"AutoScalingConfigurationArn": $auto_scaling_configuration_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -441,7 +441,7 @@ export def "x-amz-target-app-runner-delete-auto-scaling-configuration DeleteAuto
 #
 # POST /#X-Amz-Target=AppRunner.DeleteConnection
 # operationId: DeleteConnection
-export def "x-amz-target-app-runner-delete-connection DeleteConnection" [
+export def "x-amz-target-app-runner-delete-connection delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,23 +450,23 @@ export def "x-amz-target-app-runner-delete-connection DeleteConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ConnectionArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  connection_arn: any
 ]: any -> record<Connection: record<ConnectionName: record, ConnectionArn: record, ProviderType: record, Status: record, CreatedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DeleteConnection")
-  let body = {ConnectionArn: $ConnectionArn} | compact
+  let body = {"ConnectionArn": $connection_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -477,7 +477,7 @@ export def "x-amz-target-app-runner-delete-connection DeleteConnection" [
 #
 # POST /#X-Amz-Target=AppRunner.DeleteObservabilityConfiguration
 # operationId: DeleteObservabilityConfiguration
-export def "x-amz-target-app-runner-delete-observability-configuration DeleteObservabilityConfiguration" [
+export def "x-amz-target-app-runner-delete-observability-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,23 +486,23 @@ export def "x-amz-target-app-runner-delete-observability-configuration DeleteObs
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  ObservabilityConfigurationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  observability_configuration_arn: any
 ]: any -> record<ObservabilityConfiguration: record<ObservabilityConfigurationArn: record, ObservabilityConfigurationName: record, TraceConfiguration: record<Vendor: record>, ObservabilityConfigurationRevision: record, Latest: record, Status: record, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DeleteObservabilityConfiguration")
-  let body = {ObservabilityConfigurationArn: $ObservabilityConfigurationArn} | compact
+  let body = {"ObservabilityConfigurationArn": $observability_configuration_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -513,7 +513,7 @@ export def "x-amz-target-app-runner-delete-observability-configuration DeleteObs
 #
 # POST /#X-Amz-Target=AppRunner.DeleteService
 # operationId: DeleteService
-export def "x-amz-target-app-runner-delete-service DeleteService" [
+export def "x-amz-target-app-runner-delete-service delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,23 +522,23 @@ export def "x-amz-target-app-runner-delete-service DeleteService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  ServiceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  service_arn: any
 ]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>, OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DeleteService")
-  let body = {ServiceArn: $ServiceArn} | compact
+  let body = {"ServiceArn": $service_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -549,7 +549,7 @@ export def "x-amz-target-app-runner-delete-service DeleteService" [
 #
 # POST /#X-Amz-Target=AppRunner.DeleteVpcConnector
 # operationId: DeleteVpcConnector
-export def "x-amz-target-app-runner-delete-vpc-connector DeleteVpcConnector" [
+export def "x-amz-target-app-runner-delete-vpc-connector delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,23 +558,23 @@ export def "x-amz-target-app-runner-delete-vpc-connector DeleteVpcConnector" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  VpcConnectorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  vpc_connector_arn: any
 ]: any -> record<VpcConnector: record<VpcConnectorName: record, VpcConnectorArn: record, VpcConnectorRevision: record, Subnets: record, SecurityGroups: record, Status: record, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DeleteVpcConnector")
-  let body = {VpcConnectorArn: $VpcConnectorArn} | compact
+  let body = {"VpcConnectorArn": $vpc_connector_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -585,7 +585,7 @@ export def "x-amz-target-app-runner-delete-vpc-connector DeleteVpcConnector" [
 #
 # POST /#X-Amz-Target=AppRunner.DeleteVpcIngressConnection
 # operationId: DeleteVpcIngressConnection
-export def "x-amz-target-app-runner-delete-vpc-ingress-connection DeleteVpcIngressConnection" [
+export def "x-amz-target-app-runner-delete-vpc-ingress-connection delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,23 +594,23 @@ export def "x-amz-target-app-runner-delete-vpc-ingress-connection DeleteVpcIngre
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  VpcIngressConnectionArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  vpc_ingress_connection_arn: any
 ]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: record, VpcIngressConnectionName: record, ServiceArn: record, Status: record, AccountId: record, DomainName: record, IngressVpcConfiguration: record<VpcId: record, VpcEndpointId: record>, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DeleteVpcIngressConnection")
-  let body = {VpcIngressConnectionArn: $VpcIngressConnectionArn} | compact
+  let body = {"VpcIngressConnectionArn": $vpc_ingress_connection_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -621,7 +621,7 @@ export def "x-amz-target-app-runner-delete-vpc-ingress-connection DeleteVpcIngre
 #
 # POST /#X-Amz-Target=AppRunner.DescribeAutoScalingConfiguration
 # operationId: DescribeAutoScalingConfiguration
-export def "x-amz-target-app-runner-describe-auto-scaling-configuration DescribeAutoScalingConfiguration" [
+export def "x-amz-target-app-runner-describe-auto-scaling-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,23 +630,23 @@ export def "x-amz-target-app-runner-describe-auto-scaling-configuration Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  AutoScalingConfigurationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  auto_scaling_configuration_arn: any
 ]: any -> record<AutoScalingConfiguration: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record, Latest: record, Status: record, MaxConcurrency: record, MinSize: record, MaxSize: record, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DescribeAutoScalingConfiguration")
-  let body = {AutoScalingConfigurationArn: $AutoScalingConfigurationArn} | compact
+  let body = {"AutoScalingConfigurationArn": $auto_scaling_configuration_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -657,7 +657,7 @@ export def "x-amz-target-app-runner-describe-auto-scaling-configuration Describe
 #
 # POST /#X-Amz-Target=AppRunner.DescribeCustomDomains
 # operationId: DescribeCustomDomains
-export def "x-amz-target-app-runner-describe-custom-domains DescribeCustomDomains" [
+export def "x-amz-target-app-runner-describe-custom-domains post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,28 +666,28 @@ export def "x-amz-target-app-runner-describe-custom-domains DescribeCustomDomain
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  ServiceArn: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  service_arn: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<DNSTarget: record, ServiceArn: record, CustomDomains: record, VpcDNSTargets: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DescribeCustomDomains" $qp)
-  let body = {ServiceArn: $ServiceArn, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ServiceArn": $service_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -698,7 +698,7 @@ export def "x-amz-target-app-runner-describe-custom-domains DescribeCustomDomain
 #
 # POST /#X-Amz-Target=AppRunner.DescribeObservabilityConfiguration
 # operationId: DescribeObservabilityConfiguration
-export def "x-amz-target-app-runner-describe-observability-configuration DescribeObservabilityConfiguration" [
+export def "x-amz-target-app-runner-describe-observability-configuration post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,23 +707,23 @@ export def "x-amz-target-app-runner-describe-observability-configuration Describ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  ObservabilityConfigurationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  observability_configuration_arn: any
 ]: any -> record<ObservabilityConfiguration: record<ObservabilityConfigurationArn: record, ObservabilityConfigurationName: record, TraceConfiguration: record<Vendor: record>, ObservabilityConfigurationRevision: record, Latest: record, Status: record, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DescribeObservabilityConfiguration")
-  let body = {ObservabilityConfigurationArn: $ObservabilityConfigurationArn} | compact
+  let body = {"ObservabilityConfigurationArn": $observability_configuration_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -734,7 +734,7 @@ export def "x-amz-target-app-runner-describe-observability-configuration Describ
 #
 # POST /#X-Amz-Target=AppRunner.DescribeService
 # operationId: DescribeService
-export def "x-amz-target-app-runner-describe-service DescribeService" [
+export def "x-amz-target-app-runner-describe-service post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -743,23 +743,23 @@ export def "x-amz-target-app-runner-describe-service DescribeService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  ServiceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  service_arn: any
 ]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DescribeService")
-  let body = {ServiceArn: $ServiceArn} | compact
+  let body = {"ServiceArn": $service_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -770,7 +770,7 @@ export def "x-amz-target-app-runner-describe-service DescribeService" [
 #
 # POST /#X-Amz-Target=AppRunner.DescribeVpcConnector
 # operationId: DescribeVpcConnector
-export def "x-amz-target-app-runner-describe-vpc-connector DescribeVpcConnector" [
+export def "x-amz-target-app-runner-describe-vpc-connector post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -779,23 +779,23 @@ export def "x-amz-target-app-runner-describe-vpc-connector DescribeVpcConnector"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  VpcConnectorArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  vpc_connector_arn: any
 ]: any -> record<VpcConnector: record<VpcConnectorName: record, VpcConnectorArn: record, VpcConnectorRevision: record, Subnets: record, SecurityGroups: record, Status: record, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DescribeVpcConnector")
-  let body = {VpcConnectorArn: $VpcConnectorArn} | compact
+  let body = {"VpcConnectorArn": $vpc_connector_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -806,7 +806,7 @@ export def "x-amz-target-app-runner-describe-vpc-connector DescribeVpcConnector"
 #
 # POST /#X-Amz-Target=AppRunner.DescribeVpcIngressConnection
 # operationId: DescribeVpcIngressConnection
-export def "x-amz-target-app-runner-describe-vpc-ingress-connection DescribeVpcIngressConnection" [
+export def "x-amz-target-app-runner-describe-vpc-ingress-connection post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,23 +815,23 @@ export def "x-amz-target-app-runner-describe-vpc-ingress-connection DescribeVpcI
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  VpcIngressConnectionArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  vpc_ingress_connection_arn: any
 ]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: record, VpcIngressConnectionName: record, ServiceArn: record, Status: record, AccountId: record, DomainName: record, IngressVpcConfiguration: record<VpcId: record, VpcEndpointId: record>, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DescribeVpcIngressConnection")
-  let body = {VpcIngressConnectionArn: $VpcIngressConnectionArn} | compact
+  let body = {"VpcIngressConnectionArn": $vpc_ingress_connection_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -842,7 +842,7 @@ export def "x-amz-target-app-runner-describe-vpc-ingress-connection DescribeVpcI
 #
 # POST /#X-Amz-Target=AppRunner.DisassociateCustomDomain
 # operationId: DisassociateCustomDomain
-export def "x-amz-target-app-runner-disassociate-custom-domain DisassociateCustomDomain" [
+export def "x-amz-target-app-runner-disassociate-custom-domain post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -851,24 +851,24 @@ export def "x-amz-target-app-runner-disassociate-custom-domain DisassociateCusto
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  ServiceArn: any
-  DomainName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  service_arn: any
+  domain_name: any
 ]: any -> record<DNSTarget: record, ServiceArn: record, CustomDomain: record<DomainName: record, EnableWWWSubdomain: record, CertificateValidationRecords: record, Status: record>, VpcDNSTargets: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.DisassociateCustomDomain")
-  let body = {ServiceArn: $ServiceArn, DomainName: $DomainName} | compact
+  let body = {"ServiceArn": $service_arn, "DomainName": $domain_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -879,7 +879,7 @@ export def "x-amz-target-app-runner-disassociate-custom-domain DisassociateCusto
 #
 # POST /#X-Amz-Target=AppRunner.ListAutoScalingConfigurations
 # operationId: ListAutoScalingConfigurations
-export def "x-amz-target-app-runner-list-auto-scaling-configurations ListAutoScalingConfigurations" [
+export def "x-amz-target-app-runner-list-auto-scaling-configurations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,29 +888,29 @@ export def "x-amz-target-app-runner-list-auto-scaling-configurations ListAutoSca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --AutoScalingConfigurationName: any
-  --LatestOnly: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --auto-scaling-configuration-name: any
+  --latest-only: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<AutoScalingConfigurationSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.ListAutoScalingConfigurations" $qp)
-  let body = {AutoScalingConfigurationName: $AutoScalingConfigurationName, LatestOnly: $LatestOnly, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AutoScalingConfigurationName": $auto_scaling_configuration_name, "LatestOnly": $latest_only, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -921,7 +921,7 @@ export def "x-amz-target-app-runner-list-auto-scaling-configurations ListAutoSca
 #
 # POST /#X-Amz-Target=AppRunner.ListConnections
 # operationId: ListConnections
-export def "x-amz-target-app-runner-list-connections ListConnections" [
+export def "x-amz-target-app-runner-list-connections list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,28 +930,28 @@ export def "x-amz-target-app-runner-list-connections ListConnections" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --ConnectionName: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --connection-name: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ConnectionSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.ListConnections" $qp)
-  let body = {ConnectionName: $ConnectionName, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ConnectionName": $connection_name, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -962,7 +962,7 @@ export def "x-amz-target-app-runner-list-connections ListConnections" [
 #
 # POST /#X-Amz-Target=AppRunner.ListObservabilityConfigurations
 # operationId: ListObservabilityConfigurations
-export def "x-amz-target-app-runner-list-observability-configurations ListObservabilityConfigurations" [
+export def "x-amz-target-app-runner-list-observability-configurations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,29 +971,29 @@ export def "x-amz-target-app-runner-list-observability-configurations ListObserv
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  --ObservabilityConfigurationName: any
-  --LatestOnly: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  --observability-configuration-name: any
+  --latest-only: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ObservabilityConfigurationSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.ListObservabilityConfigurations" $qp)
-  let body = {ObservabilityConfigurationName: $ObservabilityConfigurationName, LatestOnly: $LatestOnly, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ObservabilityConfigurationName": $observability_configuration_name, "LatestOnly": $latest_only, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1004,7 +1004,7 @@ export def "x-amz-target-app-runner-list-observability-configurations ListObserv
 #
 # POST /#X-Amz-Target=AppRunner.ListOperations
 # operationId: ListOperations
-export def "x-amz-target-app-runner-list-operations ListOperations" [
+export def "x-amz-target-app-runner-list-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,28 +1013,28 @@ export def "x-amz-target-app-runner-list-operations ListOperations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  ServiceArn: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  service_arn: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<OperationSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.ListOperations" $qp)
-  let body = {ServiceArn: $ServiceArn, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"ServiceArn": $service_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1045,7 +1045,7 @@ export def "x-amz-target-app-runner-list-operations ListOperations" [
 #
 # POST /#X-Amz-Target=AppRunner.ListServices
 # operationId: ListServices
-export def "x-amz-target-app-runner-list-services ListServices" [
+export def "x-amz-target-app-runner-list-services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,27 +1054,27 @@ export def "x-amz-target-app-runner-list-services ListServices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --next-token: any
+  --max-results: any
 ]: any -> record<ServiceSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.ListServices" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1085,7 +1085,7 @@ export def "x-amz-target-app-runner-list-services ListServices" [
 #
 # POST /#X-Amz-Target=AppRunner.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-app-runner-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-app-runner-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,23 +1094,23 @@ export def "x-amz-target-app-runner-list-tags-for-resource ListTagsForResource" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.ListTagsForResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1121,7 +1121,7 @@ export def "x-amz-target-app-runner-list-tags-for-resource ListTagsForResource" 
 #
 # POST /#X-Amz-Target=AppRunner.ListVpcConnectors
 # operationId: ListVpcConnectors
-export def "x-amz-target-app-runner-list-vpc-connectors ListVpcConnectors" [
+export def "x-amz-target-app-runner-list-vpc-connectors list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1130,27 +1130,27 @@ export def "x-amz-target-app-runner-list-vpc-connectors ListVpcConnectors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  --max-results: any
+  --next-token: any
 ]: any -> record<VpcConnectors: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.ListVpcConnectors" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1161,7 +1161,7 @@ export def "x-amz-target-app-runner-list-vpc-connectors ListVpcConnectors" [
 #
 # POST /#X-Amz-Target=AppRunner.ListVpcIngressConnections
 # operationId: ListVpcIngressConnections
-export def "x-amz-target-app-runner-list-vpc-ingress-connections ListVpcIngressConnections" [
+export def "x-amz-target-app-runner-list-vpc-ingress-connections list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1170,28 +1170,28 @@ export def "x-amz-target-app-runner-list-vpc-ingress-connections ListVpcIngressC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  --Filter: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  --filter: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<VpcIngressConnectionSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.ListVpcIngressConnections" $qp)
-  let body = {Filter: $Filter, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"Filter": $filter, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1202,7 +1202,7 @@ export def "x-amz-target-app-runner-list-vpc-ingress-connections ListVpcIngressC
 #
 # POST /#X-Amz-Target=AppRunner.PauseService
 # operationId: PauseService
-export def "x-amz-target-app-runner-pause-service PauseService" [
+export def "x-amz-target-app-runner-pause-service pause" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1211,23 +1211,23 @@ export def "x-amz-target-app-runner-pause-service PauseService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  ServiceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  service_arn: any
 ]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>, OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.PauseService")
-  let body = {ServiceArn: $ServiceArn} | compact
+  let body = {"ServiceArn": $service_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1238,7 +1238,7 @@ export def "x-amz-target-app-runner-pause-service PauseService" [
 #
 # POST /#X-Amz-Target=AppRunner.ResumeService
 # operationId: ResumeService
-export def "x-amz-target-app-runner-resume-service ResumeService" [
+export def "x-amz-target-app-runner-resume-service post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1247,23 +1247,23 @@ export def "x-amz-target-app-runner-resume-service ResumeService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  ServiceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  service_arn: any
 ]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>, OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.ResumeService")
-  let body = {ServiceArn: $ServiceArn} | compact
+  let body = {"ServiceArn": $service_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1274,7 +1274,7 @@ export def "x-amz-target-app-runner-resume-service ResumeService" [
 #
 # POST /#X-Amz-Target=AppRunner.StartDeployment
 # operationId: StartDeployment
-export def "x-amz-target-app-runner-start-deployment StartDeployment" [
+export def "x-amz-target-app-runner-start-deployment start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1283,23 +1283,23 @@ export def "x-amz-target-app-runner-start-deployment StartDeployment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  ServiceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  service_arn: any
 ]: any -> record<OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.StartDeployment")
-  let body = {ServiceArn: $ServiceArn} | compact
+  let body = {"ServiceArn": $service_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1310,7 +1310,7 @@ export def "x-amz-target-app-runner-start-deployment StartDeployment" [
 #
 # POST /#X-Amz-Target=AppRunner.TagResource
 # operationId: TagResource
-export def "x-amz-target-app-runner-tag-resource TagResource" [
+export def "x-amz-target-app-runner-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1319,24 +1319,24 @@ export def "x-amz-target-app-runner-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1347,7 +1347,7 @@ export def "x-amz-target-app-runner-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=AppRunner.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-app-runner-untag-resource UntagResource" [
+export def "x-amz-target-app-runner-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1356,24 +1356,24 @@ export def "x-amz-target-app-runner-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1384,7 +1384,7 @@ export def "x-amz-target-app-runner-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=AppRunner.UpdateService
 # operationId: UpdateService
-export def "x-amz-target-app-runner-update-service UpdateService" [
+export def "x-amz-target-app-runner-update-service update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1393,29 +1393,29 @@ export def "x-amz-target-app-runner-update-service UpdateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  ServiceArn: any
-  --SourceConfiguration: any
-  --InstanceConfiguration: any
-  --AutoScalingConfigurationArn: any
-  --HealthCheckConfiguration: any
-  --NetworkConfiguration: any
-  --ObservabilityConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  service_arn: any
+  --source-configuration: any
+  --instance-configuration: any
+  --auto-scaling-configuration-arn: any
+  --health-check-configuration: any
+  --network-configuration: any
+  --observability-configuration: any
 ]: any -> record<Service: record<ServiceName: record, ServiceId: record, ServiceArn: record, ServiceUrl: record, CreatedAt: record, UpdatedAt: record, DeletedAt: record, Status: record, SourceConfiguration: record<CodeRepository: record, ImageRepository: record, AutoDeploymentsEnabled: record, AuthenticationConfiguration: record>, InstanceConfiguration: record<Cpu: record, Memory: record, InstanceRoleArn: record>, EncryptionConfiguration: record<KmsKey: record>, HealthCheckConfiguration: record<Protocol: record, Path: record, Interval: record, Timeout: record, HealthyThreshold: record, UnhealthyThreshold: record>, AutoScalingConfigurationSummary: record<AutoScalingConfigurationArn: record, AutoScalingConfigurationName: record, AutoScalingConfigurationRevision: record>, NetworkConfiguration: record<EgressConfiguration: record, IngressConfiguration: record>, ObservabilityConfiguration: record<ObservabilityEnabled: record, ObservabilityConfigurationArn: record>>, OperationId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.UpdateService")
-  let body = {ServiceArn: $ServiceArn, SourceConfiguration: $SourceConfiguration, InstanceConfiguration: $InstanceConfiguration, AutoScalingConfigurationArn: $AutoScalingConfigurationArn, HealthCheckConfiguration: $HealthCheckConfiguration, NetworkConfiguration: $NetworkConfiguration, ObservabilityConfiguration: $ObservabilityConfiguration} | compact
+  let body = {"ServiceArn": $service_arn, "SourceConfiguration": $source_configuration, "InstanceConfiguration": $instance_configuration, "AutoScalingConfigurationArn": $auto_scaling_configuration_arn, "HealthCheckConfiguration": $health_check_configuration, "NetworkConfiguration": $network_configuration, "ObservabilityConfiguration": $observability_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1426,7 +1426,7 @@ export def "x-amz-target-app-runner-update-service UpdateService" [
 #
 # POST /#X-Amz-Target=AppRunner.UpdateVpcIngressConnection
 # operationId: UpdateVpcIngressConnection
-export def "x-amz-target-app-runner-update-vpc-ingress-connection UpdateVpcIngressConnection" [
+export def "x-amz-target-app-runner-update-vpc-ingress-connection update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,24 +1435,24 @@ export def "x-amz-target-app-runner-update-vpc-ingress-connection UpdateVpcIngre
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  VpcIngressConnectionArn: any
-  IngressVpcConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  vpc_ingress_connection_arn: any
+  ingress_vpc_configuration: any
 ]: any -> record<VpcIngressConnection: record<VpcIngressConnectionArn: record, VpcIngressConnectionName: record, ServiceArn: record, Status: record, AccountId: record, DomainName: record, IngressVpcConfiguration: record<VpcId: record, VpcEndpointId: record>, CreatedAt: record, DeletedAt: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AppRunner.UpdateVpcIngressConnection")
-  let body = {VpcIngressConnectionArn: $VpcIngressConnectionArn, IngressVpcConfiguration: $IngressVpcConfiguration} | compact
+  let body = {"VpcIngressConnectionArn": $vpc_ingress_connection_arn, "IngressVpcConfiguration": $ingress_vpc_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

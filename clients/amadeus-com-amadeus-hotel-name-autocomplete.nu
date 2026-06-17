@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reference-data-locations-hotel gethotels" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reference-data-locations-hotel get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /reference-data/locations/hotel
 # operationId: gethotels
-export def "reference-data-locations-hotel gethotels" [
+export def "reference-data-locations-hotel get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,14 +102,14 @@ export def "reference-data-locations-hotel gethotels" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --keyword: string # Location query keyword (e.g. PARI)
-  --subType: list # Category of search - To enter several values, repeat the query parameter   Use HOTEL_LEISURE to target aggregators or HOTEL_GDS to target directly the chains
-  --countryCode: string # The country in which you search the subType. Country Code in [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) format (e.g. FR)
+  --sub-type: list # Category of search - To enter several values, repeat the query parameter   Use HOTEL_LEISURE to target aggregators or HOTEL_GDS to target directly the chains
+  --country-code: string # The country in which you search the subType. Country Code in [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) format (e.g. FR)
   --lang: string # The language in which you want the results in following [ISO 639-1](https://fr.wikipedia.org/wiki/Liste_des_codes_ISO_639-1).   If the language entered is not available then the results will be shown in the default language, English. (default: EN)
   --max: int # The number of results requested from 1 to 20 (default: 20)
 ]: nothing -> record<data: table<address: record, geoCode: record, hotelIds: list, iataCode: string, id: float, name: string, relevance: int, subType: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "keyword" $keyword "scalar") (serialize-qp "subType" $subType "multi") (serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "keyword" $keyword "scalar") (serialize-qp "subType" $sub_type "multi") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "max" $max "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/locations/hotel" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

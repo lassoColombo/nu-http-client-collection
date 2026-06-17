@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoftaadiam-diagnostic-settings List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoftaadiam-diagnostic-settings list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/microsoft.aadiam/diagnosticSettings
 # operationId: DiagnosticSettings_List
-export def "providers-microsoftaadiam-diagnostic-settings List" [
+export def "providers-microsoftaadiam-diagnostic-settings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +117,7 @@ export def "providers-microsoftaadiam-diagnostic-settings List" [
 #
 # DELETE /providers/microsoft.aadiam/diagnosticSettings/{name}
 # operationId: DiagnosticSettings_Delete
-export def "providers-microsoftaadiam-diagnostic-settings Delete" [
+export def "providers-microsoftaadiam-diagnostic-settings delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -132,7 +132,7 @@ export def "providers-microsoftaadiam-diagnostic-settings Delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/microsoft.aadiam/diagnosticSettings/($name)" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/providers/microsoft.aadiam/diagnosticSettings/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +142,7 @@ export def "providers-microsoftaadiam-diagnostic-settings Delete" [
 #
 # GET /providers/microsoft.aadiam/diagnosticSettings/{name}
 # operationId: DiagnosticSettings_Get
-export def "providers-microsoftaadiam-diagnostic-settings Get" [
+export def "providers-microsoftaadiam-diagnostic-settings get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "providers-microsoftaadiam-diagnostic-settings Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/microsoft.aadiam/diagnosticSettings/($name)" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/providers/microsoft.aadiam/diagnosticSettings/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -168,7 +168,7 @@ export def "providers-microsoftaadiam-diagnostic-settings Get" [
 # PUT /providers/microsoft.aadiam/diagnosticSettings/{name}
 # operationId: DiagnosticSettings_CreateOrUpdate
 # --properties shape: {eventHubAuthorizationRuleId?: string, eventHubName?: string, logs?: list, serviceBusRuleId?: string, storageAccountId?: string, workspaceId?: string}
-export def "providers-microsoftaadiam-diagnostic-settings CreateOrUpdate" [
+export def "providers-microsoftaadiam-diagnostic-settings create-or-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,8 +185,8 @@ export def "providers-microsoftaadiam-diagnostic-settings CreateOrUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/microsoft.aadiam/diagnosticSettings/($name)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({name: $name} | format pattern "/providers/microsoft.aadiam/diagnosticSettings/{name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,7 +197,7 @@ export def "providers-microsoftaadiam-diagnostic-settings CreateOrUpdate" [
 #
 # GET /providers/microsoft.aadiam/diagnosticSettingsCategories
 # operationId: DiagnosticSettingsCategory_List
-export def "providers-microsoftaadiam-diagnostic-settings-categories List" [
+export def "providers-microsoftaadiam-diagnostic-settings-categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "providers-microsoftaadiam-diagnostic-settings-categories List" [
 #
 # GET /providers/microsoft.aadiam/operations
 # operationId: Operations_List
-export def "providers-microsoftaadiam-operations List" [
+export def "providers-microsoftaadiam-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

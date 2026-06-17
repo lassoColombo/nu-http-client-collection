@@ -70,11 +70,11 @@ def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
 def filter-completer [] { ["ACTIVE" "ALL" "TERMINATED" "UNKNOWN"] }
 def view-completer [] { ["JOB_VIEW_ALL" "JOB_VIEW_DESCRIPTION" "JOB_VIEW_SUMMARY" "JOB_VIEW_UNKNOWN"] }
-def currentState-completer [] { ["JOB_STATE_CANCELLED" "JOB_STATE_CANCELLING" "JOB_STATE_DONE" "JOB_STATE_DRAINED" "JOB_STATE_DRAINING" "JOB_STATE_FAILED" "JOB_STATE_PENDING" "JOB_STATE_QUEUED" "JOB_STATE_RESOURCE_CLEANING_UP" "JOB_STATE_RUNNING" "JOB_STATE_STOPPED" "JOB_STATE_UNKNOWN" "JOB_STATE_UPDATED"] }
-def requestedState-completer [] { ["JOB_STATE_CANCELLED" "JOB_STATE_CANCELLING" "JOB_STATE_DONE" "JOB_STATE_DRAINED" "JOB_STATE_DRAINING" "JOB_STATE_FAILED" "JOB_STATE_PENDING" "JOB_STATE_QUEUED" "JOB_STATE_RESOURCE_CLEANING_UP" "JOB_STATE_RUNNING" "JOB_STATE_STOPPED" "JOB_STATE_UNKNOWN" "JOB_STATE_UPDATED"] }
+def current-state-completer [] { ["JOB_STATE_CANCELLED" "JOB_STATE_CANCELLING" "JOB_STATE_DONE" "JOB_STATE_DRAINED" "JOB_STATE_DRAINING" "JOB_STATE_FAILED" "JOB_STATE_PENDING" "JOB_STATE_QUEUED" "JOB_STATE_RESOURCE_CLEANING_UP" "JOB_STATE_RUNNING" "JOB_STATE_STOPPED" "JOB_STATE_UNKNOWN" "JOB_STATE_UPDATED"] }
+def requested-state-completer [] { ["JOB_STATE_CANCELLED" "JOB_STATE_CANCELLING" "JOB_STATE_DONE" "JOB_STATE_DRAINED" "JOB_STATE_DRAINING" "JOB_STATE_FAILED" "JOB_STATE_PENDING" "JOB_STATE_QUEUED" "JOB_STATE_RESOURCE_CLEANING_UP" "JOB_STATE_RUNNING" "JOB_STATE_STOPPED" "JOB_STATE_UNKNOWN" "JOB_STATE_UPDATED"] }
 def type-completer [] { ["JOB_TYPE_BATCH" "JOB_TYPE_STREAMING" "JOB_TYPE_UNKNOWN"] }
-def dataFormat-completer [] { ["BROTLI" "DATA_FORMAT_UNSPECIFIED" "JSON" "RAW" "ZLIB"] }
-def minimumImportance-completer [] { ["JOB_MESSAGE_BASIC" "JOB_MESSAGE_DEBUG" "JOB_MESSAGE_DETAILED" "JOB_MESSAGE_ERROR" "JOB_MESSAGE_IMPORTANCE_UNKNOWN" "JOB_MESSAGE_WARNING"] }
+def data-format-completer [] { ["BROTLI" "DATA_FORMAT_UNSPECIFIED" "JSON" "RAW" "ZLIB"] }
+def minimum-importance-completer [] { ["JOB_MESSAGE_BASIC" "JOB_MESSAGE_DEBUG" "JOB_MESSAGE_DETAILED" "JOB_MESSAGE_ERROR" "JOB_MESSAGE_IMPORTANCE_UNKNOWN" "JOB_MESSAGE_WARNING"] }
 def view-completer-1 [] { ["METADATA_ONLY"] }
 
 # List all available API commands with their parameters
@@ -106,7 +106,7 @@ export def commands []: nothing -> table {
 # operationId: dataflow.projects.workerMessages
 # --workerMessages item shape: {labels?: record, time?: string, workerHealthReport?: record, workerLifecycleEvent?: record, workerMessageCode?: record, workerMetrics?: record, workerShutdownNotice?: record, workerThreadScalingReport?: record}
 export def "v1b3-projects-worker-messages dataflowprojectsworkerMessages" [
-  projectId: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,19 +122,19 @@ export def "v1b3-projects-worker-messages dataflowprojectsworkerMessages" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job.
-  --workerMessages: list # The WorkerMessages to send. — item shape: {labels?: record, time?: string, workerHealthReport?: record, workerLifecycleEvent?: record, workerMessageCode?: record, workerMetrics?: record, workerShutdownNotice?: record, workerThreadScalingReport?: record}
+  --worker-messages: list # The WorkerMessages to send. — item shape: {labels?: record, time?: string, workerHealthReport?: record, workerLifecycleEvent?: record, workerMessageCode?: record, workerMetrics?: record, workerShutdownNotice?: record, workerThreadScalingReport?: record}
 ]: any -> record<workerMessageResponses: table<workerHealthReportResponse: record, workerMetricsResponse: record, workerShutdownNoticeResponse: record, workerThreadScalingReportResponse: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/WorkerMessages" $qp)
-  let body = {location: $location, workerMessages: $workerMessages} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v1b3/projects/{project_id}/WorkerMessages") $qp)
+  let body = {"location": $location, "workerMessages": $worker_messages} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +146,7 @@ export def "v1b3-projects-worker-messages dataflowprojectsworkerMessages" [
 # GET /v1b3/projects/{projectId}/jobs
 # operationId: dataflow.projects.jobs.list
 export def "v1b3-projects-jobs dataflowprojectsjobslist" [
-  projectId: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,21 +162,21 @@ export def "v1b3-projects-jobs dataflowprojectsjobslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string@filter-completer # The kind of filter to use.
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
   --name: string # Optional. The job name. Optional.
-  --pageSize: int # If there are many jobs, limit response to at most this many. The actual number of jobs returned will be the lesser of max_responses and an unspecified server-defined limit.
-  --pageToken: string # Set this to the 'next_page_token' field of a previous response to request additional results in a long list.
+  --page-size: int # If there are many jobs, limit response to at most this many. The actual number of jobs returned will be the lesser of max_responses and an unspecified server-defined limit.
+  --page-token: string # Set this to the 'next_page_token' field of a previous response to request additional results in a long list.
   --view: string@view-completer # Deprecated. ListJobs always returns summaries now. Use GetJob for other JobViews.
 ]: nothing -> record<failedLocation: table<name: string>, jobs: table<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record, executionInfo: record, id: string, jobMetadata: record, labels: record, location: string, name: string, pipelineDescription: record, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: list, startTime: string, steps: list, stepsLocation: string, tempFiles: list, transformNameMapping: record, type: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v1b3/projects/{project_id}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -193,7 +193,7 @@ export def "v1b3-projects-jobs dataflowprojectsjobslist" [
 # --stageStates item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
 # --steps item shape: {kind?: string, name?: string, properties?: record}
 export def "v1b3-projects-jobs dataflowprojectsjobscreate" [
-  projectId: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,45 +209,45 @@ export def "v1b3-projects-jobs dataflowprojectsjobscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
-  --replaceJobId: string # Deprecated. This field is now in the Job message.
+  --replace-job-id: string # Deprecated. This field is now in the Job message.
   --view: string@view-completer # The level of information requested in response.
-  --clientRequestId: string # The client's unique identifier of the job, re-used across retried attempts. If this field is set, the service will ensure its uniqueness. The request to create a job will fail if the service has knowledge of a previously submitted job with the same client's ID and job name. The caller may use this field to ensure idempotence of job creation across retried attempts to create a job. By default, the field is empty and, in that case, the service ignores it.
-  --createTime: string # The timestamp when the job was initially created. Immutable and set by the Cloud Dataflow service. (format: google-datetime)
-  --createdFromSnapshotId: string # If this is specified, the job's initial state is populated from the given snapshot.
-  --currentState: string@currentState-completer # The current state of the job. Jobs are created in the `JOB_STATE_STOPPED` state unless otherwise specified. A job in the `JOB_STATE_RUNNING` state may asynchronously enter a terminal state. After a job has reached a terminal state, no further state updates may be made. This field may be mutated by the Cloud Dataflow service; callers cannot mutate it.
-  --currentStateTime: string # The timestamp associated with the current state. (format: google-datetime)
+  --client-request-id: string # The client's unique identifier of the job, re-used across retried attempts. If this field is set, the service will ensure its uniqueness. The request to create a job will fail if the service has knowledge of a previously submitted job with the same client's ID and job name. The caller may use this field to ensure idempotence of job creation across retried attempts to create a job. By default, the field is empty and, in that case, the service ignores it.
+  --create-time: string # The timestamp when the job was initially created. Immutable and set by the Cloud Dataflow service. (format: google-datetime)
+  --created-from-snapshot-id: string # If this is specified, the job's initial state is populated from the given snapshot.
+  --current-state: string@current-state-completer # The current state of the job. Jobs are created in the `JOB_STATE_STOPPED` state unless otherwise specified. A job in the `JOB_STATE_RUNNING` state may asynchronously enter a terminal state. After a job has reached a terminal state, no further state updates may be made. This field may be mutated by the Cloud Dataflow service; callers cannot mutate it.
+  --current-state-time: string # The timestamp associated with the current state. (format: google-datetime)
   --environment: record # Describes the environment in which a Dataflow Job runs. — shape: {clusterManagerApiService?: string, dataset?: string, debugOptions?: record, experiments?: list, flexResourceSchedulingGoal?: "FLEXRS_UNSPECIFIED"|"FLEXRS_SPEED_OPTIMIZED"|"FLEXRS_COST_OPTIMIZED", internalExperiments?: record, sdkPipelineOptions?: record, serviceAccountEmail?: string, serviceKmsKeyName?: string, serviceOptions?: list, tempStoragePrefix?: string, userAgent?: record, version?: record, workerPools?: list, workerRegion?: string, workerZone?: string}
-  --executionInfo: record # Additional information about how a Cloud Dataflow job will be executed that isn't contained in the submitted job. — shape: {stages?: record}
+  --execution-info: record # Additional information about how a Cloud Dataflow job will be executed that isn't contained in the submitted job. — shape: {stages?: record}
   --id: string # The unique ID of this job. This field is set by the Cloud Dataflow service when the Job is created, and is immutable for the life of the job.
-  --jobMetadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
+  --job-metadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
   --labels: record # User-defined labels for this job. The labels map can contain no more than 64 entries. Entries of the labels map are UTF8 strings that comply with the following restrictions: * Keys must conform to regexp: \p{Ll}\p{Lo}{0,62} * Values must conform to regexp: [\p{Ll}\p{Lo}\p{N}_-]{0,63} * Both keys and values are additionally constrained to be <= 128 bytes in size.
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
   --name: string # The user-specified Cloud Dataflow job name. Only one Job with a given name can exist in a project within one region at any given time. Jobs in different regions can have the same name. If a caller attempts to create a Job with the same name as an already-existing Job, the attempt returns the existing Job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
-  --pipelineDescription: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
-  --body-projectId: string # The ID of the Cloud Platform project that the job belongs to.
-  --replaceJobId: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job.
-  --replacedByJobId: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
-  --requestedState: string@requestedState-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
-  --satisfiesPzs: oneof<nothing, bool> # Reserved for future use. This field is set only in responses from the server; it is ignored if it is set in any requests.
-  --stageStates: list # This field may be mutated by the Cloud Dataflow service; callers cannot mutate it. — item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
-  --startTime: string # The timestamp when the job was started (transitioned to JOB_STATE_PENDING). Flexible resource scheduling jobs are started with some delay after job creation, so start_time is unset before start and is updated when the job is started by the Cloud Dataflow service. For other jobs, start_time always equals to create_time and is immutable and set by the Cloud Dataflow service. (format: google-datetime)
+  --pipeline-description: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
+  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to.
+  --replace-job-id: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job.
+  --replaced-by-job-id: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
+  --requested-state: string@requested-state-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
+  --satisfies-pzs: oneof<nothing, bool> # Reserved for future use. This field is set only in responses from the server; it is ignored if it is set in any requests.
+  --stage-states: list # This field may be mutated by the Cloud Dataflow service; callers cannot mutate it. — item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
+  --start-time: string # The timestamp when the job was started (transitioned to JOB_STATE_PENDING). Flexible resource scheduling jobs are started with some delay after job creation, so start_time is unset before start and is updated when the job is started by the Cloud Dataflow service. For other jobs, start_time always equals to create_time and is immutable and set by the Cloud Dataflow service. (format: google-datetime)
   --steps: list # Exactly one of step or steps_location should be specified. The top-level steps that constitute the entire job. Only retrieved with JOB_VIEW_ALL. — item shape: {kind?: string, name?: string, properties?: record}
-  --stepsLocation: string # The Cloud Storage location where the steps are stored.
-  --tempFiles: list # A set of files the system should be aware of that are used for temporary storage. These temporary files will be removed on job completion. No duplicates are allowed. No file patterns are supported. The supported files are: Google Cloud Storage: storage.googleapis.com/{bucket}/{object} bucket.storage.googleapis.com/{object}
-  --transformNameMapping: record # The map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
+  --steps-location: string # The Cloud Storage location where the steps are stored.
+  --temp-files: list # A set of files the system should be aware of that are used for temporary storage. These temporary files will be removed on job completion. No duplicates are allowed. No file patterns are supported. The supported files are: Google Cloud Storage: storage.googleapis.com/{bucket}/{object} bucket.storage.googleapis.com/{object}
+  --transform-name-mapping: record # The map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
   --type: string@type-completer # The type of Cloud Dataflow job.
 ]: any -> record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record<enableHotKeyLogging: bool>, experiments: list<string>, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list<string>, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list<record>, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list<record>, bigqueryDetails: list<record>, datastoreDetails: list<record>, fileDetails: list<record>, pubsubDetails: list<record>, sdkVersion: record<sdkSupportStatus: string, version: string, versionDisplayName: string>, spannerDetails: list<record>, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list<record>, executionPipelineStage: list<record>, originalPipelineTransform: list<record>, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: table<currentStateTime: string, executionStageName: string, executionStageState: string>, startTime: string, steps: table<kind: string, name: string, properties: record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "replaceJobId" $replaceJobId "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs" $qp)
-  let body = {clientRequestId: $clientRequestId, createTime: $createTime, createdFromSnapshotId: $createdFromSnapshotId, currentState: $currentState, currentStateTime: $currentStateTime, environment: $environment, executionInfo: $executionInfo, id: $id, jobMetadata: $jobMetadata, labels: $labels, location: $location, name: $name, pipelineDescription: $pipelineDescription, projectId: $body_projectId, replaceJobId: $replaceJobId, replacedByJobId: $replacedByJobId, requestedState: $requestedState, satisfiesPzs: $satisfiesPzs, stageStates: $stageStates, startTime: $startTime, steps: $steps, stepsLocation: $stepsLocation, tempFiles: $tempFiles, transformNameMapping: $transformNameMapping, type: $type} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "replaceJobId" $replace_job_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v1b3/projects/{project_id}/jobs") $qp)
+  let body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $location, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $replace_job_id, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -259,8 +259,8 @@ export def "v1b3-projects-jobs dataflowprojectsjobscreate" [
 # GET /v1b3/projects/{projectId}/jobs/{jobId}
 # operationId: dataflow.projects.jobs.get
 export def "v1b3-projects-jobs dataflowprojectsjobsget" [
-  projectId: string
-  jobId: string
+  project_id: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,17 +276,17 @@ export def "v1b3-projects-jobs dataflowprojectsjobsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
   --view: string@view-completer # The level of information requested in response.
 ]: nothing -> record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record<enableHotKeyLogging: bool>, experiments: list<string>, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list<string>, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list<record>, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list<record>, bigqueryDetails: list<record>, datastoreDetails: list<record>, fileDetails: list<record>, pubsubDetails: list<record>, sdkVersion: record<sdkSupportStatus: string, version: string, versionDisplayName: string>, spannerDetails: list<record>, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list<record>, executionPipelineStage: list<record>, originalPipelineTransform: list<record>, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: table<currentStateTime: string, executionStageName: string, executionStageState: string>, startTime: string, steps: table<kind: string, name: string, properties: record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs/($jobId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,8 +303,8 @@ export def "v1b3-projects-jobs dataflowprojectsjobsget" [
 # --stageStates item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
 # --steps item shape: {kind?: string, name?: string, properties?: record}
 export def "v1b3-projects-jobs dataflowprojectsjobsupdate" [
-  projectId: string
-  jobId: string
+  project_id: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,44 +320,44 @@ export def "v1b3-projects-jobs dataflowprojectsjobsupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
-  --updateMask: string # The list of fields to update relative to Job. If empty, only RequestedJobState will be considered for update. If the FieldMask is not empty and RequestedJobState is none/empty, The fields specified in the update mask will be the only ones considered for update. If both RequestedJobState and update_mask are specified, we will first handle RequestedJobState and then the update_mask fields.
-  --clientRequestId: string # The client's unique identifier of the job, re-used across retried attempts. If this field is set, the service will ensure its uniqueness. The request to create a job will fail if the service has knowledge of a previously submitted job with the same client's ID and job name. The caller may use this field to ensure idempotence of job creation across retried attempts to create a job. By default, the field is empty and, in that case, the service ignores it.
-  --createTime: string # The timestamp when the job was initially created. Immutable and set by the Cloud Dataflow service. (format: google-datetime)
-  --createdFromSnapshotId: string # If this is specified, the job's initial state is populated from the given snapshot.
-  --currentState: string@currentState-completer # The current state of the job. Jobs are created in the `JOB_STATE_STOPPED` state unless otherwise specified. A job in the `JOB_STATE_RUNNING` state may asynchronously enter a terminal state. After a job has reached a terminal state, no further state updates may be made. This field may be mutated by the Cloud Dataflow service; callers cannot mutate it.
-  --currentStateTime: string # The timestamp associated with the current state. (format: google-datetime)
+  --update-mask: string # The list of fields to update relative to Job. If empty, only RequestedJobState will be considered for update. If the FieldMask is not empty and RequestedJobState is none/empty, The fields specified in the update mask will be the only ones considered for update. If both RequestedJobState and update_mask are specified, we will first handle RequestedJobState and then the update_mask fields.
+  --client-request-id: string # The client's unique identifier of the job, re-used across retried attempts. If this field is set, the service will ensure its uniqueness. The request to create a job will fail if the service has knowledge of a previously submitted job with the same client's ID and job name. The caller may use this field to ensure idempotence of job creation across retried attempts to create a job. By default, the field is empty and, in that case, the service ignores it.
+  --create-time: string # The timestamp when the job was initially created. Immutable and set by the Cloud Dataflow service. (format: google-datetime)
+  --created-from-snapshot-id: string # If this is specified, the job's initial state is populated from the given snapshot.
+  --current-state: string@current-state-completer # The current state of the job. Jobs are created in the `JOB_STATE_STOPPED` state unless otherwise specified. A job in the `JOB_STATE_RUNNING` state may asynchronously enter a terminal state. After a job has reached a terminal state, no further state updates may be made. This field may be mutated by the Cloud Dataflow service; callers cannot mutate it.
+  --current-state-time: string # The timestamp associated with the current state. (format: google-datetime)
   --environment: record # Describes the environment in which a Dataflow Job runs. — shape: {clusterManagerApiService?: string, dataset?: string, debugOptions?: record, experiments?: list, flexResourceSchedulingGoal?: "FLEXRS_UNSPECIFIED"|"FLEXRS_SPEED_OPTIMIZED"|"FLEXRS_COST_OPTIMIZED", internalExperiments?: record, sdkPipelineOptions?: record, serviceAccountEmail?: string, serviceKmsKeyName?: string, serviceOptions?: list, tempStoragePrefix?: string, userAgent?: record, version?: record, workerPools?: list, workerRegion?: string, workerZone?: string}
-  --executionInfo: record # Additional information about how a Cloud Dataflow job will be executed that isn't contained in the submitted job. — shape: {stages?: record}
+  --execution-info: record # Additional information about how a Cloud Dataflow job will be executed that isn't contained in the submitted job. — shape: {stages?: record}
   --id: string # The unique ID of this job. This field is set by the Cloud Dataflow service when the Job is created, and is immutable for the life of the job.
-  --jobMetadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
+  --job-metadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
   --labels: record # User-defined labels for this job. The labels map can contain no more than 64 entries. Entries of the labels map are UTF8 strings that comply with the following restrictions: * Keys must conform to regexp: \p{Ll}\p{Lo}{0,62} * Values must conform to regexp: [\p{Ll}\p{Lo}\p{N}_-]{0,63} * Both keys and values are additionally constrained to be <= 128 bytes in size.
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
   --name: string # The user-specified Cloud Dataflow job name. Only one Job with a given name can exist in a project within one region at any given time. Jobs in different regions can have the same name. If a caller attempts to create a Job with the same name as an already-existing Job, the attempt returns the existing Job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
-  --pipelineDescription: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
-  --body-projectId: string # The ID of the Cloud Platform project that the job belongs to.
-  --replaceJobId: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job.
-  --replacedByJobId: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
-  --requestedState: string@requestedState-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
-  --satisfiesPzs: oneof<nothing, bool> # Reserved for future use. This field is set only in responses from the server; it is ignored if it is set in any requests.
-  --stageStates: list # This field may be mutated by the Cloud Dataflow service; callers cannot mutate it. — item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
-  --startTime: string # The timestamp when the job was started (transitioned to JOB_STATE_PENDING). Flexible resource scheduling jobs are started with some delay after job creation, so start_time is unset before start and is updated when the job is started by the Cloud Dataflow service. For other jobs, start_time always equals to create_time and is immutable and set by the Cloud Dataflow service. (format: google-datetime)
+  --pipeline-description: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
+  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to.
+  --replace-job-id: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job.
+  --replaced-by-job-id: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
+  --requested-state: string@requested-state-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
+  --satisfies-pzs: oneof<nothing, bool> # Reserved for future use. This field is set only in responses from the server; it is ignored if it is set in any requests.
+  --stage-states: list # This field may be mutated by the Cloud Dataflow service; callers cannot mutate it. — item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
+  --start-time: string # The timestamp when the job was started (transitioned to JOB_STATE_PENDING). Flexible resource scheduling jobs are started with some delay after job creation, so start_time is unset before start and is updated when the job is started by the Cloud Dataflow service. For other jobs, start_time always equals to create_time and is immutable and set by the Cloud Dataflow service. (format: google-datetime)
   --steps: list # Exactly one of step or steps_location should be specified. The top-level steps that constitute the entire job. Only retrieved with JOB_VIEW_ALL. — item shape: {kind?: string, name?: string, properties?: record}
-  --stepsLocation: string # The Cloud Storage location where the steps are stored.
-  --tempFiles: list # A set of files the system should be aware of that are used for temporary storage. These temporary files will be removed on job completion. No duplicates are allowed. No file patterns are supported. The supported files are: Google Cloud Storage: storage.googleapis.com/{bucket}/{object} bucket.storage.googleapis.com/{object}
-  --transformNameMapping: record # The map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
+  --steps-location: string # The Cloud Storage location where the steps are stored.
+  --temp-files: list # A set of files the system should be aware of that are used for temporary storage. These temporary files will be removed on job completion. No duplicates are allowed. No file patterns are supported. The supported files are: Google Cloud Storage: storage.googleapis.com/{bucket}/{object} bucket.storage.googleapis.com/{object}
+  --transform-name-mapping: record # The map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
   --type: string@type-completer # The type of Cloud Dataflow job.
 ]: any -> record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record<enableHotKeyLogging: bool>, experiments: list<string>, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list<string>, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list<record>, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list<record>, bigqueryDetails: list<record>, datastoreDetails: list<record>, fileDetails: list<record>, pubsubDetails: list<record>, sdkVersion: record<sdkSupportStatus: string, version: string, versionDisplayName: string>, spannerDetails: list<record>, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list<record>, executionPipelineStage: list<record>, originalPipelineTransform: list<record>, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: table<currentStateTime: string, executionStageName: string, executionStageState: string>, startTime: string, steps: table<kind: string, name: string, properties: record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs/($jobId)" $qp)
-  let body = {clientRequestId: $clientRequestId, createTime: $createTime, createdFromSnapshotId: $createdFromSnapshotId, currentState: $currentState, currentStateTime: $currentStateTime, environment: $environment, executionInfo: $executionInfo, id: $id, jobMetadata: $jobMetadata, labels: $labels, location: $location, name: $name, pipelineDescription: $pipelineDescription, projectId: $body_projectId, replaceJobId: $replaceJobId, replacedByJobId: $replacedByJobId, requestedState: $requestedState, satisfiesPzs: $satisfiesPzs, stageStates: $stageStates, startTime: $startTime, steps: $steps, stepsLocation: $stepsLocation, tempFiles: $tempFiles, transformNameMapping: $transformNameMapping, type: $type} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}") $qp)
+  let body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $location, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $replace_job_id, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -369,8 +369,8 @@ export def "v1b3-projects-jobs dataflowprojectsjobsupdate" [
 # POST /v1b3/projects/{projectId}/jobs/{jobId}/debug/getConfig
 # operationId: dataflow.projects.jobs.debug.getConfig
 export def "v1b3-projects-jobs-debug-get-config dataflowprojectsjobsdebuggetConfig" [
-  projectId: string
-  jobId: string
+  project_id: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,20 +386,20 @@ export def "v1b3-projects-jobs-debug-get-config dataflowprojectsjobsdebuggetConf
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --componentId: string # The internal component id for which debug configuration is requested.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --component-id: string # The internal component id for which debug configuration is requested.
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job specified by job_id.
-  --workerId: string # The worker id, i.e., VM hostname.
+  --worker-id: string # The worker id, i.e., VM hostname.
 ]: any -> record<config: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs/($jobId)/debug/getConfig" $qp)
-  let body = {componentId: $componentId, location: $location, workerId: $workerId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/debug/getConfig") $qp)
+  let body = {"componentId": $component_id, "location": $location, "workerId": $worker_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -411,8 +411,8 @@ export def "v1b3-projects-jobs-debug-get-config dataflowprojectsjobsdebuggetConf
 # POST /v1b3/projects/{projectId}/jobs/{jobId}/debug/sendCapture
 # operationId: dataflow.projects.jobs.debug.sendCapture
 export def "v1b3-projects-jobs-debug-send-capture dataflowprojectsjobsdebugsendCapture" [
-  projectId: string
-  jobId: string
+  project_id: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,22 +428,22 @@ export def "v1b3-projects-jobs-debug-send-capture dataflowprojectsjobsdebugsendC
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --componentId: string # The internal component id for which debug information is sent.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --component-id: string # The internal component id for which debug information is sent.
   --data: string # The encoded debug information.
-  --dataFormat: string@dataFormat-completer # Format for the data field above (id=5).
+  --data-format: string@data-format-completer # Format for the data field above (id=5).
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job specified by job_id.
-  --workerId: string # The worker id, i.e., VM hostname.
+  --worker-id: string # The worker id, i.e., VM hostname.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs/($jobId)/debug/sendCapture" $qp)
-  let body = {componentId: $componentId, data: $data, dataFormat: $dataFormat, location: $location, workerId: $workerId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/debug/sendCapture") $qp)
+  let body = {"componentId": $component_id, "data": $data, "dataFormat": $data_format, "location": $location, "workerId": $worker_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -455,8 +455,8 @@ export def "v1b3-projects-jobs-debug-send-capture dataflowprojectsjobsdebugsendC
 # GET /v1b3/projects/{projectId}/jobs/{jobId}/messages
 # operationId: dataflow.projects.jobs.messages.list
 export def "v1b3-projects-jobs-messages dataflowprojectsjobsmessageslist" [
-  projectId: string
-  jobId: string
+  project_id: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,21 +472,21 @@ export def "v1b3-projects-jobs-messages dataflowprojectsjobsmessageslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --endTime: string # Return only messages with timestamps < end_time. The default is now (i.e. return up to the latest messages available).
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --end-time: string # Return only messages with timestamps < end_time. The default is now (i.e. return up to the latest messages available).
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job specified by job_id.
-  --minimumImportance: string@minimumImportance-completer # Filter to only get messages with importance >= level
-  --pageSize: int # If specified, determines the maximum number of messages to return. If unspecified, the service may choose an appropriate default, or may return an arbitrarily large number of results.
-  --pageToken: string # If supplied, this should be the value of next_page_token returned by an earlier call. This will cause the next page of results to be returned.
-  --startTime: string # If specified, return only messages with timestamps >= start_time. The default is the job creation time (i.e. beginning of messages).
+  --minimum-importance: string@minimum-importance-completer # Filter to only get messages with importance >= level
+  --page-size: int # If specified, determines the maximum number of messages to return. If unspecified, the service may choose an appropriate default, or may return an arbitrarily large number of results.
+  --page-token: string # If supplied, this should be the value of next_page_token returned by an earlier call. This will cause the next page of results to be returned.
+  --start-time: string # If specified, return only messages with timestamps >= start_time. The default is the job creation time (i.e. beginning of messages).
 ]: nothing -> record<autoscalingEvents: table<currentNumWorkers: string, description: record, eventType: string, targetNumWorkers: string, time: string, workerPool: string>, jobMessages: table<id: string, messageImportance: string, messageText: string, time: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "minimumImportance" $minimumImportance "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "startTime" $startTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs/($jobId)/messages" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "minimumImportance" $minimum_importance "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -497,8 +497,8 @@ export def "v1b3-projects-jobs-messages dataflowprojectsjobsmessageslist" [
 # GET /v1b3/projects/{projectId}/jobs/{jobId}/metrics
 # operationId: dataflow.projects.jobs.getMetrics
 export def "v1b3-projects-jobs-metrics dataflowprojectsjobsgetMetrics" [
-  projectId: string
-  jobId: string
+  project_id: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,17 +514,17 @@ export def "v1b3-projects-jobs-metrics dataflowprojectsjobsgetMetrics" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job specified by job_id.
-  --startTime: string # Return only metric data that has changed since this time. Default is to return all information about all metrics for the job.
+  --start-time: string # Return only metric data that has changed since this time. Default is to return all information about all metrics for the job.
 ]: nothing -> record<metricTime: string, metrics: table<cumulative: bool, distribution: any, gauge: any, internal: any, kind: string, meanCount: any, meanSum: any, name: record, scalar: any, set: any, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "startTime" $startTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs/($jobId)/metrics" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -535,8 +535,8 @@ export def "v1b3-projects-jobs-metrics dataflowprojectsjobsgetMetrics" [
 # POST /v1b3/projects/{projectId}/jobs/{jobId}/workItems:lease
 # operationId: dataflow.projects.jobs.workItems.lease
 export def "v1b3-projects-jobs-work-items-lease dataflowprojectsjobsworkItemslease" [
-  projectId: string
-  jobId: string
+  project_id: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,24 +552,24 @@ export def "v1b3-projects-jobs-work-items-lease dataflowprojectsjobsworkItemslea
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --currentWorkerTime: string # The current timestamp at the worker. (format: google-datetime)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --current-worker-time: string # The current timestamp at the worker. (format: google-datetime)
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the WorkItem's job.
-  --requestedLeaseDuration: string # The initial lease period. (format: google-duration)
-  --unifiedWorkerRequest: record # Untranslated bag-of-bytes WorkRequest from UnifiedWorker.
-  --workItemTypes: list # Filter for WorkItem type.
-  --workerCapabilities: list # Worker capabilities. WorkItems might be limited to workers with specific capabilities.
-  --workerId: string # Identifies the worker leasing work -- typically the ID of the virtual machine running the worker.
+  --requested-lease-duration: string # The initial lease period. (format: google-duration)
+  --unified-worker-request: record # Untranslated bag-of-bytes WorkRequest from UnifiedWorker.
+  --work-item-types: list # Filter for WorkItem type.
+  --worker-capabilities: list # Worker capabilities. WorkItems might be limited to workers with specific capabilities.
+  --worker-id: string # Identifies the worker leasing work -- typically the ID of the virtual machine running the worker.
 ]: any -> record<unifiedWorkerResponse: record, workItems: table<configuration: string, id: string, initialReportIndex: string, jobId: string, leaseExpireTime: string, mapTask: record, packages: list, projectId: string, reportStatusInterval: string, seqMapTask: record, shellTask: record, sourceOperationTask: record, streamingComputationTask: record, streamingConfigTask: record, streamingSetupTask: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs/($jobId)/workItems:lease" $qp)
-  let body = {currentWorkerTime: $currentWorkerTime, location: $location, requestedLeaseDuration: $requestedLeaseDuration, unifiedWorkerRequest: $unifiedWorkerRequest, workItemTypes: $workItemTypes, workerCapabilities: $workerCapabilities, workerId: $workerId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/workItems:lease") $qp)
+  let body = {"currentWorkerTime": $current_worker_time, "location": $location, "requestedLeaseDuration": $requested_lease_duration, "unifiedWorkerRequest": $unified_worker_request, "workItemTypes": $work_item_types, "workerCapabilities": $worker_capabilities, "workerId": $worker_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -582,8 +582,8 @@ export def "v1b3-projects-jobs-work-items-lease dataflowprojectsjobsworkItemslea
 # operationId: dataflow.projects.jobs.workItems.reportStatus
 # --workItemStatuses item shape: {completed?: bool, counterUpdates?: list, dynamicSourceSplit?: record, errors?: list, metricUpdates?: list, progress?: record, reportIndex?: string, reportedProgress?: record, requestedLeaseDuration?: string, sourceFork?: record, sourceOperationResponse?: record, stopPosition?: record, totalThrottlerWaitTimeSeconds?: float, workItemId?: string}
 export def "v1b3-projects-jobs-work-items-report-status dataflowprojectsjobsworkItemsreportStatus" [
-  projectId: string
-  jobId: string
+  project_id: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,22 +599,22 @@ export def "v1b3-projects-jobs-work-items-report-status dataflowprojectsjobswork
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --currentWorkerTime: string # The current timestamp at the worker. (format: google-datetime)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --current-worker-time: string # The current timestamp at the worker. (format: google-datetime)
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the WorkItem's job.
-  --unifiedWorkerRequest: record # Untranslated bag-of-bytes WorkProgressUpdateRequest from UnifiedWorker.
-  --workItemStatuses: list # The order is unimportant, except that the order of the WorkItemServiceState messages in the ReportWorkItemStatusResponse corresponds to the order of WorkItemStatus messages here. — item shape: {completed?: bool, counterUpdates?: list, dynamicSourceSplit?: record, errors?: list, metricUpdates?: list, progress?: record, reportIndex?: string, reportedProgress?: record, requestedLeaseDuration?: string, sourceFork?: record, sourceOperationResponse?: record, stopPosition?: record, totalThrottlerWaitTimeSeconds?: float, workItemId?: string}
-  --workerId: string # The ID of the worker reporting the WorkItem status. If this does not match the ID of the worker which the Dataflow service believes currently has the lease on the WorkItem, the report will be dropped (with an error response).
+  --unified-worker-request: record # Untranslated bag-of-bytes WorkProgressUpdateRequest from UnifiedWorker.
+  --work-item-statuses: list # The order is unimportant, except that the order of the WorkItemServiceState messages in the ReportWorkItemStatusResponse corresponds to the order of WorkItemStatus messages here. — item shape: {completed?: bool, counterUpdates?: list, dynamicSourceSplit?: record, errors?: list, metricUpdates?: list, progress?: record, reportIndex?: string, reportedProgress?: record, requestedLeaseDuration?: string, sourceFork?: record, sourceOperationResponse?: record, stopPosition?: record, totalThrottlerWaitTimeSeconds?: float, workItemId?: string}
+  --worker-id: string # The ID of the worker reporting the WorkItem status. If this does not match the ID of the worker which the Dataflow service believes currently has the lease on the WorkItem, the report will be dropped (with an error response).
 ]: any -> record<unifiedWorkerResponse: record, workItemServiceStates: table<completeWorkStatus: record, harnessData: record, hotKeyDetection: record, leaseExpireTime: string, metricShortId: list, nextReportIndex: string, reportStatusInterval: string, splitRequest: record, suggestedStopPoint: record, suggestedStopPosition: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs/($jobId)/workItems:reportStatus" $qp)
-  let body = {currentWorkerTime: $currentWorkerTime, location: $location, unifiedWorkerRequest: $unifiedWorkerRequest, workItemStatuses: $workItemStatuses, workerId: $workerId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}/workItems:reportStatus") $qp)
+  let body = {"currentWorkerTime": $current_worker_time, "location": $location, "unifiedWorkerRequest": $unified_worker_request, "workItemStatuses": $work_item_statuses, "workerId": $worker_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -626,8 +626,8 @@ export def "v1b3-projects-jobs-work-items-report-status dataflowprojectsjobswork
 # POST /v1b3/projects/{projectId}/jobs/{jobId}:snapshot
 # operationId: dataflow.projects.jobs.snapshot
 export def "v1b3-projects-jobs dataflowprojectsjobssnapshot" [
-  projectId: string
-  jobId: string
+  project_id: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,21 +643,21 @@ export def "v1b3-projects-jobs dataflowprojectsjobssnapshot" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --description: string # User specified description of the snapshot. Maybe empty.
   --location: string # The location that contains this job.
-  --snapshotSources: oneof<nothing, bool> # If true, perform snapshots for sources which support this.
+  --snapshot-sources: oneof<nothing, bool> # If true, perform snapshots for sources which support this.
   --ttl: string # TTL for the snapshot. (format: google-duration)
 ]: any -> record<creationTime: string, description: string, diskSizeBytes: string, id: string, projectId: string, pubsubMetadata: table<expireTime: string, snapshotName: string, topicName: string>, region: string, sourceJobId: string, state: string, ttl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs/($jobId):snapshot" $qp)
-  let body = {description: $description, location: $location, snapshotSources: $snapshotSources, ttl: $ttl} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/jobs/{job_id}:snapshot") $qp)
+  let body = {"description": $description, "location": $location, "snapshotSources": $snapshot_sources, "ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -669,7 +669,7 @@ export def "v1b3-projects-jobs dataflowprojectsjobssnapshot" [
 # GET /v1b3/projects/{projectId}/jobs:aggregated
 # operationId: dataflow.projects.jobs.aggregated
 export def "v1b3-projects-jobs-aggregated dataflowprojectsjobsaggregated" [
-  projectId: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,21 +685,21 @@ export def "v1b3-projects-jobs-aggregated dataflowprojectsjobsaggregated" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string@filter-completer # The kind of filter to use.
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
   --name: string # Optional. The job name. Optional.
-  --pageSize: int # If there are many jobs, limit response to at most this many. The actual number of jobs returned will be the lesser of max_responses and an unspecified server-defined limit.
-  --pageToken: string # Set this to the 'next_page_token' field of a previous response to request additional results in a long list.
+  --page-size: int # If there are many jobs, limit response to at most this many. The actual number of jobs returned will be the lesser of max_responses and an unspecified server-defined limit.
+  --page-token: string # Set this to the 'next_page_token' field of a previous response to request additional results in a long list.
   --view: string@view-completer # Deprecated. ListJobs always returns summaries now. Use GetJob for other JobViews.
 ]: nothing -> record<failedLocation: table<name: string>, jobs: table<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record, executionInfo: record, id: string, jobMetadata: record, labels: record, location: string, name: string, pipelineDescription: record, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: list, startTime: string, steps: list, stepsLocation: string, tempFiles: list, transformNameMapping: record, type: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/jobs:aggregated" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v1b3/projects/{project_id}/jobs:aggregated") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -711,7 +711,7 @@ export def "v1b3-projects-jobs-aggregated dataflowprojectsjobsaggregated" [
 # operationId: dataflow.projects.locations.workerMessages
 # --workerMessages item shape: {labels?: record, time?: string, workerHealthReport?: record, workerLifecycleEvent?: record, workerMessageCode?: record, workerMetrics?: record, workerShutdownNotice?: record, workerThreadScalingReport?: record}
 export def "v1b3-projects-locations-worker-messages dataflowprojectslocationsworkerMessages" [
-  projectId: string
+  project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -728,19 +728,19 @@ export def "v1b3-projects-locations-worker-messages dataflowprojectslocationswor
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job.
-  --workerMessages: list # The WorkerMessages to send. — item shape: {labels?: record, time?: string, workerHealthReport?: record, workerLifecycleEvent?: record, workerMessageCode?: record, workerMetrics?: record, workerShutdownNotice?: record, workerThreadScalingReport?: record}
+  --worker-messages: list # The WorkerMessages to send. — item shape: {labels?: record, time?: string, workerHealthReport?: record, workerLifecycleEvent?: record, workerMessageCode?: record, workerMetrics?: record, workerShutdownNotice?: record, workerThreadScalingReport?: record}
 ]: any -> record<workerMessageResponses: table<workerHealthReportResponse: record, workerMetricsResponse: record, workerShutdownNoticeResponse: record, workerThreadScalingReportResponse: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/WorkerMessages" $qp)
-  let body = {location: $body_location, workerMessages: $workerMessages} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location} | format pattern "/v1b3/projects/{project_id}/locations/{location}/WorkerMessages") $qp)
+  let body = {"location": $body_location, "workerMessages": $worker_messages} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -753,7 +753,7 @@ export def "v1b3-projects-locations-worker-messages dataflowprojectslocationswor
 # operationId: dataflow.projects.locations.flexTemplates.launch
 # --launchParameter shape: {containerSpec?: record, containerSpecGcsPath?: string, environment?: record, jobName?: string, launchOptions?: record, parameters?: record, transformNameMappings?: record, update?: bool}
 export def "v1b3-projects-locations-flex-templates-launch dataflowprojectslocationsflexTemplateslaunch" [
-  projectId: string
+  project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,19 +770,19 @@ export def "v1b3-projects-locations-flex-templates-launch dataflowprojectslocati
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --launchParameter: record # Launch FlexTemplate Parameter. — shape: {containerSpec?: record, containerSpecGcsPath?: string, environment?: record, jobName?: string, launchOptions?: record, parameters?: record, transformNameMappings?: record, update?: bool}
-  --validateOnly: oneof<nothing, bool> # If true, the request is validated but not actually executed. Defaults to false.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --launch-parameter: record # Launch FlexTemplate Parameter. — shape: {containerSpec?: record, containerSpecGcsPath?: string, environment?: record, jobName?: string, launchOptions?: record, parameters?: record, transformNameMappings?: record, update?: bool}
+  --validate-only: oneof<nothing, bool> # If true, the request is validated but not actually executed. Defaults to false.
 ]: any -> record<job: record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record, experiments: list, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list, bigqueryDetails: list, datastoreDetails: list, fileDetails: list, pubsubDetails: list, sdkVersion: record, spannerDetails: list, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list, executionPipelineStage: list, originalPipelineTransform: list, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: list<record>, startTime: string, steps: list<record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/flexTemplates:launch" $qp)
-  let body = {launchParameter: $launchParameter, validateOnly: $validateOnly} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location} | format pattern "/v1b3/projects/{project_id}/locations/{location}/flexTemplates:launch") $qp)
+  let body = {"launchParameter": $launch_parameter, "validateOnly": $validate_only} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -794,7 +794,7 @@ export def "v1b3-projects-locations-flex-templates-launch dataflowprojectslocati
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs
 # operationId: dataflow.projects.locations.jobs.list
 export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobslist" [
-  projectId: string
+  project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -811,20 +811,20 @@ export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string@filter-completer # The kind of filter to use.
   --name: string # Optional. The job name. Optional.
-  --pageSize: int # If there are many jobs, limit response to at most this many. The actual number of jobs returned will be the lesser of max_responses and an unspecified server-defined limit.
-  --pageToken: string # Set this to the 'next_page_token' field of a previous response to request additional results in a long list.
+  --page-size: int # If there are many jobs, limit response to at most this many. The actual number of jobs returned will be the lesser of max_responses and an unspecified server-defined limit.
+  --page-token: string # Set this to the 'next_page_token' field of a previous response to request additional results in a long list.
   --view: string@view-completer # Deprecated. ListJobs always returns summaries now. Use GetJob for other JobViews.
 ]: nothing -> record<failedLocation: table<name: string>, jobs: table<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record, executionInfo: record, id: string, jobMetadata: record, labels: record, location: string, name: string, pipelineDescription: record, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: list, startTime: string, steps: list, stepsLocation: string, tempFiles: list, transformNameMapping: record, type: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -841,7 +841,7 @@ export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobslist" [
 # --stageStates item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
 # --steps item shape: {kind?: string, name?: string, properties?: record}
 export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobscreate" [
-  projectId: string
+  project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -858,44 +858,44 @@ export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --replaceJobId: string # Deprecated. This field is now in the Job message.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --replace-job-id: string # Deprecated. This field is now in the Job message.
   --view: string@view-completer # The level of information requested in response.
-  --clientRequestId: string # The client's unique identifier of the job, re-used across retried attempts. If this field is set, the service will ensure its uniqueness. The request to create a job will fail if the service has knowledge of a previously submitted job with the same client's ID and job name. The caller may use this field to ensure idempotence of job creation across retried attempts to create a job. By default, the field is empty and, in that case, the service ignores it.
-  --createTime: string # The timestamp when the job was initially created. Immutable and set by the Cloud Dataflow service. (format: google-datetime)
-  --createdFromSnapshotId: string # If this is specified, the job's initial state is populated from the given snapshot.
-  --currentState: string@currentState-completer # The current state of the job. Jobs are created in the `JOB_STATE_STOPPED` state unless otherwise specified. A job in the `JOB_STATE_RUNNING` state may asynchronously enter a terminal state. After a job has reached a terminal state, no further state updates may be made. This field may be mutated by the Cloud Dataflow service; callers cannot mutate it.
-  --currentStateTime: string # The timestamp associated with the current state. (format: google-datetime)
+  --client-request-id: string # The client's unique identifier of the job, re-used across retried attempts. If this field is set, the service will ensure its uniqueness. The request to create a job will fail if the service has knowledge of a previously submitted job with the same client's ID and job name. The caller may use this field to ensure idempotence of job creation across retried attempts to create a job. By default, the field is empty and, in that case, the service ignores it.
+  --create-time: string # The timestamp when the job was initially created. Immutable and set by the Cloud Dataflow service. (format: google-datetime)
+  --created-from-snapshot-id: string # If this is specified, the job's initial state is populated from the given snapshot.
+  --current-state: string@current-state-completer # The current state of the job. Jobs are created in the `JOB_STATE_STOPPED` state unless otherwise specified. A job in the `JOB_STATE_RUNNING` state may asynchronously enter a terminal state. After a job has reached a terminal state, no further state updates may be made. This field may be mutated by the Cloud Dataflow service; callers cannot mutate it.
+  --current-state-time: string # The timestamp associated with the current state. (format: google-datetime)
   --environment: record # Describes the environment in which a Dataflow Job runs. — shape: {clusterManagerApiService?: string, dataset?: string, debugOptions?: record, experiments?: list, flexResourceSchedulingGoal?: "FLEXRS_UNSPECIFIED"|"FLEXRS_SPEED_OPTIMIZED"|"FLEXRS_COST_OPTIMIZED", internalExperiments?: record, sdkPipelineOptions?: record, serviceAccountEmail?: string, serviceKmsKeyName?: string, serviceOptions?: list, tempStoragePrefix?: string, userAgent?: record, version?: record, workerPools?: list, workerRegion?: string, workerZone?: string}
-  --executionInfo: record # Additional information about how a Cloud Dataflow job will be executed that isn't contained in the submitted job. — shape: {stages?: record}
+  --execution-info: record # Additional information about how a Cloud Dataflow job will be executed that isn't contained in the submitted job. — shape: {stages?: record}
   --id: string # The unique ID of this job. This field is set by the Cloud Dataflow service when the Job is created, and is immutable for the life of the job.
-  --jobMetadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
+  --job-metadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
   --labels: record # User-defined labels for this job. The labels map can contain no more than 64 entries. Entries of the labels map are UTF8 strings that comply with the following restrictions: * Keys must conform to regexp: \p{Ll}\p{Lo}{0,62} * Values must conform to regexp: [\p{Ll}\p{Lo}\p{N}_-]{0,63} * Both keys and values are additionally constrained to be <= 128 bytes in size.
   --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
   --name: string # The user-specified Cloud Dataflow job name. Only one Job with a given name can exist in a project within one region at any given time. Jobs in different regions can have the same name. If a caller attempts to create a Job with the same name as an already-existing Job, the attempt returns the existing Job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
-  --pipelineDescription: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
-  --body-projectId: string # The ID of the Cloud Platform project that the job belongs to.
-  --replaceJobId: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job.
-  --replacedByJobId: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
-  --requestedState: string@requestedState-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
-  --satisfiesPzs: oneof<nothing, bool> # Reserved for future use. This field is set only in responses from the server; it is ignored if it is set in any requests.
-  --stageStates: list # This field may be mutated by the Cloud Dataflow service; callers cannot mutate it. — item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
-  --startTime: string # The timestamp when the job was started (transitioned to JOB_STATE_PENDING). Flexible resource scheduling jobs are started with some delay after job creation, so start_time is unset before start and is updated when the job is started by the Cloud Dataflow service. For other jobs, start_time always equals to create_time and is immutable and set by the Cloud Dataflow service. (format: google-datetime)
+  --pipeline-description: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
+  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to.
+  --replace-job-id: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job.
+  --replaced-by-job-id: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
+  --requested-state: string@requested-state-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
+  --satisfies-pzs: oneof<nothing, bool> # Reserved for future use. This field is set only in responses from the server; it is ignored if it is set in any requests.
+  --stage-states: list # This field may be mutated by the Cloud Dataflow service; callers cannot mutate it. — item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
+  --start-time: string # The timestamp when the job was started (transitioned to JOB_STATE_PENDING). Flexible resource scheduling jobs are started with some delay after job creation, so start_time is unset before start and is updated when the job is started by the Cloud Dataflow service. For other jobs, start_time always equals to create_time and is immutable and set by the Cloud Dataflow service. (format: google-datetime)
   --steps: list # Exactly one of step or steps_location should be specified. The top-level steps that constitute the entire job. Only retrieved with JOB_VIEW_ALL. — item shape: {kind?: string, name?: string, properties?: record}
-  --stepsLocation: string # The Cloud Storage location where the steps are stored.
-  --tempFiles: list # A set of files the system should be aware of that are used for temporary storage. These temporary files will be removed on job completion. No duplicates are allowed. No file patterns are supported. The supported files are: Google Cloud Storage: storage.googleapis.com/{bucket}/{object} bucket.storage.googleapis.com/{object}
-  --transformNameMapping: record # The map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
+  --steps-location: string # The Cloud Storage location where the steps are stored.
+  --temp-files: list # A set of files the system should be aware of that are used for temporary storage. These temporary files will be removed on job completion. No duplicates are allowed. No file patterns are supported. The supported files are: Google Cloud Storage: storage.googleapis.com/{bucket}/{object} bucket.storage.googleapis.com/{object}
+  --transform-name-mapping: record # The map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
   --type: string@type-completer # The type of Cloud Dataflow job.
 ]: any -> record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record<enableHotKeyLogging: bool>, experiments: list<string>, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list<string>, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list<record>, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list<record>, bigqueryDetails: list<record>, datastoreDetails: list<record>, fileDetails: list<record>, pubsubDetails: list<record>, sdkVersion: record<sdkSupportStatus: string, version: string, versionDisplayName: string>, spannerDetails: list<record>, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list<record>, executionPipelineStage: list<record>, originalPipelineTransform: list<record>, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: table<currentStateTime: string, executionStageName: string, executionStageState: string>, startTime: string, steps: table<kind: string, name: string, properties: record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "replaceJobId" $replaceJobId "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs" $qp)
-  let body = {clientRequestId: $clientRequestId, createTime: $createTime, createdFromSnapshotId: $createdFromSnapshotId, currentState: $currentState, currentStateTime: $currentStateTime, environment: $environment, executionInfo: $executionInfo, id: $id, jobMetadata: $jobMetadata, labels: $labels, location: $body_location, name: $name, pipelineDescription: $pipelineDescription, projectId: $body_projectId, replaceJobId: $replaceJobId, replacedByJobId: $replacedByJobId, requestedState: $requestedState, satisfiesPzs: $satisfiesPzs, stageStates: $stageStates, startTime: $startTime, steps: $steps, stepsLocation: $stepsLocation, tempFiles: $tempFiles, transformNameMapping: $transformNameMapping, type: $type} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "replaceJobId" $replace_job_id "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs") $qp)
+  let body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $body_location, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $replace_job_id, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -907,9 +907,9 @@ export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobscreate" [
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}
 # operationId: dataflow.projects.locations.jobs.get
 export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobsget" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,16 +925,16 @@ export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # The level of information requested in response.
 ]: nothing -> record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record<enableHotKeyLogging: bool>, experiments: list<string>, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list<string>, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list<record>, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list<record>, bigqueryDetails: list<record>, datastoreDetails: list<record>, fileDetails: list<record>, pubsubDetails: list<record>, sdkVersion: record<sdkSupportStatus: string, version: string, versionDisplayName: string>, spannerDetails: list<record>, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list<record>, executionPipelineStage: list<record>, originalPipelineTransform: list<record>, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: table<currentStateTime: string, executionStageName: string, executionStageState: string>, startTime: string, steps: table<kind: string, name: string, properties: record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -951,9 +951,9 @@ export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobsget" [
 # --stageStates item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
 # --steps item shape: {kind?: string, name?: string, properties?: record}
 export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobsupdate" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,43 +969,43 @@ export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobsupdate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --updateMask: string # The list of fields to update relative to Job. If empty, only RequestedJobState will be considered for update. If the FieldMask is not empty and RequestedJobState is none/empty, The fields specified in the update mask will be the only ones considered for update. If both RequestedJobState and update_mask are specified, we will first handle RequestedJobState and then the update_mask fields.
-  --clientRequestId: string # The client's unique identifier of the job, re-used across retried attempts. If this field is set, the service will ensure its uniqueness. The request to create a job will fail if the service has knowledge of a previously submitted job with the same client's ID and job name. The caller may use this field to ensure idempotence of job creation across retried attempts to create a job. By default, the field is empty and, in that case, the service ignores it.
-  --createTime: string # The timestamp when the job was initially created. Immutable and set by the Cloud Dataflow service. (format: google-datetime)
-  --createdFromSnapshotId: string # If this is specified, the job's initial state is populated from the given snapshot.
-  --currentState: string@currentState-completer # The current state of the job. Jobs are created in the `JOB_STATE_STOPPED` state unless otherwise specified. A job in the `JOB_STATE_RUNNING` state may asynchronously enter a terminal state. After a job has reached a terminal state, no further state updates may be made. This field may be mutated by the Cloud Dataflow service; callers cannot mutate it.
-  --currentStateTime: string # The timestamp associated with the current state. (format: google-datetime)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --update-mask: string # The list of fields to update relative to Job. If empty, only RequestedJobState will be considered for update. If the FieldMask is not empty and RequestedJobState is none/empty, The fields specified in the update mask will be the only ones considered for update. If both RequestedJobState and update_mask are specified, we will first handle RequestedJobState and then the update_mask fields.
+  --client-request-id: string # The client's unique identifier of the job, re-used across retried attempts. If this field is set, the service will ensure its uniqueness. The request to create a job will fail if the service has knowledge of a previously submitted job with the same client's ID and job name. The caller may use this field to ensure idempotence of job creation across retried attempts to create a job. By default, the field is empty and, in that case, the service ignores it.
+  --create-time: string # The timestamp when the job was initially created. Immutable and set by the Cloud Dataflow service. (format: google-datetime)
+  --created-from-snapshot-id: string # If this is specified, the job's initial state is populated from the given snapshot.
+  --current-state: string@current-state-completer # The current state of the job. Jobs are created in the `JOB_STATE_STOPPED` state unless otherwise specified. A job in the `JOB_STATE_RUNNING` state may asynchronously enter a terminal state. After a job has reached a terminal state, no further state updates may be made. This field may be mutated by the Cloud Dataflow service; callers cannot mutate it.
+  --current-state-time: string # The timestamp associated with the current state. (format: google-datetime)
   --environment: record # Describes the environment in which a Dataflow Job runs. — shape: {clusterManagerApiService?: string, dataset?: string, debugOptions?: record, experiments?: list, flexResourceSchedulingGoal?: "FLEXRS_UNSPECIFIED"|"FLEXRS_SPEED_OPTIMIZED"|"FLEXRS_COST_OPTIMIZED", internalExperiments?: record, sdkPipelineOptions?: record, serviceAccountEmail?: string, serviceKmsKeyName?: string, serviceOptions?: list, tempStoragePrefix?: string, userAgent?: record, version?: record, workerPools?: list, workerRegion?: string, workerZone?: string}
-  --executionInfo: record # Additional information about how a Cloud Dataflow job will be executed that isn't contained in the submitted job. — shape: {stages?: record}
+  --execution-info: record # Additional information about how a Cloud Dataflow job will be executed that isn't contained in the submitted job. — shape: {stages?: record}
   --id: string # The unique ID of this job. This field is set by the Cloud Dataflow service when the Job is created, and is immutable for the life of the job.
-  --jobMetadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
+  --job-metadata: record # Metadata available primarily for filtering jobs. Will be included in the ListJob response and Job SUMMARY view. — shape: {bigTableDetails?: list, bigqueryDetails?: list, datastoreDetails?: list, fileDetails?: list, pubsubDetails?: list, sdkVersion?: record, spannerDetails?: list, userDisplayProperties?: record}
   --labels: record # User-defined labels for this job. The labels map can contain no more than 64 entries. Entries of the labels map are UTF8 strings that comply with the following restrictions: * Keys must conform to regexp: \p{Ll}\p{Lo}{0,62} * Values must conform to regexp: [\p{Ll}\p{Lo}\p{N}_-]{0,63} * Both keys and values are additionally constrained to be <= 128 bytes in size.
   --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains this job.
   --name: string # The user-specified Cloud Dataflow job name. Only one Job with a given name can exist in a project within one region at any given time. Jobs in different regions can have the same name. If a caller attempts to create a Job with the same name as an already-existing Job, the attempt returns the existing Job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
-  --pipelineDescription: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
-  --body-projectId: string # The ID of the Cloud Platform project that the job belongs to.
-  --replaceJobId: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job.
-  --replacedByJobId: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
-  --requestedState: string@requestedState-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
-  --satisfiesPzs: oneof<nothing, bool> # Reserved for future use. This field is set only in responses from the server; it is ignored if it is set in any requests.
-  --stageStates: list # This field may be mutated by the Cloud Dataflow service; callers cannot mutate it. — item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
-  --startTime: string # The timestamp when the job was started (transitioned to JOB_STATE_PENDING). Flexible resource scheduling jobs are started with some delay after job creation, so start_time is unset before start and is updated when the job is started by the Cloud Dataflow service. For other jobs, start_time always equals to create_time and is immutable and set by the Cloud Dataflow service. (format: google-datetime)
+  --pipeline-description: record # A descriptive representation of submitted pipeline as well as the executed form. This data is provided by the Dataflow service for ease of visualizing the pipeline and interpreting Dataflow provided metrics. — shape: {displayData?: list, executionPipelineStage?: list, originalPipelineTransform?: list, stepNamesHash?: string}
+  --body-project-id: string # The ID of the Cloud Platform project that the job belongs to.
+  --replace-job-id: string # If this job is an update of an existing job, this field is the job ID of the job it replaced. When sending a `CreateJobRequest`, you can update a job by specifying it here. The job named here is stopped, and its intermediate state is transferred to this job.
+  --replaced-by-job-id: string # If another job is an update of this job (and thus, this job is in `JOB_STATE_UPDATED`), this field contains the ID of that job.
+  --requested-state: string@requested-state-completer # The job's requested state. `UpdateJob` may be used to switch between the `JOB_STATE_STOPPED` and `JOB_STATE_RUNNING` states, by setting requested_state. `UpdateJob` may also be used to directly set a job's requested state to `JOB_STATE_CANCELLED` or `JOB_STATE_DONE`, irrevocably terminating the job if it has not already reached a terminal state.
+  --satisfies-pzs: oneof<nothing, bool> # Reserved for future use. This field is set only in responses from the server; it is ignored if it is set in any requests.
+  --stage-states: list # This field may be mutated by the Cloud Dataflow service; callers cannot mutate it. — item shape: {currentStateTime?: string, executionStageName?: string, executionStageState?: "JOB_STATE_UNKNOWN"|"JOB_STATE_STOPPED"|"JOB_STATE_RUNNING"|"JOB_STATE_DONE"|"JOB_STATE_FAILED"|"JOB_STATE_CANCELLED"|"JOB_STATE_UPDATED"|"JOB_STATE_DRAINING"|"JOB_STATE_DRAINED"|"JOB_STATE_PENDING"|"JOB_STATE_CANCELLING"|"JOB_STATE_QUEUED"|"JOB_STATE_RESOURCE_CLEANING_UP"}
+  --start-time: string # The timestamp when the job was started (transitioned to JOB_STATE_PENDING). Flexible resource scheduling jobs are started with some delay after job creation, so start_time is unset before start and is updated when the job is started by the Cloud Dataflow service. For other jobs, start_time always equals to create_time and is immutable and set by the Cloud Dataflow service. (format: google-datetime)
   --steps: list # Exactly one of step or steps_location should be specified. The top-level steps that constitute the entire job. Only retrieved with JOB_VIEW_ALL. — item shape: {kind?: string, name?: string, properties?: record}
-  --stepsLocation: string # The Cloud Storage location where the steps are stored.
-  --tempFiles: list # A set of files the system should be aware of that are used for temporary storage. These temporary files will be removed on job completion. No duplicates are allowed. No file patterns are supported. The supported files are: Google Cloud Storage: storage.googleapis.com/{bucket}/{object} bucket.storage.googleapis.com/{object}
-  --transformNameMapping: record # The map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
+  --steps-location: string # The Cloud Storage location where the steps are stored.
+  --temp-files: list # A set of files the system should be aware of that are used for temporary storage. These temporary files will be removed on job completion. No duplicates are allowed. No file patterns are supported. The supported files are: Google Cloud Storage: storage.googleapis.com/{bucket}/{object} bucket.storage.googleapis.com/{object}
+  --transform-name-mapping: record # The map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
   --type: string@type-completer # The type of Cloud Dataflow job.
 ]: any -> record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record<enableHotKeyLogging: bool>, experiments: list<string>, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list<string>, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list<record>, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list<record>, bigqueryDetails: list<record>, datastoreDetails: list<record>, fileDetails: list<record>, pubsubDetails: list<record>, sdkVersion: record<sdkSupportStatus: string, version: string, versionDisplayName: string>, spannerDetails: list<record>, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list<record>, executionPipelineStage: list<record>, originalPipelineTransform: list<record>, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: table<currentStateTime: string, executionStageName: string, executionStageState: string>, startTime: string, steps: table<kind: string, name: string, properties: record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)" $qp)
-  let body = {clientRequestId: $clientRequestId, createTime: $createTime, createdFromSnapshotId: $createdFromSnapshotId, currentState: $currentState, currentStateTime: $currentStateTime, environment: $environment, executionInfo: $executionInfo, id: $id, jobMetadata: $jobMetadata, labels: $labels, location: $body_location, name: $name, pipelineDescription: $pipelineDescription, projectId: $body_projectId, replaceJobId: $replaceJobId, replacedByJobId: $replacedByJobId, requestedState: $requestedState, satisfiesPzs: $satisfiesPzs, stageStates: $stageStates, startTime: $startTime, steps: $steps, stepsLocation: $stepsLocation, tempFiles: $tempFiles, transformNameMapping: $transformNameMapping, type: $type} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}") $qp)
+  let body = {"clientRequestId": $client_request_id, "createTime": $create_time, "createdFromSnapshotId": $created_from_snapshot_id, "currentState": $current_state, "currentStateTime": $current_state_time, "environment": $environment, "executionInfo": $execution_info, "id": $id, "jobMetadata": $job_metadata, "labels": $labels, "location": $body_location, "name": $name, "pipelineDescription": $pipeline_description, "projectId": $body_project_id, "replaceJobId": $replace_job_id, "replacedByJobId": $replaced_by_job_id, "requestedState": $requested_state, "satisfiesPzs": $satisfies_pzs, "stageStates": $stage_states, "startTime": $start_time, "steps": $steps, "stepsLocation": $steps_location, "tempFiles": $temp_files, "transformNameMapping": $transform_name_mapping, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1017,9 +1017,9 @@ export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobsupdate" [
 # POST /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/debug/getConfig
 # operationId: dataflow.projects.locations.jobs.debug.getConfig
 export def "v1b3-projects-locations-jobs-debug-get-config dataflowprojectslocationsjobsdebuggetConfig" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,20 +1035,20 @@ export def "v1b3-projects-locations-jobs-debug-get-config dataflowprojectslocati
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --componentId: string # The internal component id for which debug configuration is requested.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --component-id: string # The internal component id for which debug configuration is requested.
   --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job specified by job_id.
-  --workerId: string # The worker id, i.e., VM hostname.
+  --worker-id: string # The worker id, i.e., VM hostname.
 ]: any -> record<config: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)/debug/getConfig" $qp)
-  let body = {componentId: $componentId, location: $body_location, workerId: $workerId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/debug/getConfig") $qp)
+  let body = {"componentId": $component_id, "location": $body_location, "workerId": $worker_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1060,9 +1060,9 @@ export def "v1b3-projects-locations-jobs-debug-get-config dataflowprojectslocati
 # POST /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/debug/sendCapture
 # operationId: dataflow.projects.locations.jobs.debug.sendCapture
 export def "v1b3-projects-locations-jobs-debug-send-capture dataflowprojectslocationsjobsdebugsendCapture" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1078,22 +1078,22 @@ export def "v1b3-projects-locations-jobs-debug-send-capture dataflowprojectsloca
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --componentId: string # The internal component id for which debug information is sent.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --component-id: string # The internal component id for which debug information is sent.
   --data: string # The encoded debug information.
-  --dataFormat: string@dataFormat-completer # Format for the data field above (id=5).
+  --data-format: string@data-format-completer # Format for the data field above (id=5).
   --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the job specified by job_id.
-  --workerId: string # The worker id, i.e., VM hostname.
+  --worker-id: string # The worker id, i.e., VM hostname.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)/debug/sendCapture" $qp)
-  let body = {componentId: $componentId, data: $data, dataFormat: $dataFormat, location: $body_location, workerId: $workerId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/debug/sendCapture") $qp)
+  let body = {"componentId": $component_id, "data": $data, "dataFormat": $data_format, "location": $body_location, "workerId": $worker_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1105,9 +1105,9 @@ export def "v1b3-projects-locations-jobs-debug-send-capture dataflowprojectsloca
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/executionDetails
 # operationId: dataflow.projects.locations.jobs.getExecutionDetails
 export def "v1b3-projects-locations-jobs-execution-details dataflowprojectslocationsjobsgetExecutionDetails" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,17 +1123,17 @@ export def "v1b3-projects-locations-jobs-execution-details dataflowprojectslocat
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --pageSize: int # If specified, determines the maximum number of stages to return. If unspecified, the service may choose an appropriate default, or may return an arbitrarily large number of results.
-  --pageToken: string # If supplied, this should be the value of next_page_token returned by an earlier call. This will cause the next page of results to be returned.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --page-size: int # If specified, determines the maximum number of stages to return. If unspecified, the service may choose an appropriate default, or may return an arbitrarily large number of results.
+  --page-token: string # If supplied, this should be the value of next_page_token returned by an earlier call. This will cause the next page of results to be returned.
 ]: nothing -> record<nextPageToken: string, stages: table<endTime: string, metrics: list, progress: record, stageId: string, startTime: string, state: string, stragglerSummary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)/executionDetails" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/executionDetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1144,9 +1144,9 @@ export def "v1b3-projects-locations-jobs-execution-details dataflowprojectslocat
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/messages
 # operationId: dataflow.projects.locations.jobs.messages.list
 export def "v1b3-projects-locations-jobs-messages dataflowprojectslocationsjobsmessageslist" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1162,20 +1162,20 @@ export def "v1b3-projects-locations-jobs-messages dataflowprojectslocationsjobsm
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --endTime: string # Return only messages with timestamps < end_time. The default is now (i.e. return up to the latest messages available).
-  --minimumImportance: string@minimumImportance-completer # Filter to only get messages with importance >= level
-  --pageSize: int # If specified, determines the maximum number of messages to return. If unspecified, the service may choose an appropriate default, or may return an arbitrarily large number of results.
-  --pageToken: string # If supplied, this should be the value of next_page_token returned by an earlier call. This will cause the next page of results to be returned.
-  --startTime: string # If specified, return only messages with timestamps >= start_time. The default is the job creation time (i.e. beginning of messages).
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --end-time: string # Return only messages with timestamps < end_time. The default is now (i.e. return up to the latest messages available).
+  --minimum-importance: string@minimum-importance-completer # Filter to only get messages with importance >= level
+  --page-size: int # If specified, determines the maximum number of messages to return. If unspecified, the service may choose an appropriate default, or may return an arbitrarily large number of results.
+  --page-token: string # If supplied, this should be the value of next_page_token returned by an earlier call. This will cause the next page of results to be returned.
+  --start-time: string # If specified, return only messages with timestamps >= start_time. The default is the job creation time (i.e. beginning of messages).
 ]: nothing -> record<autoscalingEvents: table<currentNumWorkers: string, description: record, eventType: string, targetNumWorkers: string, time: string, workerPool: string>, jobMessages: table<id: string, messageImportance: string, messageText: string, time: string>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "minimumImportance" $minimumImportance "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "startTime" $startTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)/messages" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "minimumImportance" $minimum_importance "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1186,9 +1186,9 @@ export def "v1b3-projects-locations-jobs-messages dataflowprojectslocationsjobsm
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/metrics
 # operationId: dataflow.projects.locations.jobs.getMetrics
 export def "v1b3-projects-locations-jobs-metrics dataflowprojectslocationsjobsgetMetrics" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,16 +1204,16 @@ export def "v1b3-projects-locations-jobs-metrics dataflowprojectslocationsjobsge
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --startTime: string # Return only metric data that has changed since this time. Default is to return all information about all metrics for the job.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --start-time: string # Return only metric data that has changed since this time. Default is to return all information about all metrics for the job.
 ]: nothing -> record<metricTime: string, metrics: table<cumulative: bool, distribution: any, gauge: any, internal: any, kind: string, meanCount: any, meanSum: any, name: record, scalar: any, set: any, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "startTime" $startTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)/metrics" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1224,9 +1224,9 @@ export def "v1b3-projects-locations-jobs-metrics dataflowprojectslocationsjobsge
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/snapshots
 # operationId: dataflow.projects.locations.jobs.snapshots.list
 export def "v1b3-projects-locations-jobs-snapshots dataflowprojectslocationsjobssnapshotslist" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,15 +1242,15 @@ export def "v1b3-projects-locations-jobs-snapshots dataflowprojectslocationsjobs
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<snapshots: table<creationTime: string, description: string, diskSizeBytes: string, id: string, projectId: string, pubsubMetadata: list, region: string, sourceJobId: string, state: string, ttl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)/snapshots" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1261,10 +1261,10 @@ export def "v1b3-projects-locations-jobs-snapshots dataflowprojectslocationsjobs
 # GET /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/stages/{stageId}/executionDetails
 # operationId: dataflow.projects.locations.jobs.stages.getExecutionDetails
 export def "v1b3-projects-locations-jobs-stages-execution-details dataflowprojectslocationsjobsstagesgetExecutionDetails" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
-  stageId: string
+  job_id: string
+  stage_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,19 +1280,19 @@ export def "v1b3-projects-locations-jobs-stages-execution-details dataflowprojec
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --endTime: string # Upper time bound of work items to include, by start time.
-  --pageSize: int # If specified, determines the maximum number of work items to return. If unspecified, the service may choose an appropriate default, or may return an arbitrarily large number of results.
-  --pageToken: string # If supplied, this should be the value of next_page_token returned by an earlier call. This will cause the next page of results to be returned.
-  --startTime: string # Lower time bound of work items to include, by start time.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --end-time: string # Upper time bound of work items to include, by start time.
+  --page-size: int # If specified, determines the maximum number of work items to return. If unspecified, the service may choose an appropriate default, or may return an arbitrarily large number of results.
+  --page-token: string # If supplied, this should be the value of next_page_token returned by an earlier call. This will cause the next page of results to be returned.
+  --start-time: string # Lower time bound of work items to include, by start time.
 ]: nothing -> record<nextPageToken: string, workers: table<workItems: list, workerName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar") (serialize-qp "startTime" $startTime "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)/stages/($stageId)/executionDetails" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "startTime" $start_time "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id, stage_id: $stage_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/stages/{stage_id}/executionDetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1303,9 +1303,9 @@ export def "v1b3-projects-locations-jobs-stages-execution-details dataflowprojec
 # POST /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}/workItems:lease
 # operationId: dataflow.projects.locations.jobs.workItems.lease
 export def "v1b3-projects-locations-jobs-work-items-lease dataflowprojectslocationsjobsworkItemslease" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1321,24 +1321,24 @@ export def "v1b3-projects-locations-jobs-work-items-lease dataflowprojectslocati
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --currentWorkerTime: string # The current timestamp at the worker. (format: google-datetime)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --current-worker-time: string # The current timestamp at the worker. (format: google-datetime)
   --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the WorkItem's job.
-  --requestedLeaseDuration: string # The initial lease period. (format: google-duration)
-  --unifiedWorkerRequest: record # Untranslated bag-of-bytes WorkRequest from UnifiedWorker.
-  --workItemTypes: list # Filter for WorkItem type.
-  --workerCapabilities: list # Worker capabilities. WorkItems might be limited to workers with specific capabilities.
-  --workerId: string # Identifies the worker leasing work -- typically the ID of the virtual machine running the worker.
+  --requested-lease-duration: string # The initial lease period. (format: google-duration)
+  --unified-worker-request: record # Untranslated bag-of-bytes WorkRequest from UnifiedWorker.
+  --work-item-types: list # Filter for WorkItem type.
+  --worker-capabilities: list # Worker capabilities. WorkItems might be limited to workers with specific capabilities.
+  --worker-id: string # Identifies the worker leasing work -- typically the ID of the virtual machine running the worker.
 ]: any -> record<unifiedWorkerResponse: record, workItems: table<configuration: string, id: string, initialReportIndex: string, jobId: string, leaseExpireTime: string, mapTask: record, packages: list, projectId: string, reportStatusInterval: string, seqMapTask: record, shellTask: record, sourceOperationTask: record, streamingComputationTask: record, streamingConfigTask: record, streamingSetupTask: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)/workItems:lease" $qp)
-  let body = {currentWorkerTime: $currentWorkerTime, location: $body_location, requestedLeaseDuration: $requestedLeaseDuration, unifiedWorkerRequest: $unifiedWorkerRequest, workItemTypes: $workItemTypes, workerCapabilities: $workerCapabilities, workerId: $workerId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/workItems:lease") $qp)
+  let body = {"currentWorkerTime": $current_worker_time, "location": $body_location, "requestedLeaseDuration": $requested_lease_duration, "unifiedWorkerRequest": $unified_worker_request, "workItemTypes": $work_item_types, "workerCapabilities": $worker_capabilities, "workerId": $worker_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1351,9 +1351,9 @@ export def "v1b3-projects-locations-jobs-work-items-lease dataflowprojectslocati
 # operationId: dataflow.projects.locations.jobs.workItems.reportStatus
 # --workItemStatuses item shape: {completed?: bool, counterUpdates?: list, dynamicSourceSplit?: record, errors?: list, metricUpdates?: list, progress?: record, reportIndex?: string, reportedProgress?: record, requestedLeaseDuration?: string, sourceFork?: record, sourceOperationResponse?: record, stopPosition?: record, totalThrottlerWaitTimeSeconds?: float, workItemId?: string}
 export def "v1b3-projects-locations-jobs-work-items-report-status dataflowprojectslocationsjobsworkItemsreportStatus" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1369,22 +1369,22 @@ export def "v1b3-projects-locations-jobs-work-items-report-status dataflowprojec
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --currentWorkerTime: string # The current timestamp at the worker. (format: google-datetime)
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --current-worker-time: string # The current timestamp at the worker. (format: google-datetime)
   --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) that contains the WorkItem's job.
-  --unifiedWorkerRequest: record # Untranslated bag-of-bytes WorkProgressUpdateRequest from UnifiedWorker.
-  --workItemStatuses: list # The order is unimportant, except that the order of the WorkItemServiceState messages in the ReportWorkItemStatusResponse corresponds to the order of WorkItemStatus messages here. — item shape: {completed?: bool, counterUpdates?: list, dynamicSourceSplit?: record, errors?: list, metricUpdates?: list, progress?: record, reportIndex?: string, reportedProgress?: record, requestedLeaseDuration?: string, sourceFork?: record, sourceOperationResponse?: record, stopPosition?: record, totalThrottlerWaitTimeSeconds?: float, workItemId?: string}
-  --workerId: string # The ID of the worker reporting the WorkItem status. If this does not match the ID of the worker which the Dataflow service believes currently has the lease on the WorkItem, the report will be dropped (with an error response).
+  --unified-worker-request: record # Untranslated bag-of-bytes WorkProgressUpdateRequest from UnifiedWorker.
+  --work-item-statuses: list # The order is unimportant, except that the order of the WorkItemServiceState messages in the ReportWorkItemStatusResponse corresponds to the order of WorkItemStatus messages here. — item shape: {completed?: bool, counterUpdates?: list, dynamicSourceSplit?: record, errors?: list, metricUpdates?: list, progress?: record, reportIndex?: string, reportedProgress?: record, requestedLeaseDuration?: string, sourceFork?: record, sourceOperationResponse?: record, stopPosition?: record, totalThrottlerWaitTimeSeconds?: float, workItemId?: string}
+  --worker-id: string # The ID of the worker reporting the WorkItem status. If this does not match the ID of the worker which the Dataflow service believes currently has the lease on the WorkItem, the report will be dropped (with an error response).
 ]: any -> record<unifiedWorkerResponse: record, workItemServiceStates: table<completeWorkStatus: record, harnessData: record, hotKeyDetection: record, leaseExpireTime: string, metricShortId: list, nextReportIndex: string, reportStatusInterval: string, splitRequest: record, suggestedStopPoint: record, suggestedStopPosition: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId)/workItems:reportStatus" $qp)
-  let body = {currentWorkerTime: $currentWorkerTime, location: $body_location, unifiedWorkerRequest: $unifiedWorkerRequest, workItemStatuses: $workItemStatuses, workerId: $workerId} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}/workItems:reportStatus") $qp)
+  let body = {"currentWorkerTime": $current_worker_time, "location": $body_location, "unifiedWorkerRequest": $unified_worker_request, "workItemStatuses": $work_item_statuses, "workerId": $worker_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1396,9 +1396,9 @@ export def "v1b3-projects-locations-jobs-work-items-report-status dataflowprojec
 # POST /v1b3/projects/{projectId}/locations/{location}/jobs/{jobId}:snapshot
 # operationId: dataflow.projects.locations.jobs.snapshot
 export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobssnapshot" [
-  projectId: string
+  project_id: string
   location: string
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1414,21 +1414,21 @@ export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobssnapshot" 
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --description: string # User specified description of the snapshot. Maybe empty.
   --body-location: string # The location that contains this job.
-  --snapshotSources: oneof<nothing, bool> # If true, perform snapshots for sources which support this.
+  --snapshot-sources: oneof<nothing, bool> # If true, perform snapshots for sources which support this.
   --ttl: string # TTL for the snapshot. (format: google-duration)
 ]: any -> record<creationTime: string, description: string, diskSizeBytes: string, id: string, projectId: string, pubsubMetadata: table<expireTime: string, snapshotName: string, topicName: string>, region: string, sourceJobId: string, state: string, ttl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/jobs/($jobId):snapshot" $qp)
-  let body = {description: $description, location: $body_location, snapshotSources: $snapshotSources, ttl: $ttl} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, job_id: $job_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/jobs/{job_id}:snapshot") $qp)
+  let body = {"description": $description, "location": $body_location, "snapshotSources": $snapshot_sources, "ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1440,7 +1440,7 @@ export def "v1b3-projects-locations-jobs dataflowprojectslocationsjobssnapshot" 
 # GET /v1b3/projects/{projectId}/locations/{location}/snapshots
 # operationId: dataflow.projects.locations.snapshots.list
 export def "v1b3-projects-locations-snapshots dataflowprojectslocationssnapshotslist" [
-  projectId: string
+  project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1457,16 +1457,16 @@ export def "v1b3-projects-locations-snapshots dataflowprojectslocationssnapshots
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --jobId: string # If specified, list snapshots created from this job.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --job-id: string # If specified, list snapshots created from this job.
 ]: nothing -> record<snapshots: table<creationTime: string, description: string, diskSizeBytes: string, id: string, projectId: string, pubsubMetadata: list, region: string, sourceJobId: string, state: string, ttl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "jobId" $jobId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/snapshots" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "jobId" $job_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location} | format pattern "/v1b3/projects/{project_id}/locations/{location}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1477,9 +1477,9 @@ export def "v1b3-projects-locations-snapshots dataflowprojectslocationssnapshots
 # DELETE /v1b3/projects/{projectId}/locations/{location}/snapshots/{snapshotId}
 # operationId: dataflow.projects.locations.snapshots.delete
 export def "v1b3-projects-locations-snapshots dataflowprojectslocationssnapshotsdelete" [
-  projectId: string
+  project_id: string
   location: string
-  snapshotId: string
+  snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1495,15 +1495,15 @@ export def "v1b3-projects-locations-snapshots dataflowprojectslocationssnapshots
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/snapshots/($snapshotId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, snapshot_id: $snapshot_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/snapshots/{snapshot_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1514,9 +1514,9 @@ export def "v1b3-projects-locations-snapshots dataflowprojectslocationssnapshots
 # GET /v1b3/projects/{projectId}/locations/{location}/snapshots/{snapshotId}
 # operationId: dataflow.projects.locations.snapshots.get
 export def "v1b3-projects-locations-snapshots dataflowprojectslocationssnapshotsget" [
-  projectId: string
+  project_id: string
   location: string
-  snapshotId: string
+  snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1532,15 +1532,15 @@ export def "v1b3-projects-locations-snapshots dataflowprojectslocationssnapshots
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<creationTime: string, description: string, diskSizeBytes: string, id: string, projectId: string, pubsubMetadata: table<expireTime: string, snapshotName: string, topicName: string>, region: string, sourceJobId: string, state: string, ttl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/snapshots/($snapshotId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location, snapshot_id: $snapshot_id} | format pattern "/v1b3/projects/{project_id}/locations/{location}/snapshots/{snapshot_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1552,7 +1552,7 @@ export def "v1b3-projects-locations-snapshots dataflowprojectslocationssnapshots
 # operationId: dataflow.projects.locations.templates.create
 # --environment shape: {additionalExperiments?: list, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
 export def "v1b3-projects-locations-templates dataflowprojectslocationstemplatescreate" [
-  projectId: string
+  project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1569,22 +1569,22 @@ export def "v1b3-projects-locations-templates dataflowprojectslocationstemplates
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --environment: record # The environment values to set at runtime. — shape: {additionalExperiments?: list, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
-  --gcsPath: string # Required. A Cloud Storage path to the template from which to create the job. Must be a valid Cloud Storage URL, beginning with `gs://`.
-  --jobName: string # Required. The job name to use for the created job.
+  --gcs-path: string # Required. A Cloud Storage path to the template from which to create the job. Must be a valid Cloud Storage URL, beginning with `gs://`.
+  --job-name: string # Required. The job name to use for the created job.
   --body-location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) to which to direct the request.
   --parameters: record # The runtime parameters to pass to the job.
 ]: any -> record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record<enableHotKeyLogging: bool>, experiments: list<string>, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list<string>, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list<record>, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list<record>, bigqueryDetails: list<record>, datastoreDetails: list<record>, fileDetails: list<record>, pubsubDetails: list<record>, sdkVersion: record<sdkSupportStatus: string, version: string, versionDisplayName: string>, spannerDetails: list<record>, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list<record>, executionPipelineStage: list<record>, originalPipelineTransform: list<record>, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: table<currentStateTime: string, executionStageName: string, executionStageState: string>, startTime: string, steps: table<kind: string, name: string, properties: record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/templates" $qp)
-  let body = {environment: $environment, gcsPath: $gcsPath, jobName: $jobName, location: $body_location, parameters: $parameters} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location} | format pattern "/v1b3/projects/{project_id}/locations/{location}/templates") $qp)
+  let body = {"environment": $environment, "gcsPath": $gcs_path, "jobName": $job_name, "location": $body_location, "parameters": $parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1596,7 +1596,7 @@ export def "v1b3-projects-locations-templates dataflowprojectslocationstemplates
 # GET /v1b3/projects/{projectId}/locations/{location}/templates:get
 # operationId: dataflow.projects.locations.templates.get
 export def "v1b3-projects-locations-templates-get dataflowprojectslocationstemplatesget" [
-  projectId: string
+  project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1613,17 +1613,17 @@ export def "v1b3-projects-locations-templates-get dataflowprojectslocationstempl
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --gcsPath: string # Required. A Cloud Storage path to the template from which to create the job. Must be valid Cloud Storage URL, beginning with 'gs://'.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --gcs-path: string # Required. A Cloud Storage path to the template from which to create the job. Must be valid Cloud Storage URL, beginning with 'gs://'.
   --view: string@view-completer-1 # The view to retrieve. Defaults to METADATA_ONLY.
 ]: nothing -> record<metadata: record<description: string, name: string, parameters: list<record>>, runtimeMetadata: record<parameters: list<record>, sdkInfo: record<language: string, version: string>>, status: record<code: int, details: list<record>, message: string>, templateType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "gcsPath" $gcsPath "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/templates:get" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "gcsPath" $gcs_path "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location} | format pattern "/v1b3/projects/{project_id}/locations/{location}/templates:get") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1635,7 +1635,7 @@ export def "v1b3-projects-locations-templates-get dataflowprojectslocationstempl
 # operationId: dataflow.projects.locations.templates.launch
 # --environment shape: {additionalExperiments?: list, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
 export def "v1b3-projects-locations-templates-launch dataflowprojectslocationstemplateslaunch" [
-  projectId: string
+  project_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1652,26 +1652,26 @@ export def "v1b3-projects-locations-templates-launch dataflowprojectslocationste
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dynamicTemplategcsPath: string # Path to dynamic template spec file on Cloud Storage. The file must be a Json serialized DynamicTemplateFieSpec object.
-  --dynamicTemplatestagingLocation: string # Cloud Storage path for staging dependencies. Must be a valid Cloud Storage URL, beginning with `gs://`.
-  --gcsPath: string # A Cloud Storage path to the template from which to create the job. Must be valid Cloud Storage URL, beginning with 'gs://'.
-  --validateOnly: oneof<nothing, bool> # If true, the request is validated but not actually executed. Defaults to false.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --dynamic-template-gcs-path: string # Path to dynamic template spec file on Cloud Storage. The file must be a Json serialized DynamicTemplateFieSpec object.
+  --dynamic-template-staging-location: string # Cloud Storage path for staging dependencies. Must be a valid Cloud Storage URL, beginning with `gs://`.
+  --gcs-path: string # A Cloud Storage path to the template from which to create the job. Must be valid Cloud Storage URL, beginning with 'gs://'.
+  --validate-only: oneof<nothing, bool> # If true, the request is validated but not actually executed. Defaults to false.
   --environment: record # The environment values to set at runtime. — shape: {additionalExperiments?: list, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
-  --jobName: string # Required. The job name to use for the created job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
+  --job-name: string # Required. The job name to use for the created job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
   --parameters: record # The runtime parameters to pass to the job.
-  --transformNameMapping: record # Only applicable when updating a pipeline. Map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
+  --transform-name-mapping: record # Only applicable when updating a pipeline. Map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
   --update: oneof<nothing, bool> # If set, replace the existing pipeline with the name specified by jobName with this pipeline, preserving state.
 ]: any -> record<job: record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record, experiments: list, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list, bigqueryDetails: list, datastoreDetails: list, fileDetails: list, pubsubDetails: list, sdkVersion: record, spannerDetails: list, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list, executionPipelineStage: list, originalPipelineTransform: list, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: list<record>, startTime: string, steps: list<record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "dynamicTemplate.gcsPath" $dynamicTemplategcsPath "scalar") (serialize-qp "dynamicTemplate.stagingLocation" $dynamicTemplatestagingLocation "scalar") (serialize-qp "gcsPath" $gcsPath "scalar") (serialize-qp "validateOnly" $validateOnly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/locations/($location)/templates:launch" $qp)
-  let body = {environment: $environment, jobName: $jobName, parameters: $parameters, transformNameMapping: $transformNameMapping, update: $update} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dynamicTemplate.gcsPath" $dynamic_template_gcs_path "scalar") (serialize-qp "dynamicTemplate.stagingLocation" $dynamic_template_staging_location "scalar") (serialize-qp "gcsPath" $gcs_path "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, location: $location} | format pattern "/v1b3/projects/{project_id}/locations/{location}/templates:launch") $qp)
+  let body = {"environment": $environment, "jobName": $job_name, "parameters": $parameters, "transformNameMapping": $transform_name_mapping, "update": $update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1683,7 +1683,7 @@ export def "v1b3-projects-locations-templates-launch dataflowprojectslocationste
 # DELETE /v1b3/projects/{projectId}/snapshots
 # operationId: dataflow.projects.deleteSnapshots
 export def "v1b3-projects-snapshots dataflowprojectsdeleteSnapshots" [
-  projectId: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1699,17 +1699,17 @@ export def "v1b3-projects-snapshots dataflowprojectsdeleteSnapshots" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --location: string # The location that contains this snapshot.
-  --snapshotId: string # The ID of the snapshot.
+  --snapshot-id: string # The ID of the snapshot.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "snapshotId" $snapshotId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/snapshots" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "snapshotId" $snapshot_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v1b3/projects/{project_id}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1720,7 +1720,7 @@ export def "v1b3-projects-snapshots dataflowprojectsdeleteSnapshots" [
 # GET /v1b3/projects/{projectId}/snapshots
 # operationId: dataflow.projects.snapshots.list
 export def "v1b3-projects-snapshots dataflowprojectssnapshotslist" [
-  projectId: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1736,17 +1736,17 @@ export def "v1b3-projects-snapshots dataflowprojectssnapshotslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --jobId: string # If specified, list snapshots created from this job.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --job-id: string # If specified, list snapshots created from this job.
   --location: string # The location to list snapshots in.
 ]: nothing -> record<snapshots: table<creationTime: string, description: string, diskSizeBytes: string, id: string, projectId: string, pubsubMetadata: list, region: string, sourceJobId: string, state: string, ttl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "jobId" $jobId "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/snapshots" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "jobId" $job_id "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v1b3/projects/{project_id}/snapshots") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1757,8 +1757,8 @@ export def "v1b3-projects-snapshots dataflowprojectssnapshotslist" [
 # GET /v1b3/projects/{projectId}/snapshots/{snapshotId}
 # operationId: dataflow.projects.snapshots.get
 export def "v1b3-projects-snapshots dataflowprojectssnapshotsget" [
-  projectId: string
-  snapshotId: string
+  project_id: string
+  snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1774,16 +1774,16 @@ export def "v1b3-projects-snapshots dataflowprojectssnapshotsget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --location: string # The location that contains this snapshot.
 ]: nothing -> record<creationTime: string, description: string, diskSizeBytes: string, id: string, projectId: string, pubsubMetadata: table<expireTime: string, snapshotName: string, topicName: string>, region: string, sourceJobId: string, state: string, ttl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/snapshots/($snapshotId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id, snapshot_id: $snapshot_id} | format pattern "/v1b3/projects/{project_id}/snapshots/{snapshot_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1795,7 +1795,7 @@ export def "v1b3-projects-snapshots dataflowprojectssnapshotsget" [
 # operationId: dataflow.projects.templates.create
 # --environment shape: {additionalExperiments?: list, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
 export def "v1b3-projects-templates dataflowprojectstemplatescreate" [
-  projectId: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1811,22 +1811,22 @@ export def "v1b3-projects-templates dataflowprojectstemplatescreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --environment: record # The environment values to set at runtime. — shape: {additionalExperiments?: list, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
-  --gcsPath: string # Required. A Cloud Storage path to the template from which to create the job. Must be a valid Cloud Storage URL, beginning with `gs://`.
-  --jobName: string # Required. The job name to use for the created job.
+  --gcs-path: string # Required. A Cloud Storage path to the template from which to create the job. Must be a valid Cloud Storage URL, beginning with `gs://`.
+  --job-name: string # Required. The job name to use for the created job.
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) to which to direct the request.
   --parameters: record # The runtime parameters to pass to the job.
 ]: any -> record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record<enableHotKeyLogging: bool>, experiments: list<string>, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list<string>, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list<record>, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list<record>, bigqueryDetails: list<record>, datastoreDetails: list<record>, fileDetails: list<record>, pubsubDetails: list<record>, sdkVersion: record<sdkSupportStatus: string, version: string, versionDisplayName: string>, spannerDetails: list<record>, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list<record>, executionPipelineStage: list<record>, originalPipelineTransform: list<record>, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: table<currentStateTime: string, executionStageName: string, executionStageState: string>, startTime: string, steps: table<kind: string, name: string, properties: record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/templates" $qp)
-  let body = {environment: $environment, gcsPath: $gcsPath, jobName: $jobName, location: $location, parameters: $parameters} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v1b3/projects/{project_id}/templates") $qp)
+  let body = {"environment": $environment, "gcsPath": $gcs_path, "jobName": $job_name, "location": $location, "parameters": $parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1838,7 +1838,7 @@ export def "v1b3-projects-templates dataflowprojectstemplatescreate" [
 # GET /v1b3/projects/{projectId}/templates:get
 # operationId: dataflow.projects.templates.get
 export def "v1b3-projects-templates-get dataflowprojectstemplatesget" [
-  projectId: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1854,18 +1854,18 @@ export def "v1b3-projects-templates-get dataflowprojectstemplatesget" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --gcsPath: string # Required. A Cloud Storage path to the template from which to create the job. Must be valid Cloud Storage URL, beginning with 'gs://'.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --gcs-path: string # Required. A Cloud Storage path to the template from which to create the job. Must be valid Cloud Storage URL, beginning with 'gs://'.
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) to which to direct the request.
   --view: string@view-completer-1 # The view to retrieve. Defaults to METADATA_ONLY.
 ]: nothing -> record<metadata: record<description: string, name: string, parameters: list<record>>, runtimeMetadata: record<parameters: list<record>, sdkInfo: record<language: string, version: string>>, status: record<code: int, details: list<record>, message: string>, templateType: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "gcsPath" $gcsPath "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/templates:get" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "gcsPath" $gcs_path "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v1b3/projects/{project_id}/templates:get") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1877,7 +1877,7 @@ export def "v1b3-projects-templates-get dataflowprojectstemplatesget" [
 # operationId: dataflow.projects.templates.launch
 # --environment shape: {additionalExperiments?: list, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
 export def "v1b3-projects-templates-launch dataflowprojectstemplateslaunch" [
-  projectId: string
+  project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1893,27 +1893,27 @@ export def "v1b3-projects-templates-launch dataflowprojectstemplateslaunch" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dynamicTemplategcsPath: string # Path to dynamic template spec file on Cloud Storage. The file must be a Json serialized DynamicTemplateFieSpec object.
-  --dynamicTemplatestagingLocation: string # Cloud Storage path for staging dependencies. Must be a valid Cloud Storage URL, beginning with `gs://`.
-  --gcsPath: string # A Cloud Storage path to the template from which to create the job. Must be valid Cloud Storage URL, beginning with 'gs://'.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --dynamic-template-gcs-path: string # Path to dynamic template spec file on Cloud Storage. The file must be a Json serialized DynamicTemplateFieSpec object.
+  --dynamic-template-staging-location: string # Cloud Storage path for staging dependencies. Must be a valid Cloud Storage URL, beginning with `gs://`.
+  --gcs-path: string # A Cloud Storage path to the template from which to create the job. Must be valid Cloud Storage URL, beginning with 'gs://'.
   --location: string # The [regional endpoint] (https://cloud.google.com/dataflow/docs/concepts/regional-endpoints) to which to direct the request.
-  --validateOnly: oneof<nothing, bool> # If true, the request is validated but not actually executed. Defaults to false.
+  --validate-only: oneof<nothing, bool> # If true, the request is validated but not actually executed. Defaults to false.
   --environment: record # The environment values to set at runtime. — shape: {additionalExperiments?: list, additionalUserLabels?: record, bypassTempDirValidation?: bool, enableStreamingEngine?: bool, ipConfiguration?: "WORKER_IP_UNSPECIFIED"|"WORKER_IP_PUBLIC"|"WORKER_IP_PRIVATE", kmsKeyName?: string, machineType?: string, maxWorkers?: int, network?: string, numWorkers?: int, serviceAccountEmail?: string, subnetwork?: string, tempLocation?: string, workerRegion?: string, workerZone?: string, zone?: string}
-  --jobName: string # Required. The job name to use for the created job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
+  --job-name: string # Required. The job name to use for the created job. The name must match the regular expression `[a-z]([-a-z0-9]{0,1022}[a-z0-9])?`
   --parameters: record # The runtime parameters to pass to the job.
-  --transformNameMapping: record # Only applicable when updating a pipeline. Map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
+  --transform-name-mapping: record # Only applicable when updating a pipeline. Map of transform name prefixes of the job to be replaced to the corresponding name prefixes of the new job.
   --update: oneof<nothing, bool> # If set, replace the existing pipeline with the name specified by jobName with this pipeline, preserving state.
 ]: any -> record<job: record<clientRequestId: string, createTime: string, createdFromSnapshotId: string, currentState: string, currentStateTime: string, environment: record<clusterManagerApiService: string, dataset: string, debugOptions: record, experiments: list, flexResourceSchedulingGoal: string, internalExperiments: record, sdkPipelineOptions: record, serviceAccountEmail: string, serviceKmsKeyName: string, serviceOptions: list, shuffleMode: string, tempStoragePrefix: string, userAgent: record, version: record, workerPools: list, workerRegion: string, workerZone: string>, executionInfo: record<stages: record>, id: string, jobMetadata: record<bigTableDetails: list, bigqueryDetails: list, datastoreDetails: list, fileDetails: list, pubsubDetails: list, sdkVersion: record, spannerDetails: list, userDisplayProperties: record>, labels: record, location: string, name: string, pipelineDescription: record<displayData: list, executionPipelineStage: list, originalPipelineTransform: list, stepNamesHash: string>, projectId: string, replaceJobId: string, replacedByJobId: string, requestedState: string, satisfiesPzs: bool, stageStates: list<record>, startTime: string, steps: list<record>, stepsLocation: string, tempFiles: list<string>, transformNameMapping: record, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "dynamicTemplate.gcsPath" $dynamicTemplategcsPath "scalar") (serialize-qp "dynamicTemplate.stagingLocation" $dynamicTemplatestagingLocation "scalar") (serialize-qp "gcsPath" $gcsPath "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "validateOnly" $validateOnly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1b3/projects/($projectId)/templates:launch" $qp)
-  let body = {environment: $environment, jobName: $jobName, parameters: $parameters, transformNameMapping: $transformNameMapping, update: $update} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "dynamicTemplate.gcsPath" $dynamic_template_gcs_path "scalar") (serialize-qp "dynamicTemplate.stagingLocation" $dynamic_template_staging_location "scalar") (serialize-qp "gcsPath" $gcs_path "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/v1b3/projects/{project_id}/templates:launch") $qp)
+  let body = {"environment": $environment, "jobName": $job_name, "parameters": $parameters, "transformNameMapping": $transform_name_mapping, "update": $update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

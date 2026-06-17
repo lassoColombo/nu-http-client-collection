@@ -105,7 +105,7 @@ export def "ecosystems ecosystemsOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)")
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id} | format pattern "/ecosystems/{ecosystem_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +131,7 @@ export def "ecosystems-categories categoriesAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/categories" $qp)
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id} | format pattern "/ecosystems/{ecosystem_id}/categories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -155,7 +155,7 @@ export def "ecosystems-categories categoriesOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/categories/($id)")
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id, id: $id} | format pattern "/ecosystems/{ecosystem_id}/categories/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,7 +182,7 @@ export def "ecosystems-categories-listings categoryListingsAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/categories/($id)/listings" $qp)
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id, id: $id} | format pattern "/ecosystems/{ecosystem_id}/categories/{id}/listings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,7 +208,7 @@ export def "ecosystems-collections collectionsAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/collections" $qp)
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id} | format pattern "/ecosystems/{ecosystem_id}/collections") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,7 +232,7 @@ export def "ecosystems-collections collectionsOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/collections/($id)")
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id, id: $id} | format pattern "/ecosystems/{ecosystem_id}/collections/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +259,7 @@ export def "ecosystems-collections-listings collectionListingsAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/collections/($id)/listings" $qp)
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id, id: $id} | format pattern "/ecosystems/{ecosystem_id}/collections/{id}/listings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +269,7 @@ export def "ecosystems-collections-listings collectionListingsAll" [
 #
 # GET /ecosystems/{ecosystem_id}/listings
 # operationId: listingsAll
-export def "ecosystems-listings listingsAll" [
+export def "ecosystems-listings list-ings-all" [
   ecosystem_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +286,7 @@ export def "ecosystems-listings listingsAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "external_id" $external_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/listings" $qp)
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id} | format pattern "/ecosystems/{ecosystem_id}/listings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,7 +296,7 @@ export def "ecosystems-listings listingsAll" [
 #
 # GET /ecosystems/{ecosystem_id}/listings/{id}
 # operationId: listingsOne
-export def "ecosystems-listings listingsOne" [
+export def "ecosystems-listings list-ings-one" [
   ecosystem_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -310,7 +310,7 @@ export def "ecosystems-listings listingsOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/listings/($id)")
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id, id: $id} | format pattern "/ecosystems/{ecosystem_id}/listings/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -333,7 +333,7 @@ export def "ecosystems-products productsAll" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/products")
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id} | format pattern "/ecosystems/{ecosystem_id}/products"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,7 +357,7 @@ export def "ecosystems-products productsOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/products/($id)")
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id, id: $id} | format pattern "/ecosystems/{ecosystem_id}/products/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -384,7 +384,7 @@ export def "ecosystems-products-listings productListingsAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/ecosystems/($ecosystem_id)/products/($id)/listings" $qp)
+  let full_url = (build-url $base ({ecosystem_id: $ecosystem_id, id: $id} | format pattern "/ecosystems/{ecosystem_id}/products/{id}/listings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

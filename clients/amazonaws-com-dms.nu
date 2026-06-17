@@ -66,80 +66,80 @@ def base-url-completer [] { ["http://dms.us-east-1.amazonaws.com" "http://dms.us
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AmazonDMSv20160101.AddTagsToResource"] }
-def X-Amz-Target-completer-1 [] { ["AmazonDMSv20160101.ApplyPendingMaintenanceAction"] }
-def X-Amz-Target-completer-2 [] { ["AmazonDMSv20160101.BatchStartRecommendations"] }
-def X-Amz-Target-completer-3 [] { ["AmazonDMSv20160101.CancelReplicationTaskAssessmentRun"] }
-def X-Amz-Target-completer-4 [] { ["AmazonDMSv20160101.CreateEndpoint"] }
-def X-Amz-Target-completer-5 [] { ["AmazonDMSv20160101.CreateEventSubscription"] }
-def X-Amz-Target-completer-6 [] { ["AmazonDMSv20160101.CreateFleetAdvisorCollector"] }
-def X-Amz-Target-completer-7 [] { ["AmazonDMSv20160101.CreateReplicationInstance"] }
-def X-Amz-Target-completer-8 [] { ["AmazonDMSv20160101.CreateReplicationSubnetGroup"] }
-def X-Amz-Target-completer-9 [] { ["AmazonDMSv20160101.CreateReplicationTask"] }
-def X-Amz-Target-completer-10 [] { ["AmazonDMSv20160101.DeleteCertificate"] }
-def X-Amz-Target-completer-11 [] { ["AmazonDMSv20160101.DeleteConnection"] }
-def X-Amz-Target-completer-12 [] { ["AmazonDMSv20160101.DeleteEndpoint"] }
-def X-Amz-Target-completer-13 [] { ["AmazonDMSv20160101.DeleteEventSubscription"] }
-def X-Amz-Target-completer-14 [] { ["AmazonDMSv20160101.DeleteFleetAdvisorCollector"] }
-def X-Amz-Target-completer-15 [] { ["AmazonDMSv20160101.DeleteFleetAdvisorDatabases"] }
-def X-Amz-Target-completer-16 [] { ["AmazonDMSv20160101.DeleteReplicationInstance"] }
-def X-Amz-Target-completer-17 [] { ["AmazonDMSv20160101.DeleteReplicationSubnetGroup"] }
-def X-Amz-Target-completer-18 [] { ["AmazonDMSv20160101.DeleteReplicationTask"] }
-def X-Amz-Target-completer-19 [] { ["AmazonDMSv20160101.DeleteReplicationTaskAssessmentRun"] }
-def X-Amz-Target-completer-20 [] { ["AmazonDMSv20160101.DescribeAccountAttributes"] }
-def X-Amz-Target-completer-21 [] { ["AmazonDMSv20160101.DescribeApplicableIndividualAssessments"] }
-def X-Amz-Target-completer-22 [] { ["AmazonDMSv20160101.DescribeCertificates"] }
-def X-Amz-Target-completer-23 [] { ["AmazonDMSv20160101.DescribeConnections"] }
-def X-Amz-Target-completer-24 [] { ["AmazonDMSv20160101.DescribeEndpointSettings"] }
-def X-Amz-Target-completer-25 [] { ["AmazonDMSv20160101.DescribeEndpointTypes"] }
-def X-Amz-Target-completer-26 [] { ["AmazonDMSv20160101.DescribeEndpoints"] }
-def X-Amz-Target-completer-27 [] { ["AmazonDMSv20160101.DescribeEventCategories"] }
-def X-Amz-Target-completer-28 [] { ["AmazonDMSv20160101.DescribeEventSubscriptions"] }
-def X-Amz-Target-completer-29 [] { ["AmazonDMSv20160101.DescribeEvents"] }
-def X-Amz-Target-completer-30 [] { ["AmazonDMSv20160101.DescribeFleetAdvisorCollectors"] }
-def X-Amz-Target-completer-31 [] { ["AmazonDMSv20160101.DescribeFleetAdvisorDatabases"] }
-def X-Amz-Target-completer-32 [] { ["AmazonDMSv20160101.DescribeFleetAdvisorLsaAnalysis"] }
-def X-Amz-Target-completer-33 [] { ["AmazonDMSv20160101.DescribeFleetAdvisorSchemaObjectSummary"] }
-def X-Amz-Target-completer-34 [] { ["AmazonDMSv20160101.DescribeFleetAdvisorSchemas"] }
-def X-Amz-Target-completer-35 [] { ["AmazonDMSv20160101.DescribeOrderableReplicationInstances"] }
-def X-Amz-Target-completer-36 [] { ["AmazonDMSv20160101.DescribePendingMaintenanceActions"] }
-def X-Amz-Target-completer-37 [] { ["AmazonDMSv20160101.DescribeRecommendationLimitations"] }
-def X-Amz-Target-completer-38 [] { ["AmazonDMSv20160101.DescribeRecommendations"] }
-def X-Amz-Target-completer-39 [] { ["AmazonDMSv20160101.DescribeRefreshSchemasStatus"] }
-def X-Amz-Target-completer-40 [] { ["AmazonDMSv20160101.DescribeReplicationInstanceTaskLogs"] }
-def X-Amz-Target-completer-41 [] { ["AmazonDMSv20160101.DescribeReplicationInstances"] }
-def X-Amz-Target-completer-42 [] { ["AmazonDMSv20160101.DescribeReplicationSubnetGroups"] }
-def X-Amz-Target-completer-43 [] { ["AmazonDMSv20160101.DescribeReplicationTaskAssessmentResults"] }
-def X-Amz-Target-completer-44 [] { ["AmazonDMSv20160101.DescribeReplicationTaskAssessmentRuns"] }
-def X-Amz-Target-completer-45 [] { ["AmazonDMSv20160101.DescribeReplicationTaskIndividualAssessments"] }
-def X-Amz-Target-completer-46 [] { ["AmazonDMSv20160101.DescribeReplicationTasks"] }
-def X-Amz-Target-completer-47 [] { ["AmazonDMSv20160101.DescribeSchemas"] }
-def X-Amz-Target-completer-48 [] { ["AmazonDMSv20160101.DescribeTableStatistics"] }
-def X-Amz-Target-completer-49 [] { ["AmazonDMSv20160101.ImportCertificate"] }
-def X-Amz-Target-completer-50 [] { ["AmazonDMSv20160101.ListTagsForResource"] }
-def X-Amz-Target-completer-51 [] { ["AmazonDMSv20160101.ModifyEndpoint"] }
-def X-Amz-Target-completer-52 [] { ["AmazonDMSv20160101.ModifyEventSubscription"] }
-def X-Amz-Target-completer-53 [] { ["AmazonDMSv20160101.ModifyReplicationInstance"] }
-def X-Amz-Target-completer-54 [] { ["AmazonDMSv20160101.ModifyReplicationSubnetGroup"] }
-def X-Amz-Target-completer-55 [] { ["AmazonDMSv20160101.ModifyReplicationTask"] }
-def X-Amz-Target-completer-56 [] { ["AmazonDMSv20160101.MoveReplicationTask"] }
-def X-Amz-Target-completer-57 [] { ["AmazonDMSv20160101.RebootReplicationInstance"] }
-def X-Amz-Target-completer-58 [] { ["AmazonDMSv20160101.RefreshSchemas"] }
-def X-Amz-Target-completer-59 [] { ["AmazonDMSv20160101.ReloadTables"] }
-def X-Amz-Target-completer-60 [] { ["AmazonDMSv20160101.RemoveTagsFromResource"] }
-def X-Amz-Target-completer-61 [] { ["AmazonDMSv20160101.RunFleetAdvisorLsaAnalysis"] }
-def X-Amz-Target-completer-62 [] { ["AmazonDMSv20160101.StartRecommendations"] }
-def X-Amz-Target-completer-63 [] { ["AmazonDMSv20160101.StartReplicationTask"] }
-def X-Amz-Target-completer-64 [] { ["AmazonDMSv20160101.StartReplicationTaskAssessment"] }
-def X-Amz-Target-completer-65 [] { ["AmazonDMSv20160101.StartReplicationTaskAssessmentRun"] }
-def X-Amz-Target-completer-66 [] { ["AmazonDMSv20160101.StopReplicationTask"] }
-def X-Amz-Target-completer-67 [] { ["AmazonDMSv20160101.TestConnection"] }
-def X-Amz-Target-completer-68 [] { ["AmazonDMSv20160101.UpdateSubscriptionsToEventBridge"] }
+def x-amz-target-completer [] { ["AmazonDMSv20160101.AddTagsToResource"] }
+def x-amz-target-completer-1 [] { ["AmazonDMSv20160101.ApplyPendingMaintenanceAction"] }
+def x-amz-target-completer-2 [] { ["AmazonDMSv20160101.BatchStartRecommendations"] }
+def x-amz-target-completer-3 [] { ["AmazonDMSv20160101.CancelReplicationTaskAssessmentRun"] }
+def x-amz-target-completer-4 [] { ["AmazonDMSv20160101.CreateEndpoint"] }
+def x-amz-target-completer-5 [] { ["AmazonDMSv20160101.CreateEventSubscription"] }
+def x-amz-target-completer-6 [] { ["AmazonDMSv20160101.CreateFleetAdvisorCollector"] }
+def x-amz-target-completer-7 [] { ["AmazonDMSv20160101.CreateReplicationInstance"] }
+def x-amz-target-completer-8 [] { ["AmazonDMSv20160101.CreateReplicationSubnetGroup"] }
+def x-amz-target-completer-9 [] { ["AmazonDMSv20160101.CreateReplicationTask"] }
+def x-amz-target-completer-10 [] { ["AmazonDMSv20160101.DeleteCertificate"] }
+def x-amz-target-completer-11 [] { ["AmazonDMSv20160101.DeleteConnection"] }
+def x-amz-target-completer-12 [] { ["AmazonDMSv20160101.DeleteEndpoint"] }
+def x-amz-target-completer-13 [] { ["AmazonDMSv20160101.DeleteEventSubscription"] }
+def x-amz-target-completer-14 [] { ["AmazonDMSv20160101.DeleteFleetAdvisorCollector"] }
+def x-amz-target-completer-15 [] { ["AmazonDMSv20160101.DeleteFleetAdvisorDatabases"] }
+def x-amz-target-completer-16 [] { ["AmazonDMSv20160101.DeleteReplicationInstance"] }
+def x-amz-target-completer-17 [] { ["AmazonDMSv20160101.DeleteReplicationSubnetGroup"] }
+def x-amz-target-completer-18 [] { ["AmazonDMSv20160101.DeleteReplicationTask"] }
+def x-amz-target-completer-19 [] { ["AmazonDMSv20160101.DeleteReplicationTaskAssessmentRun"] }
+def x-amz-target-completer-20 [] { ["AmazonDMSv20160101.DescribeAccountAttributes"] }
+def x-amz-target-completer-21 [] { ["AmazonDMSv20160101.DescribeApplicableIndividualAssessments"] }
+def x-amz-target-completer-22 [] { ["AmazonDMSv20160101.DescribeCertificates"] }
+def x-amz-target-completer-23 [] { ["AmazonDMSv20160101.DescribeConnections"] }
+def x-amz-target-completer-24 [] { ["AmazonDMSv20160101.DescribeEndpointSettings"] }
+def x-amz-target-completer-25 [] { ["AmazonDMSv20160101.DescribeEndpointTypes"] }
+def x-amz-target-completer-26 [] { ["AmazonDMSv20160101.DescribeEndpoints"] }
+def x-amz-target-completer-27 [] { ["AmazonDMSv20160101.DescribeEventCategories"] }
+def x-amz-target-completer-28 [] { ["AmazonDMSv20160101.DescribeEventSubscriptions"] }
+def x-amz-target-completer-29 [] { ["AmazonDMSv20160101.DescribeEvents"] }
+def x-amz-target-completer-30 [] { ["AmazonDMSv20160101.DescribeFleetAdvisorCollectors"] }
+def x-amz-target-completer-31 [] { ["AmazonDMSv20160101.DescribeFleetAdvisorDatabases"] }
+def x-amz-target-completer-32 [] { ["AmazonDMSv20160101.DescribeFleetAdvisorLsaAnalysis"] }
+def x-amz-target-completer-33 [] { ["AmazonDMSv20160101.DescribeFleetAdvisorSchemaObjectSummary"] }
+def x-amz-target-completer-34 [] { ["AmazonDMSv20160101.DescribeFleetAdvisorSchemas"] }
+def x-amz-target-completer-35 [] { ["AmazonDMSv20160101.DescribeOrderableReplicationInstances"] }
+def x-amz-target-completer-36 [] { ["AmazonDMSv20160101.DescribePendingMaintenanceActions"] }
+def x-amz-target-completer-37 [] { ["AmazonDMSv20160101.DescribeRecommendationLimitations"] }
+def x-amz-target-completer-38 [] { ["AmazonDMSv20160101.DescribeRecommendations"] }
+def x-amz-target-completer-39 [] { ["AmazonDMSv20160101.DescribeRefreshSchemasStatus"] }
+def x-amz-target-completer-40 [] { ["AmazonDMSv20160101.DescribeReplicationInstanceTaskLogs"] }
+def x-amz-target-completer-41 [] { ["AmazonDMSv20160101.DescribeReplicationInstances"] }
+def x-amz-target-completer-42 [] { ["AmazonDMSv20160101.DescribeReplicationSubnetGroups"] }
+def x-amz-target-completer-43 [] { ["AmazonDMSv20160101.DescribeReplicationTaskAssessmentResults"] }
+def x-amz-target-completer-44 [] { ["AmazonDMSv20160101.DescribeReplicationTaskAssessmentRuns"] }
+def x-amz-target-completer-45 [] { ["AmazonDMSv20160101.DescribeReplicationTaskIndividualAssessments"] }
+def x-amz-target-completer-46 [] { ["AmazonDMSv20160101.DescribeReplicationTasks"] }
+def x-amz-target-completer-47 [] { ["AmazonDMSv20160101.DescribeSchemas"] }
+def x-amz-target-completer-48 [] { ["AmazonDMSv20160101.DescribeTableStatistics"] }
+def x-amz-target-completer-49 [] { ["AmazonDMSv20160101.ImportCertificate"] }
+def x-amz-target-completer-50 [] { ["AmazonDMSv20160101.ListTagsForResource"] }
+def x-amz-target-completer-51 [] { ["AmazonDMSv20160101.ModifyEndpoint"] }
+def x-amz-target-completer-52 [] { ["AmazonDMSv20160101.ModifyEventSubscription"] }
+def x-amz-target-completer-53 [] { ["AmazonDMSv20160101.ModifyReplicationInstance"] }
+def x-amz-target-completer-54 [] { ["AmazonDMSv20160101.ModifyReplicationSubnetGroup"] }
+def x-amz-target-completer-55 [] { ["AmazonDMSv20160101.ModifyReplicationTask"] }
+def x-amz-target-completer-56 [] { ["AmazonDMSv20160101.MoveReplicationTask"] }
+def x-amz-target-completer-57 [] { ["AmazonDMSv20160101.RebootReplicationInstance"] }
+def x-amz-target-completer-58 [] { ["AmazonDMSv20160101.RefreshSchemas"] }
+def x-amz-target-completer-59 [] { ["AmazonDMSv20160101.ReloadTables"] }
+def x-amz-target-completer-60 [] { ["AmazonDMSv20160101.RemoveTagsFromResource"] }
+def x-amz-target-completer-61 [] { ["AmazonDMSv20160101.RunFleetAdvisorLsaAnalysis"] }
+def x-amz-target-completer-62 [] { ["AmazonDMSv20160101.StartRecommendations"] }
+def x-amz-target-completer-63 [] { ["AmazonDMSv20160101.StartReplicationTask"] }
+def x-amz-target-completer-64 [] { ["AmazonDMSv20160101.StartReplicationTaskAssessment"] }
+def x-amz-target-completer-65 [] { ["AmazonDMSv20160101.StartReplicationTaskAssessmentRun"] }
+def x-amz-target-completer-66 [] { ["AmazonDMSv20160101.StopReplicationTask"] }
+def x-amz-target-completer-67 [] { ["AmazonDMSv20160101.TestConnection"] }
+def x-amz-target-completer-68 [] { ["AmazonDMSv20160101.UpdateSubscriptionsToEventBridge"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-amazon-dm-sv20160101-add-tags-to-resource AddTagsToResource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-amazon-dm-sv20160101-add-tags-to-resource create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.AddTagsToResource
 # operationId: AddTagsToResource
-export def "x-amz-target-amazon-dm-sv20160101-add-tags-to-resource AddTagsToResource" [
+export def "x-amz-target-amazon-dm-sv20160101-add-tags-to-resource create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,24 +172,24 @@ export def "x-amz-target-amazon-dm-sv20160101-add-tags-to-resource AddTagsToReso
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.AddTagsToResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,7 +200,7 @@ export def "x-amz-target-amazon-dm-sv20160101-add-tags-to-resource AddTagsToReso
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.ApplyPendingMaintenanceAction
 # operationId: ApplyPendingMaintenanceAction
-export def "x-amz-target-amazon-dm-sv20160101-apply-pending-maintenance-action ApplyPendingMaintenanceAction" [
+export def "x-amz-target-amazon-dm-sv20160101-apply-pending-maintenance-action post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,25 +209,25 @@ export def "x-amz-target-amazon-dm-sv20160101-apply-pending-maintenance-action A
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ReplicationInstanceArn: any
-  ApplyAction: any
-  OptInType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  replication_instance_arn: any
+  apply_action: any
+  opt_in_type: any
 ]: any -> record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: record, PendingMaintenanceActionDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.ApplyPendingMaintenanceAction")
-  let body = {ReplicationInstanceArn: $ReplicationInstanceArn, ApplyAction: $ApplyAction, OptInType: $OptInType} | compact
+  let body = {"ReplicationInstanceArn": $replication_instance_arn, "ApplyAction": $apply_action, "OptInType": $opt_in_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -238,7 +238,7 @@ export def "x-amz-target-amazon-dm-sv20160101-apply-pending-maintenance-action A
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.BatchStartRecommendations
 # operationId: BatchStartRecommendations
-export def "x-amz-target-amazon-dm-sv20160101-batch-start-recommendations BatchStartRecommendations" [
+export def "x-amz-target-amazon-dm-sv20160101-batch-start-recommendations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,23 +247,23 @@ export def "x-amz-target-amazon-dm-sv20160101-batch-start-recommendations BatchS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  --Data: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  --data: any
 ]: any -> record<ErrorEntries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.BatchStartRecommendations")
-  let body = {Data: $Data} | compact
+  let body = {"Data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,7 +274,7 @@ export def "x-amz-target-amazon-dm-sv20160101-batch-start-recommendations BatchS
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.CancelReplicationTaskAssessmentRun
 # operationId: CancelReplicationTaskAssessmentRun
-export def "x-amz-target-amazon-dm-sv20160101-cancel-replication-task-assessment-run CancelReplicationTaskAssessmentRun" [
+export def "x-amz-target-amazon-dm-sv20160101-cancel-replication-task-assessment-run cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,23 +283,23 @@ export def "x-amz-target-amazon-dm-sv20160101-cancel-replication-task-assessment
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  ReplicationTaskAssessmentRunArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  replication_task_assessment_run_arn: any
 ]: any -> record<ReplicationTaskAssessmentRun: record<ReplicationTaskAssessmentRunArn: record, ReplicationTaskArn: record, Status: record, ReplicationTaskAssessmentRunCreationDate: record, AssessmentProgress: record<IndividualAssessmentCount: record, IndividualAssessmentCompletedCount: record>, LastFailureMessage: record, ServiceAccessRoleArn: record, ResultLocationBucket: record, ResultLocationFolder: record, ResultEncryptionMode: record, ResultKmsKeyArn: record, AssessmentRunName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.CancelReplicationTaskAssessmentRun")
-  let body = {ReplicationTaskAssessmentRunArn: $ReplicationTaskAssessmentRunArn} | compact
+  let body = {"ReplicationTaskAssessmentRunArn": $replication_task_assessment_run_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,7 +312,7 @@ export def "x-amz-target-amazon-dm-sv20160101-cancel-replication-task-assessment
 # operationId: CreateEndpoint
 # --RedshiftSettings shape: {AcceptAnyDate?: any, AfterConnectScript?: any, BucketFolder?: any, BucketName?: any, CaseSensitiveNames?: any, CompUpdate?: any, ConnectionTimeout?: any, DatabaseName?: any, DateFormat?: any, EmptyAsNull?: any, EncryptionMode?: any, ExplicitIds?: any, FileTransferUploadStreams?: any, LoadTimeout?: any, MaxFileSize?: any, Password?: any, Port?: any, RemoveQuotes?: any, ReplaceInvalidChars?: any, ReplaceChars?: any, ServerName?: any, ServiceAccessRoleArn?: any, ServerSideEncryptionKmsKeyId?: any, TimeFormat?: any, TrimBlanks?: any, TruncateColumns?: any, Username?: any, WriteBufferSize?: any, SecretsManagerAccessRoleArn?: any, SecretsManagerSecretId?: any, MapBooleanAsBoolean?: any}
 # --DocDbSettings shape: {Username?: any, Password?: any, ServerName?: any, Port?: any, DatabaseName?: any, NestingLevel?: any, ExtractDocId?: any, DocsToInvestigate?: any, KmsKeyId?: any, SecretsManagerAccessRoleArn?: any, SecretsManagerSecretId?: any}
-export def "x-amz-target-amazon-dm-sv20160101-create-endpoint CreateEndpoint" [
+export def "x-amz-target-amazon-dm-sv20160101-create-endpoint create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,56 +321,56 @@ export def "x-amz-target-amazon-dm-sv20160101-create-endpoint CreateEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  EndpointIdentifier: any
-  EndpointType: any
-  EngineName: any
-  --Username: any
-  --Password: any
-  --ServerName: any
-  --Port: any
-  --DatabaseName: any
-  --ExtraConnectionAttributes: any
-  --KmsKeyId: any
-  --Tags: any
-  --CertificateArn: any
-  --SslMode: any
-  --ServiceAccessRoleArn: any
-  --ExternalTableDefinition: any
-  --DynamoDbSettings: any
-  --S3Settings: any
-  --DmsTransferSettings: any
-  --MongoDbSettings: any
-  --KinesisSettings: any
-  --KafkaSettings: any
-  --ElasticsearchSettings: any
-  --NeptuneSettings: any
-  --RedshiftSettings: record # Provides information that defines an Amazon Redshift endpoint. — shape: {AcceptAnyDate?: any, AfterConnectScript?: any, BucketFolder?: any, BucketName?: any, CaseSensitiveNames?: any, CompUpdate?: any, ConnectionTimeout?: any, DatabaseName?: any, DateFormat?: any, EmptyAsNull?: any, EncryptionMode?: any, ExplicitIds?: any, FileTransferUploadStreams?: any, LoadTimeout?: any, MaxFileSize?: any, Password?: any, Port?: any, RemoveQuotes?: any, ReplaceInvalidChars?: any, ReplaceChars?: any, ServerName?: any, ServiceAccessRoleArn?: any, ServerSideEncryptionKmsKeyId?: any, TimeFormat?: any, TrimBlanks?: any, TruncateColumns?: any, Username?: any, WriteBufferSize?: any, SecretsManagerAccessRoleArn?: any, SecretsManagerSecretId?: any, MapBooleanAsBoolean?: any}
-  --PostgreSQLSettings: any
-  --MySQLSettings: any
-  --OracleSettings: any
-  --SybaseSettings: any
-  --MicrosoftSQLServerSettings: any
-  --IBMDb2Settings: any
-  --ResourceIdentifier: any
-  --DocDbSettings: record # Provides information that defines a DocumentDB endpoint. — shape: {Username?: any, Password?: any, ServerName?: any, Port?: any, DatabaseName?: any, NestingLevel?: any, ExtractDocId?: any, DocsToInvestigate?: any, KmsKeyId?: any, SecretsManagerAccessRoleArn?: any, SecretsManagerSecretId?: any}
-  --RedisSettings: any
-  --GcpMySQLSettings: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  endpoint_identifier: any
+  endpoint_type: any
+  engine_name: any
+  --username: any
+  --password: any
+  --server-name: any
+  --port: any
+  --database-name: any
+  --extra-connection-attributes: any
+  --kms-key-id: any
+  --tags: any
+  --certificate-arn: any
+  --ssl-mode: any
+  --service-access-role-arn: any
+  --external-table-definition: any
+  --dynamo-db-settings: any
+  --s3-settings: any
+  --dms-transfer-settings: any
+  --mongo-db-settings: any
+  --kinesis-settings: any
+  --kafka-settings: any
+  --elasticsearch-settings: any
+  --neptune-settings: any
+  --redshift-settings: record # Provides information that defines an Amazon Redshift endpoint. — shape: {AcceptAnyDate?: any, AfterConnectScript?: any, BucketFolder?: any, BucketName?: any, CaseSensitiveNames?: any, CompUpdate?: any, ConnectionTimeout?: any, DatabaseName?: any, DateFormat?: any, EmptyAsNull?: any, EncryptionMode?: any, ExplicitIds?: any, FileTransferUploadStreams?: any, LoadTimeout?: any, MaxFileSize?: any, Password?: any, Port?: any, RemoveQuotes?: any, ReplaceInvalidChars?: any, ReplaceChars?: any, ServerName?: any, ServiceAccessRoleArn?: any, ServerSideEncryptionKmsKeyId?: any, TimeFormat?: any, TrimBlanks?: any, TruncateColumns?: any, Username?: any, WriteBufferSize?: any, SecretsManagerAccessRoleArn?: any, SecretsManagerSecretId?: any, MapBooleanAsBoolean?: any}
+  --postgre-sql-settings: any
+  --my-sql-settings: any
+  --oracle-settings: any
+  --sybase-settings: any
+  --microsoft-sql-server-settings: any
+  --ibm-db2-settings: any
+  --resource-identifier: any
+  --doc-db-settings: record # Provides information that defines a DocumentDB endpoint. — shape: {Username?: any, Password?: any, ServerName?: any, Port?: any, DatabaseName?: any, NestingLevel?: any, ExtractDocId?: any, DocsToInvestigate?: any, KmsKeyId?: any, SecretsManagerAccessRoleArn?: any, SecretsManagerSecretId?: any}
+  --redis-settings: any
+  --gcp-my-sql-settings: any
 ]: any -> record<Endpoint: record<EndpointIdentifier: record, EndpointType: record, EngineName: record, EngineDisplayName: record, Username: record, ServerName: record, Port: record, DatabaseName: record, ExtraConnectionAttributes: record, Status: record, KmsKeyId: record, EndpointArn: record, CertificateArn: record, SslMode: record, ServiceAccessRoleArn: record, ExternalTableDefinition: record, ExternalId: record, DynamoDbSettings: record<ServiceAccessRoleArn: record>, S3Settings: record<ServiceAccessRoleArn: record, ExternalTableDefinition: record, CsvRowDelimiter: record, CsvDelimiter: record, BucketFolder: record, BucketName: record, CompressionType: record, EncryptionMode: record, ServerSideEncryptionKmsKeyId: record, DataFormat: record, EncodingType: record, DictPageSizeLimit: record, RowGroupLength: record, DataPageSize: record, ParquetVersion: record, EnableStatistics: record, IncludeOpForFullLoad: record, CdcInsertsOnly: record, TimestampColumnName: record, ParquetTimestampInMillisecond: record, CdcInsertsAndUpdates: record, DatePartitionEnabled: record, DatePartitionSequence: record, DatePartitionDelimiter: record, UseCsvNoSupValue: record, CsvNoSupValue: record, PreserveTransactions: record, CdcPath: record, UseTaskStartTimeForFullLoadTimestamp: record, CannedAclForObjects: record, AddColumnName: record, CdcMaxBatchInterval: record, CdcMinFileSize: record, CsvNullValue: record, IgnoreHeaderRows: record, MaxFileSize: record, Rfc4180: record, DatePartitionTimezone: record, AddTrailingPaddingCharacter: record, ExpectedBucketOwner: record, GlueCatalogGeneration: record>, DmsTransferSettings: record<ServiceAccessRoleArn: record, BucketName: record>, MongoDbSettings: record<Username: record, Password: record, ServerName: record, Port: record, DatabaseName: record, AuthType: record, AuthMechanism: record, NestingLevel: record, ExtractDocId: record, DocsToInvestigate: record, AuthSource: record, KmsKeyId: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, KinesisSettings: record<StreamArn: record, MessageFormat: record, ServiceAccessRoleArn: record, IncludeTransactionDetails: record, IncludePartitionValue: record, PartitionIncludeSchemaTable: record, IncludeTableAlterOperations: record, IncludeControlDetails: record, IncludeNullAndEmpty: record, NoHexPrefix: record>, KafkaSettings: record<Broker: record, Topic: record, MessageFormat: record, IncludeTransactionDetails: record, IncludePartitionValue: record, PartitionIncludeSchemaTable: record, IncludeTableAlterOperations: record, IncludeControlDetails: record, MessageMaxBytes: record, IncludeNullAndEmpty: record, SecurityProtocol: record, SslClientCertificateArn: record, SslClientKeyArn: record, SslClientKeyPassword: record, SslCaCertificateArn: record, SaslUsername: record, SaslPassword: record, NoHexPrefix: record, SaslMechanism: record>, ElasticsearchSettings: record<ServiceAccessRoleArn: record, EndpointUri: record, FullLoadErrorPercentage: record, ErrorRetryDuration: record, UseNewMappingType: record>, NeptuneSettings: record<ServiceAccessRoleArn: record, S3BucketName: record, S3BucketFolder: record, ErrorRetryDuration: record, MaxFileSize: record, MaxRetryCount: record, IamAuthEnabled: record>, RedshiftSettings: record<AcceptAnyDate: record, AfterConnectScript: record, BucketFolder: record, BucketName: record, CaseSensitiveNames: record, CompUpdate: record, ConnectionTimeout: record, DatabaseName: record, DateFormat: record, EmptyAsNull: record, EncryptionMode: record, ExplicitIds: record, FileTransferUploadStreams: record, LoadTimeout: record, MaxFileSize: record, Password: record, Port: record, RemoveQuotes: record, ReplaceInvalidChars: record, ReplaceChars: record, ServerName: record, ServiceAccessRoleArn: record, ServerSideEncryptionKmsKeyId: record, TimeFormat: record, TrimBlanks: record, TruncateColumns: record, Username: record, WriteBufferSize: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, MapBooleanAsBoolean: record>, PostgreSQLSettings: record<AfterConnectScript: record, CaptureDdls: record, MaxFileSize: record, DatabaseName: record, DdlArtifactsSchema: record, ExecuteTimeout: record, FailTasksOnLobTruncation: record, HeartbeatEnable: record, HeartbeatSchema: record, HeartbeatFrequency: record, Password: record, Port: record, ServerName: record, Username: record, SlotName: record, PluginName: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, TrimSpaceInChar: record, MapBooleanAsBoolean: record>, MySQLSettings: record<AfterConnectScript: record, CleanSourceMetadataOnMismatch: record, DatabaseName: record, EventsPollInterval: record, TargetDbType: record, MaxFileSize: record, ParallelLoadThreads: record, Password: record, Port: record, ServerName: record, ServerTimezone: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, OracleSettings: record<AddSupplementalLogging: record, ArchivedLogDestId: record, AdditionalArchivedLogDestId: record, ExtraArchivedLogDestIds: record, AllowSelectNestedTables: record, ParallelAsmReadThreads: record, ReadAheadBlocks: record, AccessAlternateDirectly: record, UseAlternateFolderForOnline: record, OraclePathPrefix: record, UsePathPrefix: record, ReplacePathPrefix: record, EnableHomogenousTablespace: record, DirectPathNoLog: record, ArchivedLogsOnly: record, AsmPassword: record, AsmServer: record, AsmUser: record, CharLengthSemantics: record, DatabaseName: record, DirectPathParallelLoad: record, FailTasksOnLobTruncation: record, NumberDatatypeScale: record, Password: record, Port: record, ReadTableSpaceName: record, RetryInterval: record, SecurityDbEncryption: record, SecurityDbEncryptionName: record, ServerName: record, SpatialDataOptionToGeoJsonFunctionName: record, StandbyDelayTime: record, Username: record, UseBFile: record, UseDirectPathFullLoad: record, UseLogminerReader: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, SecretsManagerOracleAsmAccessRoleArn: record, SecretsManagerOracleAsmSecretId: record, TrimSpaceInChar: record, ConvertTimestampWithZoneToUTC: record>, SybaseSettings: record<DatabaseName: record, Password: record, Port: record, ServerName: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, MicrosoftSQLServerSettings: record<Port: record, BcpPacketSize: record, DatabaseName: record, ControlTablesFileGroup: record, Password: record, QuerySingleAlwaysOnNode: record, ReadBackupOnly: record, SafeguardPolicy: record, ServerName: record, Username: record, UseBcpFullLoad: record, UseThirdPartyBackupDevice: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, TrimSpaceInChar: record, TlogAccessMode: record, ForceLobLookup: record>, IBMDb2Settings: record<DatabaseName: record, Password: record, Port: record, ServerName: record, SetDataCaptureChanges: record, CurrentLsn: record, MaxKBytesPerRead: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, DocDbSettings: record<Username: record, Password: record, ServerName: record, Port: record, DatabaseName: record, NestingLevel: record, ExtractDocId: record, DocsToInvestigate: record, KmsKeyId: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, RedisSettings: record<ServerName: record, Port: record, SslSecurityProtocol: record, AuthType: record, AuthUserName: record, AuthPassword: record, SslCaCertificateArn: record>, GcpMySQLSettings: record<AfterConnectScript: record, CleanSourceMetadataOnMismatch: record, DatabaseName: record, EventsPollInterval: record, TargetDbType: record, MaxFileSize: record, ParallelLoadThreads: record, Password: record, Port: record, ServerName: record, ServerTimezone: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.CreateEndpoint")
-  let body = {EndpointIdentifier: $EndpointIdentifier, EndpointType: $EndpointType, EngineName: $EngineName, Username: $Username, Password: $Password, ServerName: $ServerName, Port: $Port, DatabaseName: $DatabaseName, ExtraConnectionAttributes: $ExtraConnectionAttributes, KmsKeyId: $KmsKeyId, Tags: $Tags, CertificateArn: $CertificateArn, SslMode: $SslMode, ServiceAccessRoleArn: $ServiceAccessRoleArn, ExternalTableDefinition: $ExternalTableDefinition, DynamoDbSettings: $DynamoDbSettings, S3Settings: $S3Settings, DmsTransferSettings: $DmsTransferSettings, MongoDbSettings: $MongoDbSettings, KinesisSettings: $KinesisSettings, KafkaSettings: $KafkaSettings, ElasticsearchSettings: $ElasticsearchSettings, NeptuneSettings: $NeptuneSettings, RedshiftSettings: $RedshiftSettings, PostgreSQLSettings: $PostgreSQLSettings, MySQLSettings: $MySQLSettings, OracleSettings: $OracleSettings, SybaseSettings: $SybaseSettings, MicrosoftSQLServerSettings: $MicrosoftSQLServerSettings, IBMDb2Settings: $IBMDb2Settings, ResourceIdentifier: $ResourceIdentifier, DocDbSettings: $DocDbSettings, RedisSettings: $RedisSettings, GcpMySQLSettings: $GcpMySQLSettings} | compact
+  let body = {"EndpointIdentifier": $endpoint_identifier, "EndpointType": $endpoint_type, "EngineName": $engine_name, "Username": $username, "Password": $password, "ServerName": $server_name, "Port": $port, "DatabaseName": $database_name, "ExtraConnectionAttributes": $extra_connection_attributes, "KmsKeyId": $kms_key_id, "Tags": $tags, "CertificateArn": $certificate_arn, "SslMode": $ssl_mode, "ServiceAccessRoleArn": $service_access_role_arn, "ExternalTableDefinition": $external_table_definition, "DynamoDbSettings": $dynamo_db_settings, "S3Settings": $s3_settings, "DmsTransferSettings": $dms_transfer_settings, "MongoDbSettings": $mongo_db_settings, "KinesisSettings": $kinesis_settings, "KafkaSettings": $kafka_settings, "ElasticsearchSettings": $elasticsearch_settings, "NeptuneSettings": $neptune_settings, "RedshiftSettings": $redshift_settings, "PostgreSQLSettings": $postgre_sql_settings, "MySQLSettings": $my_sql_settings, "OracleSettings": $oracle_settings, "SybaseSettings": $sybase_settings, "MicrosoftSQLServerSettings": $microsoft_sql_server_settings, "IBMDb2Settings": $ibm_db2_settings, "ResourceIdentifier": $resource_identifier, "DocDbSettings": $doc_db_settings, "RedisSettings": $redis_settings, "GcpMySQLSettings": $gcp_my_sql_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,7 +381,7 @@ export def "x-amz-target-amazon-dm-sv20160101-create-endpoint CreateEndpoint" [
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.CreateEventSubscription
 # operationId: CreateEventSubscription
-export def "x-amz-target-amazon-dm-sv20160101-create-event-subscription CreateEventSubscription" [
+export def "x-amz-target-amazon-dm-sv20160101-create-event-subscription create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,29 +390,29 @@ export def "x-amz-target-amazon-dm-sv20160101-create-event-subscription CreateEv
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  SubscriptionName: any
-  SnsTopicArn: any
-  --SourceType: any
-  --EventCategories: any
-  --SourceIds: any
-  --Enabled: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  subscription_name: any
+  sns_topic_arn: any
+  --source-type: any
+  --event-categories: any
+  --source-ids: any
+  --enabled: any
+  --tags: any
 ]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.CreateEventSubscription")
-  let body = {SubscriptionName: $SubscriptionName, SnsTopicArn: $SnsTopicArn, SourceType: $SourceType, EventCategories: $EventCategories, SourceIds: $SourceIds, Enabled: $Enabled, Tags: $Tags} | compact
+  let body = {"SubscriptionName": $subscription_name, "SnsTopicArn": $sns_topic_arn, "SourceType": $source_type, "EventCategories": $event_categories, "SourceIds": $source_ids, "Enabled": $enabled, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,7 +423,7 @@ export def "x-amz-target-amazon-dm-sv20160101-create-event-subscription CreateEv
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.CreateFleetAdvisorCollector
 # operationId: CreateFleetAdvisorCollector
-export def "x-amz-target-amazon-dm-sv20160101-create-fleet-advisor-collector CreateFleetAdvisorCollector" [
+export def "x-amz-target-amazon-dm-sv20160101-create-fleet-advisor-collector create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,26 +432,26 @@ export def "x-amz-target-amazon-dm-sv20160101-create-fleet-advisor-collector Cre
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  CollectorName: any
-  --Description: any
-  ServiceAccessRoleArn: any
-  S3BucketName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  collector_name: any
+  --description: any
+  service_access_role_arn: any
+  s3_bucket_name: any
 ]: any -> record<CollectorReferencedId: record, CollectorName: record, Description: record, ServiceAccessRoleArn: record, S3BucketName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.CreateFleetAdvisorCollector")
-  let body = {CollectorName: $CollectorName, Description: $Description, ServiceAccessRoleArn: $ServiceAccessRoleArn, S3BucketName: $S3BucketName} | compact
+  let body = {"CollectorName": $collector_name, "Description": $description, "ServiceAccessRoleArn": $service_access_role_arn, "S3BucketName": $s3_bucket_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -462,7 +462,7 @@ export def "x-amz-target-amazon-dm-sv20160101-create-fleet-advisor-collector Cre
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.CreateReplicationInstance
 # operationId: CreateReplicationInstance
-export def "x-amz-target-amazon-dm-sv20160101-create-replication-instance CreateReplicationInstance" [
+export def "x-amz-target-amazon-dm-sv20160101-create-replication-instance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,38 +471,38 @@ export def "x-amz-target-amazon-dm-sv20160101-create-replication-instance Create
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ReplicationInstanceIdentifier: any
-  --AllocatedStorage: any
-  ReplicationInstanceClass: any
-  --VpcSecurityGroupIds: any
-  --AvailabilityZone: any
-  --ReplicationSubnetGroupIdentifier: any
-  --PreferredMaintenanceWindow: any
-  --MultiAZ: any
-  --EngineVersion: any
-  --AutoMinorVersionUpgrade: any
-  --Tags: any
-  --KmsKeyId: any
-  --PubliclyAccessible: any
-  --DnsNameServers: any
-  --ResourceIdentifier: any
-  --NetworkType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  replication_instance_identifier: any
+  --allocated-storage: any
+  replication_instance_class: any
+  --vpc-security-group-ids: any
+  --availability-zone: any
+  --replication-subnet-group-identifier: any
+  --preferred-maintenance-window: any
+  --multi-az: any
+  --engine-version: any
+  --auto-minor-version-upgrade: any
+  --tags: any
+  --kms-key-id: any
+  --publicly-accessible: any
+  --dns-name-servers: any
+  --resource-identifier: any
+  --network-type: any
 ]: any -> record<ReplicationInstance: record<ReplicationInstanceIdentifier: record, ReplicationInstanceClass: record, ReplicationInstanceStatus: record, AllocatedStorage: record, InstanceCreateTime: record, VpcSecurityGroups: record, AvailabilityZone: record, ReplicationSubnetGroup: record<ReplicationSubnetGroupIdentifier: record, ReplicationSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<ReplicationInstanceClass: record, AllocatedStorage: record, MultiAZ: record, EngineVersion: record, NetworkType: record>, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, KmsKeyId: record, ReplicationInstanceArn: record, ReplicationInstancePublicIpAddress: record, ReplicationInstancePrivateIpAddress: record, ReplicationInstancePublicIpAddresses: record, ReplicationInstancePrivateIpAddresses: record, ReplicationInstanceIpv6Addresses: record, PubliclyAccessible: record, SecondaryAvailabilityZone: record, FreeUntil: record, DnsNameServers: record, NetworkType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.CreateReplicationInstance")
-  let body = {ReplicationInstanceIdentifier: $ReplicationInstanceIdentifier, AllocatedStorage: $AllocatedStorage, ReplicationInstanceClass: $ReplicationInstanceClass, VpcSecurityGroupIds: $VpcSecurityGroupIds, AvailabilityZone: $AvailabilityZone, ReplicationSubnetGroupIdentifier: $ReplicationSubnetGroupIdentifier, PreferredMaintenanceWindow: $PreferredMaintenanceWindow, MultiAZ: $MultiAZ, EngineVersion: $EngineVersion, AutoMinorVersionUpgrade: $AutoMinorVersionUpgrade, Tags: $Tags, KmsKeyId: $KmsKeyId, PubliclyAccessible: $PubliclyAccessible, DnsNameServers: $DnsNameServers, ResourceIdentifier: $ResourceIdentifier, NetworkType: $NetworkType} | compact
+  let body = {"ReplicationInstanceIdentifier": $replication_instance_identifier, "AllocatedStorage": $allocated_storage, "ReplicationInstanceClass": $replication_instance_class, "VpcSecurityGroupIds": $vpc_security_group_ids, "AvailabilityZone": $availability_zone, "ReplicationSubnetGroupIdentifier": $replication_subnet_group_identifier, "PreferredMaintenanceWindow": $preferred_maintenance_window, "MultiAZ": $multi_az, "EngineVersion": $engine_version, "AutoMinorVersionUpgrade": $auto_minor_version_upgrade, "Tags": $tags, "KmsKeyId": $kms_key_id, "PubliclyAccessible": $publicly_accessible, "DnsNameServers": $dns_name_servers, "ResourceIdentifier": $resource_identifier, "NetworkType": $network_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -513,7 +513,7 @@ export def "x-amz-target-amazon-dm-sv20160101-create-replication-instance Create
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.CreateReplicationSubnetGroup
 # operationId: CreateReplicationSubnetGroup
-export def "x-amz-target-amazon-dm-sv20160101-create-replication-subnet-group CreateReplicationSubnetGroup" [
+export def "x-amz-target-amazon-dm-sv20160101-create-replication-subnet-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,26 +522,26 @@ export def "x-amz-target-amazon-dm-sv20160101-create-replication-subnet-group Cr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  ReplicationSubnetGroupIdentifier: any
-  ReplicationSubnetGroupDescription: any
-  SubnetIds: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  replication_subnet_group_identifier: any
+  replication_subnet_group_description: any
+  subnet_ids: any
+  --tags: any
 ]: any -> record<ReplicationSubnetGroup: record<ReplicationSubnetGroupIdentifier: record, ReplicationSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, SupportedNetworkTypes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.CreateReplicationSubnetGroup")
-  let body = {ReplicationSubnetGroupIdentifier: $ReplicationSubnetGroupIdentifier, ReplicationSubnetGroupDescription: $ReplicationSubnetGroupDescription, SubnetIds: $SubnetIds, Tags: $Tags} | compact
+  let body = {"ReplicationSubnetGroupIdentifier": $replication_subnet_group_identifier, "ReplicationSubnetGroupDescription": $replication_subnet_group_description, "SubnetIds": $subnet_ids, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -552,7 +552,7 @@ export def "x-amz-target-amazon-dm-sv20160101-create-replication-subnet-group Cr
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.CreateReplicationTask
 # operationId: CreateReplicationTask
-export def "x-amz-target-amazon-dm-sv20160101-create-replication-task CreateReplicationTask" [
+export def "x-amz-target-amazon-dm-sv20160101-create-replication-task create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,35 +561,35 @@ export def "x-amz-target-amazon-dm-sv20160101-create-replication-task CreateRepl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  ReplicationTaskIdentifier: any
-  SourceEndpointArn: any
-  TargetEndpointArn: any
-  ReplicationInstanceArn: any
-  MigrationType: any
-  TableMappings: any
-  --ReplicationTaskSettings: any
-  --CdcStartTime: any
-  --CdcStartPosition: any
-  --CdcStopPosition: any
-  --Tags: any
-  --TaskData: any
-  --ResourceIdentifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  replication_task_identifier: any
+  source_endpoint_arn: any
+  target_endpoint_arn: any
+  replication_instance_arn: any
+  migration_type: any
+  table_mappings: any
+  --replication-task-settings: any
+  --cdc-start-time: any
+  --cdc-start-position: any
+  --cdc-stop-position: any
+  --tags: any
+  --task-data: any
+  --resource-identifier: any
 ]: any -> record<ReplicationTask: record<ReplicationTaskIdentifier: record, SourceEndpointArn: record, TargetEndpointArn: record, ReplicationInstanceArn: record, MigrationType: record, TableMappings: record, ReplicationTaskSettings: record, Status: record, LastFailureMessage: record, StopReason: record, ReplicationTaskCreationDate: record, ReplicationTaskStartDate: record, CdcStartPosition: record, CdcStopPosition: record, RecoveryCheckpoint: record, ReplicationTaskArn: record, ReplicationTaskStats: record<FullLoadProgressPercent: record, ElapsedTimeMillis: record, TablesLoaded: record, TablesLoading: record, TablesQueued: record, TablesErrored: record, FreshStartDate: record, StartDate: record, StopDate: record, FullLoadStartDate: record, FullLoadFinishDate: record>, TaskData: record, TargetReplicationInstanceArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.CreateReplicationTask")
-  let body = {ReplicationTaskIdentifier: $ReplicationTaskIdentifier, SourceEndpointArn: $SourceEndpointArn, TargetEndpointArn: $TargetEndpointArn, ReplicationInstanceArn: $ReplicationInstanceArn, MigrationType: $MigrationType, TableMappings: $TableMappings, ReplicationTaskSettings: $ReplicationTaskSettings, CdcStartTime: $CdcStartTime, CdcStartPosition: $CdcStartPosition, CdcStopPosition: $CdcStopPosition, Tags: $Tags, TaskData: $TaskData, ResourceIdentifier: $ResourceIdentifier} | compact
+  let body = {"ReplicationTaskIdentifier": $replication_task_identifier, "SourceEndpointArn": $source_endpoint_arn, "TargetEndpointArn": $target_endpoint_arn, "ReplicationInstanceArn": $replication_instance_arn, "MigrationType": $migration_type, "TableMappings": $table_mappings, "ReplicationTaskSettings": $replication_task_settings, "CdcStartTime": $cdc_start_time, "CdcStartPosition": $cdc_start_position, "CdcStopPosition": $cdc_stop_position, "Tags": $tags, "TaskData": $task_data, "ResourceIdentifier": $resource_identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -600,7 +600,7 @@ export def "x-amz-target-amazon-dm-sv20160101-create-replication-task CreateRepl
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DeleteCertificate
 # operationId: DeleteCertificate
-export def "x-amz-target-amazon-dm-sv20160101-delete-certificate DeleteCertificate" [
+export def "x-amz-target-amazon-dm-sv20160101-delete-certificate delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,23 +609,23 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-certificate DeleteCertifica
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  CertificateArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  certificate_arn: any
 ]: any -> record<Certificate: record<CertificateIdentifier: record, CertificateCreationDate: record, CertificatePem: record, CertificateWallet: record, CertificateArn: record, CertificateOwner: record, ValidFromDate: record, ValidToDate: record, SigningAlgorithm: record, KeyLength: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DeleteCertificate")
-  let body = {CertificateArn: $CertificateArn} | compact
+  let body = {"CertificateArn": $certificate_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -636,7 +636,7 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-certificate DeleteCertifica
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DeleteConnection
 # operationId: DeleteConnection
-export def "x-amz-target-amazon-dm-sv20160101-delete-connection DeleteConnection" [
+export def "x-amz-target-amazon-dm-sv20160101-delete-connection delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,24 +645,24 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-connection DeleteConnection
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  EndpointArn: any
-  ReplicationInstanceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  endpoint_arn: any
+  replication_instance_arn: any
 ]: any -> record<Connection: record<ReplicationInstanceArn: record, EndpointArn: record, Status: record, LastFailureMessage: record, EndpointIdentifier: record, ReplicationInstanceIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DeleteConnection")
-  let body = {EndpointArn: $EndpointArn, ReplicationInstanceArn: $ReplicationInstanceArn} | compact
+  let body = {"EndpointArn": $endpoint_arn, "ReplicationInstanceArn": $replication_instance_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -673,7 +673,7 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-connection DeleteConnection
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DeleteEndpoint
 # operationId: DeleteEndpoint
-export def "x-amz-target-amazon-dm-sv20160101-delete-endpoint DeleteEndpoint" [
+export def "x-amz-target-amazon-dm-sv20160101-delete-endpoint delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -682,23 +682,23 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-endpoint DeleteEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  EndpointArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  endpoint_arn: any
 ]: any -> record<Endpoint: record<EndpointIdentifier: record, EndpointType: record, EngineName: record, EngineDisplayName: record, Username: record, ServerName: record, Port: record, DatabaseName: record, ExtraConnectionAttributes: record, Status: record, KmsKeyId: record, EndpointArn: record, CertificateArn: record, SslMode: record, ServiceAccessRoleArn: record, ExternalTableDefinition: record, ExternalId: record, DynamoDbSettings: record<ServiceAccessRoleArn: record>, S3Settings: record<ServiceAccessRoleArn: record, ExternalTableDefinition: record, CsvRowDelimiter: record, CsvDelimiter: record, BucketFolder: record, BucketName: record, CompressionType: record, EncryptionMode: record, ServerSideEncryptionKmsKeyId: record, DataFormat: record, EncodingType: record, DictPageSizeLimit: record, RowGroupLength: record, DataPageSize: record, ParquetVersion: record, EnableStatistics: record, IncludeOpForFullLoad: record, CdcInsertsOnly: record, TimestampColumnName: record, ParquetTimestampInMillisecond: record, CdcInsertsAndUpdates: record, DatePartitionEnabled: record, DatePartitionSequence: record, DatePartitionDelimiter: record, UseCsvNoSupValue: record, CsvNoSupValue: record, PreserveTransactions: record, CdcPath: record, UseTaskStartTimeForFullLoadTimestamp: record, CannedAclForObjects: record, AddColumnName: record, CdcMaxBatchInterval: record, CdcMinFileSize: record, CsvNullValue: record, IgnoreHeaderRows: record, MaxFileSize: record, Rfc4180: record, DatePartitionTimezone: record, AddTrailingPaddingCharacter: record, ExpectedBucketOwner: record, GlueCatalogGeneration: record>, DmsTransferSettings: record<ServiceAccessRoleArn: record, BucketName: record>, MongoDbSettings: record<Username: record, Password: record, ServerName: record, Port: record, DatabaseName: record, AuthType: record, AuthMechanism: record, NestingLevel: record, ExtractDocId: record, DocsToInvestigate: record, AuthSource: record, KmsKeyId: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, KinesisSettings: record<StreamArn: record, MessageFormat: record, ServiceAccessRoleArn: record, IncludeTransactionDetails: record, IncludePartitionValue: record, PartitionIncludeSchemaTable: record, IncludeTableAlterOperations: record, IncludeControlDetails: record, IncludeNullAndEmpty: record, NoHexPrefix: record>, KafkaSettings: record<Broker: record, Topic: record, MessageFormat: record, IncludeTransactionDetails: record, IncludePartitionValue: record, PartitionIncludeSchemaTable: record, IncludeTableAlterOperations: record, IncludeControlDetails: record, MessageMaxBytes: record, IncludeNullAndEmpty: record, SecurityProtocol: record, SslClientCertificateArn: record, SslClientKeyArn: record, SslClientKeyPassword: record, SslCaCertificateArn: record, SaslUsername: record, SaslPassword: record, NoHexPrefix: record, SaslMechanism: record>, ElasticsearchSettings: record<ServiceAccessRoleArn: record, EndpointUri: record, FullLoadErrorPercentage: record, ErrorRetryDuration: record, UseNewMappingType: record>, NeptuneSettings: record<ServiceAccessRoleArn: record, S3BucketName: record, S3BucketFolder: record, ErrorRetryDuration: record, MaxFileSize: record, MaxRetryCount: record, IamAuthEnabled: record>, RedshiftSettings: record<AcceptAnyDate: record, AfterConnectScript: record, BucketFolder: record, BucketName: record, CaseSensitiveNames: record, CompUpdate: record, ConnectionTimeout: record, DatabaseName: record, DateFormat: record, EmptyAsNull: record, EncryptionMode: record, ExplicitIds: record, FileTransferUploadStreams: record, LoadTimeout: record, MaxFileSize: record, Password: record, Port: record, RemoveQuotes: record, ReplaceInvalidChars: record, ReplaceChars: record, ServerName: record, ServiceAccessRoleArn: record, ServerSideEncryptionKmsKeyId: record, TimeFormat: record, TrimBlanks: record, TruncateColumns: record, Username: record, WriteBufferSize: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, MapBooleanAsBoolean: record>, PostgreSQLSettings: record<AfterConnectScript: record, CaptureDdls: record, MaxFileSize: record, DatabaseName: record, DdlArtifactsSchema: record, ExecuteTimeout: record, FailTasksOnLobTruncation: record, HeartbeatEnable: record, HeartbeatSchema: record, HeartbeatFrequency: record, Password: record, Port: record, ServerName: record, Username: record, SlotName: record, PluginName: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, TrimSpaceInChar: record, MapBooleanAsBoolean: record>, MySQLSettings: record<AfterConnectScript: record, CleanSourceMetadataOnMismatch: record, DatabaseName: record, EventsPollInterval: record, TargetDbType: record, MaxFileSize: record, ParallelLoadThreads: record, Password: record, Port: record, ServerName: record, ServerTimezone: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, OracleSettings: record<AddSupplementalLogging: record, ArchivedLogDestId: record, AdditionalArchivedLogDestId: record, ExtraArchivedLogDestIds: record, AllowSelectNestedTables: record, ParallelAsmReadThreads: record, ReadAheadBlocks: record, AccessAlternateDirectly: record, UseAlternateFolderForOnline: record, OraclePathPrefix: record, UsePathPrefix: record, ReplacePathPrefix: record, EnableHomogenousTablespace: record, DirectPathNoLog: record, ArchivedLogsOnly: record, AsmPassword: record, AsmServer: record, AsmUser: record, CharLengthSemantics: record, DatabaseName: record, DirectPathParallelLoad: record, FailTasksOnLobTruncation: record, NumberDatatypeScale: record, Password: record, Port: record, ReadTableSpaceName: record, RetryInterval: record, SecurityDbEncryption: record, SecurityDbEncryptionName: record, ServerName: record, SpatialDataOptionToGeoJsonFunctionName: record, StandbyDelayTime: record, Username: record, UseBFile: record, UseDirectPathFullLoad: record, UseLogminerReader: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, SecretsManagerOracleAsmAccessRoleArn: record, SecretsManagerOracleAsmSecretId: record, TrimSpaceInChar: record, ConvertTimestampWithZoneToUTC: record>, SybaseSettings: record<DatabaseName: record, Password: record, Port: record, ServerName: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, MicrosoftSQLServerSettings: record<Port: record, BcpPacketSize: record, DatabaseName: record, ControlTablesFileGroup: record, Password: record, QuerySingleAlwaysOnNode: record, ReadBackupOnly: record, SafeguardPolicy: record, ServerName: record, Username: record, UseBcpFullLoad: record, UseThirdPartyBackupDevice: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, TrimSpaceInChar: record, TlogAccessMode: record, ForceLobLookup: record>, IBMDb2Settings: record<DatabaseName: record, Password: record, Port: record, ServerName: record, SetDataCaptureChanges: record, CurrentLsn: record, MaxKBytesPerRead: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, DocDbSettings: record<Username: record, Password: record, ServerName: record, Port: record, DatabaseName: record, NestingLevel: record, ExtractDocId: record, DocsToInvestigate: record, KmsKeyId: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, RedisSettings: record<ServerName: record, Port: record, SslSecurityProtocol: record, AuthType: record, AuthUserName: record, AuthPassword: record, SslCaCertificateArn: record>, GcpMySQLSettings: record<AfterConnectScript: record, CleanSourceMetadataOnMismatch: record, DatabaseName: record, EventsPollInterval: record, TargetDbType: record, MaxFileSize: record, ParallelLoadThreads: record, Password: record, Port: record, ServerName: record, ServerTimezone: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DeleteEndpoint")
-  let body = {EndpointArn: $EndpointArn} | compact
+  let body = {"EndpointArn": $endpoint_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -709,7 +709,7 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-endpoint DeleteEndpoint" [
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DeleteEventSubscription
 # operationId: DeleteEventSubscription
-export def "x-amz-target-amazon-dm-sv20160101-delete-event-subscription DeleteEventSubscription" [
+export def "x-amz-target-amazon-dm-sv20160101-delete-event-subscription delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,23 +718,23 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-event-subscription DeleteEv
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  SubscriptionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  subscription_name: any
 ]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DeleteEventSubscription")
-  let body = {SubscriptionName: $SubscriptionName} | compact
+  let body = {"SubscriptionName": $subscription_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -745,7 +745,7 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-event-subscription DeleteEv
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DeleteFleetAdvisorCollector
 # operationId: DeleteFleetAdvisorCollector
-export def "x-amz-target-amazon-dm-sv20160101-delete-fleet-advisor-collector DeleteFleetAdvisorCollector" [
+export def "x-amz-target-amazon-dm-sv20160101-delete-fleet-advisor-collector delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -754,23 +754,23 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-fleet-advisor-collector Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  CollectorReferencedId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  collector_referenced_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DeleteFleetAdvisorCollector")
-  let body = {CollectorReferencedId: $CollectorReferencedId} | compact
+  let body = {"CollectorReferencedId": $collector_referenced_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -781,7 +781,7 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-fleet-advisor-collector Del
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DeleteFleetAdvisorDatabases
 # operationId: DeleteFleetAdvisorDatabases
-export def "x-amz-target-amazon-dm-sv20160101-delete-fleet-advisor-databases DeleteFleetAdvisorDatabases" [
+export def "x-amz-target-amazon-dm-sv20160101-delete-fleet-advisor-databases delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -790,23 +790,23 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-fleet-advisor-databases Del
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  DatabaseIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  database_ids: any
 ]: any -> record<DatabaseIds: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DeleteFleetAdvisorDatabases")
-  let body = {DatabaseIds: $DatabaseIds} | compact
+  let body = {"DatabaseIds": $database_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -817,7 +817,7 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-fleet-advisor-databases Del
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DeleteReplicationInstance
 # operationId: DeleteReplicationInstance
-export def "x-amz-target-amazon-dm-sv20160101-delete-replication-instance DeleteReplicationInstance" [
+export def "x-amz-target-amazon-dm-sv20160101-delete-replication-instance delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,23 +826,23 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-replication-instance Delete
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  ReplicationInstanceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  replication_instance_arn: any
 ]: any -> record<ReplicationInstance: record<ReplicationInstanceIdentifier: record, ReplicationInstanceClass: record, ReplicationInstanceStatus: record, AllocatedStorage: record, InstanceCreateTime: record, VpcSecurityGroups: record, AvailabilityZone: record, ReplicationSubnetGroup: record<ReplicationSubnetGroupIdentifier: record, ReplicationSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<ReplicationInstanceClass: record, AllocatedStorage: record, MultiAZ: record, EngineVersion: record, NetworkType: record>, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, KmsKeyId: record, ReplicationInstanceArn: record, ReplicationInstancePublicIpAddress: record, ReplicationInstancePrivateIpAddress: record, ReplicationInstancePublicIpAddresses: record, ReplicationInstancePrivateIpAddresses: record, ReplicationInstanceIpv6Addresses: record, PubliclyAccessible: record, SecondaryAvailabilityZone: record, FreeUntil: record, DnsNameServers: record, NetworkType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DeleteReplicationInstance")
-  let body = {ReplicationInstanceArn: $ReplicationInstanceArn} | compact
+  let body = {"ReplicationInstanceArn": $replication_instance_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -853,7 +853,7 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-replication-instance Delete
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DeleteReplicationSubnetGroup
 # operationId: DeleteReplicationSubnetGroup
-export def "x-amz-target-amazon-dm-sv20160101-delete-replication-subnet-group DeleteReplicationSubnetGroup" [
+export def "x-amz-target-amazon-dm-sv20160101-delete-replication-subnet-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,23 +862,23 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-replication-subnet-group De
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  ReplicationSubnetGroupIdentifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  replication_subnet_group_identifier: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DeleteReplicationSubnetGroup")
-  let body = {ReplicationSubnetGroupIdentifier: $ReplicationSubnetGroupIdentifier} | compact
+  let body = {"ReplicationSubnetGroupIdentifier": $replication_subnet_group_identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -889,7 +889,7 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-replication-subnet-group De
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DeleteReplicationTask
 # operationId: DeleteReplicationTask
-export def "x-amz-target-amazon-dm-sv20160101-delete-replication-task DeleteReplicationTask" [
+export def "x-amz-target-amazon-dm-sv20160101-delete-replication-task delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,23 +898,23 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-replication-task DeleteRepl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ReplicationTaskArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  replication_task_arn: any
 ]: any -> record<ReplicationTask: record<ReplicationTaskIdentifier: record, SourceEndpointArn: record, TargetEndpointArn: record, ReplicationInstanceArn: record, MigrationType: record, TableMappings: record, ReplicationTaskSettings: record, Status: record, LastFailureMessage: record, StopReason: record, ReplicationTaskCreationDate: record, ReplicationTaskStartDate: record, CdcStartPosition: record, CdcStopPosition: record, RecoveryCheckpoint: record, ReplicationTaskArn: record, ReplicationTaskStats: record<FullLoadProgressPercent: record, ElapsedTimeMillis: record, TablesLoaded: record, TablesLoading: record, TablesQueued: record, TablesErrored: record, FreshStartDate: record, StartDate: record, StopDate: record, FullLoadStartDate: record, FullLoadFinishDate: record>, TaskData: record, TargetReplicationInstanceArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DeleteReplicationTask")
-  let body = {ReplicationTaskArn: $ReplicationTaskArn} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -925,7 +925,7 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-replication-task DeleteRepl
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DeleteReplicationTaskAssessmentRun
 # operationId: DeleteReplicationTaskAssessmentRun
-export def "x-amz-target-amazon-dm-sv20160101-delete-replication-task-assessment-run DeleteReplicationTaskAssessmentRun" [
+export def "x-amz-target-amazon-dm-sv20160101-delete-replication-task-assessment-run delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,23 +934,23 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-replication-task-assessment
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  ReplicationTaskAssessmentRunArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  replication_task_assessment_run_arn: any
 ]: any -> record<ReplicationTaskAssessmentRun: record<ReplicationTaskAssessmentRunArn: record, ReplicationTaskArn: record, Status: record, ReplicationTaskAssessmentRunCreationDate: record, AssessmentProgress: record<IndividualAssessmentCount: record, IndividualAssessmentCompletedCount: record>, LastFailureMessage: record, ServiceAccessRoleArn: record, ResultLocationBucket: record, ResultLocationFolder: record, ResultEncryptionMode: record, ResultKmsKeyArn: record, AssessmentRunName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DeleteReplicationTaskAssessmentRun")
-  let body = {ReplicationTaskAssessmentRunArn: $ReplicationTaskAssessmentRunArn} | compact
+  let body = {"ReplicationTaskAssessmentRunArn": $replication_task_assessment_run_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -961,7 +961,7 @@ export def "x-amz-target-amazon-dm-sv20160101-delete-replication-task-assessment
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeAccountAttributes
 # operationId: DescribeAccountAttributes
-export def "x-amz-target-amazon-dm-sv20160101-describe-account-attributes DescribeAccountAttributes" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-account-attributes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,14 +970,14 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-account-attributes Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
   --body: record
 ]: any -> record<AccountQuotas: record, UniqueAccountIdentifier: record> {
   let input = $in
@@ -985,7 +985,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-account-attributes Descri
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeAccountAttributes")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -996,7 +996,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-account-attributes Descri
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeApplicableIndividualAssessments
 # operationId: DescribeApplicableIndividualAssessments
-export def "x-amz-target-amazon-dm-sv20160101-describe-applicable-individual-assessments DescribeApplicableIndividualAssessments" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-applicable-individual-assessments post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,32 +1005,32 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-applicable-individual-ass
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --ReplicationTaskArn: any
-  --ReplicationInstanceArn: any
-  --SourceEngineName: any
-  --TargetEngineName: any
-  --MigrationType: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --replication-task-arn: any
+  --replication-instance-arn: any
+  --source-engine-name: any
+  --target-engine-name: any
+  --migration-type: any
+  --max-records: any
+  --marker: any
 ]: any -> record<IndividualAssessmentNames: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeApplicableIndividualAssessments" $qp)
-  let body = {ReplicationTaskArn: $ReplicationTaskArn, ReplicationInstanceArn: $ReplicationInstanceArn, SourceEngineName: $SourceEngineName, TargetEngineName: $TargetEngineName, MigrationType: $MigrationType, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn, "ReplicationInstanceArn": $replication_instance_arn, "SourceEngineName": $source_engine_name, "TargetEngineName": $target_engine_name, "MigrationType": $migration_type, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1041,7 +1041,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-applicable-individual-ass
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeCertificates
 # operationId: DescribeCertificates
-export def "x-amz-target-amazon-dm-sv20160101-describe-certificates DescribeCertificates" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-certificates post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,28 +1050,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-certificates DescribeCert
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  --filters: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, Certificates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeCertificates" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1082,7 +1082,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-certificates DescribeCert
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeConnections
 # operationId: DescribeConnections
-export def "x-amz-target-amazon-dm-sv20160101-describe-connections DescribeConnections" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-connections post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,28 +1091,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-connections DescribeConne
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --filters: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, Connections: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeConnections" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1123,7 +1123,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-connections DescribeConne
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeEndpointSettings
 # operationId: DescribeEndpointSettings
-export def "x-amz-target-amazon-dm-sv20160101-describe-endpoint-settings DescribeEndpointSettings" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-endpoint-settings post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1132,28 +1132,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-endpoint-settings Describ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  EngineName: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  engine_name: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, EndpointSettings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeEndpointSettings" $qp)
-  let body = {EngineName: $EngineName, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"EngineName": $engine_name, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1164,7 +1164,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-endpoint-settings Describ
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeEndpointTypes
 # operationId: DescribeEndpointTypes
-export def "x-amz-target-amazon-dm-sv20160101-describe-endpoint-types DescribeEndpointTypes" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-endpoint-types post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1173,28 +1173,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-endpoint-types DescribeEn
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  --filters: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, SupportedEndpointTypes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeEndpointTypes" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1205,7 +1205,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-endpoint-types DescribeEn
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeEndpoints
 # operationId: DescribeEndpoints
-export def "x-amz-target-amazon-dm-sv20160101-describe-endpoints DescribeEndpoints" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-endpoints post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1214,28 +1214,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-endpoints DescribeEndpoin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  --filters: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, Endpoints: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeEndpoints" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1246,7 +1246,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-endpoints DescribeEndpoin
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeEventCategories
 # operationId: DescribeEventCategories
-export def "x-amz-target-amazon-dm-sv20160101-describe-event-categories DescribeEventCategories" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-event-categories post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1255,24 +1255,24 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-event-categories Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  --SourceType: any
-  --Filters: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  --source-type: any
+  --filters: any
 ]: any -> record<EventCategoryGroupList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeEventCategories")
-  let body = {SourceType: $SourceType, Filters: $Filters} | compact
+  let body = {"SourceType": $source_type, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1283,7 +1283,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-event-categories Describe
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeEventSubscriptions
 # operationId: DescribeEventSubscriptions
-export def "x-amz-target-amazon-dm-sv20160101-describe-event-subscriptions DescribeEventSubscriptions" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-event-subscriptions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,29 +1292,29 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-event-subscriptions Descr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --SubscriptionName: any
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --subscription-name: any
+  --filters: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, EventSubscriptionsList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeEventSubscriptions" $qp)
-  let body = {SubscriptionName: $SubscriptionName, Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"SubscriptionName": $subscription_name, "Filters": $filters, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1325,7 +1325,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-event-subscriptions Descr
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeEvents
 # operationId: DescribeEvents
-export def "x-amz-target-amazon-dm-sv20160101-describe-events DescribeEvents" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-events post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1334,34 +1334,34 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-events DescribeEvents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --SourceIdentifier: any
-  --SourceType: any
-  --StartTime: any
-  --EndTime: any
-  --Duration: any
-  --EventCategories: any
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --source-identifier: any
+  --source-type: any
+  --start-time: any
+  --end-time: any
+  --duration: any
+  --event-categories: any
+  --filters: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, Events: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeEvents" $qp)
-  let body = {SourceIdentifier: $SourceIdentifier, SourceType: $SourceType, StartTime: $StartTime, EndTime: $EndTime, Duration: $Duration, EventCategories: $EventCategories, Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"SourceIdentifier": $source_identifier, "SourceType": $source_type, "StartTime": $start_time, "EndTime": $end_time, "Duration": $duration, "EventCategories": $event_categories, "Filters": $filters, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1372,7 +1372,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-events DescribeEvents" [
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeFleetAdvisorCollectors
 # operationId: DescribeFleetAdvisorCollectors
-export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-collectors DescribeFleetAdvisorCollectors" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-collectors post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1381,28 +1381,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-collectors 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  --Filters: any
-  --MaxRecords: any
-  --NextToken: any
+  --max-records: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  --filters: any
+  --max-records: any
+  --next-token: any
 ]: any -> record<Collectors: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeFleetAdvisorCollectors" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, NextToken: $NextToken} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1413,7 +1413,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-collectors 
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeFleetAdvisorDatabases
 # operationId: DescribeFleetAdvisorDatabases
-export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-databases DescribeFleetAdvisorDatabases" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-databases post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1422,28 +1422,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-databases D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  --Filters: any
-  --MaxRecords: any
-  --NextToken: any
+  --max-records: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  --filters: any
+  --max-records: any
+  --next-token: any
 ]: any -> record<Databases: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeFleetAdvisorDatabases" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, NextToken: $NextToken} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1454,7 +1454,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-databases D
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeFleetAdvisorLsaAnalysis
 # operationId: DescribeFleetAdvisorLsaAnalysis
-export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-lsa-analysis DescribeFleetAdvisorLsaAnalysis" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-lsa-analysis post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1463,27 +1463,27 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-lsa-analysi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --MaxRecords: any
-  --NextToken: any
+  --max-records: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --max-records: any
+  --next-token: any
 ]: any -> record<Analysis: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeFleetAdvisorLsaAnalysis" $qp)
-  let body = {MaxRecords: $MaxRecords, NextToken: $NextToken} | compact
+  let body = {"MaxRecords": $max_records, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1494,7 +1494,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-lsa-analysi
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeFleetAdvisorSchemaObjectSummary
 # operationId: DescribeFleetAdvisorSchemaObjectSummary
-export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-schema-object-summary DescribeFleetAdvisorSchemaObjectSummary" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-schema-object-summary post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1503,28 +1503,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-schema-obje
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  --Filters: any
-  --MaxRecords: any
-  --NextToken: any
+  --max-records: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  --filters: any
+  --max-records: any
+  --next-token: any
 ]: any -> record<FleetAdvisorSchemaObjects: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeFleetAdvisorSchemaObjectSummary" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, NextToken: $NextToken} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1535,7 +1535,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-schema-obje
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeFleetAdvisorSchemas
 # operationId: DescribeFleetAdvisorSchemas
-export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-schemas DescribeFleetAdvisorSchemas" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-schemas post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1544,28 +1544,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-schemas Des
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  --Filters: any
-  --MaxRecords: any
-  --NextToken: any
+  --max-records: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  --filters: any
+  --max-records: any
+  --next-token: any
 ]: any -> record<FleetAdvisorSchemas: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeFleetAdvisorSchemas" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, NextToken: $NextToken} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1576,7 +1576,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-fleet-advisor-schemas Des
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeOrderableReplicationInstances
 # operationId: DescribeOrderableReplicationInstances
-export def "x-amz-target-amazon-dm-sv20160101-describe-orderable-replication-instances DescribeOrderableReplicationInstances" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-orderable-replication-instances post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1585,27 +1585,27 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-orderable-replication-ins
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  --max-records: any
+  --marker: any
 ]: any -> record<OrderableReplicationInstances: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeOrderableReplicationInstances" $qp)
-  let body = {MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1616,7 +1616,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-orderable-replication-ins
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribePendingMaintenanceActions
 # operationId: DescribePendingMaintenanceActions
-export def "x-amz-target-amazon-dm-sv20160101-describe-pending-maintenance-actions DescribePendingMaintenanceActions" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-pending-maintenance-actions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,29 +1625,29 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-pending-maintenance-actio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  --ReplicationInstanceArn: any
-  --Filters: any
-  --Marker: any
-  --MaxRecords: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  --replication-instance-arn: any
+  --filters: any
+  --marker: any
+  --max-records: any
 ]: any -> record<PendingMaintenanceActions: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribePendingMaintenanceActions" $qp)
-  let body = {ReplicationInstanceArn: $ReplicationInstanceArn, Filters: $Filters, Marker: $Marker, MaxRecords: $MaxRecords} | compact
+  let body = {"ReplicationInstanceArn": $replication_instance_arn, "Filters": $filters, "Marker": $marker, "MaxRecords": $max_records} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1658,7 +1658,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-pending-maintenance-actio
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeRecommendationLimitations
 # operationId: DescribeRecommendationLimitations
-export def "x-amz-target-amazon-dm-sv20160101-describe-recommendation-limitations DescribeRecommendationLimitations" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-recommendation-limitations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1667,28 +1667,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-recommendation-limitation
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  --Filters: any
-  --MaxRecords: any
-  --NextToken: any
+  --max-records: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  --filters: any
+  --max-records: any
+  --next-token: any
 ]: any -> record<NextToken: record, Limitations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeRecommendationLimitations" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, NextToken: $NextToken} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1699,7 +1699,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-recommendation-limitation
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeRecommendations
 # operationId: DescribeRecommendations
-export def "x-amz-target-amazon-dm-sv20160101-describe-recommendations DescribeRecommendations" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-recommendations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1708,28 +1708,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-recommendations DescribeR
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  --Filters: any
-  --MaxRecords: any
-  --NextToken: any
+  --max-records: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  --filters: any
+  --max-records: any
+  --next-token: any
 ]: any -> record<NextToken: record, Recommendations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeRecommendations" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, NextToken: $NextToken} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1740,7 +1740,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-recommendations DescribeR
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeRefreshSchemasStatus
 # operationId: DescribeRefreshSchemasStatus
-export def "x-amz-target-amazon-dm-sv20160101-describe-refresh-schemas-status DescribeRefreshSchemasStatus" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-refresh-schemas-status post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1749,23 +1749,23 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-refresh-schemas-status De
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  EndpointArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  endpoint_arn: any
 ]: any -> record<RefreshSchemasStatus: record<EndpointArn: record, ReplicationInstanceArn: record, Status: record, LastRefreshDate: record, LastFailureMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeRefreshSchemasStatus")
-  let body = {EndpointArn: $EndpointArn} | compact
+  let body = {"EndpointArn": $endpoint_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1776,7 +1776,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-refresh-schemas-status De
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationInstanceTaskLogs
 # operationId: DescribeReplicationInstanceTaskLogs
-export def "x-amz-target-amazon-dm-sv20160101-describe-replication-instance-task-logs DescribeReplicationInstanceTaskLogs" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-replication-instance-task-logs logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1785,28 +1785,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-instance-task
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  ReplicationInstanceArn: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  replication_instance_arn: any
+  --max-records: any
+  --marker: any
 ]: any -> record<ReplicationInstanceArn: record, ReplicationInstanceTaskLogs: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationInstanceTaskLogs" $qp)
-  let body = {ReplicationInstanceArn: $ReplicationInstanceArn, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"ReplicationInstanceArn": $replication_instance_arn, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1817,7 +1817,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-instance-task
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationInstances
 # operationId: DescribeReplicationInstances
-export def "x-amz-target-amazon-dm-sv20160101-describe-replication-instances DescribeReplicationInstances" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-replication-instances post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,28 +1826,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-instances Des
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  --filters: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, ReplicationInstances: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationInstances" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1858,7 +1858,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-instances Des
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationSubnetGroups
 # operationId: DescribeReplicationSubnetGroups
-export def "x-amz-target-amazon-dm-sv20160101-describe-replication-subnet-groups DescribeReplicationSubnetGroups" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-replication-subnet-groups post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1867,28 +1867,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-subnet-groups
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  --filters: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, ReplicationSubnetGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationSubnetGroups" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1899,7 +1899,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-subnet-groups
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationTaskAssessmentResults
 # operationId: DescribeReplicationTaskAssessmentResults
-export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-assessment-results DescribeReplicationTaskAssessmentResults" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-assessment-results post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1908,28 +1908,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-assessme
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  --ReplicationTaskArn: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  --replication-task-arn: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, BucketName: record, ReplicationTaskAssessmentResults: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationTaskAssessmentResults" $qp)
-  let body = {ReplicationTaskArn: $ReplicationTaskArn, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1940,7 +1940,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-assessme
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationTaskAssessmentRuns
 # operationId: DescribeReplicationTaskAssessmentRuns
-export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-assessment-runs DescribeReplicationTaskAssessmentRuns" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-assessment-runs post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1949,28 +1949,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-assessme
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  --filters: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, ReplicationTaskAssessmentRuns: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationTaskAssessmentRuns" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1981,7 +1981,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-assessme
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationTaskIndividualAssessments
 # operationId: DescribeReplicationTaskIndividualAssessments
-export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-individual-assessments DescribeReplicationTaskIndividualAssessments" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-individual-assessments post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1990,28 +1990,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-individu
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  --filters: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, ReplicationTaskIndividualAssessments: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationTaskIndividualAssessments" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2022,7 +2022,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-task-individu
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationTasks
 # operationId: DescribeReplicationTasks
-export def "x-amz-target-amazon-dm-sv20160101-describe-replication-tasks DescribeReplicationTasks" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-replication-tasks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,29 +2031,29 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-tasks Describ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  --Filters: any
-  --MaxRecords: any
-  --Marker: any
-  --WithoutSettings: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  --filters: any
+  --max-records: any
+  --marker: any
+  --without-settings: any
 ]: any -> record<Marker: record, ReplicationTasks: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeReplicationTasks" $qp)
-  let body = {Filters: $Filters, MaxRecords: $MaxRecords, Marker: $Marker, WithoutSettings: $WithoutSettings} | compact
+  let body = {"Filters": $filters, "MaxRecords": $max_records, "Marker": $marker, "WithoutSettings": $without_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2064,7 +2064,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-replication-tasks Describ
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeSchemas
 # operationId: DescribeSchemas
-export def "x-amz-target-amazon-dm-sv20160101-describe-schemas DescribeSchemas" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-schemas post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2073,28 +2073,28 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-schemas DescribeSchemas" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  EndpointArn: any
-  --MaxRecords: any
-  --Marker: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  endpoint_arn: any
+  --max-records: any
+  --marker: any
 ]: any -> record<Marker: record, Schemas: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeSchemas" $qp)
-  let body = {EndpointArn: $EndpointArn, MaxRecords: $MaxRecords, Marker: $Marker} | compact
+  let body = {"EndpointArn": $endpoint_arn, "MaxRecords": $max_records, "Marker": $marker} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2105,7 +2105,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-schemas DescribeSchemas" 
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.DescribeTableStatistics
 # operationId: DescribeTableStatistics
-export def "x-amz-target-amazon-dm-sv20160101-describe-table-statistics DescribeTableStatistics" [
+export def "x-amz-target-amazon-dm-sv20160101-describe-table-statistics post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2114,29 +2114,29 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-table-statistics Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxRecords: string # Pagination limit
-  --Marker: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  ReplicationTaskArn: any
-  --MaxRecords: any
-  --Marker: any
-  --Filters: any
+  --max-records: string # Pagination limit
+  --marker: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  replication_task_arn: any
+  --max-records: any
+  --marker: any
+  --filters: any
 ]: any -> record<ReplicationTaskArn: record, TableStatistics: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxRecords" $MaxRecords "scalar") (serialize-qp "Marker" $Marker "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.DescribeTableStatistics" $qp)
-  let body = {ReplicationTaskArn: $ReplicationTaskArn, MaxRecords: $MaxRecords, Marker: $Marker, Filters: $Filters} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn, "MaxRecords": $max_records, "Marker": $marker, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2147,7 +2147,7 @@ export def "x-amz-target-amazon-dm-sv20160101-describe-table-statistics Describe
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.ImportCertificate
 # operationId: ImportCertificate
-export def "x-amz-target-amazon-dm-sv20160101-import-certificate ImportCertificate" [
+export def "x-amz-target-amazon-dm-sv20160101-import-certificate import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2156,26 +2156,26 @@ export def "x-amz-target-amazon-dm-sv20160101-import-certificate ImportCertifica
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  CertificateIdentifier: any
-  --CertificatePem: any
-  --CertificateWallet: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  certificate_identifier: any
+  --certificate-pem: any
+  --certificate-wallet: any
+  --tags: any
 ]: any -> record<Certificate: record<CertificateIdentifier: record, CertificateCreationDate: record, CertificatePem: record, CertificateWallet: record, CertificateArn: record, CertificateOwner: record, ValidFromDate: record, ValidToDate: record, SigningAlgorithm: record, KeyLength: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.ImportCertificate")
-  let body = {CertificateIdentifier: $CertificateIdentifier, CertificatePem: $CertificatePem, CertificateWallet: $CertificateWallet, Tags: $Tags} | compact
+  let body = {"CertificateIdentifier": $certificate_identifier, "CertificatePem": $certificate_pem, "CertificateWallet": $certificate_wallet, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2186,7 +2186,7 @@ export def "x-amz-target-amazon-dm-sv20160101-import-certificate ImportCertifica
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-amazon-dm-sv20160101-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-amazon-dm-sv20160101-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2195,24 +2195,24 @@ export def "x-amz-target-amazon-dm-sv20160101-list-tags-for-resource ListTagsFor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  --ResourceArn: any
-  --ResourceArnList: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  --resource-arn: any
+  --resource-arn-list: any
 ]: any -> record<TagList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.ListTagsForResource")
-  let body = {ResourceArn: $ResourceArn, ResourceArnList: $ResourceArnList} | compact
+  let body = {"ResourceArn": $resource_arn, "ResourceArnList": $resource_arn_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2224,7 +2224,7 @@ export def "x-amz-target-amazon-dm-sv20160101-list-tags-for-resource ListTagsFor
 # POST /#X-Amz-Target=AmazonDMSv20160101.ModifyEndpoint
 # operationId: ModifyEndpoint
 # --RedshiftSettings shape: {AcceptAnyDate?: any, AfterConnectScript?: any, BucketFolder?: any, BucketName?: any, CaseSensitiveNames?: any, CompUpdate?: any, ConnectionTimeout?: any, DatabaseName?: any, DateFormat?: any, EmptyAsNull?: any, EncryptionMode?: any, ExplicitIds?: any, FileTransferUploadStreams?: any, LoadTimeout?: any, MaxFileSize?: any, Password?: any, Port?: any, RemoveQuotes?: any, ReplaceInvalidChars?: any, ReplaceChars?: any, ServerName?: any, ServiceAccessRoleArn?: any, ServerSideEncryptionKmsKeyId?: any, TimeFormat?: any, TrimBlanks?: any, TruncateColumns?: any, Username?: any, WriteBufferSize?: any, SecretsManagerAccessRoleArn?: any, SecretsManagerSecretId?: any, MapBooleanAsBoolean?: any}
-export def "x-amz-target-amazon-dm-sv20160101-modify-endpoint ModifyEndpoint" [
+export def "x-amz-target-amazon-dm-sv20160101-modify-endpoint post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2233,55 +2233,55 @@ export def "x-amz-target-amazon-dm-sv20160101-modify-endpoint ModifyEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  EndpointArn: any
-  --EndpointIdentifier: any
-  --EndpointType: any
-  --EngineName: any
-  --Username: any
-  --Password: any
-  --ServerName: any
-  --Port: any
-  --DatabaseName: any
-  --ExtraConnectionAttributes: any
-  --CertificateArn: any
-  --SslMode: any
-  --ServiceAccessRoleArn: any
-  --ExternalTableDefinition: any
-  --DynamoDbSettings: any
-  --S3Settings: any
-  --DmsTransferSettings: any
-  --MongoDbSettings: any
-  --KinesisSettings: any
-  --KafkaSettings: any
-  --ElasticsearchSettings: any
-  --NeptuneSettings: any
-  --RedshiftSettings: record # Provides information that defines an Amazon Redshift endpoint. — shape: {AcceptAnyDate?: any, AfterConnectScript?: any, BucketFolder?: any, BucketName?: any, CaseSensitiveNames?: any, CompUpdate?: any, ConnectionTimeout?: any, DatabaseName?: any, DateFormat?: any, EmptyAsNull?: any, EncryptionMode?: any, ExplicitIds?: any, FileTransferUploadStreams?: any, LoadTimeout?: any, MaxFileSize?: any, Password?: any, Port?: any, RemoveQuotes?: any, ReplaceInvalidChars?: any, ReplaceChars?: any, ServerName?: any, ServiceAccessRoleArn?: any, ServerSideEncryptionKmsKeyId?: any, TimeFormat?: any, TrimBlanks?: any, TruncateColumns?: any, Username?: any, WriteBufferSize?: any, SecretsManagerAccessRoleArn?: any, SecretsManagerSecretId?: any, MapBooleanAsBoolean?: any}
-  --PostgreSQLSettings: any
-  --MySQLSettings: any
-  --OracleSettings: any
-  --SybaseSettings: any
-  --MicrosoftSQLServerSettings: any
-  --IBMDb2Settings: any
-  --DocDbSettings: any
-  --RedisSettings: any
-  --ExactSettings: any
-  --GcpMySQLSettings: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  endpoint_arn: any
+  --endpoint-identifier: any
+  --endpoint-type: any
+  --engine-name: any
+  --username: any
+  --password: any
+  --server-name: any
+  --port: any
+  --database-name: any
+  --extra-connection-attributes: any
+  --certificate-arn: any
+  --ssl-mode: any
+  --service-access-role-arn: any
+  --external-table-definition: any
+  --dynamo-db-settings: any
+  --s3-settings: any
+  --dms-transfer-settings: any
+  --mongo-db-settings: any
+  --kinesis-settings: any
+  --kafka-settings: any
+  --elasticsearch-settings: any
+  --neptune-settings: any
+  --redshift-settings: record # Provides information that defines an Amazon Redshift endpoint. — shape: {AcceptAnyDate?: any, AfterConnectScript?: any, BucketFolder?: any, BucketName?: any, CaseSensitiveNames?: any, CompUpdate?: any, ConnectionTimeout?: any, DatabaseName?: any, DateFormat?: any, EmptyAsNull?: any, EncryptionMode?: any, ExplicitIds?: any, FileTransferUploadStreams?: any, LoadTimeout?: any, MaxFileSize?: any, Password?: any, Port?: any, RemoveQuotes?: any, ReplaceInvalidChars?: any, ReplaceChars?: any, ServerName?: any, ServiceAccessRoleArn?: any, ServerSideEncryptionKmsKeyId?: any, TimeFormat?: any, TrimBlanks?: any, TruncateColumns?: any, Username?: any, WriteBufferSize?: any, SecretsManagerAccessRoleArn?: any, SecretsManagerSecretId?: any, MapBooleanAsBoolean?: any}
+  --postgre-sql-settings: any
+  --my-sql-settings: any
+  --oracle-settings: any
+  --sybase-settings: any
+  --microsoft-sql-server-settings: any
+  --ibm-db2-settings: any
+  --doc-db-settings: any
+  --redis-settings: any
+  --exact-settings: any
+  --gcp-my-sql-settings: any
 ]: any -> record<Endpoint: record<EndpointIdentifier: record, EndpointType: record, EngineName: record, EngineDisplayName: record, Username: record, ServerName: record, Port: record, DatabaseName: record, ExtraConnectionAttributes: record, Status: record, KmsKeyId: record, EndpointArn: record, CertificateArn: record, SslMode: record, ServiceAccessRoleArn: record, ExternalTableDefinition: record, ExternalId: record, DynamoDbSettings: record<ServiceAccessRoleArn: record>, S3Settings: record<ServiceAccessRoleArn: record, ExternalTableDefinition: record, CsvRowDelimiter: record, CsvDelimiter: record, BucketFolder: record, BucketName: record, CompressionType: record, EncryptionMode: record, ServerSideEncryptionKmsKeyId: record, DataFormat: record, EncodingType: record, DictPageSizeLimit: record, RowGroupLength: record, DataPageSize: record, ParquetVersion: record, EnableStatistics: record, IncludeOpForFullLoad: record, CdcInsertsOnly: record, TimestampColumnName: record, ParquetTimestampInMillisecond: record, CdcInsertsAndUpdates: record, DatePartitionEnabled: record, DatePartitionSequence: record, DatePartitionDelimiter: record, UseCsvNoSupValue: record, CsvNoSupValue: record, PreserveTransactions: record, CdcPath: record, UseTaskStartTimeForFullLoadTimestamp: record, CannedAclForObjects: record, AddColumnName: record, CdcMaxBatchInterval: record, CdcMinFileSize: record, CsvNullValue: record, IgnoreHeaderRows: record, MaxFileSize: record, Rfc4180: record, DatePartitionTimezone: record, AddTrailingPaddingCharacter: record, ExpectedBucketOwner: record, GlueCatalogGeneration: record>, DmsTransferSettings: record<ServiceAccessRoleArn: record, BucketName: record>, MongoDbSettings: record<Username: record, Password: record, ServerName: record, Port: record, DatabaseName: record, AuthType: record, AuthMechanism: record, NestingLevel: record, ExtractDocId: record, DocsToInvestigate: record, AuthSource: record, KmsKeyId: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, KinesisSettings: record<StreamArn: record, MessageFormat: record, ServiceAccessRoleArn: record, IncludeTransactionDetails: record, IncludePartitionValue: record, PartitionIncludeSchemaTable: record, IncludeTableAlterOperations: record, IncludeControlDetails: record, IncludeNullAndEmpty: record, NoHexPrefix: record>, KafkaSettings: record<Broker: record, Topic: record, MessageFormat: record, IncludeTransactionDetails: record, IncludePartitionValue: record, PartitionIncludeSchemaTable: record, IncludeTableAlterOperations: record, IncludeControlDetails: record, MessageMaxBytes: record, IncludeNullAndEmpty: record, SecurityProtocol: record, SslClientCertificateArn: record, SslClientKeyArn: record, SslClientKeyPassword: record, SslCaCertificateArn: record, SaslUsername: record, SaslPassword: record, NoHexPrefix: record, SaslMechanism: record>, ElasticsearchSettings: record<ServiceAccessRoleArn: record, EndpointUri: record, FullLoadErrorPercentage: record, ErrorRetryDuration: record, UseNewMappingType: record>, NeptuneSettings: record<ServiceAccessRoleArn: record, S3BucketName: record, S3BucketFolder: record, ErrorRetryDuration: record, MaxFileSize: record, MaxRetryCount: record, IamAuthEnabled: record>, RedshiftSettings: record<AcceptAnyDate: record, AfterConnectScript: record, BucketFolder: record, BucketName: record, CaseSensitiveNames: record, CompUpdate: record, ConnectionTimeout: record, DatabaseName: record, DateFormat: record, EmptyAsNull: record, EncryptionMode: record, ExplicitIds: record, FileTransferUploadStreams: record, LoadTimeout: record, MaxFileSize: record, Password: record, Port: record, RemoveQuotes: record, ReplaceInvalidChars: record, ReplaceChars: record, ServerName: record, ServiceAccessRoleArn: record, ServerSideEncryptionKmsKeyId: record, TimeFormat: record, TrimBlanks: record, TruncateColumns: record, Username: record, WriteBufferSize: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, MapBooleanAsBoolean: record>, PostgreSQLSettings: record<AfterConnectScript: record, CaptureDdls: record, MaxFileSize: record, DatabaseName: record, DdlArtifactsSchema: record, ExecuteTimeout: record, FailTasksOnLobTruncation: record, HeartbeatEnable: record, HeartbeatSchema: record, HeartbeatFrequency: record, Password: record, Port: record, ServerName: record, Username: record, SlotName: record, PluginName: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, TrimSpaceInChar: record, MapBooleanAsBoolean: record>, MySQLSettings: record<AfterConnectScript: record, CleanSourceMetadataOnMismatch: record, DatabaseName: record, EventsPollInterval: record, TargetDbType: record, MaxFileSize: record, ParallelLoadThreads: record, Password: record, Port: record, ServerName: record, ServerTimezone: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, OracleSettings: record<AddSupplementalLogging: record, ArchivedLogDestId: record, AdditionalArchivedLogDestId: record, ExtraArchivedLogDestIds: record, AllowSelectNestedTables: record, ParallelAsmReadThreads: record, ReadAheadBlocks: record, AccessAlternateDirectly: record, UseAlternateFolderForOnline: record, OraclePathPrefix: record, UsePathPrefix: record, ReplacePathPrefix: record, EnableHomogenousTablespace: record, DirectPathNoLog: record, ArchivedLogsOnly: record, AsmPassword: record, AsmServer: record, AsmUser: record, CharLengthSemantics: record, DatabaseName: record, DirectPathParallelLoad: record, FailTasksOnLobTruncation: record, NumberDatatypeScale: record, Password: record, Port: record, ReadTableSpaceName: record, RetryInterval: record, SecurityDbEncryption: record, SecurityDbEncryptionName: record, ServerName: record, SpatialDataOptionToGeoJsonFunctionName: record, StandbyDelayTime: record, Username: record, UseBFile: record, UseDirectPathFullLoad: record, UseLogminerReader: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, SecretsManagerOracleAsmAccessRoleArn: record, SecretsManagerOracleAsmSecretId: record, TrimSpaceInChar: record, ConvertTimestampWithZoneToUTC: record>, SybaseSettings: record<DatabaseName: record, Password: record, Port: record, ServerName: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, MicrosoftSQLServerSettings: record<Port: record, BcpPacketSize: record, DatabaseName: record, ControlTablesFileGroup: record, Password: record, QuerySingleAlwaysOnNode: record, ReadBackupOnly: record, SafeguardPolicy: record, ServerName: record, Username: record, UseBcpFullLoad: record, UseThirdPartyBackupDevice: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record, TrimSpaceInChar: record, TlogAccessMode: record, ForceLobLookup: record>, IBMDb2Settings: record<DatabaseName: record, Password: record, Port: record, ServerName: record, SetDataCaptureChanges: record, CurrentLsn: record, MaxKBytesPerRead: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, DocDbSettings: record<Username: record, Password: record, ServerName: record, Port: record, DatabaseName: record, NestingLevel: record, ExtractDocId: record, DocsToInvestigate: record, KmsKeyId: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>, RedisSettings: record<ServerName: record, Port: record, SslSecurityProtocol: record, AuthType: record, AuthUserName: record, AuthPassword: record, SslCaCertificateArn: record>, GcpMySQLSettings: record<AfterConnectScript: record, CleanSourceMetadataOnMismatch: record, DatabaseName: record, EventsPollInterval: record, TargetDbType: record, MaxFileSize: record, ParallelLoadThreads: record, Password: record, Port: record, ServerName: record, ServerTimezone: record, Username: record, SecretsManagerAccessRoleArn: record, SecretsManagerSecretId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.ModifyEndpoint")
-  let body = {EndpointArn: $EndpointArn, EndpointIdentifier: $EndpointIdentifier, EndpointType: $EndpointType, EngineName: $EngineName, Username: $Username, Password: $Password, ServerName: $ServerName, Port: $Port, DatabaseName: $DatabaseName, ExtraConnectionAttributes: $ExtraConnectionAttributes, CertificateArn: $CertificateArn, SslMode: $SslMode, ServiceAccessRoleArn: $ServiceAccessRoleArn, ExternalTableDefinition: $ExternalTableDefinition, DynamoDbSettings: $DynamoDbSettings, S3Settings: $S3Settings, DmsTransferSettings: $DmsTransferSettings, MongoDbSettings: $MongoDbSettings, KinesisSettings: $KinesisSettings, KafkaSettings: $KafkaSettings, ElasticsearchSettings: $ElasticsearchSettings, NeptuneSettings: $NeptuneSettings, RedshiftSettings: $RedshiftSettings, PostgreSQLSettings: $PostgreSQLSettings, MySQLSettings: $MySQLSettings, OracleSettings: $OracleSettings, SybaseSettings: $SybaseSettings, MicrosoftSQLServerSettings: $MicrosoftSQLServerSettings, IBMDb2Settings: $IBMDb2Settings, DocDbSettings: $DocDbSettings, RedisSettings: $RedisSettings, ExactSettings: $ExactSettings, GcpMySQLSettings: $GcpMySQLSettings} | compact
+  let body = {"EndpointArn": $endpoint_arn, "EndpointIdentifier": $endpoint_identifier, "EndpointType": $endpoint_type, "EngineName": $engine_name, "Username": $username, "Password": $password, "ServerName": $server_name, "Port": $port, "DatabaseName": $database_name, "ExtraConnectionAttributes": $extra_connection_attributes, "CertificateArn": $certificate_arn, "SslMode": $ssl_mode, "ServiceAccessRoleArn": $service_access_role_arn, "ExternalTableDefinition": $external_table_definition, "DynamoDbSettings": $dynamo_db_settings, "S3Settings": $s3_settings, "DmsTransferSettings": $dms_transfer_settings, "MongoDbSettings": $mongo_db_settings, "KinesisSettings": $kinesis_settings, "KafkaSettings": $kafka_settings, "ElasticsearchSettings": $elasticsearch_settings, "NeptuneSettings": $neptune_settings, "RedshiftSettings": $redshift_settings, "PostgreSQLSettings": $postgre_sql_settings, "MySQLSettings": $my_sql_settings, "OracleSettings": $oracle_settings, "SybaseSettings": $sybase_settings, "MicrosoftSQLServerSettings": $microsoft_sql_server_settings, "IBMDb2Settings": $ibm_db2_settings, "DocDbSettings": $doc_db_settings, "RedisSettings": $redis_settings, "ExactSettings": $exact_settings, "GcpMySQLSettings": $gcp_my_sql_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2292,7 +2292,7 @@ export def "x-amz-target-amazon-dm-sv20160101-modify-endpoint ModifyEndpoint" [
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.ModifyEventSubscription
 # operationId: ModifyEventSubscription
-export def "x-amz-target-amazon-dm-sv20160101-modify-event-subscription ModifyEventSubscription" [
+export def "x-amz-target-amazon-dm-sv20160101-modify-event-subscription post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2301,27 +2301,27 @@ export def "x-amz-target-amazon-dm-sv20160101-modify-event-subscription ModifyEv
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  SubscriptionName: any
-  --SnsTopicArn: any
-  --SourceType: any
-  --EventCategories: any
-  --Enabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  subscription_name: any
+  --sns-topic-arn: any
+  --source-type: any
+  --event-categories: any
+  --enabled: any
 ]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.ModifyEventSubscription")
-  let body = {SubscriptionName: $SubscriptionName, SnsTopicArn: $SnsTopicArn, SourceType: $SourceType, EventCategories: $EventCategories, Enabled: $Enabled} | compact
+  let body = {"SubscriptionName": $subscription_name, "SnsTopicArn": $sns_topic_arn, "SourceType": $source_type, "EventCategories": $event_categories, "Enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2332,7 +2332,7 @@ export def "x-amz-target-amazon-dm-sv20160101-modify-event-subscription ModifyEv
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.ModifyReplicationInstance
 # operationId: ModifyReplicationInstance
-export def "x-amz-target-amazon-dm-sv20160101-modify-replication-instance ModifyReplicationInstance" [
+export def "x-amz-target-amazon-dm-sv20160101-modify-replication-instance post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2341,34 +2341,34 @@ export def "x-amz-target-amazon-dm-sv20160101-modify-replication-instance Modify
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-53
-  ReplicationInstanceArn: any
-  --AllocatedStorage: any
-  --ApplyImmediately: any
-  --ReplicationInstanceClass: any
-  --VpcSecurityGroupIds: any
-  --PreferredMaintenanceWindow: any
-  --MultiAZ: any
-  --EngineVersion: any
-  --AllowMajorVersionUpgrade: any
-  --AutoMinorVersionUpgrade: any
-  --ReplicationInstanceIdentifier: any
-  --NetworkType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-53
+  replication_instance_arn: any
+  --allocated-storage: any
+  --apply-immediately: any
+  --replication-instance-class: any
+  --vpc-security-group-ids: any
+  --preferred-maintenance-window: any
+  --multi-az: any
+  --engine-version: any
+  --allow-major-version-upgrade: any
+  --auto-minor-version-upgrade: any
+  --replication-instance-identifier: any
+  --network-type: any
 ]: any -> record<ReplicationInstance: record<ReplicationInstanceIdentifier: record, ReplicationInstanceClass: record, ReplicationInstanceStatus: record, AllocatedStorage: record, InstanceCreateTime: record, VpcSecurityGroups: record, AvailabilityZone: record, ReplicationSubnetGroup: record<ReplicationSubnetGroupIdentifier: record, ReplicationSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<ReplicationInstanceClass: record, AllocatedStorage: record, MultiAZ: record, EngineVersion: record, NetworkType: record>, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, KmsKeyId: record, ReplicationInstanceArn: record, ReplicationInstancePublicIpAddress: record, ReplicationInstancePrivateIpAddress: record, ReplicationInstancePublicIpAddresses: record, ReplicationInstancePrivateIpAddresses: record, ReplicationInstanceIpv6Addresses: record, PubliclyAccessible: record, SecondaryAvailabilityZone: record, FreeUntil: record, DnsNameServers: record, NetworkType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.ModifyReplicationInstance")
-  let body = {ReplicationInstanceArn: $ReplicationInstanceArn, AllocatedStorage: $AllocatedStorage, ApplyImmediately: $ApplyImmediately, ReplicationInstanceClass: $ReplicationInstanceClass, VpcSecurityGroupIds: $VpcSecurityGroupIds, PreferredMaintenanceWindow: $PreferredMaintenanceWindow, MultiAZ: $MultiAZ, EngineVersion: $EngineVersion, AllowMajorVersionUpgrade: $AllowMajorVersionUpgrade, AutoMinorVersionUpgrade: $AutoMinorVersionUpgrade, ReplicationInstanceIdentifier: $ReplicationInstanceIdentifier, NetworkType: $NetworkType} | compact
+  let body = {"ReplicationInstanceArn": $replication_instance_arn, "AllocatedStorage": $allocated_storage, "ApplyImmediately": $apply_immediately, "ReplicationInstanceClass": $replication_instance_class, "VpcSecurityGroupIds": $vpc_security_group_ids, "PreferredMaintenanceWindow": $preferred_maintenance_window, "MultiAZ": $multi_az, "EngineVersion": $engine_version, "AllowMajorVersionUpgrade": $allow_major_version_upgrade, "AutoMinorVersionUpgrade": $auto_minor_version_upgrade, "ReplicationInstanceIdentifier": $replication_instance_identifier, "NetworkType": $network_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2379,7 +2379,7 @@ export def "x-amz-target-amazon-dm-sv20160101-modify-replication-instance Modify
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.ModifyReplicationSubnetGroup
 # operationId: ModifyReplicationSubnetGroup
-export def "x-amz-target-amazon-dm-sv20160101-modify-replication-subnet-group ModifyReplicationSubnetGroup" [
+export def "x-amz-target-amazon-dm-sv20160101-modify-replication-subnet-group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2388,25 +2388,25 @@ export def "x-amz-target-amazon-dm-sv20160101-modify-replication-subnet-group Mo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-54
-  ReplicationSubnetGroupIdentifier: any
-  --ReplicationSubnetGroupDescription: any
-  SubnetIds: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-54
+  replication_subnet_group_identifier: any
+  --replication-subnet-group-description: any
+  subnet_ids: any
 ]: any -> record<ReplicationSubnetGroup: record<ReplicationSubnetGroupIdentifier: record, ReplicationSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, SupportedNetworkTypes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.ModifyReplicationSubnetGroup")
-  let body = {ReplicationSubnetGroupIdentifier: $ReplicationSubnetGroupIdentifier, ReplicationSubnetGroupDescription: $ReplicationSubnetGroupDescription, SubnetIds: $SubnetIds} | compact
+  let body = {"ReplicationSubnetGroupIdentifier": $replication_subnet_group_identifier, "ReplicationSubnetGroupDescription": $replication_subnet_group_description, "SubnetIds": $subnet_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2417,7 +2417,7 @@ export def "x-amz-target-amazon-dm-sv20160101-modify-replication-subnet-group Mo
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.ModifyReplicationTask
 # operationId: ModifyReplicationTask
-export def "x-amz-target-amazon-dm-sv20160101-modify-replication-task ModifyReplicationTask" [
+export def "x-amz-target-amazon-dm-sv20160101-modify-replication-task post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2426,31 +2426,31 @@ export def "x-amz-target-amazon-dm-sv20160101-modify-replication-task ModifyRepl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-55
-  ReplicationTaskArn: any
-  --ReplicationTaskIdentifier: any
-  --MigrationType: any
-  --TableMappings: any
-  --ReplicationTaskSettings: any
-  --CdcStartTime: any
-  --CdcStartPosition: any
-  --CdcStopPosition: any
-  --TaskData: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-55
+  replication_task_arn: any
+  --replication-task-identifier: any
+  --migration-type: any
+  --table-mappings: any
+  --replication-task-settings: any
+  --cdc-start-time: any
+  --cdc-start-position: any
+  --cdc-stop-position: any
+  --task-data: any
 ]: any -> record<ReplicationTask: record<ReplicationTaskIdentifier: record, SourceEndpointArn: record, TargetEndpointArn: record, ReplicationInstanceArn: record, MigrationType: record, TableMappings: record, ReplicationTaskSettings: record, Status: record, LastFailureMessage: record, StopReason: record, ReplicationTaskCreationDate: record, ReplicationTaskStartDate: record, CdcStartPosition: record, CdcStopPosition: record, RecoveryCheckpoint: record, ReplicationTaskArn: record, ReplicationTaskStats: record<FullLoadProgressPercent: record, ElapsedTimeMillis: record, TablesLoaded: record, TablesLoading: record, TablesQueued: record, TablesErrored: record, FreshStartDate: record, StartDate: record, StopDate: record, FullLoadStartDate: record, FullLoadFinishDate: record>, TaskData: record, TargetReplicationInstanceArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.ModifyReplicationTask")
-  let body = {ReplicationTaskArn: $ReplicationTaskArn, ReplicationTaskIdentifier: $ReplicationTaskIdentifier, MigrationType: $MigrationType, TableMappings: $TableMappings, ReplicationTaskSettings: $ReplicationTaskSettings, CdcStartTime: $CdcStartTime, CdcStartPosition: $CdcStartPosition, CdcStopPosition: $CdcStopPosition, TaskData: $TaskData} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn, "ReplicationTaskIdentifier": $replication_task_identifier, "MigrationType": $migration_type, "TableMappings": $table_mappings, "ReplicationTaskSettings": $replication_task_settings, "CdcStartTime": $cdc_start_time, "CdcStartPosition": $cdc_start_position, "CdcStopPosition": $cdc_stop_position, "TaskData": $task_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2461,7 +2461,7 @@ export def "x-amz-target-amazon-dm-sv20160101-modify-replication-task ModifyRepl
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.MoveReplicationTask
 # operationId: MoveReplicationTask
-export def "x-amz-target-amazon-dm-sv20160101-move-replication-task MoveReplicationTask" [
+export def "x-amz-target-amazon-dm-sv20160101-move-replication-task move" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2470,24 +2470,24 @@ export def "x-amz-target-amazon-dm-sv20160101-move-replication-task MoveReplicat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-56
-  ReplicationTaskArn: any
-  TargetReplicationInstanceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-56
+  replication_task_arn: any
+  target_replication_instance_arn: any
 ]: any -> record<ReplicationTask: record<ReplicationTaskIdentifier: record, SourceEndpointArn: record, TargetEndpointArn: record, ReplicationInstanceArn: record, MigrationType: record, TableMappings: record, ReplicationTaskSettings: record, Status: record, LastFailureMessage: record, StopReason: record, ReplicationTaskCreationDate: record, ReplicationTaskStartDate: record, CdcStartPosition: record, CdcStopPosition: record, RecoveryCheckpoint: record, ReplicationTaskArn: record, ReplicationTaskStats: record<FullLoadProgressPercent: record, ElapsedTimeMillis: record, TablesLoaded: record, TablesLoading: record, TablesQueued: record, TablesErrored: record, FreshStartDate: record, StartDate: record, StopDate: record, FullLoadStartDate: record, FullLoadFinishDate: record>, TaskData: record, TargetReplicationInstanceArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.MoveReplicationTask")
-  let body = {ReplicationTaskArn: $ReplicationTaskArn, TargetReplicationInstanceArn: $TargetReplicationInstanceArn} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn, "TargetReplicationInstanceArn": $target_replication_instance_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2498,7 +2498,7 @@ export def "x-amz-target-amazon-dm-sv20160101-move-replication-task MoveReplicat
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.RebootReplicationInstance
 # operationId: RebootReplicationInstance
-export def "x-amz-target-amazon-dm-sv20160101-reboot-replication-instance RebootReplicationInstance" [
+export def "x-amz-target-amazon-dm-sv20160101-reboot-replication-instance post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2507,25 +2507,25 @@ export def "x-amz-target-amazon-dm-sv20160101-reboot-replication-instance Reboot
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-57
-  ReplicationInstanceArn: any
-  --ForceFailover: any
-  --ForcePlannedFailover: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-57
+  replication_instance_arn: any
+  --force-failover: any
+  --force-planned-failover: any
 ]: any -> record<ReplicationInstance: record<ReplicationInstanceIdentifier: record, ReplicationInstanceClass: record, ReplicationInstanceStatus: record, AllocatedStorage: record, InstanceCreateTime: record, VpcSecurityGroups: record, AvailabilityZone: record, ReplicationSubnetGroup: record<ReplicationSubnetGroupIdentifier: record, ReplicationSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<ReplicationInstanceClass: record, AllocatedStorage: record, MultiAZ: record, EngineVersion: record, NetworkType: record>, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, KmsKeyId: record, ReplicationInstanceArn: record, ReplicationInstancePublicIpAddress: record, ReplicationInstancePrivateIpAddress: record, ReplicationInstancePublicIpAddresses: record, ReplicationInstancePrivateIpAddresses: record, ReplicationInstanceIpv6Addresses: record, PubliclyAccessible: record, SecondaryAvailabilityZone: record, FreeUntil: record, DnsNameServers: record, NetworkType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.RebootReplicationInstance")
-  let body = {ReplicationInstanceArn: $ReplicationInstanceArn, ForceFailover: $ForceFailover, ForcePlannedFailover: $ForcePlannedFailover} | compact
+  let body = {"ReplicationInstanceArn": $replication_instance_arn, "ForceFailover": $force_failover, "ForcePlannedFailover": $force_planned_failover} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2536,7 +2536,7 @@ export def "x-amz-target-amazon-dm-sv20160101-reboot-replication-instance Reboot
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.RefreshSchemas
 # operationId: RefreshSchemas
-export def "x-amz-target-amazon-dm-sv20160101-refresh-schemas RefreshSchemas" [
+export def "x-amz-target-amazon-dm-sv20160101-refresh-schemas refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2545,24 +2545,24 @@ export def "x-amz-target-amazon-dm-sv20160101-refresh-schemas RefreshSchemas" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-58
-  EndpointArn: any
-  ReplicationInstanceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-58
+  endpoint_arn: any
+  replication_instance_arn: any
 ]: any -> record<RefreshSchemasStatus: record<EndpointArn: record, ReplicationInstanceArn: record, Status: record, LastRefreshDate: record, LastFailureMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.RefreshSchemas")
-  let body = {EndpointArn: $EndpointArn, ReplicationInstanceArn: $ReplicationInstanceArn} | compact
+  let body = {"EndpointArn": $endpoint_arn, "ReplicationInstanceArn": $replication_instance_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2573,7 +2573,7 @@ export def "x-amz-target-amazon-dm-sv20160101-refresh-schemas RefreshSchemas" [
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.ReloadTables
 # operationId: ReloadTables
-export def "x-amz-target-amazon-dm-sv20160101-reload-tables ReloadTables" [
+export def "x-amz-target-amazon-dm-sv20160101-reload-tables reload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2582,25 +2582,25 @@ export def "x-amz-target-amazon-dm-sv20160101-reload-tables ReloadTables" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-59
-  ReplicationTaskArn: any
-  TablesToReload: any
-  --ReloadOption: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-59
+  replication_task_arn: any
+  tables_to_reload: any
+  --reload-option: any
 ]: any -> record<ReplicationTaskArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.ReloadTables")
-  let body = {ReplicationTaskArn: $ReplicationTaskArn, TablesToReload: $TablesToReload, ReloadOption: $ReloadOption} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn, "TablesToReload": $tables_to_reload, "ReloadOption": $reload_option} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2611,7 +2611,7 @@ export def "x-amz-target-amazon-dm-sv20160101-reload-tables ReloadTables" [
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.RemoveTagsFromResource
 # operationId: RemoveTagsFromResource
-export def "x-amz-target-amazon-dm-sv20160101-remove-tags-from-resource RemoveTagsFromResource" [
+export def "x-amz-target-amazon-dm-sv20160101-remove-tags-from-resource delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2620,24 +2620,24 @@ export def "x-amz-target-amazon-dm-sv20160101-remove-tags-from-resource RemoveTa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-60
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-60
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.RemoveTagsFromResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2648,7 +2648,7 @@ export def "x-amz-target-amazon-dm-sv20160101-remove-tags-from-resource RemoveTa
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.RunFleetAdvisorLsaAnalysis
 # operationId: RunFleetAdvisorLsaAnalysis
-export def "x-amz-target-amazon-dm-sv20160101-run-fleet-advisor-lsa-analysis RunFleetAdvisorLsaAnalysis" [
+export def "x-amz-target-amazon-dm-sv20160101-run-fleet-advisor-lsa-analysis post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2657,19 +2657,19 @@ export def "x-amz-target-amazon-dm-sv20160101-run-fleet-advisor-lsa-analysis Run
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-61
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-61
 ]: nothing -> record<LsaAnalysisId: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.RunFleetAdvisorLsaAnalysis")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2680,7 +2680,7 @@ export def "x-amz-target-amazon-dm-sv20160101-run-fleet-advisor-lsa-analysis Run
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.StartRecommendations
 # operationId: StartRecommendations
-export def "x-amz-target-amazon-dm-sv20160101-start-recommendations StartRecommendations" [
+export def "x-amz-target-amazon-dm-sv20160101-start-recommendations start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2689,24 +2689,24 @@ export def "x-amz-target-amazon-dm-sv20160101-start-recommendations StartRecomme
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-62
-  DatabaseId: any
-  Settings: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-62
+  database_id: any
+  settings: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.StartRecommendations")
-  let body = {DatabaseId: $DatabaseId, Settings: $Settings} | compact
+  let body = {"DatabaseId": $database_id, "Settings": $settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2717,7 +2717,7 @@ export def "x-amz-target-amazon-dm-sv20160101-start-recommendations StartRecomme
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.StartReplicationTask
 # operationId: StartReplicationTask
-export def "x-amz-target-amazon-dm-sv20160101-start-replication-task StartReplicationTask" [
+export def "x-amz-target-amazon-dm-sv20160101-start-replication-task start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2726,27 +2726,27 @@ export def "x-amz-target-amazon-dm-sv20160101-start-replication-task StartReplic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-63
-  ReplicationTaskArn: any
-  StartReplicationTaskType: any
-  --CdcStartTime: any
-  --CdcStartPosition: any
-  --CdcStopPosition: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-63
+  replication_task_arn: any
+  start_replication_task_type: any
+  --cdc-start-time: any
+  --cdc-start-position: any
+  --cdc-stop-position: any
 ]: any -> record<ReplicationTask: record<ReplicationTaskIdentifier: record, SourceEndpointArn: record, TargetEndpointArn: record, ReplicationInstanceArn: record, MigrationType: record, TableMappings: record, ReplicationTaskSettings: record, Status: record, LastFailureMessage: record, StopReason: record, ReplicationTaskCreationDate: record, ReplicationTaskStartDate: record, CdcStartPosition: record, CdcStopPosition: record, RecoveryCheckpoint: record, ReplicationTaskArn: record, ReplicationTaskStats: record<FullLoadProgressPercent: record, ElapsedTimeMillis: record, TablesLoaded: record, TablesLoading: record, TablesQueued: record, TablesErrored: record, FreshStartDate: record, StartDate: record, StopDate: record, FullLoadStartDate: record, FullLoadFinishDate: record>, TaskData: record, TargetReplicationInstanceArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.StartReplicationTask")
-  let body = {ReplicationTaskArn: $ReplicationTaskArn, StartReplicationTaskType: $StartReplicationTaskType, CdcStartTime: $CdcStartTime, CdcStartPosition: $CdcStartPosition, CdcStopPosition: $CdcStopPosition} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn, "StartReplicationTaskType": $start_replication_task_type, "CdcStartTime": $cdc_start_time, "CdcStartPosition": $cdc_start_position, "CdcStopPosition": $cdc_stop_position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2757,7 +2757,7 @@ export def "x-amz-target-amazon-dm-sv20160101-start-replication-task StartReplic
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.StartReplicationTaskAssessment
 # operationId: StartReplicationTaskAssessment
-export def "x-amz-target-amazon-dm-sv20160101-start-replication-task-assessment StartReplicationTaskAssessment" [
+export def "x-amz-target-amazon-dm-sv20160101-start-replication-task-assessment start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2766,23 +2766,23 @@ export def "x-amz-target-amazon-dm-sv20160101-start-replication-task-assessment 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-64
-  ReplicationTaskArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-64
+  replication_task_arn: any
 ]: any -> record<ReplicationTask: record<ReplicationTaskIdentifier: record, SourceEndpointArn: record, TargetEndpointArn: record, ReplicationInstanceArn: record, MigrationType: record, TableMappings: record, ReplicationTaskSettings: record, Status: record, LastFailureMessage: record, StopReason: record, ReplicationTaskCreationDate: record, ReplicationTaskStartDate: record, CdcStartPosition: record, CdcStopPosition: record, RecoveryCheckpoint: record, ReplicationTaskArn: record, ReplicationTaskStats: record<FullLoadProgressPercent: record, ElapsedTimeMillis: record, TablesLoaded: record, TablesLoading: record, TablesQueued: record, TablesErrored: record, FreshStartDate: record, StartDate: record, StopDate: record, FullLoadStartDate: record, FullLoadFinishDate: record>, TaskData: record, TargetReplicationInstanceArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.StartReplicationTaskAssessment")
-  let body = {ReplicationTaskArn: $ReplicationTaskArn} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2793,7 +2793,7 @@ export def "x-amz-target-amazon-dm-sv20160101-start-replication-task-assessment 
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.StartReplicationTaskAssessmentRun
 # operationId: StartReplicationTaskAssessmentRun
-export def "x-amz-target-amazon-dm-sv20160101-start-replication-task-assessment-run StartReplicationTaskAssessmentRun" [
+export def "x-amz-target-amazon-dm-sv20160101-start-replication-task-assessment-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2802,31 +2802,31 @@ export def "x-amz-target-amazon-dm-sv20160101-start-replication-task-assessment-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-65
-  ReplicationTaskArn: any
-  ServiceAccessRoleArn: any
-  ResultLocationBucket: any
-  --ResultLocationFolder: any
-  --ResultEncryptionMode: any
-  --ResultKmsKeyArn: any
-  AssessmentRunName: any
-  --IncludeOnly: any
-  --Exclude: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-65
+  replication_task_arn: any
+  service_access_role_arn: any
+  result_location_bucket: any
+  --result-location-folder: any
+  --result-encryption-mode: any
+  --result-kms-key-arn: any
+  assessment_run_name: any
+  --include-only: any
+  --exclude: any
 ]: any -> record<ReplicationTaskAssessmentRun: record<ReplicationTaskAssessmentRunArn: record, ReplicationTaskArn: record, Status: record, ReplicationTaskAssessmentRunCreationDate: record, AssessmentProgress: record<IndividualAssessmentCount: record, IndividualAssessmentCompletedCount: record>, LastFailureMessage: record, ServiceAccessRoleArn: record, ResultLocationBucket: record, ResultLocationFolder: record, ResultEncryptionMode: record, ResultKmsKeyArn: record, AssessmentRunName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.StartReplicationTaskAssessmentRun")
-  let body = {ReplicationTaskArn: $ReplicationTaskArn, ServiceAccessRoleArn: $ServiceAccessRoleArn, ResultLocationBucket: $ResultLocationBucket, ResultLocationFolder: $ResultLocationFolder, ResultEncryptionMode: $ResultEncryptionMode, ResultKmsKeyArn: $ResultKmsKeyArn, AssessmentRunName: $AssessmentRunName, IncludeOnly: $IncludeOnly, Exclude: $Exclude} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn, "ServiceAccessRoleArn": $service_access_role_arn, "ResultLocationBucket": $result_location_bucket, "ResultLocationFolder": $result_location_folder, "ResultEncryptionMode": $result_encryption_mode, "ResultKmsKeyArn": $result_kms_key_arn, "AssessmentRunName": $assessment_run_name, "IncludeOnly": $include_only, "Exclude": $exclude} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2837,7 +2837,7 @@ export def "x-amz-target-amazon-dm-sv20160101-start-replication-task-assessment-
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.StopReplicationTask
 # operationId: StopReplicationTask
-export def "x-amz-target-amazon-dm-sv20160101-stop-replication-task StopReplicationTask" [
+export def "x-amz-target-amazon-dm-sv20160101-stop-replication-task stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2846,23 +2846,23 @@ export def "x-amz-target-amazon-dm-sv20160101-stop-replication-task StopReplicat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-66
-  ReplicationTaskArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-66
+  replication_task_arn: any
 ]: any -> record<ReplicationTask: record<ReplicationTaskIdentifier: record, SourceEndpointArn: record, TargetEndpointArn: record, ReplicationInstanceArn: record, MigrationType: record, TableMappings: record, ReplicationTaskSettings: record, Status: record, LastFailureMessage: record, StopReason: record, ReplicationTaskCreationDate: record, ReplicationTaskStartDate: record, CdcStartPosition: record, CdcStopPosition: record, RecoveryCheckpoint: record, ReplicationTaskArn: record, ReplicationTaskStats: record<FullLoadProgressPercent: record, ElapsedTimeMillis: record, TablesLoaded: record, TablesLoading: record, TablesQueued: record, TablesErrored: record, FreshStartDate: record, StartDate: record, StopDate: record, FullLoadStartDate: record, FullLoadFinishDate: record>, TaskData: record, TargetReplicationInstanceArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.StopReplicationTask")
-  let body = {ReplicationTaskArn: $ReplicationTaskArn} | compact
+  let body = {"ReplicationTaskArn": $replication_task_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2873,7 +2873,7 @@ export def "x-amz-target-amazon-dm-sv20160101-stop-replication-task StopReplicat
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.TestConnection
 # operationId: TestConnection
-export def "x-amz-target-amazon-dm-sv20160101-test-connection TestConnection" [
+export def "x-amz-target-amazon-dm-sv20160101-test-connection test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2882,24 +2882,24 @@ export def "x-amz-target-amazon-dm-sv20160101-test-connection TestConnection" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-67
-  ReplicationInstanceArn: any
-  EndpointArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-67
+  replication_instance_arn: any
+  endpoint_arn: any
 ]: any -> record<Connection: record<ReplicationInstanceArn: record, EndpointArn: record, Status: record, LastFailureMessage: record, EndpointIdentifier: record, ReplicationInstanceIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.TestConnection")
-  let body = {ReplicationInstanceArn: $ReplicationInstanceArn, EndpointArn: $EndpointArn} | compact
+  let body = {"ReplicationInstanceArn": $replication_instance_arn, "EndpointArn": $endpoint_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2910,7 +2910,7 @@ export def "x-amz-target-amazon-dm-sv20160101-test-connection TestConnection" [
 #
 # POST /#X-Amz-Target=AmazonDMSv20160101.UpdateSubscriptionsToEventBridge
 # operationId: UpdateSubscriptionsToEventBridge
-export def "x-amz-target-amazon-dm-sv20160101-update-subscriptions-to-event-bridge UpdateSubscriptionsToEventBridge" [
+export def "x-amz-target-amazon-dm-sv20160101-update-subscriptions-to-event-bridge update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2919,23 +2919,23 @@ export def "x-amz-target-amazon-dm-sv20160101-update-subscriptions-to-event-brid
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-68
-  --ForceMove: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-68
+  --force-move: any
 ]: any -> record<Result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AmazonDMSv20160101.UpdateSubscriptionsToEventBridge")
-  let body = {ForceMove: $ForceMove} | compact
+  let body = {"ForceMove": $force_move} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts AccountCtrlgetAccountServicesByAccountID" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/accounts/{account_id}
 # operationId: AccountCtrl.getAccountServicesByAccountID
-export def "accounts AccountCtrlgetAccountServicesByAccountID" [
+export def "accounts get" [
   account_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -106,7 +106,7 @@ export def "accounts AccountCtrlgetAccountServicesByAccountID" [
 ]: nothing -> record<_embedded: record<data: record<address: record, id: float, name: string, status: string>>, _links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, page: float, page_size: float, total_items: float, total_pages: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/accounts/($account_id)")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/api/accounts/{account_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -116,7 +116,7 @@ export def "accounts AccountCtrlgetAccountServicesByAccountID" [
 #
 # GET /api/accounts/{account_id}/locations
 # operationId: AccountCtrl.getLocationsByAccountID
-export def "accounts-locations AccountCtrlgetLocationsByAccountID" [
+export def "accounts-locations list" [
   account_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -129,7 +129,7 @@ export def "accounts-locations AccountCtrlgetLocationsByAccountID" [
 ]: nothing -> record<_embedded: record<data: list<record>>, _links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, page: float, page_size: float, total_items: float, total_pages: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/accounts/($account_id)/locations")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/api/accounts/{account_id}/locations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -139,7 +139,7 @@ export def "accounts-locations AccountCtrlgetLocationsByAccountID" [
 #
 # GET /api/accounts/{account_id}/locations/{location_id}
 # operationId: AccountCtrl.getLocationByID
-export def "accounts-locations AccountCtrlgetLocationByID" [
+export def "accounts-locations get" [
   account_id: float
   location_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -153,7 +153,7 @@ export def "accounts-locations AccountCtrlgetLocationByID" [
 ]: nothing -> record<_embedded: record<data: record<address: record, id: float, name: string>>, _links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, page: float, page_size: float, total_items: float, total_pages: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/accounts/($account_id)/locations/($location_id)")
+  let full_url = (build-url $base ({account_id: $account_id, location_id: $location_id} | format pattern "/api/accounts/{account_id}/locations/{location_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

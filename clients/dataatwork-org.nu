@@ -200,7 +200,7 @@ export def "jobs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fips" $fips "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/jobs/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,7 +222,7 @@ export def "jobs-related-jobs get" [
 ]: nothing -> record<related_job_titles: table<parent_uuid: string, title: string, uuid: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)/related_jobs")
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/related_jobs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,7 +244,7 @@ export def "jobs-related-skills get" [
 ]: nothing -> record<job_title: string, job_uuid: string, normalized_job_title: string, skills: table<description: string, importance: float, level: float, normalized_skill_name: string, skill_name: string, skill_uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/jobs/($id)/related_skills")
+  let full_url = (build-url $base ({id: $id} | format pattern "/jobs/{id}/related_skills"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -338,7 +338,7 @@ export def "skills get" [
 ]: nothing -> record<name: string, normalized_skill_name: string, onet_element_id: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/skills/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/skills/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -360,7 +360,7 @@ export def "skills-related-jobs get" [
 ]: nothing -> record<jobs: table<importance: float, job_title: string, job_uuid: string, level: float, normalized_job_title: string>, normalized_job_title: string, skill_name: string, skill_uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/skills/($id)/related_jobs")
+  let full_url = (build-url $base ({id: $id} | format pattern "/skills/{id}/related_jobs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -382,7 +382,7 @@ export def "skills-related-skills get" [
 ]: nothing -> record<related_skill_name: table<skill_name: string, uuid: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/skills/($id)/related_skills")
+  let full_url = (build-url $base ({id: $id} | format pattern "/skills/{id}/related_skills"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

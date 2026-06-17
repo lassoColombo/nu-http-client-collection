@@ -102,12 +102,12 @@ export def "categories list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: string # Provide the size of the page to fetch.
+  --page-size: string # Provide the size of the page to fetch.
   --page: string # Provide the page number to fetch.
 ]: nothing -> record<categories: table<id: int, name: string, url: string>, noOfPages: int, page: int, pageSize: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -118,7 +118,7 @@ export def "categories list" [
 #
 # GET /categories/{categoryId}
 export def "categories get" [
-  categoryId: string
+  category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,7 +130,7 @@ export def "categories get" [
 ]: nothing -> record<category: record<id: int, name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/categories/($categoryId)")
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/categories/{category_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -140,7 +140,7 @@ export def "categories get" [
 #
 # GET /categories/{categoryId}/podcasts
 export def "categories-podcasts get" [
-  categoryId: string
+  category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,14 +150,14 @@ export def "categories-podcasts get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Provide the page number to fetch.
-  --pageSize: string # Provide the size of the page to fetch.
+  --page-size: string # Provide the size of the page to fetch.
   --order: string # Order the items by 'newest' | 'random'
   --filters: string # Takes filters like 'lang' in a url encoded json.  Example: 1)Single -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en","hi"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
 ]: nothing -> record<noOfPages: int, page: int, pageSize: int, podcasts: table<author: string, category: record, categoryId: int, description: string, episodes: int, featured: record, featuredId: int, image: string, keywords: string, latestEpisodeTime: string, podcastId: int, title: string, url: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/categories/($categoryId)/podcasts" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/categories/{category_id}/podcasts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,13 +176,13 @@ export def "podcasts list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Provide the page number to fetch.
-  --pageSize: string # Provide the size of the page to fetch.
+  --page-size: string # Provide the size of the page to fetch.
   --order: string # Order the items by 'newest' | 'random'
   --filters: string # Takes filters like 'lang' in a url encoded json.  Example: 1)Single -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en","hi"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
 ]: nothing -> record<noOfPages: int, page: int, pageSize: int, podcasts: table<author: string, category: record, categoryId: int, description: string, episodes: int, featured: record, featuredId: int, image: string, keywords: string, latestEpisodeTime: string, podcastId: int, title: string, url: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/podcasts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -193,7 +193,7 @@ export def "podcasts list" [
 #
 # GET /podcasts/{podcastId}
 export def "podcasts get" [
-  podcastId: string
+  podcast_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "podcasts get" [
 ]: nothing -> record<podcast: record<author: string, category: record<id: int, name: string>, categoryId: int, description: string, episodes: int, featured: record<id: int, name: string>, featuredId: int, image: string, keywords: string, latest_episode_time: string, podcastId: int, title: string, url: string, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/podcasts/($podcastId)")
+  let full_url = (build-url $base ({podcast_id: $podcast_id} | format pattern "/podcasts/{podcast_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -215,7 +215,7 @@ export def "podcasts get" [
 #
 # GET /podcasts/{podcastId}/episodes
 export def "podcasts-episodes get" [
-  podcastId: string
+  podcast_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,14 +225,14 @@ export def "podcasts-episodes get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # Provide the page number to fetch.
-  --pageSize: string # Provide the size of the page to fetch.
+  --page-size: string # Provide the size of the page to fetch.
   --order: string # Order the items by 'newest' | 'random'
   --filters: string # Takes filters like 'lang' in a url encoded json.  Example: 1)Single -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> &nbsp;&nbsp;&nbsp;&nbsp; var filterJson = {"lang":["en","hi"]}; &nbsp;&nbsp;&nbsp;&nbsp; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
 ]: nothing -> record<episodes: table<author: string, description: string, episodeId: int, episodeUrl: string, image: string, isNew: bool, play: record, podcastId: int, podcastUrl: string, publishTime: string, publishedOn: int, title: string>, noOfPages: int, page: int, pageSize: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/podcasts/($podcastId)/episodes" $qp)
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({podcast_id: $podcast_id} | format pattern "/podcasts/{podcast_id}/episodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,12 +248,12 @@ export def "util-languages get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: string # Provide the size of the page to fetch.
+  --page-size: string # Provide the size of the page to fetch.
   --page: string # Provide the page number to fetch.
 ]: nothing -> record<languages: table<code: string, id: int, name: string>, noOfPages: int, page: int, pageSize: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/util/languages" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -66,8 +66,8 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def city-completer [] { ["Vancouver" "Victoria"] }
-def jobTypes-completer [] { ["[1]" "[2]"] }
-def lastRequestDate-completer [] { ["2018-08-29T00:00:00.000Z"] }
+def job-types-completer [] { ["[1]" "[2]"] }
+def last-request-date-completer [] { ["2018-08-29T00:00:00.000Z"] }
 def region-completer [] { ["1" "2"] }
 
 # List all available API commands with their parameters
@@ -148,16 +148,16 @@ export def "jobs post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --city: string@city-completer # The name of a city within B.C. Only job postings located within the specified city will be included in the response. If not specified, the data is not filtered by city. (default: Victoria)
-  --jobTypes: int@jobTypes-completer # ID values for types of job to filter on. Only job postings matching all specified values will be included in the response. If not specified, the data is not filtered by job type. (default: [1])
-  --lastRequestDate: string@lastRequestDate-completer # The date of the last request. Only job postings changed or deleted after this time will be included in the response. Default is _today_ - 10 days. (default: 2018-08-29)
-  --majorProjects: oneof<nothing, bool> # When true, only include job postings that have a Major Project associated with them. When false, only include job postings that do not have a Major Project associated with them. If not specified, the data is not filtered by major project, unless the MajorProjectID parameter is used. (default: true)
+  --job-types: int@job-types-completer # ID values for types of job to filter on. Only job postings matching all specified values will be included in the response. If not specified, the data is not filtered by job type. (default: [1])
+  --last-request-date: string@last-request-date-completer # The date of the last request. Only job postings changed or deleted after this time will be included in the response. Default is _today_ - 10 days. (default: 2018-08-29)
+  --major-projects: oneof<nothing, bool> # When true, only include job postings that have a Major Project associated with them. When false, only include job postings that do not have a Major Project associated with them. If not specified, the data is not filtered by major project, unless the MajorProjectID parameter is used. (default: true)
   --region: int@region-completer # The unique id of a region within B.C. Only job postings located within the specified region will be included in the response. If not specified, the data is not filtered by region (default: 1)
 ]: any -> record<Jobs: table<EmployerName: string, ExpiryDate: string, JobDescription: string, JobID: int, JobTitle: string, JobTypes: list, Locations: list, MajorProject: record, PostedDate: string, RecordType: int, SalaryMax: float, SalaryMin: float, SalaryMultiplier: int, SalaryType: string, Url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/jobs")
-  let body = {city: $city, jobTypes: $jobTypes, lastRequestDate: $lastRequestDate, majorProjects: $majorProjects, region: $region} | compact
+  let body = {"city": $city, "jobTypes": $job_types, "lastRequestDate": $last_request_date, "majorProjects": $major_projects, "region": $region} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

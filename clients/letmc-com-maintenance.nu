@@ -67,13 +67,13 @@ def base-url-completer [] { ["https://live-api.letmc.com"] }
 def auth-scheme-completer [] { ["apikey" "basic"] }
 
 # Completers for enum parameters
-def IssuePriority-completer [] { ["High" "Low" "Medium"] }
+def issue-priority-completer [] { ["High" "Low" "Medium"] }
 def accept-completer [] { ["application/json" "application/xml" "text/json" "text/xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "maintenance-maintenance-createmaintenancejob CreateMaintenanceJob" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "maintenance-maintenance-createmaintenancejob create-maintenance-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,9 +98,9 @@ export def commands []: nothing -> table {
 # POST /v3/maintenance/{shortName}/maintenance/{branchID}/createmaintenancejob
 # operationId: MaintenanceController_CreateMaintenanceJob
 # --Documents item shape: {MimeType?: string, URL?: string}
-export def "maintenance-maintenance-createmaintenancejob CreateMaintenanceJob" [
-  shortName: string
-  branchID: string
+export def "maintenance-maintenance-createmaintenancejob create-maintenance-job" [
+  short_name: string
+  branch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,32 +110,32 @@ export def "maintenance-maintenance-createmaintenancejob CreateMaintenanceJob" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --Documents: list # Documents linked to a submitted maintenance job — item shape: {MimeType?: string, URL?: string}
-  --ExternalID: string # ID used externally to manage jobs before sending to the system. This has a 10 character limit.
-  --IssueFault: string # The fault title if applicable
-  --IssueNotes: string # Fault notes
-  --IssuePriority: string@IssuePriority-completer # The priority of the job (Defaults to 'Low' if incorrect value or empty)
-  --IssueTitle: string # The title of the issue
-  --PropertyAddress1: string # The first line of the property address
-  --PropertyAddress2: string # The second line of the property address
-  --PropertyAddress3: string # The third line of the property address
-  --PropertyAddress4: string # The forth line of the property address
-  --PropertyCountry: string # The country the property is located
-  --PropertyPostcode: string # The property postcode
-  --ReportedAt: string # The date the job was reported (format: date-time)
-  --TenantEMailAddress: string # The email address of the Tenant
-  --TenantForename: string # The forename of the Tenant
-  --TenantPhonePrimary: string # The primary phone number of the Tenant
-  --TenantPhoneSecondary: string # The secondary phone number of the Tenant
-  --TenantPresenceRequested: oneof<nothing, bool> # Is the Tenant’s presence requested during the maintenance visit? (Defaults to “false” if incorrect value or empty)
-  --TenantSurname: string # The surname of the Tenant
-  --TenantTitle: string # The title of the Tenant
+  --documents: list # Documents linked to a submitted maintenance job — item shape: {MimeType?: string, URL?: string}
+  --external-id: string # ID used externally to manage jobs before sending to the system. This has a 10 character limit.
+  --issue-fault: string # The fault title if applicable
+  --issue-notes: string # Fault notes
+  --issue-priority: string@issue-priority-completer # The priority of the job (Defaults to 'Low' if incorrect value or empty)
+  --issue-title: string # The title of the issue
+  --property-address1: string # The first line of the property address
+  --property-address2: string # The second line of the property address
+  --property-address3: string # The third line of the property address
+  --property-address4: string # The forth line of the property address
+  --property-country: string # The country the property is located
+  --property-postcode: string # The property postcode
+  --reported-at: string # The date the job was reported (format: date-time)
+  --tenant-e-mail-address: string # The email address of the Tenant
+  --tenant-forename: string # The forename of the Tenant
+  --tenant-phone-primary: string # The primary phone number of the Tenant
+  --tenant-phone-secondary: string # The secondary phone number of the Tenant
+  --tenant-presence-requested: oneof<nothing, bool> # Is the Tenant’s presence requested during the maintenance visit? (Defaults to “false” if incorrect value or empty)
+  --tenant-surname: string # The surname of the Tenant
+  --tenant-title: string # The title of the Tenant
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v3/maintenance/($shortName)/maintenance/($branchID)/createmaintenancejob")
-  let body = {Documents: $Documents, ExternalID: $ExternalID, IssueFault: $IssueFault, IssueNotes: $IssueNotes, IssuePriority: $IssuePriority, IssueTitle: $IssueTitle, PropertyAddress1: $PropertyAddress1, PropertyAddress2: $PropertyAddress2, PropertyAddress3: $PropertyAddress3, PropertyAddress4: $PropertyAddress4, PropertyCountry: $PropertyCountry, PropertyPostcode: $PropertyPostcode, ReportedAt: $ReportedAt, TenantEMailAddress: $TenantEMailAddress, TenantForename: $TenantForename, TenantPhonePrimary: $TenantPhonePrimary, TenantPhoneSecondary: $TenantPhoneSecondary, TenantPresenceRequested: $TenantPresenceRequested, TenantSurname: $TenantSurname, TenantTitle: $TenantTitle} | compact
+  let full_url = (build-url $base ({short_name: $short_name, branch_id: $branch_id} | format pattern "/v3/maintenance/{short_name}/maintenance/{branch_id}/createmaintenancejob"))
+  let body = {"Documents": $documents, "ExternalID": $external_id, "IssueFault": $issue_fault, "IssueNotes": $issue_notes, "IssuePriority": $issue_priority, "IssueTitle": $issue_title, "PropertyAddress1": $property_address1, "PropertyAddress2": $property_address2, "PropertyAddress3": $property_address3, "PropertyAddress4": $property_address4, "PropertyCountry": $property_country, "PropertyPostcode": $property_postcode, "ReportedAt": $reported_at, "TenantEMailAddress": $tenant_e_mail_address, "TenantForename": $tenant_forename, "TenantPhonePrimary": $tenant_phone_primary, "TenantPhoneSecondary": $tenant_phone_secondary, "TenantPresenceRequested": $tenant_presence_requested, "TenantSurname": $tenant_surname, "TenantTitle": $tenant_title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

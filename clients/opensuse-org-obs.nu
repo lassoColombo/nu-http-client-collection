@@ -164,7 +164,7 @@ export def "architectures get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/architectures/($architecture_name)")
+  let full_url = (build-url $base ({architecture_name: $architecture_name} | format pattern "/architectures/{architecture_name}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +207,7 @@ export def "attribute delete-by-namespace" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)")
+  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/attribute/{namespace}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,7 +229,7 @@ export def "attribute get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)")
+  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/attribute/{namespace}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,7 +251,7 @@ export def "attribute-meta delete-by-namespace" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)/_meta")
+  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/attribute/{namespace}/_meta"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,7 +273,7 @@ export def "attribute-meta list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)/_meta")
+  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/attribute/{namespace}/_meta"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,7 +297,7 @@ export def "attribute-meta post-by-namespace" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)/_meta")
+  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/attribute/{namespace}/_meta"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -322,7 +322,7 @@ export def "attribute-meta put-by-namespace" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)/_meta")
+  let full_url = (build-url $base ({namespace: $namespace} | format pattern "/attribute/{namespace}/_meta"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -332,9 +332,9 @@ export def "attribute-meta put-by-namespace" [
 # Delete an attribute and all its values in projects or packages.
 #
 # DELETE /attribute/{namespace}/{attribute_name}
-export def "attribute delete-by-attribute_name-namespace" [
-  attribute_name: string
+export def "attribute delete-by-namespace-attribute_name" [
   namespace: any
+  attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "attribute delete-by-attribute_name-namespace" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)/($attribute_name)")
+  let full_url = (build-url $base ({namespace: $namespace, attribute_name: $attribute_name} | format pattern "/attribute/{namespace}/{attribute_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,7 +369,7 @@ export def "attribute-meta delete-by-namespace-attribute_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)/($attribute_name)/_meta")
+  let full_url = (build-url $base ({namespace: $namespace, attribute_name: $attribute_name} | format pattern "/attribute/{namespace}/{attribute_name}/_meta"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -392,7 +392,7 @@ export def "attribute-meta get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)/($attribute_name)/_meta")
+  let full_url = (build-url $base ({namespace: $namespace, attribute_name: $attribute_name} | format pattern "/attribute/{namespace}/{attribute_name}/_meta"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -417,7 +417,7 @@ export def "attribute-meta post-by-namespace-attribute_name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)/($attribute_name)/_meta")
+  let full_url = (build-url $base ({namespace: $namespace, attribute_name: $attribute_name} | format pattern "/attribute/{namespace}/{attribute_name}/_meta"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -443,7 +443,7 @@ export def "attribute-meta put-by-namespace-attribute_name" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/attribute/($namespace)/($attribute_name)/_meta")
+  let full_url = (build-url $base ({namespace: $namespace, attribute_name: $attribute_name} | format pattern "/attribute/{namespace}/{attribute_name}/_meta"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,7 +487,7 @@ export def "build get-by-project_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)")
+  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/build/{project_name}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,7 +514,7 @@ export def "build post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "package" $package "scalar") (serialize-qp "arch" $arch "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/build/($project_name)" $qp)
+  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/build/{project_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -544,7 +544,7 @@ export def "build-result get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "view" $view "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "arch" $arch "scalar") (serialize-qp "repository" $repository "scalar") (serialize-qp "lastbuild" $lastbuild "scalar") (serialize-qp "locallink" $locallink "scalar") (serialize-qp "multibuild" $multibuild "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/build/($project_name)/_result" $qp)
+  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/build/{project_name}/_result") $qp)
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -553,9 +553,9 @@ export def "build-result get" [
 # List of all architectures the specified project builds against a given repository.
 #
 # GET /build/{project_name}/{repository_name}
-export def "build get-by-repository_name-project_name" [
-  repository_name: string
+export def "build get-by-project_name-repository_name" [
   project_name: any
+  repository_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -567,7 +567,7 @@ export def "build get-by-repository_name-project_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name} | format pattern "/build/{project_name}/{repository_name}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -590,7 +590,7 @@ export def "build-buildconfig get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/_buildconfig")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name} | format pattern "/build/{project_name}/{repository_name}/_buildconfig"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -617,7 +617,7 @@ export def "build-builddepinfo get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "package" $package "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/_builddepinfo" $qp)
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/_builddepinfo") $qp)
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -641,7 +641,7 @@ export def "build-repository get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/_repository")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/_repository"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -650,11 +650,11 @@ export def "build-repository get" [
 # List binaries built by the sources of the specified package.
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}
-export def "build get-by-package_name-project_name-repository_name-architecture_name" [
-  package_name: string
+export def "build get-by-project_name-repository_name-architecture_name-package_name" [
   project_name: any
   repository_name: any
   architecture_name: any
+  package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +666,7 @@ export def "build get-by-package_name-project_name-repository_name-architecture_
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/($package_name)")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -676,7 +676,7 @@ export def "build get-by-package_name-project_name-repository_name-architecture_
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_buildinfo
 # operationId: getBuildProjectRepositoryArchPackageBuildinfo
-export def "build-buildinfo get" [
+export def "build-buildinfo get-build-project-repository-arch-package" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -692,7 +692,7 @@ export def "build-buildinfo get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/($package_name)/_buildinfo")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_buildinfo"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,7 +702,7 @@ export def "build-buildinfo get" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_history
 # operationId: getBuildProjectRepositoryArchPackageHistory
-export def "build-history get" [
+export def "build-history get-build-project-repository-arch-package" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -718,7 +718,7 @@ export def "build-history get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/($package_name)/_history")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_history"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -743,7 +743,7 @@ export def "build-jobstatus get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/($package_name)/_jobstatus")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_jobstatus"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -753,7 +753,7 @@ export def "build-jobstatus get" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_log
 # operationId: getBuildProjectRepositoryArchPackageLog
-export def "build-log get" [
+export def "build-log get-build-project-repository-arch-package" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -769,7 +769,7 @@ export def "build-log get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/($package_name)/_log")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_log"))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -794,7 +794,7 @@ export def "build-reason get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/($package_name)/_reason")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_reason"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -804,7 +804,7 @@ export def "build-reason get" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_status
 # operationId: getBuildProjectRepositoryArchPackageStatus
-export def "build-status get" [
+export def "build-status get-build-project-repository-arch-package" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -820,7 +820,7 @@ export def "build-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/($package_name)/_status")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/_status"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -830,12 +830,12 @@ export def "build-status get" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}
 # operationId: getBuildProjectRepositoryArchitecturePackageFile
-export def "build get-by-file_name-project_name-repository_name-architecture_name-package_name" [
-  file_name: string
+export def "build get-build-project-repository-architecture-package-file" [
   project_name: any
   repository_name: any
   architecture_name: any
   package_name: any
+  file_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -847,7 +847,7 @@ export def "build get-by-file_name-project_name-repository_name-architecture_nam
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/($package_name)/($file_name)")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name, file_name: $file_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}"))
   let accept_val = "application/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -857,11 +857,11 @@ export def "build get-by-file_name-project_name-repository_name-architecture_nam
 #
 # PUT /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}
 # operationId: putBuildProjectRepositoryArchitecturePackageFile
-export def "build put" [
-  package_name: list
+export def "build update-build-project-repository-architecture-package-file" [
   project_name: any
   repository_name: any
   architecture_name: any
+  package_name: list
   file_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -876,7 +876,7 @@ export def "build put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/($package_name)/($file_name)")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name, file_name: $file_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -887,7 +887,7 @@ export def "build put" [
 #
 # GET /build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}?view=fileinfo
 # operationId: getBuildProjectRepositoryArchitecturePackageFileViewFileinfo
-export def "build get-by-project_name-repository_name-architecture_name-package_name-file_name" [
+export def "build get-build-project-repository-architecture-package-file-view-fileinfo" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -906,7 +906,7 @@ export def "build get-by-project_name-repository_name-architecture_name-package_
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "view" $view "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/build/($project_name)/($repository_name)/($architecture_name)/($package_name)/($file_name)?view=fileinfo" $qp)
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, package_name: $package_name, file_name: $file_name} | format pattern "/build/{project_name}/{repository_name}/{architecture_name}/{package_name}/{file_name}?view=fileinfo") $qp)
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1063,7 +1063,7 @@ export def "distributions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/distributions/($distribution_id)")
+  let full_url = (build-url $base ({distribution_id: $distribution_id} | format pattern "/distributions/{distribution_id}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1085,7 +1085,7 @@ export def "distributions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/distributions/($distribution_id)")
+  let full_url = (build-url $base ({distribution_id: $distribution_id} | format pattern "/distributions/{distribution_id}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1109,7 +1109,7 @@ export def "distributions put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/distributions/($distribution_id)")
+  let full_url = (build-url $base ({distribution_id: $distribution_id} | format pattern "/distributions/{distribution_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1153,7 +1153,7 @@ export def "group delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/group/($group_title)")
+  let full_url = (build-url $base ({group_title: $group_title} | format pattern "/group/{group_title}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1175,7 +1175,7 @@ export def "group get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/group/($group_title)")
+  let full_url = (build-url $base ({group_title: $group_title} | format pattern "/group/{group_title}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1201,7 +1201,7 @@ export def "group post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "userid" $userid "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/group/($group_title)" $qp)
+  let full_url = (build-url $base ({group_title: $group_title} | format pattern "/group/{group_title}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1225,7 +1225,7 @@ export def "group put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/group/($group_title)")
+  let full_url = (build-url $base ({group_title: $group_title} | format pattern "/group/{group_title}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1293,7 +1293,7 @@ export def "issue-trackers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/issue_trackers/($issue_tracker_name)")
+  let full_url = (build-url $base ({issue_tracker_name: $issue_tracker_name} | format pattern "/issue_trackers/{issue_tracker_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1315,7 +1315,7 @@ export def "issue-trackers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/issue_trackers/($issue_tracker_name)")
+  let full_url = (build-url $base ({issue_tracker_name: $issue_tracker_name} | format pattern "/issue_trackers/{issue_tracker_name}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1339,7 +1339,7 @@ export def "issue-trackers put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/issue_trackers/($issue_tracker_name)")
+  let full_url = (build-url $base ({issue_tracker_name: $issue_tracker_name} | format pattern "/issue_trackers/{issue_tracker_name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1350,8 +1350,8 @@ export def "issue-trackers put" [
 #
 # GET /issue_trackers/{issue_tracker_name}/issues/{issue_name}
 export def "issue-trackers-issues get" [
-  issue_name: string
   issue_tracker_name: any
+  issue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1363,7 +1363,7 @@ export def "issue-trackers-issues get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/issue_trackers/($issue_tracker_name)/issues/($issue_name)")
+  let full_url = (build-url $base ({issue_tracker_name: $issue_tracker_name, issue_name: $issue_name} | format pattern "/issue_trackers/{issue_tracker_name}/issues/{issue_name}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1458,7 +1458,7 @@ export def "person get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/person/($login)")
+  let full_url = (build-url $base ({login: $login} | format pattern "/person/{login}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1484,7 +1484,7 @@ export def "person post-by-login" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/person/($login)" $qp)
+  let full_url = (build-url $base ({login: $login} | format pattern "/person/{login}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1509,7 +1509,7 @@ export def "person put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/person/($login)")
+  let full_url = (build-url $base ({login: $login} | format pattern "/person/{login}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1532,7 +1532,7 @@ export def "person-group get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/person/($login)/group")
+  let full_url = (build-url $base ({login: $login} | format pattern "/person/{login}/group"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1554,7 +1554,7 @@ export def "person-token get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/person/($login)/token")
+  let full_url = (build-url $base ({login: $login} | format pattern "/person/{login}/token"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1581,7 +1581,7 @@ export def "person-token post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "project" $project "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "operation" $operation "scalar") (serialize-qp "scm_token" $scm_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/person/($login)/token" $qp)
+  let full_url = (build-url $base ({login: $login} | format pattern "/person/{login}/token") $qp)
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1591,8 +1591,8 @@ export def "person-token post" [
 #
 # DELETE /person/{login}/token/{id}
 export def "person-token delete" [
-  id: string
   login: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1604,7 +1604,7 @@ export def "person-token delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/person/($login)/token/($id)")
+  let full_url = (build-url $base ({login: $login, id: $id} | format pattern "/person/{login}/token/{id}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1647,7 +1647,7 @@ export def "published get-by-project_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/published/($project_name)")
+  let full_url = (build-url $base ({project_name: $project_name} | format pattern "/published/{project_name}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1670,7 +1670,7 @@ export def "published get-by-project_name-repository_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/published/($project_name)/($repository_name)")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name} | format pattern "/published/{project_name}/{repository_name}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1694,7 +1694,7 @@ export def "published get-by-project_name-repository_name-architecture_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/published/($project_name)/($repository_name)/($architecture_name)")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1703,11 +1703,11 @@ export def "published get-by-project_name-repository_name-architecture_name" [
 # Return the binary file itself.
 #
 # GET /published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}
-export def "published get-by-binary_filename-project_name-repository_name-architecture_name" [
-  binary_filename: string
+export def "published get-by-project_name-repository_name-architecture_name-binary_filename" [
   project_name: any
   repository_name: any
   architecture_name: any
+  binary_filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1720,7 +1720,7 @@ export def "published get-by-binary_filename-project_name-repository_name-archit
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/published/($project_name)/($repository_name)/($architecture_name)/($binary_filename)")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, binary_filename: $binary_filename} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}"))
   let accept_val = ($accept | default "application/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1729,7 +1729,7 @@ export def "published get-by-binary_filename-project_name-repository_name-archit
 # Generate a ymp pattern that includes the needed repositories to install the given binary.
 #
 # GET /published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}?view=ymp
-export def "published get-by-project_name-repository_name-architecture_name-binary_filename" [
+export def "published get-by-project_name-repository_name-architecture_name-binary_filename-1" [
   project_name: any
   repository_name: any
   architecture_name: any
@@ -1745,7 +1745,7 @@ export def "published get-by-project_name-repository_name-architecture_name-bina
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/published/($project_name)/($repository_name)/($architecture_name)/($binary_filename)?view=ymp")
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name, architecture_name: $architecture_name, binary_filename: $binary_filename} | format pattern "/published/{project_name}/{repository_name}/{architecture_name}/{binary_filename}?view=ymp"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1770,7 +1770,7 @@ export def "published get-by-project_name-repository_name-1" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "view" $view "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/published/($project_name)/($repository_name)?view=status" $qp)
+  let full_url = (build-url $base ({project_name: $project_name, repository_name: $repository_name} | format pattern "/published/{project_name}/{repository_name}?view=status") $qp)
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1842,7 +1842,7 @@ export def "request delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/request/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/request/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1864,7 +1864,7 @@ export def "request get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/request/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/request/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1897,7 +1897,7 @@ export def "request post-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cmd" $cmd "scalar") (serialize-qp "newstate" $newstate "scalar") (serialize-qp "priority" $priority "scalar") (serialize-qp "by_user" $by_user "scalar") (serialize-qp "by_group" $by_group "scalar") (serialize-qp "by_project" $by_project "scalar") (serialize-qp "by_package" $by_package "scalar") (serialize-qp "incident" $incident "scalar") (serialize-qp "time" $time "scalar") (serialize-qp "comment" $comment "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/request/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/request/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1921,7 +1921,7 @@ export def "request put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/request/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/request/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1949,7 +1949,7 @@ export def "request post-by-id-1" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "diff_to_superseded" $diff_to_superseded "scalar") (serialize-qp "view" $view "scalar") (serialize-qp "withissues" $withissues "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/request/($id)?cmd=diff" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/request/{id}?cmd=diff") $qp)
   let accept_val = ($accept | default "application/xml; charset=utf-8")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2012,8 +2012,8 @@ export def "worker-status get" [
 #
 # GET /worker/{architecture_name}:{worker_id}
 export def "worker get" [
-  worker_id: string
   architecture_name: any
+  worker_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2025,7 +2025,7 @@ export def "worker get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/worker/($architecture_name):($worker_id)")
+  let full_url = (build-url $base ({architecture_name: $architecture_name, worker_id: $worker_id} | format pattern "/worker/{architecture_name}:{worker_id}"))
   let accept_val = "application/xml; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -72,7 +72,7 @@ def severity-completer [] { ["critical" "minimal" "moderate"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-support-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-support-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Support/operations
 # operationId: Operations_List
-export def "providers-microsoft-support-operations List" [
+export def "providers-microsoft-support-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,7 +120,7 @@ export def "providers-microsoft-support-operations List" [
 #
 # GET /providers/Microsoft.Support/services
 # operationId: Services_List
-export def "providers-microsoft-support-services List" [
+export def "providers-microsoft-support-services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,8 +144,8 @@ export def "providers-microsoft-support-services List" [
 #
 # GET /providers/Microsoft.Support/services/{serviceName}
 # operationId: Services_Get
-export def "providers-microsoft-support-services Get" [
-  serviceName: string
+export def "providers-microsoft-support-services get" [
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "providers-microsoft-support-services Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Support/services/($serviceName)" $qp)
+  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/providers/Microsoft.Support/services/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,8 +169,8 @@ export def "providers-microsoft-support-services Get" [
 #
 # GET /providers/Microsoft.Support/services/{serviceName}/problemClassifications
 # operationId: ProblemClassifications_List
-export def "providers-microsoft-support-services-problem-classifications List" [
-  serviceName: string
+export def "providers-microsoft-support-services-problem-classifications list" [
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-support-services-problem-classifications List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Support/services/($serviceName)/problemClassifications" $qp)
+  let full_url = (build-url $base ({service_name: $service_name} | format pattern "/providers/Microsoft.Support/services/{service_name}/problemClassifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -194,9 +194,9 @@ export def "providers-microsoft-support-services-problem-classifications List" [
 #
 # GET /providers/Microsoft.Support/services/{serviceName}/problemClassifications/{problemClassificationName}
 # operationId: ProblemClassifications_Get
-export def "providers-microsoft-support-services-problem-classifications Get" [
-  serviceName: string
-  problemClassificationName: string
+export def "providers-microsoft-support-services-problem-classifications get" [
+  service_name: string
+  problem_classification_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "providers-microsoft-support-services-problem-classifications Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Support/services/($serviceName)/problemClassifications/($problemClassificationName)" $qp)
+  let full_url = (build-url $base ({service_name: $service_name, problem_classification_name: $problem_classification_name} | format pattern "/providers/Microsoft.Support/services/{service_name}/problemClassifications/{problem_classification_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,8 +220,8 @@ export def "providers-microsoft-support-services-problem-classifications Get" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Support/checkNameAvailability
 # operationId: SupportTickets_CheckNameAvailability
-export def "subscriptions-providers-microsoft-support-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-check-name-availability check" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,8 +238,8 @@ export def "subscriptions-providers-microsoft-support-check-name-availability Ch
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,8 +250,8 @@ export def "subscriptions-providers-microsoft-support-check-name-availability Ch
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets
 # operationId: SupportTickets_List
-export def "subscriptions-providers-microsoft-support-support-tickets List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,9 +277,9 @@ export def "subscriptions-providers-microsoft-support-support-tickets List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}
 # operationId: SupportTickets_Get
-export def "subscriptions-providers-microsoft-support-support-tickets Get" [
-  supportTicketName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets get" [
+  subscription_id: string
+  support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, support_ticket_name: $support_ticket_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,9 +304,9 @@ export def "subscriptions-providers-microsoft-support-support-tickets Get" [
 # PATCH /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}
 # operationId: SupportTickets_Update
 # --contactDetails shape: {additionalEmailAddresses?: list, country?: string, firstName?: string, lastName?: string, phoneNumber?: string, preferredContactMethod?: "email"|"phone", preferredSupportLanguage?: string, preferredTimeZone?: string, primaryEmailAddress?: string}
-export def "subscriptions-providers-microsoft-support-support-tickets Update" [
-  supportTicketName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets update" [
+  subscription_id: string
+  support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,15 +316,15 @@ export def "subscriptions-providers-microsoft-support-support-tickets Update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Api version
-  --contactDetails: record # Contact information associated with the support ticket. — shape: {additionalEmailAddresses?: list, country?: string, firstName?: string, lastName?: string, phoneNumber?: string, preferredContactMethod?: "email"|"phone", preferredSupportLanguage?: string, preferredTimeZone?: string, primaryEmailAddress?: string}
+  --contact-details: record # Contact information associated with the support ticket. — shape: {additionalEmailAddresses?: list, country?: string, firstName?: string, lastName?: string, phoneNumber?: string, preferredContactMethod?: "email"|"phone", preferredSupportLanguage?: string, preferredTimeZone?: string, primaryEmailAddress?: string}
   --severity: string@severity-completer # Severity level
 ]: any -> record<id: string, name: string, properties: record<contactDetails: record<additionalEmailAddresses: list, country: string, firstName: string, lastName: string, phoneNumber: string, preferredContactMethod: string, preferredSupportLanguage: string, preferredTimeZone: string, primaryEmailAddress: string>, createdDate: string, description: string, enrollmentId: string, modifiedDate: string, problemClassificationDisplayName: string, problemClassificationId: string, problemStartTime: string, productionOutage: bool, quotaTicketDetails: record<quotaChangeRequestSubType: string, quotaChangeRequestVersion: string, quotaChangeRequests: list>, require24X7Response: bool, serviceDisplayName: string, serviceId: string, serviceLevelAgreement: record<expirationTime: string, slaMinutes: int, startTime: string>, severity: string, status: string, supportEngineer: record<emailAddress: string>, supportPlanType: string, supportTicketId: string, technicalTicketDetails: record<resourceId: string>, title: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)" $qp)
-  let body = {contactDetails: $contactDetails, severity: $severity} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, support_ticket_name: $support_ticket_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}") $qp)
+  let body = {"contactDetails": $contact_details, "severity": $severity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -336,9 +336,9 @@ export def "subscriptions-providers-microsoft-support-support-tickets Update" [
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}
 # operationId: SupportTickets_Create
 # --properties shape: {contactDetails: record, description: string, problemClassificationId: string, problemStartTime?: string, quotaTicketDetails?: record, require24X7Response?: bool, serviceId: string, serviceLevelAgreement?: record, severity: "minimal"|"moderate"|"critical", supportEngineer?: record, supportTicketId?: string, technicalTicketDetails?: record, title: string}
-export def "subscriptions-providers-microsoft-support-support-tickets Create" [
-  supportTicketName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets create" [
+  subscription_id: string
+  support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,8 +354,8 @@ export def "subscriptions-providers-microsoft-support-support-tickets Create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, support_ticket_name: $support_ticket_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -366,9 +366,9 @@ export def "subscriptions-providers-microsoft-support-support-tickets Create" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/checkNameAvailability
 # operationId: Communications_CheckNameAvailability
-export def "subscriptions-providers-microsoft-support-support-tickets-check-name-availability CheckNameAvailability" [
-  supportTicketName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets-check-name-availability check" [
+  subscription_id: string
+  support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,8 +385,8 @@ export def "subscriptions-providers-microsoft-support-support-tickets-check-name
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, support_ticket_name: $support_ticket_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,9 +397,9 @@ export def "subscriptions-providers-microsoft-support-support-tickets-check-name
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/communications
 # operationId: Communications_List
-export def "subscriptions-providers-microsoft-support-support-tickets-communications List" [
-  supportTicketName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets-communications list" [
+  subscription_id: string
+  support_ticket_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)/communications" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, support_ticket_name: $support_ticket_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/communications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -425,10 +425,10 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/communications/{communicationName}
 # operationId: Communications_Get
-export def "subscriptions-providers-microsoft-support-support-tickets-communications Get" [
-  supportTicketName: string
-  communicationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets-communications get" [
+  subscription_id: string
+  support_ticket_name: string
+  communication_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)/communications/($communicationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, support_ticket_name: $support_ticket_name, communication_name: $communication_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/communications/{communication_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -453,10 +453,10 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Support/supportTickets/{supportTicketName}/communications/{communicationName}
 # operationId: Communications_Create
 # --properties shape: {body: string, sender?: string, subject: string}
-export def "subscriptions-providers-microsoft-support-support-tickets-communications Create" [
-  supportTicketName: string
-  communicationName: string
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-support-support-tickets-communications create" [
+  subscription_id: string
+  support_ticket_name: string
+  communication_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,8 +472,8 @@ export def "subscriptions-providers-microsoft-support-support-tickets-communicat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Support/supportTickets/($supportTicketName)/communications/($communicationName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, support_ticket_name: $support_ticket_name, communication_name: $communication_name} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Support/supportTickets/{support_ticket_name}/communications/{communication_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

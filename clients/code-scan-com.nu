@@ -101,11 +101,11 @@ export def "job get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --jobId: string # Id of the Job to retrieve
+  --job-id: string # Id of the Job to retrieve
 ]: nothing -> record<alert: string, alertDescription: string, analysisMode: string, commit: string, created: string, emailReportTo: string, finished: string, jobId: string, projectBranch: string, projectKey: string, started: string, status: string, url: string, version: string, warnings: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jobId" $jobId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jobId" $job_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/job" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -124,18 +124,18 @@ export def "job post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --analysisMode: string # When set to preview, analysis is not added to the database
-  --commitOverride: string # When the project is based on git, the git commit that this job should run. Leave blank to use the project's default
-  --emailReportTo: string # List of usernames to email the report to
-  --projectBranch: string # he project branch that this job is evaluating
-  projectKey: string # The key of the project to start
+  --analysis-mode: string # When set to preview, analysis is not added to the database
+  --commit-override: string # When the project is based on git, the git commit that this job should run. Leave blank to use the project's default
+  --email-report-to: string # List of usernames to email the report to
+  --project-branch: string # he project branch that this job is evaluating
+  project_key: string # The key of the project to start
   --version: string # Use this as the analysis' version. On success the Project's default version will be set to this
 ]: any -> record<alert: string, alertDescription: string, analysisMode: string, commit: string, created: string, emailReportTo: string, finished: string, jobId: string, projectBranch: string, projectKey: string, started: string, status: string, url: string, version: string, warnings: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/job")
-  let body = {analysisMode: $analysisMode, commitOverride: $commitOverride, emailReportTo: $emailReportTo, projectBranch: $projectBranch, projectKey: $projectKey, version: $version} | compact
+  let body = {"analysisMode": $analysis_mode, "commitOverride": $commit_override, "emailReportTo": $email_report_to, "projectBranch": $project_branch, "projectKey": $project_key, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -71,7 +71,7 @@ def state-completer [] { ["cancelled" "created" "error" "failed" "started" "subm
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "payments Search-payments" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "payments list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/payments
 # operationId: Search payments
-export def "payments Search-payments" [
+export def "payments list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "payments Search-payments" [
 # POST /v1/payments
 # operationId: Create a payment
 # --prefilled_cardholder_details shape: {billing_address?: record, cardholder_name?: string}
-export def "payments Create-a-payment" [
+export def "payments post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,7 +147,7 @@ export def "payments Create-a-payment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/payments")
-  let body = {prefilled_cardholder_details: $prefilled_cardholder_details} | compact
+  let body = {"prefilled_cardholder_details": $prefilled_cardholder_details} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -158,8 +158,8 @@ export def "payments Create-a-payment" [
 #
 # GET /v1/payments/{paymentId}
 # operationId: Get a payment
-export def "payments Get-a-payment" [
-  paymentId: string
+export def "payments get" [
+  payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "payments Get-a-payment" [
 ]: nothing -> record<_links: record<cancel: record<href: string, method: string, params: record, type: string>, capture: record<href: string, method: string, params: record, type: string>, events: record<href: string, method: string>, next_url: record<href: string, method: string>, next_url_post: record<href: string, method: string, params: record, type: string>, refunds: record<href: string, method: string>, self: record<href: string, method: string>>, amount: int, card_brand: string, card_details: record<billing_address: record<city: string, country: string, line1: string, line2: string, postcode: string>, card_brand: string, card_type: string, cardholder_name: string, expiry_date: string, first_digits_card_number: string, last_digits_card_number: string>, corporate_card_surcharge: int, created_date: string, delayed_capture: bool, description: string, email: string, fee: int, language: string, metadata: record, moto: bool, net_amount: int, payment_id: string, payment_provider: string, provider_id: string, reference: string, refund_summary: record<amount_available: int, amount_submitted: int, status: string>, return_url: string, settlement_summary: record<capture_submit_time: string, captured_date: string, settled_date: string>, state: record<code: string, finished: bool, message: string, status: string>, total_amount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payments/($paymentId)")
+  let full_url = (build-url $base ({payment_id: $payment_id} | format pattern "/v1/payments/{payment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -181,8 +181,8 @@ export def "payments Get-a-payment" [
 #
 # POST /v1/payments/{paymentId}/cancel
 # operationId: Cancel a payment
-export def "payments-cancel Cancel-a-payment" [
-  paymentId: string
+export def "payments-cancel post" [
+  payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "payments-cancel Cancel-a-payment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payments/($paymentId)/cancel")
+  let full_url = (build-url $base ({payment_id: $payment_id} | format pattern "/v1/payments/{payment_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,8 +204,8 @@ export def "payments-cancel Cancel-a-payment" [
 #
 # POST /v1/payments/{paymentId}/capture
 # operationId: Capture a payment
-export def "payments-capture Capture-a-payment" [
-  paymentId: string
+export def "payments-capture post" [
+  payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "payments-capture Capture-a-payment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payments/($paymentId)/capture")
+  let full_url = (build-url $base ({payment_id: $payment_id} | format pattern "/v1/payments/{payment_id}/capture"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,8 +227,8 @@ export def "payments-capture Capture-a-payment" [
 #
 # GET /v1/payments/{paymentId}/events
 # operationId: Get events for a payment
-export def "payments-events Get-events-for-a-payment" [
-  paymentId: string
+export def "payments-events get" [
+  payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "payments-events Get-events-for-a-payment" [
 ]: nothing -> record<_links: record<self: record<href: string, method: string>>, events: table<_links: record, payment_id: string, state: record, updated: string>, payment_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payments/($paymentId)/events")
+  let full_url = (build-url $base ({payment_id: $payment_id} | format pattern "/v1/payments/{payment_id}/events"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,8 +250,8 @@ export def "payments-events Get-events-for-a-payment" [
 #
 # GET /v1/payments/{paymentId}/refunds
 # operationId: Get all refunds for a payment
-export def "payments-refunds Get-all-refunds-for-a-payment" [
-  paymentId: string
+export def "payments-refunds list" [
+  payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "payments-refunds Get-all-refunds-for-a-payment" [
 ]: nothing -> record<_embedded: record<refunds: list<record>>, _links: record<payment: record<href: string, method: string>, self: record<href: string, method: string>>, payment_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payments/($paymentId)/refunds")
+  let full_url = (build-url $base ({payment_id: $payment_id} | format pattern "/v1/payments/{payment_id}/refunds"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,8 +273,8 @@ export def "payments-refunds Get-all-refunds-for-a-payment" [
 #
 # POST /v1/payments/{paymentId}/refunds
 # operationId: Submit a refund for a payment
-export def "payments-refunds Submit-a-refund-for-a-payment" [
-  paymentId: string
+export def "payments-refunds post" [
+  payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,8 +288,8 @@ export def "payments-refunds Submit-a-refund-for-a-payment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payments/($paymentId)/refunds")
-  let body = {amount: $amount} | compact
+  let full_url = (build-url $base ({payment_id: $payment_id} | format pattern "/v1/payments/{payment_id}/refunds"))
+  let body = {"amount": $amount} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -300,9 +300,9 @@ export def "payments-refunds Submit-a-refund-for-a-payment" [
 #
 # GET /v1/payments/{paymentId}/refunds/{refundId}
 # operationId: Get a payment refund
-export def "payments-refunds Get-a-payment-refund" [
-  paymentId: string
-  refundId: string
+export def "payments-refunds get" [
+  payment_id: string
+  refund_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "payments-refunds Get-a-payment-refund" [
 ]: nothing -> record<_links: record<payment: record<href: string, method: string>, self: record<href: string, method: string>>, amount: int, created_date: string, refund_id: string, settlement_summary: record<settled_date: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payments/($paymentId)/refunds/($refundId)")
+  let full_url = (build-url $base ({payment_id: $payment_id, refund_id: $refund_id} | format pattern "/v1/payments/{payment_id}/refunds/{refund_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -324,7 +324,7 @@ export def "payments-refunds Get-a-payment-refund" [
 #
 # GET /v1/refunds
 # operationId: Search refunds
-export def "refunds Search-refunds" [
+export def "refunds get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

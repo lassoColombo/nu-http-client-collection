@@ -66,50 +66,50 @@ def base-url-completer [] { ["http://transcribe.us-east-1.amazonaws.com" "http:/
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["Transcribe.CreateCallAnalyticsCategory"] }
-def X-Amz-Target-completer-1 [] { ["Transcribe.CreateLanguageModel"] }
-def X-Amz-Target-completer-2 [] { ["Transcribe.CreateMedicalVocabulary"] }
-def X-Amz-Target-completer-3 [] { ["Transcribe.CreateVocabulary"] }
-def X-Amz-Target-completer-4 [] { ["Transcribe.CreateVocabularyFilter"] }
-def X-Amz-Target-completer-5 [] { ["Transcribe.DeleteCallAnalyticsCategory"] }
-def X-Amz-Target-completer-6 [] { ["Transcribe.DeleteCallAnalyticsJob"] }
-def X-Amz-Target-completer-7 [] { ["Transcribe.DeleteLanguageModel"] }
-def X-Amz-Target-completer-8 [] { ["Transcribe.DeleteMedicalTranscriptionJob"] }
-def X-Amz-Target-completer-9 [] { ["Transcribe.DeleteMedicalVocabulary"] }
-def X-Amz-Target-completer-10 [] { ["Transcribe.DeleteTranscriptionJob"] }
-def X-Amz-Target-completer-11 [] { ["Transcribe.DeleteVocabulary"] }
-def X-Amz-Target-completer-12 [] { ["Transcribe.DeleteVocabularyFilter"] }
-def X-Amz-Target-completer-13 [] { ["Transcribe.DescribeLanguageModel"] }
-def X-Amz-Target-completer-14 [] { ["Transcribe.GetCallAnalyticsCategory"] }
-def X-Amz-Target-completer-15 [] { ["Transcribe.GetCallAnalyticsJob"] }
-def X-Amz-Target-completer-16 [] { ["Transcribe.GetMedicalTranscriptionJob"] }
-def X-Amz-Target-completer-17 [] { ["Transcribe.GetMedicalVocabulary"] }
-def X-Amz-Target-completer-18 [] { ["Transcribe.GetTranscriptionJob"] }
-def X-Amz-Target-completer-19 [] { ["Transcribe.GetVocabulary"] }
-def X-Amz-Target-completer-20 [] { ["Transcribe.GetVocabularyFilter"] }
-def X-Amz-Target-completer-21 [] { ["Transcribe.ListCallAnalyticsCategories"] }
-def X-Amz-Target-completer-22 [] { ["Transcribe.ListCallAnalyticsJobs"] }
-def X-Amz-Target-completer-23 [] { ["Transcribe.ListLanguageModels"] }
-def X-Amz-Target-completer-24 [] { ["Transcribe.ListMedicalTranscriptionJobs"] }
-def X-Amz-Target-completer-25 [] { ["Transcribe.ListMedicalVocabularies"] }
-def X-Amz-Target-completer-26 [] { ["Transcribe.ListTagsForResource"] }
-def X-Amz-Target-completer-27 [] { ["Transcribe.ListTranscriptionJobs"] }
-def X-Amz-Target-completer-28 [] { ["Transcribe.ListVocabularies"] }
-def X-Amz-Target-completer-29 [] { ["Transcribe.ListVocabularyFilters"] }
-def X-Amz-Target-completer-30 [] { ["Transcribe.StartCallAnalyticsJob"] }
-def X-Amz-Target-completer-31 [] { ["Transcribe.StartMedicalTranscriptionJob"] }
-def X-Amz-Target-completer-32 [] { ["Transcribe.StartTranscriptionJob"] }
-def X-Amz-Target-completer-33 [] { ["Transcribe.TagResource"] }
-def X-Amz-Target-completer-34 [] { ["Transcribe.UntagResource"] }
-def X-Amz-Target-completer-35 [] { ["Transcribe.UpdateCallAnalyticsCategory"] }
-def X-Amz-Target-completer-36 [] { ["Transcribe.UpdateMedicalVocabulary"] }
-def X-Amz-Target-completer-37 [] { ["Transcribe.UpdateVocabulary"] }
-def X-Amz-Target-completer-38 [] { ["Transcribe.UpdateVocabularyFilter"] }
+def x-amz-target-completer [] { ["Transcribe.CreateCallAnalyticsCategory"] }
+def x-amz-target-completer-1 [] { ["Transcribe.CreateLanguageModel"] }
+def x-amz-target-completer-2 [] { ["Transcribe.CreateMedicalVocabulary"] }
+def x-amz-target-completer-3 [] { ["Transcribe.CreateVocabulary"] }
+def x-amz-target-completer-4 [] { ["Transcribe.CreateVocabularyFilter"] }
+def x-amz-target-completer-5 [] { ["Transcribe.DeleteCallAnalyticsCategory"] }
+def x-amz-target-completer-6 [] { ["Transcribe.DeleteCallAnalyticsJob"] }
+def x-amz-target-completer-7 [] { ["Transcribe.DeleteLanguageModel"] }
+def x-amz-target-completer-8 [] { ["Transcribe.DeleteMedicalTranscriptionJob"] }
+def x-amz-target-completer-9 [] { ["Transcribe.DeleteMedicalVocabulary"] }
+def x-amz-target-completer-10 [] { ["Transcribe.DeleteTranscriptionJob"] }
+def x-amz-target-completer-11 [] { ["Transcribe.DeleteVocabulary"] }
+def x-amz-target-completer-12 [] { ["Transcribe.DeleteVocabularyFilter"] }
+def x-amz-target-completer-13 [] { ["Transcribe.DescribeLanguageModel"] }
+def x-amz-target-completer-14 [] { ["Transcribe.GetCallAnalyticsCategory"] }
+def x-amz-target-completer-15 [] { ["Transcribe.GetCallAnalyticsJob"] }
+def x-amz-target-completer-16 [] { ["Transcribe.GetMedicalTranscriptionJob"] }
+def x-amz-target-completer-17 [] { ["Transcribe.GetMedicalVocabulary"] }
+def x-amz-target-completer-18 [] { ["Transcribe.GetTranscriptionJob"] }
+def x-amz-target-completer-19 [] { ["Transcribe.GetVocabulary"] }
+def x-amz-target-completer-20 [] { ["Transcribe.GetVocabularyFilter"] }
+def x-amz-target-completer-21 [] { ["Transcribe.ListCallAnalyticsCategories"] }
+def x-amz-target-completer-22 [] { ["Transcribe.ListCallAnalyticsJobs"] }
+def x-amz-target-completer-23 [] { ["Transcribe.ListLanguageModels"] }
+def x-amz-target-completer-24 [] { ["Transcribe.ListMedicalTranscriptionJobs"] }
+def x-amz-target-completer-25 [] { ["Transcribe.ListMedicalVocabularies"] }
+def x-amz-target-completer-26 [] { ["Transcribe.ListTagsForResource"] }
+def x-amz-target-completer-27 [] { ["Transcribe.ListTranscriptionJobs"] }
+def x-amz-target-completer-28 [] { ["Transcribe.ListVocabularies"] }
+def x-amz-target-completer-29 [] { ["Transcribe.ListVocabularyFilters"] }
+def x-amz-target-completer-30 [] { ["Transcribe.StartCallAnalyticsJob"] }
+def x-amz-target-completer-31 [] { ["Transcribe.StartMedicalTranscriptionJob"] }
+def x-amz-target-completer-32 [] { ["Transcribe.StartTranscriptionJob"] }
+def x-amz-target-completer-33 [] { ["Transcribe.TagResource"] }
+def x-amz-target-completer-34 [] { ["Transcribe.UntagResource"] }
+def x-amz-target-completer-35 [] { ["Transcribe.UpdateCallAnalyticsCategory"] }
+def x-amz-target-completer-36 [] { ["Transcribe.UpdateMedicalVocabulary"] }
+def x-amz-target-completer-37 [] { ["Transcribe.UpdateVocabulary"] }
+def x-amz-target-completer-38 [] { ["Transcribe.UpdateVocabularyFilter"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-transcribe-create-call-analytics-category CreateCallAnalyticsCategory" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-transcribe-create-call-analytics-category create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=Transcribe.CreateCallAnalyticsCategory
 # operationId: CreateCallAnalyticsCategory
-export def "x-amz-target-transcribe-create-call-analytics-category CreateCallAnalyticsCategory" [
+export def "x-amz-target-transcribe-create-call-analytics-category create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,25 +142,25 @@ export def "x-amz-target-transcribe-create-call-analytics-category CreateCallAna
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  CategoryName: any
-  Rules: any
-  --InputType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  category_name: any
+  rules: any
+  --input-type: any
 ]: any -> record<CategoryProperties: record<CategoryName: record, Rules: record, CreateTime: record, LastUpdateTime: record, InputType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.CreateCallAnalyticsCategory")
-  let body = {CategoryName: $CategoryName, Rules: $Rules, InputType: $InputType} | compact
+  let body = {"CategoryName": $category_name, "Rules": $rules, "InputType": $input_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -171,7 +171,7 @@ export def "x-amz-target-transcribe-create-call-analytics-category CreateCallAna
 #
 # POST /#X-Amz-Target=Transcribe.CreateLanguageModel
 # operationId: CreateLanguageModel
-export def "x-amz-target-transcribe-create-language-model CreateLanguageModel" [
+export def "x-amz-target-transcribe-create-language-model create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,27 +180,27 @@ export def "x-amz-target-transcribe-create-language-model CreateLanguageModel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  LanguageCode: any
-  BaseModelName: any
-  ModelName: any
-  InputDataConfig: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  language_code: any
+  base_model_name: any
+  model_name: any
+  input_data_config: any
+  --tags: any
 ]: any -> record<LanguageCode: record, BaseModelName: record, ModelName: record, InputDataConfig: record<S3Uri: record, TuningDataS3Uri: record, DataAccessRoleArn: record>, ModelStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.CreateLanguageModel")
-  let body = {LanguageCode: $LanguageCode, BaseModelName: $BaseModelName, ModelName: $ModelName, InputDataConfig: $InputDataConfig, Tags: $Tags} | compact
+  let body = {"LanguageCode": $language_code, "BaseModelName": $base_model_name, "ModelName": $model_name, "InputDataConfig": $input_data_config, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -211,7 +211,7 @@ export def "x-amz-target-transcribe-create-language-model CreateLanguageModel" [
 #
 # POST /#X-Amz-Target=Transcribe.CreateMedicalVocabulary
 # operationId: CreateMedicalVocabulary
-export def "x-amz-target-transcribe-create-medical-vocabulary CreateMedicalVocabulary" [
+export def "x-amz-target-transcribe-create-medical-vocabulary create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,26 +220,26 @@ export def "x-amz-target-transcribe-create-medical-vocabulary CreateMedicalVocab
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  VocabularyName: any
-  LanguageCode: any
-  VocabularyFileUri: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  vocabulary_name: any
+  language_code: any
+  vocabulary_file_uri: any
+  --tags: any
 ]: any -> record<VocabularyName: record, LanguageCode: record, VocabularyState: record, LastModifiedTime: record, FailureReason: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.CreateMedicalVocabulary")
-  let body = {VocabularyName: $VocabularyName, LanguageCode: $LanguageCode, VocabularyFileUri: $VocabularyFileUri, Tags: $Tags} | compact
+  let body = {"VocabularyName": $vocabulary_name, "LanguageCode": $language_code, "VocabularyFileUri": $vocabulary_file_uri, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,7 +250,7 @@ export def "x-amz-target-transcribe-create-medical-vocabulary CreateMedicalVocab
 #
 # POST /#X-Amz-Target=Transcribe.CreateVocabulary
 # operationId: CreateVocabulary
-export def "x-amz-target-transcribe-create-vocabulary CreateVocabulary" [
+export def "x-amz-target-transcribe-create-vocabulary create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,28 +259,28 @@ export def "x-amz-target-transcribe-create-vocabulary CreateVocabulary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  VocabularyName: any
-  LanguageCode: any
-  --Phrases: any
-  --VocabularyFileUri: any
-  --Tags: any
-  --DataAccessRoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  vocabulary_name: any
+  language_code: any
+  --phrases: any
+  --vocabulary-file-uri: any
+  --tags: any
+  --data-access-role-arn: any
 ]: any -> record<VocabularyName: record, LanguageCode: record, VocabularyState: record, LastModifiedTime: record, FailureReason: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.CreateVocabulary")
-  let body = {VocabularyName: $VocabularyName, LanguageCode: $LanguageCode, Phrases: $Phrases, VocabularyFileUri: $VocabularyFileUri, Tags: $Tags, DataAccessRoleArn: $DataAccessRoleArn} | compact
+  let body = {"VocabularyName": $vocabulary_name, "LanguageCode": $language_code, "Phrases": $phrases, "VocabularyFileUri": $vocabulary_file_uri, "Tags": $tags, "DataAccessRoleArn": $data_access_role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -291,7 +291,7 @@ export def "x-amz-target-transcribe-create-vocabulary CreateVocabulary" [
 #
 # POST /#X-Amz-Target=Transcribe.CreateVocabularyFilter
 # operationId: CreateVocabularyFilter
-export def "x-amz-target-transcribe-create-vocabulary-filter CreateVocabularyFilter" [
+export def "x-amz-target-transcribe-create-vocabulary-filter create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,28 +300,28 @@ export def "x-amz-target-transcribe-create-vocabulary-filter CreateVocabularyFil
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  VocabularyFilterName: any
-  LanguageCode: any
-  --Words: any
-  --VocabularyFilterFileUri: any
-  --Tags: any
-  --DataAccessRoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  vocabulary_filter_name: any
+  language_code: any
+  --words: any
+  --vocabulary-filter-file-uri: any
+  --tags: any
+  --data-access-role-arn: any
 ]: any -> record<VocabularyFilterName: record, LanguageCode: record, LastModifiedTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.CreateVocabularyFilter")
-  let body = {VocabularyFilterName: $VocabularyFilterName, LanguageCode: $LanguageCode, Words: $Words, VocabularyFilterFileUri: $VocabularyFilterFileUri, Tags: $Tags, DataAccessRoleArn: $DataAccessRoleArn} | compact
+  let body = {"VocabularyFilterName": $vocabulary_filter_name, "LanguageCode": $language_code, "Words": $words, "VocabularyFilterFileUri": $vocabulary_filter_file_uri, "Tags": $tags, "DataAccessRoleArn": $data_access_role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -332,7 +332,7 @@ export def "x-amz-target-transcribe-create-vocabulary-filter CreateVocabularyFil
 #
 # POST /#X-Amz-Target=Transcribe.DeleteCallAnalyticsCategory
 # operationId: DeleteCallAnalyticsCategory
-export def "x-amz-target-transcribe-delete-call-analytics-category DeleteCallAnalyticsCategory" [
+export def "x-amz-target-transcribe-delete-call-analytics-category delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,23 +341,23 @@ export def "x-amz-target-transcribe-delete-call-analytics-category DeleteCallAna
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  CategoryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  category_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.DeleteCallAnalyticsCategory")
-  let body = {CategoryName: $CategoryName} | compact
+  let body = {"CategoryName": $category_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -368,7 +368,7 @@ export def "x-amz-target-transcribe-delete-call-analytics-category DeleteCallAna
 #
 # POST /#X-Amz-Target=Transcribe.DeleteCallAnalyticsJob
 # operationId: DeleteCallAnalyticsJob
-export def "x-amz-target-transcribe-delete-call-analytics-job DeleteCallAnalyticsJob" [
+export def "x-amz-target-transcribe-delete-call-analytics-job delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,23 +377,23 @@ export def "x-amz-target-transcribe-delete-call-analytics-job DeleteCallAnalytic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  CallAnalyticsJobName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  call_analytics_job_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.DeleteCallAnalyticsJob")
-  let body = {CallAnalyticsJobName: $CallAnalyticsJobName} | compact
+  let body = {"CallAnalyticsJobName": $call_analytics_job_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +404,7 @@ export def "x-amz-target-transcribe-delete-call-analytics-job DeleteCallAnalytic
 #
 # POST /#X-Amz-Target=Transcribe.DeleteLanguageModel
 # operationId: DeleteLanguageModel
-export def "x-amz-target-transcribe-delete-language-model DeleteLanguageModel" [
+export def "x-amz-target-transcribe-delete-language-model delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,23 +413,23 @@ export def "x-amz-target-transcribe-delete-language-model DeleteLanguageModel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ModelName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  model_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.DeleteLanguageModel")
-  let body = {ModelName: $ModelName} | compact
+  let body = {"ModelName": $model_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -440,7 +440,7 @@ export def "x-amz-target-transcribe-delete-language-model DeleteLanguageModel" [
 #
 # POST /#X-Amz-Target=Transcribe.DeleteMedicalTranscriptionJob
 # operationId: DeleteMedicalTranscriptionJob
-export def "x-amz-target-transcribe-delete-medical-transcription-job DeleteMedicalTranscriptionJob" [
+export def "x-amz-target-transcribe-delete-medical-transcription-job delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,23 +449,23 @@ export def "x-amz-target-transcribe-delete-medical-transcription-job DeleteMedic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  MedicalTranscriptionJobName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  medical_transcription_job_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.DeleteMedicalTranscriptionJob")
-  let body = {MedicalTranscriptionJobName: $MedicalTranscriptionJobName} | compact
+  let body = {"MedicalTranscriptionJobName": $medical_transcription_job_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -476,7 +476,7 @@ export def "x-amz-target-transcribe-delete-medical-transcription-job DeleteMedic
 #
 # POST /#X-Amz-Target=Transcribe.DeleteMedicalVocabulary
 # operationId: DeleteMedicalVocabulary
-export def "x-amz-target-transcribe-delete-medical-vocabulary DeleteMedicalVocabulary" [
+export def "x-amz-target-transcribe-delete-medical-vocabulary delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,23 +485,23 @@ export def "x-amz-target-transcribe-delete-medical-vocabulary DeleteMedicalVocab
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  VocabularyName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  vocabulary_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.DeleteMedicalVocabulary")
-  let body = {VocabularyName: $VocabularyName} | compact
+  let body = {"VocabularyName": $vocabulary_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -512,7 +512,7 @@ export def "x-amz-target-transcribe-delete-medical-vocabulary DeleteMedicalVocab
 #
 # POST /#X-Amz-Target=Transcribe.DeleteTranscriptionJob
 # operationId: DeleteTranscriptionJob
-export def "x-amz-target-transcribe-delete-transcription-job DeleteTranscriptionJob" [
+export def "x-amz-target-transcribe-delete-transcription-job delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,23 +521,23 @@ export def "x-amz-target-transcribe-delete-transcription-job DeleteTranscription
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  TranscriptionJobName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  transcription_job_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.DeleteTranscriptionJob")
-  let body = {TranscriptionJobName: $TranscriptionJobName} | compact
+  let body = {"TranscriptionJobName": $transcription_job_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -548,7 +548,7 @@ export def "x-amz-target-transcribe-delete-transcription-job DeleteTranscription
 #
 # POST /#X-Amz-Target=Transcribe.DeleteVocabulary
 # operationId: DeleteVocabulary
-export def "x-amz-target-transcribe-delete-vocabulary DeleteVocabulary" [
+export def "x-amz-target-transcribe-delete-vocabulary delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,23 +557,23 @@ export def "x-amz-target-transcribe-delete-vocabulary DeleteVocabulary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  VocabularyName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  vocabulary_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.DeleteVocabulary")
-  let body = {VocabularyName: $VocabularyName} | compact
+  let body = {"VocabularyName": $vocabulary_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -584,7 +584,7 @@ export def "x-amz-target-transcribe-delete-vocabulary DeleteVocabulary" [
 #
 # POST /#X-Amz-Target=Transcribe.DeleteVocabularyFilter
 # operationId: DeleteVocabularyFilter
-export def "x-amz-target-transcribe-delete-vocabulary-filter DeleteVocabularyFilter" [
+export def "x-amz-target-transcribe-delete-vocabulary-filter delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,23 +593,23 @@ export def "x-amz-target-transcribe-delete-vocabulary-filter DeleteVocabularyFil
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  VocabularyFilterName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  vocabulary_filter_name: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.DeleteVocabularyFilter")
-  let body = {VocabularyFilterName: $VocabularyFilterName} | compact
+  let body = {"VocabularyFilterName": $vocabulary_filter_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -620,7 +620,7 @@ export def "x-amz-target-transcribe-delete-vocabulary-filter DeleteVocabularyFil
 #
 # POST /#X-Amz-Target=Transcribe.DescribeLanguageModel
 # operationId: DescribeLanguageModel
-export def "x-amz-target-transcribe-describe-language-model DescribeLanguageModel" [
+export def "x-amz-target-transcribe-describe-language-model post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,23 +629,23 @@ export def "x-amz-target-transcribe-describe-language-model DescribeLanguageMode
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  ModelName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  model_name: any
 ]: any -> record<LanguageModel: record<ModelName: record, CreateTime: record, LastModifiedTime: record, LanguageCode: record, BaseModelName: record, ModelStatus: record, UpgradeAvailability: record, FailureReason: record, InputDataConfig: record<S3Uri: record, TuningDataS3Uri: record, DataAccessRoleArn: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.DescribeLanguageModel")
-  let body = {ModelName: $ModelName} | compact
+  let body = {"ModelName": $model_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -656,7 +656,7 @@ export def "x-amz-target-transcribe-describe-language-model DescribeLanguageMode
 #
 # POST /#X-Amz-Target=Transcribe.GetCallAnalyticsCategory
 # operationId: GetCallAnalyticsCategory
-export def "x-amz-target-transcribe-get-call-analytics-category GetCallAnalyticsCategory" [
+export def "x-amz-target-transcribe-get-call-analytics-category get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,23 +665,23 @@ export def "x-amz-target-transcribe-get-call-analytics-category GetCallAnalytics
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  CategoryName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  category_name: any
 ]: any -> record<CategoryProperties: record<CategoryName: record, Rules: record, CreateTime: record, LastUpdateTime: record, InputType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.GetCallAnalyticsCategory")
-  let body = {CategoryName: $CategoryName} | compact
+  let body = {"CategoryName": $category_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -692,7 +692,7 @@ export def "x-amz-target-transcribe-get-call-analytics-category GetCallAnalytics
 #
 # POST /#X-Amz-Target=Transcribe.GetCallAnalyticsJob
 # operationId: GetCallAnalyticsJob
-export def "x-amz-target-transcribe-get-call-analytics-job GetCallAnalyticsJob" [
+export def "x-amz-target-transcribe-get-call-analytics-job get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,23 +701,23 @@ export def "x-amz-target-transcribe-get-call-analytics-job GetCallAnalyticsJob" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  CallAnalyticsJobName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  call_analytics_job_name: any
 ]: any -> record<CallAnalyticsJob: record<CallAnalyticsJobName: record, CallAnalyticsJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record, RedactedTranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, DataAccessRoleArn: record, IdentifiedLanguageScore: record, Settings: record<VocabularyName: record, VocabularyFilterName: record, VocabularyFilterMethod: record, LanguageModelName: record, ContentRedaction: record, LanguageOptions: record, LanguageIdSettings: record>, ChannelDefinitions: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.GetCallAnalyticsJob")
-  let body = {CallAnalyticsJobName: $CallAnalyticsJobName} | compact
+  let body = {"CallAnalyticsJobName": $call_analytics_job_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,7 +728,7 @@ export def "x-amz-target-transcribe-get-call-analytics-job GetCallAnalyticsJob" 
 #
 # POST /#X-Amz-Target=Transcribe.GetMedicalTranscriptionJob
 # operationId: GetMedicalTranscriptionJob
-export def "x-amz-target-transcribe-get-medical-transcription-job GetMedicalTranscriptionJob" [
+export def "x-amz-target-transcribe-get-medical-transcription-job get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,23 +737,23 @@ export def "x-amz-target-transcribe-get-medical-transcription-job GetMedicalTran
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  MedicalTranscriptionJobName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  medical_transcription_job_name: any
 ]: any -> record<MedicalTranscriptionJob: record<MedicalTranscriptionJobName: record, TranscriptionJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, Settings: record<ShowSpeakerLabels: record, MaxSpeakerLabels: record, ChannelIdentification: record, ShowAlternatives: record, MaxAlternatives: record, VocabularyName: record>, ContentIdentificationType: record, Specialty: record, Type: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.GetMedicalTranscriptionJob")
-  let body = {MedicalTranscriptionJobName: $MedicalTranscriptionJobName} | compact
+  let body = {"MedicalTranscriptionJobName": $medical_transcription_job_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -764,7 +764,7 @@ export def "x-amz-target-transcribe-get-medical-transcription-job GetMedicalTran
 #
 # POST /#X-Amz-Target=Transcribe.GetMedicalVocabulary
 # operationId: GetMedicalVocabulary
-export def "x-amz-target-transcribe-get-medical-vocabulary GetMedicalVocabulary" [
+export def "x-amz-target-transcribe-get-medical-vocabulary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,23 +773,23 @@ export def "x-amz-target-transcribe-get-medical-vocabulary GetMedicalVocabulary"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  VocabularyName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  vocabulary_name: any
 ]: any -> record<VocabularyName: record, LanguageCode: record, VocabularyState: record, LastModifiedTime: record, FailureReason: record, DownloadUri: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.GetMedicalVocabulary")
-  let body = {VocabularyName: $VocabularyName} | compact
+  let body = {"VocabularyName": $vocabulary_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -800,7 +800,7 @@ export def "x-amz-target-transcribe-get-medical-vocabulary GetMedicalVocabulary"
 #
 # POST /#X-Amz-Target=Transcribe.GetTranscriptionJob
 # operationId: GetTranscriptionJob
-export def "x-amz-target-transcribe-get-transcription-job GetTranscriptionJob" [
+export def "x-amz-target-transcribe-get-transcription-job get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,23 +809,23 @@ export def "x-amz-target-transcribe-get-transcription-job GetTranscriptionJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  TranscriptionJobName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  transcription_job_name: any
 ]: any -> record<TranscriptionJob: record<TranscriptionJobName: record, TranscriptionJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record, RedactedTranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, Settings: record<VocabularyName: record, ShowSpeakerLabels: record, MaxSpeakerLabels: record, ChannelIdentification: record, ShowAlternatives: record, MaxAlternatives: record, VocabularyFilterName: record, VocabularyFilterMethod: record>, ModelSettings: record<LanguageModelName: record>, JobExecutionSettings: record<AllowDeferredExecution: record, DataAccessRoleArn: record>, ContentRedaction: record<RedactionType: record, RedactionOutput: record, PiiEntityTypes: record>, IdentifyLanguage: record, IdentifyMultipleLanguages: record, LanguageOptions: record, IdentifiedLanguageScore: record, LanguageCodes: record, Tags: record, Subtitles: record<Formats: record, SubtitleFileUris: record, OutputStartIndex: record>, LanguageIdSettings: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.GetTranscriptionJob")
-  let body = {TranscriptionJobName: $TranscriptionJobName} | compact
+  let body = {"TranscriptionJobName": $transcription_job_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -836,7 +836,7 @@ export def "x-amz-target-transcribe-get-transcription-job GetTranscriptionJob" [
 #
 # POST /#X-Amz-Target=Transcribe.GetVocabulary
 # operationId: GetVocabulary
-export def "x-amz-target-transcribe-get-vocabulary GetVocabulary" [
+export def "x-amz-target-transcribe-get-vocabulary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,23 +845,23 @@ export def "x-amz-target-transcribe-get-vocabulary GetVocabulary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  VocabularyName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  vocabulary_name: any
 ]: any -> record<VocabularyName: record, LanguageCode: record, VocabularyState: record, LastModifiedTime: record, FailureReason: record, DownloadUri: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.GetVocabulary")
-  let body = {VocabularyName: $VocabularyName} | compact
+  let body = {"VocabularyName": $vocabulary_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -872,7 +872,7 @@ export def "x-amz-target-transcribe-get-vocabulary GetVocabulary" [
 #
 # POST /#X-Amz-Target=Transcribe.GetVocabularyFilter
 # operationId: GetVocabularyFilter
-export def "x-amz-target-transcribe-get-vocabulary-filter GetVocabularyFilter" [
+export def "x-amz-target-transcribe-get-vocabulary-filter get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,23 +881,23 @@ export def "x-amz-target-transcribe-get-vocabulary-filter GetVocabularyFilter" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  VocabularyFilterName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  vocabulary_filter_name: any
 ]: any -> record<VocabularyFilterName: record, LanguageCode: record, LastModifiedTime: record, DownloadUri: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.GetVocabularyFilter")
-  let body = {VocabularyFilterName: $VocabularyFilterName} | compact
+  let body = {"VocabularyFilterName": $vocabulary_filter_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -908,7 +908,7 @@ export def "x-amz-target-transcribe-get-vocabulary-filter GetVocabularyFilter" [
 #
 # POST /#X-Amz-Target=Transcribe.ListCallAnalyticsCategories
 # operationId: ListCallAnalyticsCategories
-export def "x-amz-target-transcribe-list-call-analytics-categories ListCallAnalyticsCategories" [
+export def "x-amz-target-transcribe-list-call-analytics-categories list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,27 +917,27 @@ export def "x-amz-target-transcribe-list-call-analytics-categories ListCallAnaly
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, Categories: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.ListCallAnalyticsCategories" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -948,7 +948,7 @@ export def "x-amz-target-transcribe-list-call-analytics-categories ListCallAnaly
 #
 # POST /#X-Amz-Target=Transcribe.ListCallAnalyticsJobs
 # operationId: ListCallAnalyticsJobs
-export def "x-amz-target-transcribe-list-call-analytics-jobs ListCallAnalyticsJobs" [
+export def "x-amz-target-transcribe-list-call-analytics-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -957,29 +957,29 @@ export def "x-amz-target-transcribe-list-call-analytics-jobs ListCallAnalyticsJo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  --Status: any
-  --JobNameContains: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  --status: any
+  --job-name-contains: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Status: record, NextToken: record, CallAnalyticsJobSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.ListCallAnalyticsJobs" $qp)
-  let body = {Status: $Status, JobNameContains: $JobNameContains, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Status": $status, "JobNameContains": $job_name_contains, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -990,7 +990,7 @@ export def "x-amz-target-transcribe-list-call-analytics-jobs ListCallAnalyticsJo
 #
 # POST /#X-Amz-Target=Transcribe.ListLanguageModels
 # operationId: ListLanguageModels
-export def "x-amz-target-transcribe-list-language-models ListLanguageModels" [
+export def "x-amz-target-transcribe-list-language-models list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -999,29 +999,29 @@ export def "x-amz-target-transcribe-list-language-models ListLanguageModels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --StatusEquals: any
-  --NameContains: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --status-equals: any
+  --name-contains: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<NextToken: record, Models: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.ListLanguageModels" $qp)
-  let body = {StatusEquals: $StatusEquals, NameContains: $NameContains, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"StatusEquals": $status_equals, "NameContains": $name_contains, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1032,7 +1032,7 @@ export def "x-amz-target-transcribe-list-language-models ListLanguageModels" [
 #
 # POST /#X-Amz-Target=Transcribe.ListMedicalTranscriptionJobs
 # operationId: ListMedicalTranscriptionJobs
-export def "x-amz-target-transcribe-list-medical-transcription-jobs ListMedicalTranscriptionJobs" [
+export def "x-amz-target-transcribe-list-medical-transcription-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1041,29 +1041,29 @@ export def "x-amz-target-transcribe-list-medical-transcription-jobs ListMedicalT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --Status: any
-  --JobNameContains: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --status: any
+  --job-name-contains: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Status: record, NextToken: record, MedicalTranscriptionJobSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.ListMedicalTranscriptionJobs" $qp)
-  let body = {Status: $Status, JobNameContains: $JobNameContains, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Status": $status, "JobNameContains": $job_name_contains, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1074,7 +1074,7 @@ export def "x-amz-target-transcribe-list-medical-transcription-jobs ListMedicalT
 #
 # POST /#X-Amz-Target=Transcribe.ListMedicalVocabularies
 # operationId: ListMedicalVocabularies
-export def "x-amz-target-transcribe-list-medical-vocabularies ListMedicalVocabularies" [
+export def "x-amz-target-transcribe-list-medical-vocabularies list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1083,29 +1083,29 @@ export def "x-amz-target-transcribe-list-medical-vocabularies ListMedicalVocabul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  --NextToken: any
-  --MaxResults: any
-  --StateEquals: any
-  --NameContains: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  --next-token: any
+  --max-results: any
+  --state-equals: any
+  --name-contains: any
 ]: any -> record<Status: record, NextToken: record, Vocabularies: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.ListMedicalVocabularies" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, StateEquals: $StateEquals, NameContains: $NameContains} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "StateEquals": $state_equals, "NameContains": $name_contains} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1116,7 +1116,7 @@ export def "x-amz-target-transcribe-list-medical-vocabularies ListMedicalVocabul
 #
 # POST /#X-Amz-Target=Transcribe.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-transcribe-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-transcribe-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1125,23 +1125,23 @@ export def "x-amz-target-transcribe-list-tags-for-resource ListTagsForResource" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  resource_arn: any
 ]: any -> record<ResourceArn: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.ListTagsForResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1152,7 +1152,7 @@ export def "x-amz-target-transcribe-list-tags-for-resource ListTagsForResource" 
 #
 # POST /#X-Amz-Target=Transcribe.ListTranscriptionJobs
 # operationId: ListTranscriptionJobs
-export def "x-amz-target-transcribe-list-transcription-jobs ListTranscriptionJobs" [
+export def "x-amz-target-transcribe-list-transcription-jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,29 +1161,29 @@ export def "x-amz-target-transcribe-list-transcription-jobs ListTranscriptionJob
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  --Status: any
-  --JobNameContains: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  --status: any
+  --job-name-contains: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<Status: record, NextToken: record, TranscriptionJobSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.ListTranscriptionJobs" $qp)
-  let body = {Status: $Status, JobNameContains: $JobNameContains, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"Status": $status, "JobNameContains": $job_name_contains, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1194,7 +1194,7 @@ export def "x-amz-target-transcribe-list-transcription-jobs ListTranscriptionJob
 #
 # POST /#X-Amz-Target=Transcribe.ListVocabularies
 # operationId: ListVocabularies
-export def "x-amz-target-transcribe-list-vocabularies ListVocabularies" [
+export def "x-amz-target-transcribe-list-vocabularies list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1203,29 +1203,29 @@ export def "x-amz-target-transcribe-list-vocabularies ListVocabularies" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --NextToken: any
-  --MaxResults: any
-  --StateEquals: any
-  --NameContains: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --next-token: any
+  --max-results: any
+  --state-equals: any
+  --name-contains: any
 ]: any -> record<Status: record, NextToken: record, Vocabularies: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.ListVocabularies" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, StateEquals: $StateEquals, NameContains: $NameContains} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "StateEquals": $state_equals, "NameContains": $name_contains} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1236,7 +1236,7 @@ export def "x-amz-target-transcribe-list-vocabularies ListVocabularies" [
 #
 # POST /#X-Amz-Target=Transcribe.ListVocabularyFilters
 # operationId: ListVocabularyFilters
-export def "x-amz-target-transcribe-list-vocabulary-filters ListVocabularyFilters" [
+export def "x-amz-target-transcribe-list-vocabulary-filters list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1245,28 +1245,28 @@ export def "x-amz-target-transcribe-list-vocabulary-filters ListVocabularyFilter
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --NextToken: any
-  --MaxResults: any
-  --NameContains: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --next-token: any
+  --max-results: any
+  --name-contains: any
 ]: any -> record<NextToken: record, VocabularyFilters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.ListVocabularyFilters" $qp)
-  let body = {NextToken: $NextToken, MaxResults: $MaxResults, NameContains: $NameContains} | compact
+  let body = {"NextToken": $next_token, "MaxResults": $max_results, "NameContains": $name_contains} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1277,7 +1277,7 @@ export def "x-amz-target-transcribe-list-vocabulary-filters ListVocabularyFilter
 #
 # POST /#X-Amz-Target=Transcribe.StartCallAnalyticsJob
 # operationId: StartCallAnalyticsJob
-export def "x-amz-target-transcribe-start-call-analytics-job StartCallAnalyticsJob" [
+export def "x-amz-target-transcribe-start-call-analytics-job start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1286,29 +1286,29 @@ export def "x-amz-target-transcribe-start-call-analytics-job StartCallAnalyticsJ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  CallAnalyticsJobName: any
-  Media: any
-  --OutputLocation: any
-  --OutputEncryptionKMSKeyId: any
-  --DataAccessRoleArn: any
-  --Settings: any
-  --ChannelDefinitions: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  call_analytics_job_name: any
+  media: any
+  --output-location: any
+  --output-encryption-kms-key-id: any
+  --data-access-role-arn: any
+  --settings: any
+  --channel-definitions: any
 ]: any -> record<CallAnalyticsJob: record<CallAnalyticsJobName: record, CallAnalyticsJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record, RedactedTranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, DataAccessRoleArn: record, IdentifiedLanguageScore: record, Settings: record<VocabularyName: record, VocabularyFilterName: record, VocabularyFilterMethod: record, LanguageModelName: record, ContentRedaction: record, LanguageOptions: record, LanguageIdSettings: record>, ChannelDefinitions: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.StartCallAnalyticsJob")
-  let body = {CallAnalyticsJobName: $CallAnalyticsJobName, Media: $Media, OutputLocation: $OutputLocation, OutputEncryptionKMSKeyId: $OutputEncryptionKMSKeyId, DataAccessRoleArn: $DataAccessRoleArn, Settings: $Settings, ChannelDefinitions: $ChannelDefinitions} | compact
+  let body = {"CallAnalyticsJobName": $call_analytics_job_name, "Media": $media, "OutputLocation": $output_location, "OutputEncryptionKMSKeyId": $output_encryption_kms_key_id, "DataAccessRoleArn": $data_access_role_arn, "Settings": $settings, "ChannelDefinitions": $channel_definitions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1320,7 +1320,7 @@ export def "x-amz-target-transcribe-start-call-analytics-job StartCallAnalyticsJ
 # POST /#X-Amz-Target=Transcribe.StartMedicalTranscriptionJob
 # operationId: StartMedicalTranscriptionJob
 # --Media shape: {MediaFileUri?: any, RedactedMediaFileUri?: any}
-export def "x-amz-target-transcribe-start-medical-transcription-job StartMedicalTranscriptionJob" [
+export def "x-amz-target-transcribe-start-medical-transcription-job start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1329,36 +1329,36 @@ export def "x-amz-target-transcribe-start-medical-transcription-job StartMedical
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  MedicalTranscriptionJobName: any
-  LanguageCode: any
-  --MediaSampleRateHertz: any
-  --MediaFormat: any
-  Media: record # <p>Describes the Amazon S3 location of the media file you want to use in your request.</p> <p>For information on supported media formats, refer to the <a href="https://docs.aws.amazon.com/APIReference/API_StartTranscriptionJob.html#transcribe-StartTranscriptionJob-request-MediaFormat">MediaFormat</a> parameter or the <a href="https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html#how-input-audio">Media formats</a> section in the Amazon S3 Developer Guide.</p> — shape: {MediaFileUri?: any, RedactedMediaFileUri?: any}
-  OutputBucketName: any
-  --OutputKey: any
-  --OutputEncryptionKMSKeyId: any
-  --KMSEncryptionContext: any
-  --Settings: any
-  --ContentIdentificationType: any
-  Specialty: any
-  Type: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  medical_transcription_job_name: any
+  language_code: any
+  --media-sample-rate-hertz: any
+  --media-format: any
+  media: record # <p>Describes the Amazon S3 location of the media file you want to use in your request.</p> <p>For information on supported media formats, refer to the <a href="https://docs.aws.amazon.com/APIReference/API_StartTranscriptionJob.html#transcribe-StartTranscriptionJob-request-MediaFormat">MediaFormat</a> parameter or the <a href="https://docs.aws.amazon.com/transcribe/latest/dg/how-input.html#how-input-audio">Media formats</a> section in the Amazon S3 Developer Guide.</p> — shape: {MediaFileUri?: any, RedactedMediaFileUri?: any}
+  output_bucket_name: any
+  --output-key: any
+  --output-encryption-kms-key-id: any
+  --kms-encryption-context: any
+  --settings: any
+  --content-identification-type: any
+  specialty: any
+  type: any
+  --tags: any
 ]: any -> record<MedicalTranscriptionJob: record<MedicalTranscriptionJobName: record, TranscriptionJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, Settings: record<ShowSpeakerLabels: record, MaxSpeakerLabels: record, ChannelIdentification: record, ShowAlternatives: record, MaxAlternatives: record, VocabularyName: record>, ContentIdentificationType: record, Specialty: record, Type: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.StartMedicalTranscriptionJob")
-  let body = {MedicalTranscriptionJobName: $MedicalTranscriptionJobName, LanguageCode: $LanguageCode, MediaSampleRateHertz: $MediaSampleRateHertz, MediaFormat: $MediaFormat, Media: $Media, OutputBucketName: $OutputBucketName, OutputKey: $OutputKey, OutputEncryptionKMSKeyId: $OutputEncryptionKMSKeyId, KMSEncryptionContext: $KMSEncryptionContext, Settings: $Settings, ContentIdentificationType: $ContentIdentificationType, Specialty: $Specialty, Type: $Type, Tags: $Tags} | compact
+  let body = {"MedicalTranscriptionJobName": $medical_transcription_job_name, "LanguageCode": $language_code, "MediaSampleRateHertz": $media_sample_rate_hertz, "MediaFormat": $media_format, "Media": $media, "OutputBucketName": $output_bucket_name, "OutputKey": $output_key, "OutputEncryptionKMSKeyId": $output_encryption_kms_key_id, "KMSEncryptionContext": $kms_encryption_context, "Settings": $settings, "ContentIdentificationType": $content_identification_type, "Specialty": $specialty, "Type": $type, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1369,7 +1369,7 @@ export def "x-amz-target-transcribe-start-medical-transcription-job StartMedical
 #
 # POST /#X-Amz-Target=Transcribe.StartTranscriptionJob
 # operationId: StartTranscriptionJob
-export def "x-amz-target-transcribe-start-transcription-job StartTranscriptionJob" [
+export def "x-amz-target-transcribe-start-transcription-job start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1378,41 +1378,41 @@ export def "x-amz-target-transcribe-start-transcription-job StartTranscriptionJo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  TranscriptionJobName: any
-  --LanguageCode: any
-  --MediaSampleRateHertz: any
-  --MediaFormat: any
-  Media: any
-  --OutputBucketName: any
-  --OutputKey: any
-  --OutputEncryptionKMSKeyId: any
-  --KMSEncryptionContext: any
-  --Settings: any
-  --ModelSettings: any
-  --JobExecutionSettings: any
-  --ContentRedaction: any
-  --IdentifyLanguage: any
-  --IdentifyMultipleLanguages: any
-  --LanguageOptions: any
-  --Subtitles: any
-  --Tags: any
-  --LanguageIdSettings: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  transcription_job_name: any
+  --language-code: any
+  --media-sample-rate-hertz: any
+  --media-format: any
+  media: any
+  --output-bucket-name: any
+  --output-key: any
+  --output-encryption-kms-key-id: any
+  --kms-encryption-context: any
+  --settings: any
+  --model-settings: any
+  --job-execution-settings: any
+  --content-redaction: any
+  --identify-language: any
+  --identify-multiple-languages: any
+  --language-options: any
+  --subtitles: any
+  --tags: any
+  --language-id-settings: any
 ]: any -> record<TranscriptionJob: record<TranscriptionJobName: record, TranscriptionJobStatus: record, LanguageCode: record, MediaSampleRateHertz: record, MediaFormat: record, Media: record<MediaFileUri: record, RedactedMediaFileUri: record>, Transcript: record<TranscriptFileUri: record, RedactedTranscriptFileUri: record>, StartTime: record, CreationTime: record, CompletionTime: record, FailureReason: record, Settings: record<VocabularyName: record, ShowSpeakerLabels: record, MaxSpeakerLabels: record, ChannelIdentification: record, ShowAlternatives: record, MaxAlternatives: record, VocabularyFilterName: record, VocabularyFilterMethod: record>, ModelSettings: record<LanguageModelName: record>, JobExecutionSettings: record<AllowDeferredExecution: record, DataAccessRoleArn: record>, ContentRedaction: record<RedactionType: record, RedactionOutput: record, PiiEntityTypes: record>, IdentifyLanguage: record, IdentifyMultipleLanguages: record, LanguageOptions: record, IdentifiedLanguageScore: record, LanguageCodes: record, Tags: record, Subtitles: record<Formats: record, SubtitleFileUris: record, OutputStartIndex: record>, LanguageIdSettings: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.StartTranscriptionJob")
-  let body = {TranscriptionJobName: $TranscriptionJobName, LanguageCode: $LanguageCode, MediaSampleRateHertz: $MediaSampleRateHertz, MediaFormat: $MediaFormat, Media: $Media, OutputBucketName: $OutputBucketName, OutputKey: $OutputKey, OutputEncryptionKMSKeyId: $OutputEncryptionKMSKeyId, KMSEncryptionContext: $KMSEncryptionContext, Settings: $Settings, ModelSettings: $ModelSettings, JobExecutionSettings: $JobExecutionSettings, ContentRedaction: $ContentRedaction, IdentifyLanguage: $IdentifyLanguage, IdentifyMultipleLanguages: $IdentifyMultipleLanguages, LanguageOptions: $LanguageOptions, Subtitles: $Subtitles, Tags: $Tags, LanguageIdSettings: $LanguageIdSettings} | compact
+  let body = {"TranscriptionJobName": $transcription_job_name, "LanguageCode": $language_code, "MediaSampleRateHertz": $media_sample_rate_hertz, "MediaFormat": $media_format, "Media": $media, "OutputBucketName": $output_bucket_name, "OutputKey": $output_key, "OutputEncryptionKMSKeyId": $output_encryption_kms_key_id, "KMSEncryptionContext": $kms_encryption_context, "Settings": $settings, "ModelSettings": $model_settings, "JobExecutionSettings": $job_execution_settings, "ContentRedaction": $content_redaction, "IdentifyLanguage": $identify_language, "IdentifyMultipleLanguages": $identify_multiple_languages, "LanguageOptions": $language_options, "Subtitles": $subtitles, "Tags": $tags, "LanguageIdSettings": $language_id_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1423,7 +1423,7 @@ export def "x-amz-target-transcribe-start-transcription-job StartTranscriptionJo
 #
 # POST /#X-Amz-Target=Transcribe.TagResource
 # operationId: TagResource
-export def "x-amz-target-transcribe-tag-resource TagResource" [
+export def "x-amz-target-transcribe-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1432,24 +1432,24 @@ export def "x-amz-target-transcribe-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1460,7 +1460,7 @@ export def "x-amz-target-transcribe-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=Transcribe.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-transcribe-untag-resource UntagResource" [
+export def "x-amz-target-transcribe-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1469,24 +1469,24 @@ export def "x-amz-target-transcribe-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1497,7 +1497,7 @@ export def "x-amz-target-transcribe-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=Transcribe.UpdateCallAnalyticsCategory
 # operationId: UpdateCallAnalyticsCategory
-export def "x-amz-target-transcribe-update-call-analytics-category UpdateCallAnalyticsCategory" [
+export def "x-amz-target-transcribe-update-call-analytics-category update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1506,25 +1506,25 @@ export def "x-amz-target-transcribe-update-call-analytics-category UpdateCallAna
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  CategoryName: any
-  Rules: any
-  --InputType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  category_name: any
+  rules: any
+  --input-type: any
 ]: any -> record<CategoryProperties: record<CategoryName: record, Rules: record, CreateTime: record, LastUpdateTime: record, InputType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.UpdateCallAnalyticsCategory")
-  let body = {CategoryName: $CategoryName, Rules: $Rules, InputType: $InputType} | compact
+  let body = {"CategoryName": $category_name, "Rules": $rules, "InputType": $input_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1535,7 +1535,7 @@ export def "x-amz-target-transcribe-update-call-analytics-category UpdateCallAna
 #
 # POST /#X-Amz-Target=Transcribe.UpdateMedicalVocabulary
 # operationId: UpdateMedicalVocabulary
-export def "x-amz-target-transcribe-update-medical-vocabulary UpdateMedicalVocabulary" [
+export def "x-amz-target-transcribe-update-medical-vocabulary update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1544,25 +1544,25 @@ export def "x-amz-target-transcribe-update-medical-vocabulary UpdateMedicalVocab
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  VocabularyName: any
-  LanguageCode: any
-  VocabularyFileUri: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  vocabulary_name: any
+  language_code: any
+  vocabulary_file_uri: any
 ]: any -> record<VocabularyName: record, LanguageCode: record, LastModifiedTime: record, VocabularyState: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.UpdateMedicalVocabulary")
-  let body = {VocabularyName: $VocabularyName, LanguageCode: $LanguageCode, VocabularyFileUri: $VocabularyFileUri} | compact
+  let body = {"VocabularyName": $vocabulary_name, "LanguageCode": $language_code, "VocabularyFileUri": $vocabulary_file_uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1573,7 +1573,7 @@ export def "x-amz-target-transcribe-update-medical-vocabulary UpdateMedicalVocab
 #
 # POST /#X-Amz-Target=Transcribe.UpdateVocabulary
 # operationId: UpdateVocabulary
-export def "x-amz-target-transcribe-update-vocabulary UpdateVocabulary" [
+export def "x-amz-target-transcribe-update-vocabulary update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1582,27 +1582,27 @@ export def "x-amz-target-transcribe-update-vocabulary UpdateVocabulary" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  VocabularyName: any
-  LanguageCode: any
-  --Phrases: any
-  --VocabularyFileUri: any
-  --DataAccessRoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  vocabulary_name: any
+  language_code: any
+  --phrases: any
+  --vocabulary-file-uri: any
+  --data-access-role-arn: any
 ]: any -> record<VocabularyName: record, LanguageCode: record, LastModifiedTime: record, VocabularyState: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.UpdateVocabulary")
-  let body = {VocabularyName: $VocabularyName, LanguageCode: $LanguageCode, Phrases: $Phrases, VocabularyFileUri: $VocabularyFileUri, DataAccessRoleArn: $DataAccessRoleArn} | compact
+  let body = {"VocabularyName": $vocabulary_name, "LanguageCode": $language_code, "Phrases": $phrases, "VocabularyFileUri": $vocabulary_file_uri, "DataAccessRoleArn": $data_access_role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1613,7 +1613,7 @@ export def "x-amz-target-transcribe-update-vocabulary UpdateVocabulary" [
 #
 # POST /#X-Amz-Target=Transcribe.UpdateVocabularyFilter
 # operationId: UpdateVocabularyFilter
-export def "x-amz-target-transcribe-update-vocabulary-filter UpdateVocabularyFilter" [
+export def "x-amz-target-transcribe-update-vocabulary-filter update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1622,26 +1622,26 @@ export def "x-amz-target-transcribe-update-vocabulary-filter UpdateVocabularyFil
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  VocabularyFilterName: any
-  --Words: any
-  --VocabularyFilterFileUri: any
-  --DataAccessRoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  vocabulary_filter_name: any
+  --words: any
+  --vocabulary-filter-file-uri: any
+  --data-access-role-arn: any
 ]: any -> record<VocabularyFilterName: record, LanguageCode: record, LastModifiedTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=Transcribe.UpdateVocabularyFilter")
-  let body = {VocabularyFilterName: $VocabularyFilterName, Words: $Words, VocabularyFilterFileUri: $VocabularyFilterFileUri, DataAccessRoleArn: $DataAccessRoleArn} | compact
+  let body = {"VocabularyFilterName": $vocabulary_filter_name, "Words": $words, "VocabularyFilterFileUri": $vocabulary_filter_file_uri, "DataAccessRoleArn": $data_access_role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

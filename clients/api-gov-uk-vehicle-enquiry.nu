@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vehicles post" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vehicles get-vehicle-details" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/vehicles
 # operationId: getVehicleDetailsByRegistrationNumber
-export def "vehicles post" [
+export def "vehicles get-vehicle-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,16 +102,16 @@ export def "vehicles post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-api-key: string # Client Specific API Key
-  --X-Correlation-Id: string # Consumer Correlation ID
-  --registrationNumber: string
+  --x-correlation-id: string # Consumer Correlation ID
+  --registration-number: string
 ]: any -> record<artEndDate: string, co2Emissions: int, colour: string, dateOfLastV5CIssued: string, engineCapacity: int, euroStatus: string, fuelType: string, make: string, markedForExport: bool, monthOfFirstDvlaRegistration: string, monthOfFirstRegistration: string, motExpiryDate: string, motStatus: string, realDrivingEmissions: string, registrationNumber: string, revenueWeight: int, taxDueDate: string, taxStatus: string, typeApproval: string, wheelplan: string, yearOfManufacture: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/vehicles")
-  let body = {registrationNumber: $registrationNumber} | compact
+  let body = {"registrationNumber": $registration_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-api-key": $x_api_key, "X-Correlation-Id": $X_Correlation_Id} | compact
+  let extra_headers = {"x-api-key": $x_api_key, "X-Correlation-Id": $x_correlation_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

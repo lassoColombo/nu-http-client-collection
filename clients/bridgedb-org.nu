@@ -65,7 +65,7 @@ def base-url-completer [] { ["https://webservice.bridgedb.org" "http://webservic
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def dataSource-completer [] { ["Ag" "Ca" "Ce" "Cg" "Ch" "Ck" "Cks" "Cpc" "Cs" "E" "Eco" "En" "H" "Ik" "Il" "L" "Lm" "Ma" "Mb" "Mc" "Om" "Pd" "Q" "Re" "Rf" "Rh" "Rk" "S" "T" "U" "Uc" "Up" "Wd" "Wg" "Wi" "X"] }
+def data-source-completer [] { ["Ag" "Ca" "Ce" "Cg" "Ch" "Ck" "Cks" "Cpc" "Cs" "E" "Eco" "En" "H" "Ik" "Il" "L" "Lm" "Ma" "Mb" "Mc" "Om" "Pd" "Q" "Re" "Rf" "Rh" "Rk" "S" "T" "U" "Uc" "Up" "Wd" "Wg" "Wi" "X"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -105,12 +105,12 @@ export def "attribute-search get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results
-  --attrName: string # Restrict search by attribute name (case sensitive). Use GET /{organism}/attributeSet to find out which attributes are supported.
+  --attr-name: string # Restrict search by attribute name (case sensitive). Use GET /{organism}/attributeSet to find out which attributes are supported.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "attrName" $attrName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($organism)/attributeSearch/($query)" $qp)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "attrName" $attr_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({organism: $organism, query: $query} | format pattern "/{organism}/attributeSearch/{query}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -132,7 +132,7 @@ export def "attribute-set get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($organism)/attributeSet")
+  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/attributeSet"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,7 +143,7 @@ export def "attribute-set get" [
 # GET /{organism}/attributes/{systemCode}/{identifier}
 export def "attributes get" [
   organism: string
-  systemCode: string
+  system_code: string
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -153,12 +153,12 @@ export def "attributes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --attrName: string # Type of attribute
+  --attr-name: string # Type of attribute
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "attrName" $attrName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($organism)/attributes/($systemCode)/($identifier)" $qp)
+  let qp = [(serialize-qp "attrName" $attr_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({organism: $organism, system_code: $system_code, identifier: $identifier} | format pattern "/{organism}/attributes/{system_code}/{identifier}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,7 +180,7 @@ export def "is-free-search-supported get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($organism)/isFreeSearchSupported")
+  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/isFreeSearchSupported"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,8 +191,8 @@ export def "is-free-search-supported get" [
 # GET /{organism}/isMappingSupported/{sourceSystemCode}/{targetSystemCode}
 export def "is-mapping-supported get" [
   organism: string
-  sourceSystemCode: string
-  targetSystemCode: string
+  source_system_code: string
+  target_system_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "is-mapping-supported get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($organism)/isMappingSupported/($sourceSystemCode)/($targetSystemCode)")
+  let full_url = (build-url $base ({organism: $organism, source_system_code: $source_system_code, target_system_code: $target_system_code} | format pattern "/{organism}/isMappingSupported/{source_system_code}/{target_system_code}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,7 +226,7 @@ export def "properties get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($organism)/properties")
+  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/properties"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,7 +251,7 @@ export def "search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($organism)/search/($query)" $qp)
+  let full_url = (build-url $base ({organism: $organism, query: $query} | format pattern "/{organism}/search/{query}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,7 +273,7 @@ export def "source-data-sources get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($organism)/sourceDataSources")
+  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/sourceDataSources"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,7 +295,7 @@ export def "target-data-sources get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($organism)/targetDataSources")
+  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/targetDataSources"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -306,7 +306,7 @@ export def "target-data-sources get" [
 # GET /{organism}/xrefExists/{systemCode}/{identifier}
 export def "xref-exists get" [
   organism: string
-  systemCode: string
+  system_code: string
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -319,7 +319,7 @@ export def "xref-exists get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($organism)/xrefExists/($systemCode)/($identifier)")
+  let full_url = (build-url $base ({organism: $organism, system_code: $system_code, identifier: $identifier} | format pattern "/{organism}/xrefExists/{system_code}/{identifier}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -330,7 +330,7 @@ export def "xref-exists get" [
 # GET /{organism}/xrefs/{systemCode}/{identifier}
 export def "xrefs get" [
   organism: string
-  systemCode: string
+  system_code: string
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -340,12 +340,12 @@ export def "xrefs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dataSource: string@dataSource-completer # (Optional) Restrict results by data source [system code](https://bridgedb.github.io/pages/system-codes.html)
+  --data-source: string@data-source-completer # (Optional) Restrict results by data source [system code](https://bridgedb.github.io/pages/system-codes.html)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dataSource" $dataSource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($organism)/xrefs/($systemCode)/($identifier)" $qp)
+  let qp = [(serialize-qp "dataSource" $data_source "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({organism: $organism, system_code: $system_code, identifier: $identifier} | format pattern "/{organism}/xrefs/{system_code}/{identifier}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -364,14 +364,14 @@ export def "xrefs-batch post-by-organism" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dataSource: string@dataSource-completer # (Optional) Restrict results by data source [system code](https://bridgedb.github.io/pages/system-codes.html)
+  --data-source: string@data-source-completer # (Optional) Restrict results by data source [system code](https://bridgedb.github.io/pages/system-codes.html)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dataSource" $dataSource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($organism)/xrefsBatch" $qp)
+  let qp = [(serialize-qp "dataSource" $data_source "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({organism: $organism} | format pattern "/{organism}/xrefsBatch") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -383,7 +383,7 @@ export def "xrefs-batch post-by-organism" [
 # POST /{organism}/xrefsBatch/{systemCode}
 export def "xrefs-batch post-by-organism-systemCode" [
   organism: string
-  systemCode: string
+  system_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,14 +392,14 @@ export def "xrefs-batch post-by-organism-systemCode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dataSource: string@dataSource-completer # (Optional) Restrict results by data source [system code](https://bridgedb.github.io/pages/system-codes.html)
+  --data-source: string@data-source-completer # (Optional) Restrict results by data source [system code](https://bridgedb.github.io/pages/system-codes.html)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dataSource" $dataSource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($organism)/xrefsBatch/($systemCode)" $qp)
+  let qp = [(serialize-qp "dataSource" $data_source "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({organism: $organism, system_code: $system_code} | format pattern "/{organism}/xrefsBatch/{system_code}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

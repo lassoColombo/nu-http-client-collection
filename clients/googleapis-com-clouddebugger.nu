@@ -68,10 +68,10 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def actionvalue-completer [] { ["CAPTURE" "LOG"] }
-def canaryOption-completer [] { ["CANARY_OPTION_TRY_DISABLE" "CANARY_OPTION_TRY_ENABLE" "CANARY_OPTION_UNSPECIFIED"] }
+def action-value-completer [] { ["CAPTURE" "LOG"] }
+def canary-option-completer [] { ["CANARY_OPTION_TRY_DISABLE" "CANARY_OPTION_TRY_ENABLE" "CANARY_OPTION_UNSPECIFIED"] }
 def action-completer [] { ["CAPTURE" "LOG"] }
-def logLevel-completer [] { ["ERROR" "INFO" "WARNING"] }
+def log-level-completer [] { ["ERROR" "INFO" "WARNING"] }
 def state-completer [] { ["STATE_CANARY_ACTIVE" "STATE_CANARY_PENDING_AGENTS" "STATE_IS_FINAL" "STATE_ROLLING_TO_ALL" "STATE_UNSPECIFIED"] }
 
 # List all available API commands with their parameters
@@ -118,18 +118,18 @@ export def "controller-debuggees-register clouddebuggercontrollerdebuggeesregist
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --debuggee: record # Represents the debugged application. The application may include one or more replicated processes executing the same code. Each of these processes is attached with a debugger agent, carrying out the debugging commands. Agents attached to the same debuggee identify themselves as such by using exactly the same Debuggee message value when registering. — shape: {agentVersion?: string, canaryMode?: "CANARY_MODE_UNSPECIFIED"|"CANARY_MODE_ALWAYS_ENABLED"|"CANARY_MODE_ALWAYS_DISABLED"|"CANARY_MODE_DEFAULT_ENABLED"|"CANARY_MODE_DEFAULT_DISABLED", description?: string, extSourceContexts?: list, id?: string, isDisabled?: bool, isInactive?: bool, labels?: record, project?: string, sourceContexts?: list, status?: record, uniquifier?: string}
 ]: any -> record<agentId: string, debuggee: record<agentVersion: string, canaryMode: string, description: string, extSourceContexts: list<record>, id: string, isDisabled: bool, isInactive: bool, labels: record, project: string, sourceContexts: list<record>, status: record<description: record, isError: bool, refersTo: string>, uniquifier: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/controller/debuggees/register" $qp)
-  let body = {debuggee: $debuggee} | compact
+  let body = {"debuggee": $debuggee} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -141,7 +141,7 @@ export def "controller-debuggees-register clouddebuggercontrollerdebuggeesregist
 # GET /v2/controller/debuggees/{debuggeeId}/breakpoints
 # operationId: clouddebugger.controller.debuggees.breakpoints.list
 export def "controller-debuggees-breakpoints clouddebuggercontrollerdebuggeesbreakpointslist" [
-  debuggeeId: string
+  debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,18 +157,18 @@ export def "controller-debuggees-breakpoints clouddebuggercontrollerdebuggeesbre
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --agentId: string # Identifies the agent. This is the ID returned in the RegisterDebuggee response.
-  --successOnTimeout: oneof<nothing, bool> # If set to `true` (recommended), returns `google.rpc.Code.OK` status and sets the `wait_expired` response field to `true` when the server-selected timeout has expired. If set to `false` (deprecated), returns `google.rpc.Code.ABORTED` status when the server-selected timeout has expired.
-  --waitToken: string # A token that, if specified, blocks the method call until the list of active breakpoints has changed, or a server-selected timeout has expired. The value should be set from the `next_wait_token` field in the last response. The initial value should be set to `"init"`.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --agent-id: string # Identifies the agent. This is the ID returned in the RegisterDebuggee response.
+  --success-on-timeout: oneof<nothing, bool> # If set to `true` (recommended), returns `google.rpc.Code.OK` status and sets the `wait_expired` response field to `true` when the server-selected timeout has expired. If set to `false` (deprecated), returns `google.rpc.Code.ABORTED` status when the server-selected timeout has expired.
+  --wait-token: string # A token that, if specified, blocks the method call until the list of active breakpoints has changed, or a server-selected timeout has expired. The value should be set from the `next_wait_token` field in the last response. The initial value should be set to `"init"`.
 ]: nothing -> record<breakpoints: table<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list, expressions: list, finalTime: string, id: string, isFinalState: bool, labels: record, location: record, logLevel: string, logMessageFormat: string, stackFrames: list, state: string, status: record, userEmail: string, variableTable: list>, nextWaitToken: string, waitExpired: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "agentId" $agentId "scalar") (serialize-qp "successOnTimeout" $successOnTimeout "scalar") (serialize-qp "waitToken" $waitToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/controller/debuggees/($debuggeeId)/breakpoints" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "agentId" $agent_id "scalar") (serialize-qp "successOnTimeout" $success_on_timeout "scalar") (serialize-qp "waitToken" $wait_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({debuggee_id: $debuggee_id} | format pattern "/v2/controller/debuggees/{debuggee_id}/breakpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,7 +180,7 @@ export def "controller-debuggees-breakpoints clouddebuggercontrollerdebuggeesbre
 # operationId: clouddebugger.controller.debuggees.breakpoints.update
 # --breakpoint shape: {action?: "CAPTURE"|"LOG", canaryExpireTime?: string, condition?: string, createTime?: string, evaluatedExpressions?: list, expressions?: list, finalTime?: string, id?: string, isFinalState?: bool, labels?: record, location?: record, logLevel?: "INFO"|"WARNING"|"ERROR", logMessageFormat?: string, stackFrames?: list, state?: "STATE_UNSPECIFIED"|"STATE_CANARY_PENDING_AGENTS"|"STATE_CANARY_ACTIVE"|"STATE_ROLLING_TO_ALL"|"STATE_IS_FINAL", status?: record, userEmail?: string, variableTable?: list}
 export def "controller-debuggees-breakpoints clouddebuggercontrollerdebuggeesbreakpointsupdate" [
-  debuggeeId: string
+  debuggee_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,18 +197,18 @@ export def "controller-debuggees-breakpoints clouddebuggercontrollerdebuggeesbre
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --breakpoint: record # ------------------------------------------------------------------------------ ## Breakpoint (the resource) Represents the breakpoint specification, status and results. — shape: {action?: "CAPTURE"|"LOG", canaryExpireTime?: string, condition?: string, createTime?: string, evaluatedExpressions?: list, expressions?: list, finalTime?: string, id?: string, isFinalState?: bool, labels?: record, location?: record, logLevel?: "INFO"|"WARNING"|"ERROR", logMessageFormat?: string, stackFrames?: list, state?: "STATE_UNSPECIFIED"|"STATE_CANARY_PENDING_AGENTS"|"STATE_CANARY_ACTIVE"|"STATE_ROLLING_TO_ALL"|"STATE_IS_FINAL", status?: record, userEmail?: string, variableTable?: list}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/controller/debuggees/($debuggeeId)/breakpoints/($id)" $qp)
-  let body = {breakpoint: $breakpoint} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({debuggee_id: $debuggee_id, id: $id} | format pattern "/v2/controller/debuggees/{debuggee_id}/breakpoints/{id}") $qp)
+  let body = {"breakpoint": $breakpoint} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -235,17 +235,17 @@ export def "debugger-debuggees clouddebuggerdebuggerdebuggeeslist" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientVersion: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
-  --includeInactive: oneof<nothing, bool> # When set to `true`, the result includes all debuggees. Otherwise, the result includes only debuggees that are active.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-version: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
+  --include-inactive: oneof<nothing, bool> # When set to `true`, the result includes all debuggees. Otherwise, the result includes only debuggees that are active.
   --project: string # Required. Project number of a Google Cloud project whose debuggees to list.
 ]: nothing -> record<debuggees: table<agentVersion: string, canaryMode: string, description: string, extSourceContexts: list, id: string, isDisabled: bool, isInactive: bool, labels: record, project: string, sourceContexts: list, status: record, uniquifier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientVersion" $clientVersion "scalar") (serialize-qp "includeInactive" $includeInactive "scalar") (serialize-qp "project" $project "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientVersion" $client_version "scalar") (serialize-qp "includeInactive" $include_inactive "scalar") (serialize-qp "project" $project "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/debugger/debuggees" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,7 +257,7 @@ export def "debugger-debuggees clouddebuggerdebuggerdebuggeeslist" [
 # GET /v2/debugger/debuggees/{debuggeeId}/breakpoints
 # operationId: clouddebugger.debugger.debuggees.breakpoints.list
 export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpointslist" [
-  debuggeeId: string
+  debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,21 +273,21 @@ export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpo
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --actionvalue: string@actionvalue-completer # Only breakpoints with the specified action will pass the filter.
-  --clientVersion: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
-  --includeAllUsers: oneof<nothing, bool> # When set to `true`, the response includes the list of breakpoints set by any user. Otherwise, it includes only breakpoints set by the caller.
-  --includeInactive: oneof<nothing, bool> # When set to `true`, the response includes active and inactive breakpoints. Otherwise, it includes only active breakpoints.
-  --stripResults: oneof<nothing, bool> # This field is deprecated. The following fields are always stripped out of the result: `stack_frames`, `evaluated_expressions` and `variable_table`.
-  --waitToken: string # A wait token that, if specified, blocks the call until the breakpoints list has changed, or a server selected timeout has expired. The value should be set from the last response. The error code `google.rpc.Code.ABORTED` (RPC) is returned on wait timeout, which should be called again with the same `wait_token`.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --action-value: string@action-value-completer # Only breakpoints with the specified action will pass the filter.
+  --client-version: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
+  --include-all-users: oneof<nothing, bool> # When set to `true`, the response includes the list of breakpoints set by any user. Otherwise, it includes only breakpoints set by the caller.
+  --include-inactive: oneof<nothing, bool> # When set to `true`, the response includes active and inactive breakpoints. Otherwise, it includes only active breakpoints.
+  --strip-results: oneof<nothing, bool> # This field is deprecated. The following fields are always stripped out of the result: `stack_frames`, `evaluated_expressions` and `variable_table`.
+  --wait-token: string # A wait token that, if specified, blocks the call until the breakpoints list has changed, or a server selected timeout has expired. The value should be set from the last response. The error code `google.rpc.Code.ABORTED` (RPC) is returned on wait timeout, which should be called again with the same `wait_token`.
 ]: nothing -> record<breakpoints: table<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list, expressions: list, finalTime: string, id: string, isFinalState: bool, labels: record, location: record, logLevel: string, logMessageFormat: string, stackFrames: list, state: string, status: record, userEmail: string, variableTable: list>, nextWaitToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "action.value" $actionvalue "scalar") (serialize-qp "clientVersion" $clientVersion "scalar") (serialize-qp "includeAllUsers" $includeAllUsers "scalar") (serialize-qp "includeInactive" $includeInactive "scalar") (serialize-qp "stripResults" $stripResults "scalar") (serialize-qp "waitToken" $waitToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/debugger/debuggees/($debuggeeId)/breakpoints" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "action.value" $action_value "scalar") (serialize-qp "clientVersion" $client_version "scalar") (serialize-qp "includeAllUsers" $include_all_users "scalar") (serialize-qp "includeInactive" $include_inactive "scalar") (serialize-qp "stripResults" $strip_results "scalar") (serialize-qp "waitToken" $wait_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({debuggee_id: $debuggee_id} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,7 +303,7 @@ export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpo
 # --status shape: {description?: record, isError?: bool, refersTo?: "UNSPECIFIED"|"BREAKPOINT_SOURCE_LOCATION"|"BREAKPOINT_CONDITION"|"BREAKPOINT_EXPRESSION"|"BREAKPOINT_AGE"|"BREAKPOINT_CANARY_FAILED"|"VARIABLE_NAME"|"VARIABLE_VALUE"}
 # --variableTable item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
 export def "debugger-debuggees-breakpoints-set clouddebuggerdebuggerdebuggeesbreakpointsset" [
-  debuggeeId: string
+  debuggee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,37 +319,37 @@ export def "debugger-debuggees-breakpoints-set clouddebuggerdebuggerdebuggeesbre
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --canaryOption: string@canaryOption-completer # The canary option set by the user upon setting breakpoint.
-  --clientVersion: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --canary-option: string@canary-option-completer # The canary option set by the user upon setting breakpoint.
+  --client-version: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
   --action: string@action-completer # Action that the agent should perform when the code at the breakpoint location is hit.
-  --canaryExpireTime: string # The deadline for the breakpoint to stay in CANARY_ACTIVE state. The value is meaningless when the breakpoint is not in CANARY_ACTIVE state. (format: google-datetime)
+  --canary-expire-time: string # The deadline for the breakpoint to stay in CANARY_ACTIVE state. The value is meaningless when the breakpoint is not in CANARY_ACTIVE state. (format: google-datetime)
   --condition: string # Condition that triggers the breakpoint. The condition is a compound boolean expression composed using expressions in a programming language at the source location.
-  --createTime: string # Time this breakpoint was created by the server in seconds resolution. (format: google-datetime)
-  --evaluatedExpressions: list # Values of evaluated expressions at breakpoint time. The evaluated expressions appear in exactly the same order they are listed in the `expressions` field. The `name` field holds the original expression text, the `value` or `members` field holds the result of the evaluated expression. If the expression cannot be evaluated, the `status` inside the `Variable` will indicate an error and contain the error text. — item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
+  --create-time: string # Time this breakpoint was created by the server in seconds resolution. (format: google-datetime)
+  --evaluated-expressions: list # Values of evaluated expressions at breakpoint time. The evaluated expressions appear in exactly the same order they are listed in the `expressions` field. The `name` field holds the original expression text, the `value` or `members` field holds the result of the evaluated expression. If the expression cannot be evaluated, the `status` inside the `Variable` will indicate an error and contain the error text. — item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
   --expressions: list # List of read-only expressions to evaluate at the breakpoint location. The expressions are composed using expressions in the programming language at the source location. If the breakpoint action is `LOG`, the evaluated expressions are included in log statements.
-  --finalTime: string # Time this breakpoint was finalized as seen by the server in seconds resolution. (format: google-datetime)
+  --final-time: string # Time this breakpoint was finalized as seen by the server in seconds resolution. (format: google-datetime)
   --id: string # Breakpoint identifier, unique in the scope of the debuggee.
-  --isFinalState: oneof<nothing, bool> # When true, indicates that this is a final result and the breakpoint state will not change from here on.
+  --is-final-state: oneof<nothing, bool> # When true, indicates that this is a final result and the breakpoint state will not change from here on.
   --labels: record # A set of custom breakpoint properties, populated by the agent, to be displayed to the user.
   --location: record # Represents a location in the source code. — shape: {column?: int, line?: int, path?: string}
-  --logLevel: string@logLevel-completer # Indicates the severity of the log. Only relevant when action is `LOG`.
-  --logMessageFormat: string # Only relevant when action is `LOG`. Defines the message to log when the breakpoint hits. The message may include parameter placeholders `$0`, `$1`, etc. These placeholders are replaced with the evaluated value of the appropriate expression. Expressions not referenced in `log_message_format` are not logged. Example: `Message received, id = $0, count = $1` with `expressions` = `[ message.id, message.count ]`.
-  --stackFrames: list # The stack at breakpoint time, where stack_frames[0] represents the most recently entered function. — item shape: {arguments?: list, function?: string, locals?: list, location?: record}
+  --log-level: string@log-level-completer # Indicates the severity of the log. Only relevant when action is `LOG`.
+  --log-message-format: string # Only relevant when action is `LOG`. Defines the message to log when the breakpoint hits. The message may include parameter placeholders `$0`, `$1`, etc. These placeholders are replaced with the evaluated value of the appropriate expression. Expressions not referenced in `log_message_format` are not logged. Example: `Message received, id = $0, count = $1` with `expressions` = `[ message.id, message.count ]`.
+  --stack-frames: list # The stack at breakpoint time, where stack_frames[0] represents the most recently entered function. — item shape: {arguments?: list, function?: string, locals?: list, location?: record}
   --state: string@state-completer # The current state of the breakpoint.
   --status: record # Represents a contextual status message. The message can indicate an error or informational status, and refer to specific parts of the containing object. For example, the `Breakpoint.status` field can indicate an error referring to the `BREAKPOINT_SOURCE_LOCATION` with the message `Location not found`. — shape: {description?: record, isError?: bool, refersTo?: "UNSPECIFIED"|"BREAKPOINT_SOURCE_LOCATION"|"BREAKPOINT_CONDITION"|"BREAKPOINT_EXPRESSION"|"BREAKPOINT_AGE"|"BREAKPOINT_CANARY_FAILED"|"VARIABLE_NAME"|"VARIABLE_VALUE"}
-  --userEmail: string # E-mail address of the user that created this breakpoint
-  --variableTable: list # The `variable_table` exists to aid with computation, memory and network traffic optimization. It enables storing a variable once and reference it from multiple variables, including variables stored in the `variable_table` itself. For example, the same `this` object, which may appear at many levels of the stack, can have all of its data stored once in this table. The stack frame variables then would hold only a reference to it. The variable `var_table_index` field is an index into this repeated field. The stored objects are nameless and get their name from the referencing variable. The effective variable is a merge of the referencing variable and the referenced variable. — item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
+  --user-email: string # E-mail address of the user that created this breakpoint
+  --variable-table: list # The `variable_table` exists to aid with computation, memory and network traffic optimization. It enables storing a variable once and reference it from multiple variables, including variables stored in the `variable_table` itself. For example, the same `this` object, which may appear at many levels of the stack, can have all of its data stored once in this table. The stack frame variables then would hold only a reference to it. The variable `var_table_index` field is an index into this repeated field. The stored objects are nameless and get their name from the referencing variable. The effective variable is a merge of the referencing variable and the referenced variable. — item shape: {members?: list, name?: string, status?: record, type?: string, value?: string, varTableIndex?: int}
 ]: any -> record<breakpoint: record<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list<record>, expressions: list<string>, finalTime: string, id: string, isFinalState: bool, labels: record, location: record<column: int, line: int, path: string>, logLevel: string, logMessageFormat: string, stackFrames: list<record>, state: string, status: record<description: record, isError: bool, refersTo: string>, userEmail: string, variableTable: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "canaryOption" $canaryOption "scalar") (serialize-qp "clientVersion" $clientVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/debugger/debuggees/($debuggeeId)/breakpoints/set" $qp)
-  let body = {action: $action, canaryExpireTime: $canaryExpireTime, condition: $condition, createTime: $createTime, evaluatedExpressions: $evaluatedExpressions, expressions: $expressions, finalTime: $finalTime, id: $id, isFinalState: $isFinalState, labels: $labels, location: $location, logLevel: $logLevel, logMessageFormat: $logMessageFormat, stackFrames: $stackFrames, state: $state, status: $status, userEmail: $userEmail, variableTable: $variableTable} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "canaryOption" $canary_option "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({debuggee_id: $debuggee_id} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints/set") $qp)
+  let body = {"action": $action, "canaryExpireTime": $canary_expire_time, "condition": $condition, "createTime": $create_time, "evaluatedExpressions": $evaluated_expressions, "expressions": $expressions, "finalTime": $final_time, "id": $id, "isFinalState": $is_final_state, "labels": $labels, "location": $location, "logLevel": $log_level, "logMessageFormat": $log_message_format, "stackFrames": $stack_frames, "state": $state, "status": $status, "userEmail": $user_email, "variableTable": $variable_table} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -361,8 +361,8 @@ export def "debugger-debuggees-breakpoints-set clouddebuggerdebuggerdebuggeesbre
 # DELETE /v2/debugger/debuggees/{debuggeeId}/breakpoints/{breakpointId}
 # operationId: clouddebugger.debugger.debuggees.breakpoints.delete
 export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpointsdelete" [
-  debuggeeId: string
-  breakpointId: string
+  debuggee_id: string
+  breakpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,16 +378,16 @@ export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpo
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientVersion: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-version: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientVersion" $clientVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/debugger/debuggees/($debuggeeId)/breakpoints/($breakpointId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({debuggee_id: $debuggee_id, breakpoint_id: $breakpoint_id} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints/{breakpoint_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -398,8 +398,8 @@ export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpo
 # GET /v2/debugger/debuggees/{debuggeeId}/breakpoints/{breakpointId}
 # operationId: clouddebugger.debugger.debuggees.breakpoints.get
 export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpointsget" [
-  debuggeeId: string
-  breakpointId: string
+  debuggee_id: string
+  breakpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,16 +415,16 @@ export def "debugger-debuggees-breakpoints clouddebuggerdebuggerdebuggeesbreakpo
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --clientVersion: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --client-version: string # Required. The client version making the call. Schema: `domain/type/version` (e.g., `google.com/intellij/v1`).
 ]: nothing -> record<breakpoint: record<action: string, canaryExpireTime: string, condition: string, createTime: string, evaluatedExpressions: list<record>, expressions: list<string>, finalTime: string, id: string, isFinalState: bool, labels: record, location: record<column: int, line: int, path: string>, logLevel: string, logMessageFormat: string, stackFrames: list<record>, state: string, status: record<description: record, isError: bool, refersTo: string>, userEmail: string, variableTable: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "clientVersion" $clientVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/debugger/debuggees/($debuggeeId)/breakpoints/($breakpointId)" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientVersion" $client_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({debuggee_id: $debuggee_id, breakpoint_id: $breakpoint_id} | format pattern "/v2/debugger/debuggees/{debuggee_id}/breakpoints/{breakpoint_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

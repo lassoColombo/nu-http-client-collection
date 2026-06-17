@@ -188,7 +188,7 @@ export def "x-open-banking-v22-business-current-accounts-segment get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/x-open-banking/v2.2/business-current-accounts/segment/($segment)")
+  let full_url = (build-url $base ({segment: $segment} | format pattern "/x-open-banking/v2.2/business-current-accounts/segment/{segment}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -210,7 +210,7 @@ export def "x-open-banking-v22-commercial-credit-cards-segment get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/x-open-banking/v2.2/commercial-credit-cards/segment/($segment)")
+  let full_url = (build-url $base ({segment: $segment} | format pattern "/x-open-banking/v2.2/commercial-credit-cards/segment/{segment}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,7 +232,7 @@ export def "x-open-banking-v22-personal-current-accounts-segment get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/x-open-banking/v2.2/personal-current-accounts/segment/($segment)")
+  let full_url = (build-url $base ({segment: $segment} | format pattern "/x-open-banking/v2.2/personal-current-accounts/segment/{segment}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,7 +254,7 @@ export def "x-open-banking-v22-unsecured-sme-loans-segment get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/x-open-banking/v2.2/unsecured-sme-loans/segment/($segment)")
+  let full_url = (build-url $base ({segment: $segment} | format pattern "/x-open-banking/v2.2/unsecured-sme-loans/segment/{segment}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

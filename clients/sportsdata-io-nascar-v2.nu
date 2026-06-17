@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "driver-race-projections DriverRaceProjectionsEntryList" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "driver-race-projections list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/DriverRaceProjections/{raceid}
 # operationId: DriverRaceProjectionsEntryList
-export def "driver-race-projections DriverRaceProjectionsEntryList" [
+export def "driver-race-projections list" [
   format: string
   raceid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -108,7 +108,7 @@ export def "driver-race-projections DriverRaceProjectionsEntryList" [
 ]: nothing -> table<Bonus: float, Created: string, CurrentPosition: float, DateTime: string, Day: string, DraftKingsSalary: int, DriverID: int, FantasyPoints: float, FantasyPointsDraftKings: float, FastestLaps: float, FinalPosition: float, Laps: float, LapsLed: float, Manufacturer: string, Name: string, Number: int, NumberDisplay: string, Penalty: float, Points: float, PoleFinalPosition: float, Poles: float, PositionDifferential: float, QualifyingSpeed: float, RaceID: int, Season: int, StartPosition: float, StatID: int, Updated: string, Wins: float> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/DriverRaceProjections/($raceid)")
+  let full_url = (build-url $base ({format: $format, raceid: $raceid} | format pattern "/{format}/DriverRaceProjections/{raceid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +118,7 @@ export def "driver-race-projections DriverRaceProjectionsEntryList" [
 #
 # GET /{format}/driver/{driverid}
 # operationId: DriverDetails
-export def "driver DriverDetails" [
+export def "driver get" [
   format: string
   driverid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -132,7 +132,7 @@ export def "driver DriverDetails" [
 ]: nothing -> record<BirthDate: string, BirthPlace: string, Chassis: string, Created: string, CrewChief: string, DriverID: int, Engine: string, FirstName: string, Gender: string, Height: int, LastName: string, Manufacturer: string, Number: int, NumberDisplay: string, PhotoUrl: string, Sponsors: string, Team: string, Updated: string, Weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/driver/($driverid)")
+  let full_url = (build-url $base ({format: $format, driverid: $driverid} | format pattern "/{format}/driver/{driverid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +142,7 @@ export def "driver DriverDetails" [
 #
 # GET /{format}/drivers
 # operationId: Drivers
-export def "drivers Drivers" [
+export def "drivers get" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -155,7 +155,7 @@ export def "drivers Drivers" [
 ]: nothing -> table<BirthDate: string, BirthPlace: string, Chassis: string, Created: string, CrewChief: string, DriverID: int, Engine: string, FirstName: string, Gender: string, Height: int, LastName: string, Manufacturer: string, Number: int, NumberDisplay: string, PhotoUrl: string, Sponsors: string, Team: string, Updated: string, Weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/drivers")
+  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/drivers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -165,7 +165,7 @@ export def "drivers Drivers" [
 #
 # GET /{format}/raceresult/{raceid}
 # operationId: RaceResults
-export def "raceresult RaceResults" [
+export def "raceresult get" [
   format: string
   raceid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -179,7 +179,7 @@ export def "raceresult RaceResults" [
 ]: nothing -> record<DriverRaces: table<Bonus: float, Created: string, CurrentPosition: float, DateTime: string, Day: string, DraftKingsSalary: int, DriverID: int, FantasyPoints: float, FantasyPointsDraftKings: float, FastestLaps: float, FinalPosition: float, Laps: float, LapsLed: float, Manufacturer: string, Name: string, Number: int, NumberDisplay: string, Penalty: float, Points: float, PoleFinalPosition: float, Poles: float, PositionDifferential: float, QualifyingSpeed: float, RaceID: int, Season: int, StartPosition: float, StatID: int, Updated: string, Wins: float>, Race: record<ActualLaps: int, Broadcast: string, Canceled: bool, Created: string, DateTime: string, Day: string, IsInProgress: bool, IsOver: bool, Name: string, PoleWinnerID: int, RaceID: int, RescheduledDateTime: string, RescheduledDay: string, ScheduledLaps: int, Season: int, SeriesID: int, SeriesName: string, Track: string, Updated: string, WinnerID: int>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/raceresult/($raceid)")
+  let full_url = (build-url $base ({format: $format, raceid: $raceid} | format pattern "/{format}/raceresult/{raceid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,7 +189,7 @@ export def "raceresult RaceResults" [
 #
 # GET /{format}/races/{season}
 # operationId: RacesSchedule
-export def "races RacesSchedule" [
+export def "races get" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -203,7 +203,7 @@ export def "races RacesSchedule" [
 ]: nothing -> table<ActualLaps: int, Broadcast: string, Canceled: bool, Created: string, DateTime: string, Day: string, IsInProgress: bool, IsOver: bool, Name: string, PoleWinnerID: int, RaceID: int, RescheduledDateTime: string, RescheduledDay: string, ScheduledLaps: int, Season: int, SeriesID: int, SeriesName: string, Track: string, Updated: string, WinnerID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/races/($season)")
+  let full_url = (build-url $base ({format: $format, season: $season} | format pattern "/{format}/races/{season}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -213,7 +213,7 @@ export def "races RacesSchedule" [
 #
 # GET /{format}/series
 # operationId: Series
-export def "series Series" [
+export def "series get" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "series Series" [
 ]: nothing -> table<Name: string, SeriesID: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/series")
+  let full_url = (build-url $base ({format: $format} | format pattern "/{format}/series"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -66,34 +66,34 @@ def base-url-completer [] { ["http://cognito-identity.us-east-1.amazonaws.com" "
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSCognitoIdentityService.CreateIdentityPool"] }
-def X-Amz-Target-completer-1 [] { ["AWSCognitoIdentityService.DeleteIdentities"] }
-def X-Amz-Target-completer-2 [] { ["AWSCognitoIdentityService.DeleteIdentityPool"] }
-def X-Amz-Target-completer-3 [] { ["AWSCognitoIdentityService.DescribeIdentity"] }
-def X-Amz-Target-completer-4 [] { ["AWSCognitoIdentityService.DescribeIdentityPool"] }
-def X-Amz-Target-completer-5 [] { ["AWSCognitoIdentityService.GetCredentialsForIdentity"] }
-def X-Amz-Target-completer-6 [] { ["AWSCognitoIdentityService.GetId"] }
-def X-Amz-Target-completer-7 [] { ["AWSCognitoIdentityService.GetIdentityPoolRoles"] }
-def X-Amz-Target-completer-8 [] { ["AWSCognitoIdentityService.GetOpenIdToken"] }
-def X-Amz-Target-completer-9 [] { ["AWSCognitoIdentityService.GetOpenIdTokenForDeveloperIdentity"] }
-def X-Amz-Target-completer-10 [] { ["AWSCognitoIdentityService.GetPrincipalTagAttributeMap"] }
-def X-Amz-Target-completer-11 [] { ["AWSCognitoIdentityService.ListIdentities"] }
-def X-Amz-Target-completer-12 [] { ["AWSCognitoIdentityService.ListIdentityPools"] }
-def X-Amz-Target-completer-13 [] { ["AWSCognitoIdentityService.ListTagsForResource"] }
-def X-Amz-Target-completer-14 [] { ["AWSCognitoIdentityService.LookupDeveloperIdentity"] }
-def X-Amz-Target-completer-15 [] { ["AWSCognitoIdentityService.MergeDeveloperIdentities"] }
-def X-Amz-Target-completer-16 [] { ["AWSCognitoIdentityService.SetIdentityPoolRoles"] }
-def X-Amz-Target-completer-17 [] { ["AWSCognitoIdentityService.SetPrincipalTagAttributeMap"] }
-def X-Amz-Target-completer-18 [] { ["AWSCognitoIdentityService.TagResource"] }
-def X-Amz-Target-completer-19 [] { ["AWSCognitoIdentityService.UnlinkDeveloperIdentity"] }
-def X-Amz-Target-completer-20 [] { ["AWSCognitoIdentityService.UnlinkIdentity"] }
-def X-Amz-Target-completer-21 [] { ["AWSCognitoIdentityService.UntagResource"] }
-def X-Amz-Target-completer-22 [] { ["AWSCognitoIdentityService.UpdateIdentityPool"] }
+def x-amz-target-completer [] { ["AWSCognitoIdentityService.CreateIdentityPool"] }
+def x-amz-target-completer-1 [] { ["AWSCognitoIdentityService.DeleteIdentities"] }
+def x-amz-target-completer-2 [] { ["AWSCognitoIdentityService.DeleteIdentityPool"] }
+def x-amz-target-completer-3 [] { ["AWSCognitoIdentityService.DescribeIdentity"] }
+def x-amz-target-completer-4 [] { ["AWSCognitoIdentityService.DescribeIdentityPool"] }
+def x-amz-target-completer-5 [] { ["AWSCognitoIdentityService.GetCredentialsForIdentity"] }
+def x-amz-target-completer-6 [] { ["AWSCognitoIdentityService.GetId"] }
+def x-amz-target-completer-7 [] { ["AWSCognitoIdentityService.GetIdentityPoolRoles"] }
+def x-amz-target-completer-8 [] { ["AWSCognitoIdentityService.GetOpenIdToken"] }
+def x-amz-target-completer-9 [] { ["AWSCognitoIdentityService.GetOpenIdTokenForDeveloperIdentity"] }
+def x-amz-target-completer-10 [] { ["AWSCognitoIdentityService.GetPrincipalTagAttributeMap"] }
+def x-amz-target-completer-11 [] { ["AWSCognitoIdentityService.ListIdentities"] }
+def x-amz-target-completer-12 [] { ["AWSCognitoIdentityService.ListIdentityPools"] }
+def x-amz-target-completer-13 [] { ["AWSCognitoIdentityService.ListTagsForResource"] }
+def x-amz-target-completer-14 [] { ["AWSCognitoIdentityService.LookupDeveloperIdentity"] }
+def x-amz-target-completer-15 [] { ["AWSCognitoIdentityService.MergeDeveloperIdentities"] }
+def x-amz-target-completer-16 [] { ["AWSCognitoIdentityService.SetIdentityPoolRoles"] }
+def x-amz-target-completer-17 [] { ["AWSCognitoIdentityService.SetPrincipalTagAttributeMap"] }
+def x-amz-target-completer-18 [] { ["AWSCognitoIdentityService.TagResource"] }
+def x-amz-target-completer-19 [] { ["AWSCognitoIdentityService.UnlinkDeveloperIdentity"] }
+def x-amz-target-completer-20 [] { ["AWSCognitoIdentityService.UnlinkIdentity"] }
+def x-amz-target-completer-21 [] { ["AWSCognitoIdentityService.UntagResource"] }
+def x-amz-target-completer-22 [] { ["AWSCognitoIdentityService.UpdateIdentityPool"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-cognito-identity-service-create-identity-pool CreateIdentityPool" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-cognito-identity-service-create-identity-pool create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -117,7 +117,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.CreateIdentityPool
 # operationId: CreateIdentityPool
-export def "x-amz-target-aws-cognito-identity-service-create-identity-pool CreateIdentityPool" [
+export def "x-amz-target-aws-cognito-identity-service-create-identity-pool create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,31 +126,31 @@ export def "x-amz-target-aws-cognito-identity-service-create-identity-pool Creat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  IdentityPoolName: any
-  AllowUnauthenticatedIdentities: any
-  --AllowClassicFlow: any
-  --SupportedLoginProviders: any
-  --DeveloperProviderName: any
-  --OpenIdConnectProviderARNs: any
-  --CognitoIdentityProviders: any
-  --SamlProviderARNs: any
-  --IdentityPoolTags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  identity_pool_name: any
+  allow_unauthenticated_identities: any
+  --allow-classic-flow: any
+  --supported-login-providers: any
+  --developer-provider-name: any
+  --open-id-connect-provider-ar-ns: any
+  --cognito-identity-providers: any
+  --saml-provider-ar-ns: any
+  --identity-pool-tags: any
 ]: any -> record<IdentityPoolId: record, IdentityPoolName: record, AllowUnauthenticatedIdentities: record, AllowClassicFlow: record, SupportedLoginProviders: record, DeveloperProviderName: record, OpenIdConnectProviderARNs: record, CognitoIdentityProviders: record, SamlProviderARNs: record, IdentityPoolTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.CreateIdentityPool")
-  let body = {IdentityPoolName: $IdentityPoolName, AllowUnauthenticatedIdentities: $AllowUnauthenticatedIdentities, AllowClassicFlow: $AllowClassicFlow, SupportedLoginProviders: $SupportedLoginProviders, DeveloperProviderName: $DeveloperProviderName, OpenIdConnectProviderARNs: $OpenIdConnectProviderARNs, CognitoIdentityProviders: $CognitoIdentityProviders, SamlProviderARNs: $SamlProviderARNs, IdentityPoolTags: $IdentityPoolTags} | compact
+  let body = {"IdentityPoolName": $identity_pool_name, "AllowUnauthenticatedIdentities": $allow_unauthenticated_identities, "AllowClassicFlow": $allow_classic_flow, "SupportedLoginProviders": $supported_login_providers, "DeveloperProviderName": $developer_provider_name, "OpenIdConnectProviderARNs": $open_id_connect_provider_ar_ns, "CognitoIdentityProviders": $cognito_identity_providers, "SamlProviderARNs": $saml_provider_ar_ns, "IdentityPoolTags": $identity_pool_tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -161,7 +161,7 @@ export def "x-amz-target-aws-cognito-identity-service-create-identity-pool Creat
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.DeleteIdentities
 # operationId: DeleteIdentities
-export def "x-amz-target-aws-cognito-identity-service-delete-identities DeleteIdentities" [
+export def "x-amz-target-aws-cognito-identity-service-delete-identities delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,23 +170,23 @@ export def "x-amz-target-aws-cognito-identity-service-delete-identities DeleteId
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  IdentityIdsToDelete: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  identity_ids_to_delete: any
 ]: any -> record<UnprocessedIdentityIds: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.DeleteIdentities")
-  let body = {IdentityIdsToDelete: $IdentityIdsToDelete} | compact
+  let body = {"IdentityIdsToDelete": $identity_ids_to_delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -197,7 +197,7 @@ export def "x-amz-target-aws-cognito-identity-service-delete-identities DeleteId
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.DeleteIdentityPool
 # operationId: DeleteIdentityPool
-export def "x-amz-target-aws-cognito-identity-service-delete-identity-pool DeleteIdentityPool" [
+export def "x-amz-target-aws-cognito-identity-service-delete-identity-pool delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,23 +206,23 @@ export def "x-amz-target-aws-cognito-identity-service-delete-identity-pool Delet
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  IdentityPoolId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  identity_pool_id: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.DeleteIdentityPool")
-  let body = {IdentityPoolId: $IdentityPoolId} | compact
+  let body = {"IdentityPoolId": $identity_pool_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -233,7 +233,7 @@ export def "x-amz-target-aws-cognito-identity-service-delete-identity-pool Delet
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.DescribeIdentity
 # operationId: DescribeIdentity
-export def "x-amz-target-aws-cognito-identity-service-describe-identity DescribeIdentity" [
+export def "x-amz-target-aws-cognito-identity-service-describe-identity post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,23 +242,23 @@ export def "x-amz-target-aws-cognito-identity-service-describe-identity Describe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  IdentityId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  identity_id: any
 ]: any -> record<IdentityId: record, Logins: record, CreationDate: record, LastModifiedDate: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.DescribeIdentity")
-  let body = {IdentityId: $IdentityId} | compact
+  let body = {"IdentityId": $identity_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -269,7 +269,7 @@ export def "x-amz-target-aws-cognito-identity-service-describe-identity Describe
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.DescribeIdentityPool
 # operationId: DescribeIdentityPool
-export def "x-amz-target-aws-cognito-identity-service-describe-identity-pool DescribeIdentityPool" [
+export def "x-amz-target-aws-cognito-identity-service-describe-identity-pool post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,23 +278,23 @@ export def "x-amz-target-aws-cognito-identity-service-describe-identity-pool Des
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  IdentityPoolId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  identity_pool_id: any
 ]: any -> record<IdentityPoolId: record, IdentityPoolName: record, AllowUnauthenticatedIdentities: record, AllowClassicFlow: record, SupportedLoginProviders: record, DeveloperProviderName: record, OpenIdConnectProviderARNs: record, CognitoIdentityProviders: record, SamlProviderARNs: record, IdentityPoolTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.DescribeIdentityPool")
-  let body = {IdentityPoolId: $IdentityPoolId} | compact
+  let body = {"IdentityPoolId": $identity_pool_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -305,7 +305,7 @@ export def "x-amz-target-aws-cognito-identity-service-describe-identity-pool Des
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.GetCredentialsForIdentity
 # operationId: GetCredentialsForIdentity
-export def "x-amz-target-aws-cognito-identity-service-get-credentials-for-identity GetCredentialsForIdentity" [
+export def "x-amz-target-aws-cognito-identity-service-get-credentials-for-identity get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,25 +314,25 @@ export def "x-amz-target-aws-cognito-identity-service-get-credentials-for-identi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  IdentityId: any
-  --Logins: any
-  --CustomRoleArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  identity_id: any
+  --logins: any
+  --custom-role-arn: any
 ]: any -> record<IdentityId: record, Credentials: record<AccessKeyId: record, SecretKey: record, SessionToken: record, Expiration: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.GetCredentialsForIdentity")
-  let body = {IdentityId: $IdentityId, Logins: $Logins, CustomRoleArn: $CustomRoleArn} | compact
+  let body = {"IdentityId": $identity_id, "Logins": $logins, "CustomRoleArn": $custom_role_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -343,7 +343,7 @@ export def "x-amz-target-aws-cognito-identity-service-get-credentials-for-identi
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.GetId
 # operationId: GetId
-export def "x-amz-target-aws-cognito-identity-service-get-id GetId" [
+export def "x-amz-target-aws-cognito-identity-service-get-id get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,25 +352,25 @@ export def "x-amz-target-aws-cognito-identity-service-get-id GetId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --AccountId: any
-  IdentityPoolId: any
-  --Logins: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --account-id: any
+  identity_pool_id: any
+  --logins: any
 ]: any -> record<IdentityId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.GetId")
-  let body = {AccountId: $AccountId, IdentityPoolId: $IdentityPoolId, Logins: $Logins} | compact
+  let body = {"AccountId": $account_id, "IdentityPoolId": $identity_pool_id, "Logins": $logins} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,7 +381,7 @@ export def "x-amz-target-aws-cognito-identity-service-get-id GetId" [
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.GetIdentityPoolRoles
 # operationId: GetIdentityPoolRoles
-export def "x-amz-target-aws-cognito-identity-service-get-identity-pool-roles GetIdentityPoolRoles" [
+export def "x-amz-target-aws-cognito-identity-service-get-identity-pool-roles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,23 +390,23 @@ export def "x-amz-target-aws-cognito-identity-service-get-identity-pool-roles Ge
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  IdentityPoolId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  identity_pool_id: any
 ]: any -> record<IdentityPoolId: record, Roles: record, RoleMappings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.GetIdentityPoolRoles")
-  let body = {IdentityPoolId: $IdentityPoolId} | compact
+  let body = {"IdentityPoolId": $identity_pool_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -417,7 +417,7 @@ export def "x-amz-target-aws-cognito-identity-service-get-identity-pool-roles Ge
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.GetOpenIdToken
 # operationId: GetOpenIdToken
-export def "x-amz-target-aws-cognito-identity-service-get-open-id-token GetOpenIdToken" [
+export def "x-amz-target-aws-cognito-identity-service-get-open-id-token get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,24 +426,24 @@ export def "x-amz-target-aws-cognito-identity-service-get-open-id-token GetOpenI
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  IdentityId: any
-  --Logins: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  identity_id: any
+  --logins: any
 ]: any -> record<IdentityId: record, Token: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.GetOpenIdToken")
-  let body = {IdentityId: $IdentityId, Logins: $Logins} | compact
+  let body = {"IdentityId": $identity_id, "Logins": $logins} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -454,7 +454,7 @@ export def "x-amz-target-aws-cognito-identity-service-get-open-id-token GetOpenI
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.GetOpenIdTokenForDeveloperIdentity
 # operationId: GetOpenIdTokenForDeveloperIdentity
-export def "x-amz-target-aws-cognito-identity-service-get-open-id-token-for-developer-identity GetOpenIdTokenForDeveloperIdentity" [
+export def "x-amz-target-aws-cognito-identity-service-get-open-id-token-for-developer-identity get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,27 +463,27 @@ export def "x-amz-target-aws-cognito-identity-service-get-open-id-token-for-deve
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  IdentityPoolId: any
-  --IdentityId: any
-  Logins: any
-  --PrincipalTags: any
-  --TokenDuration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  identity_pool_id: any
+  --identity-id: any
+  logins: any
+  --principal-tags: any
+  --token-duration: any
 ]: any -> record<IdentityId: record, Token: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.GetOpenIdTokenForDeveloperIdentity")
-  let body = {IdentityPoolId: $IdentityPoolId, IdentityId: $IdentityId, Logins: $Logins, PrincipalTags: $PrincipalTags, TokenDuration: $TokenDuration} | compact
+  let body = {"IdentityPoolId": $identity_pool_id, "IdentityId": $identity_id, "Logins": $logins, "PrincipalTags": $principal_tags, "TokenDuration": $token_duration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -494,7 +494,7 @@ export def "x-amz-target-aws-cognito-identity-service-get-open-id-token-for-deve
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.GetPrincipalTagAttributeMap
 # operationId: GetPrincipalTagAttributeMap
-export def "x-amz-target-aws-cognito-identity-service-get-principal-tag-attribute-map GetPrincipalTagAttributeMap" [
+export def "x-amz-target-aws-cognito-identity-service-get-principal-tag-attribute-map get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,24 +503,24 @@ export def "x-amz-target-aws-cognito-identity-service-get-principal-tag-attribut
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  IdentityPoolId: any
-  IdentityProviderName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  identity_pool_id: any
+  identity_provider_name: any
 ]: any -> record<IdentityPoolId: record, IdentityProviderName: record, UseDefaults: record, PrincipalTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.GetPrincipalTagAttributeMap")
-  let body = {IdentityPoolId: $IdentityPoolId, IdentityProviderName: $IdentityProviderName} | compact
+  let body = {"IdentityPoolId": $identity_pool_id, "IdentityProviderName": $identity_provider_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -531,7 +531,7 @@ export def "x-amz-target-aws-cognito-identity-service-get-principal-tag-attribut
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.ListIdentities
 # operationId: ListIdentities
-export def "x-amz-target-aws-cognito-identity-service-list-identities ListIdentities" [
+export def "x-amz-target-aws-cognito-identity-service-list-identities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,26 +540,26 @@ export def "x-amz-target-aws-cognito-identity-service-list-identities ListIdenti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  IdentityPoolId: any
-  MaxResults: any
-  --NextToken: any
-  --HideDisabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  identity_pool_id: any
+  max_results: any
+  --next-token: any
+  --hide-disabled: any
 ]: any -> record<IdentityPoolId: record, Identities: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.ListIdentities")
-  let body = {IdentityPoolId: $IdentityPoolId, MaxResults: $MaxResults, NextToken: $NextToken, HideDisabled: $HideDisabled} | compact
+  let body = {"IdentityPoolId": $identity_pool_id, "MaxResults": $max_results, "NextToken": $next_token, "HideDisabled": $hide_disabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -570,7 +570,7 @@ export def "x-amz-target-aws-cognito-identity-service-list-identities ListIdenti
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.ListIdentityPools
 # operationId: ListIdentityPools
-export def "x-amz-target-aws-cognito-identity-service-list-identity-pools ListIdentityPools" [
+export def "x-amz-target-aws-cognito-identity-service-list-identity-pools list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,27 +579,27 @@ export def "x-amz-target-aws-cognito-identity-service-list-identity-pools ListId
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  max_results: any
+  --next-token: any
 ]: any -> record<IdentityPools: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.ListIdentityPools" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -610,7 +610,7 @@ export def "x-amz-target-aws-cognito-identity-service-list-identity-pools ListId
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-aws-cognito-identity-service-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-aws-cognito-identity-service-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,23 +619,23 @@ export def "x-amz-target-aws-cognito-identity-service-list-tags-for-resource Lis
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  ResourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  resource_arn: any
 ]: any -> record<Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.ListTagsForResource")
-  let body = {ResourceArn: $ResourceArn} | compact
+  let body = {"ResourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -646,7 +646,7 @@ export def "x-amz-target-aws-cognito-identity-service-list-tags-for-resource Lis
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.LookupDeveloperIdentity
 # operationId: LookupDeveloperIdentity
-export def "x-amz-target-aws-cognito-identity-service-lookup-developer-identity LookupDeveloperIdentity" [
+export def "x-amz-target-aws-cognito-identity-service-lookup-developer-identity post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,27 +655,27 @@ export def "x-amz-target-aws-cognito-identity-service-lookup-developer-identity 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  IdentityPoolId: any
-  --IdentityId: any
-  --DeveloperUserIdentifier: any
-  --MaxResults: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  identity_pool_id: any
+  --identity-id: any
+  --developer-user-identifier: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<IdentityId: record, DeveloperUserIdentifierList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.LookupDeveloperIdentity")
-  let body = {IdentityPoolId: $IdentityPoolId, IdentityId: $IdentityId, DeveloperUserIdentifier: $DeveloperUserIdentifier, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"IdentityPoolId": $identity_pool_id, "IdentityId": $identity_id, "DeveloperUserIdentifier": $developer_user_identifier, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -686,7 +686,7 @@ export def "x-amz-target-aws-cognito-identity-service-lookup-developer-identity 
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.MergeDeveloperIdentities
 # operationId: MergeDeveloperIdentities
-export def "x-amz-target-aws-cognito-identity-service-merge-developer-identities MergeDeveloperIdentities" [
+export def "x-amz-target-aws-cognito-identity-service-merge-developer-identities post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,26 +695,26 @@ export def "x-amz-target-aws-cognito-identity-service-merge-developer-identities
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  SourceUserIdentifier: any
-  DestinationUserIdentifier: any
-  DeveloperProviderName: any
-  IdentityPoolId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  source_user_identifier: any
+  destination_user_identifier: any
+  developer_provider_name: any
+  identity_pool_id: any
 ]: any -> record<IdentityId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.MergeDeveloperIdentities")
-  let body = {SourceUserIdentifier: $SourceUserIdentifier, DestinationUserIdentifier: $DestinationUserIdentifier, DeveloperProviderName: $DeveloperProviderName, IdentityPoolId: $IdentityPoolId} | compact
+  let body = {"SourceUserIdentifier": $source_user_identifier, "DestinationUserIdentifier": $destination_user_identifier, "DeveloperProviderName": $developer_provider_name, "IdentityPoolId": $identity_pool_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -725,7 +725,7 @@ export def "x-amz-target-aws-cognito-identity-service-merge-developer-identities
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.SetIdentityPoolRoles
 # operationId: SetIdentityPoolRoles
-export def "x-amz-target-aws-cognito-identity-service-set-identity-pool-roles SetIdentityPoolRoles" [
+export def "x-amz-target-aws-cognito-identity-service-set-identity-pool-roles post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,25 +734,25 @@ export def "x-amz-target-aws-cognito-identity-service-set-identity-pool-roles Se
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  IdentityPoolId: any
-  Roles: any
-  --RoleMappings: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  identity_pool_id: any
+  roles: any
+  --role-mappings: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.SetIdentityPoolRoles")
-  let body = {IdentityPoolId: $IdentityPoolId, Roles: $Roles, RoleMappings: $RoleMappings} | compact
+  let body = {"IdentityPoolId": $identity_pool_id, "Roles": $roles, "RoleMappings": $role_mappings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -763,7 +763,7 @@ export def "x-amz-target-aws-cognito-identity-service-set-identity-pool-roles Se
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.SetPrincipalTagAttributeMap
 # operationId: SetPrincipalTagAttributeMap
-export def "x-amz-target-aws-cognito-identity-service-set-principal-tag-attribute-map SetPrincipalTagAttributeMap" [
+export def "x-amz-target-aws-cognito-identity-service-set-principal-tag-attribute-map post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,26 +772,26 @@ export def "x-amz-target-aws-cognito-identity-service-set-principal-tag-attribut
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  IdentityPoolId: any
-  IdentityProviderName: any
-  --UseDefaults: any
-  --PrincipalTags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  identity_pool_id: any
+  identity_provider_name: any
+  --use-defaults: any
+  --principal-tags: any
 ]: any -> record<IdentityPoolId: record, IdentityProviderName: record, UseDefaults: record, PrincipalTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.SetPrincipalTagAttributeMap")
-  let body = {IdentityPoolId: $IdentityPoolId, IdentityProviderName: $IdentityProviderName, UseDefaults: $UseDefaults, PrincipalTags: $PrincipalTags} | compact
+  let body = {"IdentityPoolId": $identity_pool_id, "IdentityProviderName": $identity_provider_name, "UseDefaults": $use_defaults, "PrincipalTags": $principal_tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -802,7 +802,7 @@ export def "x-amz-target-aws-cognito-identity-service-set-principal-tag-attribut
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.TagResource
 # operationId: TagResource
-export def "x-amz-target-aws-cognito-identity-service-tag-resource TagResource" [
+export def "x-amz-target-aws-cognito-identity-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,24 +811,24 @@ export def "x-amz-target-aws-cognito-identity-service-tag-resource TagResource" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -839,7 +839,7 @@ export def "x-amz-target-aws-cognito-identity-service-tag-resource TagResource" 
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.UnlinkDeveloperIdentity
 # operationId: UnlinkDeveloperIdentity
-export def "x-amz-target-aws-cognito-identity-service-unlink-developer-identity UnlinkDeveloperIdentity" [
+export def "x-amz-target-aws-cognito-identity-service-unlink-developer-identity post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -848,26 +848,26 @@ export def "x-amz-target-aws-cognito-identity-service-unlink-developer-identity 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  IdentityId: any
-  IdentityPoolId: any
-  DeveloperProviderName: any
-  DeveloperUserIdentifier: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  identity_id: any
+  identity_pool_id: any
+  developer_provider_name: any
+  developer_user_identifier: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.UnlinkDeveloperIdentity")
-  let body = {IdentityId: $IdentityId, IdentityPoolId: $IdentityPoolId, DeveloperProviderName: $DeveloperProviderName, DeveloperUserIdentifier: $DeveloperUserIdentifier} | compact
+  let body = {"IdentityId": $identity_id, "IdentityPoolId": $identity_pool_id, "DeveloperProviderName": $developer_provider_name, "DeveloperUserIdentifier": $developer_user_identifier} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -878,7 +878,7 @@ export def "x-amz-target-aws-cognito-identity-service-unlink-developer-identity 
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.UnlinkIdentity
 # operationId: UnlinkIdentity
-export def "x-amz-target-aws-cognito-identity-service-unlink-identity UnlinkIdentity" [
+export def "x-amz-target-aws-cognito-identity-service-unlink-identity post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,25 +887,25 @@ export def "x-amz-target-aws-cognito-identity-service-unlink-identity UnlinkIden
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  IdentityId: any
-  Logins: any
-  LoginsToRemove: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  identity_id: any
+  logins: any
+  logins_to_remove: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.UnlinkIdentity")
-  let body = {IdentityId: $IdentityId, Logins: $Logins, LoginsToRemove: $LoginsToRemove} | compact
+  let body = {"IdentityId": $identity_id, "Logins": $logins, "LoginsToRemove": $logins_to_remove} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -916,7 +916,7 @@ export def "x-amz-target-aws-cognito-identity-service-unlink-identity UnlinkIden
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-aws-cognito-identity-service-untag-resource UntagResource" [
+export def "x-amz-target-aws-cognito-identity-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,24 +925,24 @@ export def "x-amz-target-aws-cognito-identity-service-untag-resource UntagResour
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -953,7 +953,7 @@ export def "x-amz-target-aws-cognito-identity-service-untag-resource UntagResour
 #
 # POST /#X-Amz-Target=AWSCognitoIdentityService.UpdateIdentityPool
 # operationId: UpdateIdentityPool
-export def "x-amz-target-aws-cognito-identity-service-update-identity-pool UpdateIdentityPool" [
+export def "x-amz-target-aws-cognito-identity-service-update-identity-pool update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,32 +962,32 @@ export def "x-amz-target-aws-cognito-identity-service-update-identity-pool Updat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  IdentityPoolId: any
-  IdentityPoolName: any
-  AllowUnauthenticatedIdentities: any
-  --AllowClassicFlow: any
-  --SupportedLoginProviders: any
-  --DeveloperProviderName: any
-  --OpenIdConnectProviderARNs: any
-  --CognitoIdentityProviders: any
-  --SamlProviderARNs: any
-  --IdentityPoolTags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  identity_pool_id: any
+  identity_pool_name: any
+  allow_unauthenticated_identities: any
+  --allow-classic-flow: any
+  --supported-login-providers: any
+  --developer-provider-name: any
+  --open-id-connect-provider-ar-ns: any
+  --cognito-identity-providers: any
+  --saml-provider-ar-ns: any
+  --identity-pool-tags: any
 ]: any -> record<IdentityPoolId: record, IdentityPoolName: record, AllowUnauthenticatedIdentities: record, AllowClassicFlow: record, SupportedLoginProviders: record, DeveloperProviderName: record, OpenIdConnectProviderARNs: record, CognitoIdentityProviders: record, SamlProviderARNs: record, IdentityPoolTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSCognitoIdentityService.UpdateIdentityPool")
-  let body = {IdentityPoolId: $IdentityPoolId, IdentityPoolName: $IdentityPoolName, AllowUnauthenticatedIdentities: $AllowUnauthenticatedIdentities, AllowClassicFlow: $AllowClassicFlow, SupportedLoginProviders: $SupportedLoginProviders, DeveloperProviderName: $DeveloperProviderName, OpenIdConnectProviderARNs: $OpenIdConnectProviderARNs, CognitoIdentityProviders: $CognitoIdentityProviders, SamlProviderARNs: $SamlProviderARNs, IdentityPoolTags: $IdentityPoolTags} | compact
+  let body = {"IdentityPoolId": $identity_pool_id, "IdentityPoolName": $identity_pool_name, "AllowUnauthenticatedIdentities": $allow_unauthenticated_identities, "AllowClassicFlow": $allow_classic_flow, "SupportedLoginProviders": $supported_login_providers, "DeveloperProviderName": $developer_provider_name, "OpenIdConnectProviderARNs": $open_id_connect_provider_ar_ns, "CognitoIdentityProviders": $cognito_identity_providers, "SamlProviderARNs": $saml_provider_ar_ns, "IdentityPoolTags": $identity_pool_tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

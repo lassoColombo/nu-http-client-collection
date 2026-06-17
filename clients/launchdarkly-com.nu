@@ -137,7 +137,7 @@ export def "account-relay-auto-configs list" [
 #
 # POST /account/relay-auto-configs
 # operationId: postRelayAutoConfig
-export def "account-relay-auto-configs post" [
+export def "account-relay-auto-configs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "account-relay-auto-configs post" [
 #
 # DELETE /account/relay-auto-configs/{id}
 # operationId: deleteRelayProxyConfig
-export def "account-relay-auto-configs delete" [
+export def "account-relay-auto-configs delete-relay-proxy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "account-relay-auto-configs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/relay-auto-configs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/relay-auto-configs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,7 +182,7 @@ export def "account-relay-auto-configs delete" [
 #
 # GET /account/relay-auto-configs/{id}
 # operationId: getRelayProxyConfig
-export def "account-relay-auto-configs get" [
+export def "account-relay-auto-configs get-relay-proxy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "account-relay-auto-configs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/relay-auto-configs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/relay-auto-configs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,7 +205,7 @@ export def "account-relay-auto-configs get" [
 #
 # PATCH /account/relay-auto-configs/{id}
 # operationId: patchRelayProxyConfig
-export def "account-relay-auto-configs patch" [
+export def "account-relay-auto-configs update-relay-proxy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "account-relay-auto-configs patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/relay-auto-configs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/relay-auto-configs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,7 +228,7 @@ export def "account-relay-auto-configs patch" [
 #
 # POST /account/relay-auto-configs/{id}/reset
 # operationId: resetRelayProxyConfig
-export def "account-relay-auto-configs-reset resetRelayProxyConfig" [
+export def "account-relay-auto-configs-reset reset-relay-proxy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +243,7 @@ export def "account-relay-auto-configs-reset resetRelayProxyConfig" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiry" $expiry "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/account/relay-auto-configs/($id)/reset" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/account/relay-auto-configs/{id}/reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,7 +253,7 @@ export def "account-relay-auto-configs-reset resetRelayProxyConfig" [
 #
 # GET /auditlog
 # operationId: getAuditLogEntries
-export def "auditlog list" [
+export def "auditlog get-audit-log-entries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,8 +281,8 @@ export def "auditlog list" [
 #
 # GET /auditlog/{resourceId}
 # operationId: getAuditLogEntry
-export def "auditlog get" [
-  resourceId: string
+export def "auditlog get-audit-log-entry" [
+  resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "auditlog get" [
 ]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, comment: string, date: int, description: string, kind: string, member: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, name: string, shortDescription: string, target: record<_links: record<next: record, self: record>, name: string, resources: list<string>>, title: string, titleVerb: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/auditlog/($resourceId)")
+  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/auditlog/{resource_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -326,9 +326,9 @@ export def "destinations get" [
 #
 # POST /destinations/{projectKey}/{environmentKey}
 # operationId: postDestination
-export def "destinations post" [
-  projectKey: string
-  environmentKey: string
+export def "destinations create" [
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "destinations post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/destinations/($projectKey)/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/destinations/{project_key}/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -351,9 +351,9 @@ export def "destinations post" [
 # DELETE /destinations/{projectKey}/{environmentKey}/{destinationId}
 # operationId: deleteDestination
 export def "destinations delete" [
-  projectKey: string
-  environmentKey: string
-  destinationId: string
+  project_key: string
+  environment_key: string
+  destination_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "destinations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/destinations/($projectKey)/($environmentKey)/($destinationId)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, destination_id: $destination_id} | format pattern "/destinations/{project_key}/{environment_key}/{destination_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,9 +376,9 @@ export def "destinations delete" [
 # GET /destinations/{projectKey}/{environmentKey}/{destinationId}
 # operationId: getDestination
 export def "destinations get-by-projectKey-environmentKey-destinationId" [
-  projectKey: string
-  environmentKey: string
-  destinationId: string
+  project_key: string
+  environment_key: string
+  destination_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "destinations get-by-projectKey-environmentKey-destinationId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/destinations/($projectKey)/($environmentKey)/($destinationId)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, destination_id: $destination_id} | format pattern "/destinations/{project_key}/{environment_key}/{destination_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -400,10 +400,10 @@ export def "destinations get-by-projectKey-environmentKey-destinationId" [
 #
 # PATCH /destinations/{projectKey}/{environmentKey}/{destinationId}
 # operationId: patchDestination
-export def "destinations patch" [
-  projectKey: string
-  environmentKey: string
-  destinationId: string
+export def "destinations update" [
+  project_key: string
+  environment_key: string
+  destination_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "destinations patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/destinations/($projectKey)/($environmentKey)/($destinationId)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, destination_id: $destination_id} | format pattern "/destinations/{project_key}/{environment_key}/{destination_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -425,9 +425,9 @@ export def "destinations patch" [
 #
 # GET /flag-status/{projectKey}/{featureFlagKey}
 # operationId: getFeatureFlagStatusAcrossEnvironments
-export def "flag-status get" [
-  projectKey: string
-  featureFlagKey: string
+export def "flag-status get-feature-flag-status-across-environments" [
+  project_key: string
+  feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "flag-status get" [
 ]: nothing -> record<_links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, environments: record, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/flag-status/($projectKey)/($featureFlagKey)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key} | format pattern "/flag-status/{project_key}/{feature_flag_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -449,9 +449,9 @@ export def "flag-status get" [
 #
 # GET /flag-statuses/{projectKey}/{environmentKey}
 # operationId: getFeatureFlagStatuses
-export def "flag-statuses list" [
-  projectKey: string
-  environmentKey: string
+export def "flag-statuses get-feature" [
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "flag-statuses list" [
 ]: nothing -> record<_links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_links: record, default: record, lastRequested: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/flag-statuses/($projectKey)/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/flag-statuses/{project_key}/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -473,10 +473,10 @@ export def "flag-statuses list" [
 #
 # GET /flag-statuses/{projectKey}/{environmentKey}/{featureFlagKey}
 # operationId: getFeatureFlagStatus
-export def "flag-statuses get" [
-  projectKey: string
-  environmentKey: string
-  featureFlagKey: string
+export def "flag-statuses get-feature-flag-status" [
+  project_key: string
+  environment_key: string
+  feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -488,7 +488,7 @@ export def "flag-statuses get" [
 ]: nothing -> record<_links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, default: record, lastRequested: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/flag-statuses/($projectKey)/($environmentKey)/($featureFlagKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, feature_flag_key: $feature_flag_key} | format pattern "/flag-statuses/{project_key}/{environment_key}/{feature_flag_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -499,7 +499,7 @@ export def "flag-statuses get" [
 # GET /flags/{projectKey}
 # operationId: getFeatureFlags
 export def "flags list" [
-  projectKey: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "flags list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --env: list # By default, each feature will include configurations for each environment. You can filter environments with the env query parameter. For example, setting env=["production"] will restrict the returned configurations to just your production environment.
+  --qp-env: list # By default, each feature will include configurations for each environment. You can filter environments with the env query parameter. For example, setting env=["production"] will restrict the returned configurations to just your production environment.
   --summary: oneof<nothing, bool> # By default in api version >= 1, flags will _not_ include their list of prerequisites, targets or rules.  Set summary=0 to include these fields for each flag returned.
   --archived: oneof<nothing, bool> # When set to 1, only archived flags will be included in the list of flags returned.  By default, archived flags are not included in the list of flags.
   --limit: float # The number of objects to return. Defaults to -1, which returns everything.
@@ -519,8 +519,8 @@ export def "flags list" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_links: record, _maintainer: record, _version: int, archived: bool, archivedDate: int, clientSideAvailability: record, creationDate: int, customProperties: record, defaults: record, description: string, environments: record, goalIds: list, includeInSnippet: bool, key: string, kind: string, maintainerId: string, name: string, tags: list, temporary: bool, variations: list>, totalCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "env" $env "multi") (serialize-qp "summary" $summary "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/flags/($projectKey)" $qp)
+  let qp = [(serialize-qp "env" $qp_env "multi") (serialize-qp "summary" $summary "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_key: $project_key} | format pattern "/flags/{project_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -530,8 +530,8 @@ export def "flags list" [
 #
 # POST /flags/{projectKey}
 # operationId: postFeatureFlag
-export def "flags post" [
-  projectKey: string
+export def "flags create-feature" [
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,7 +545,7 @@ export def "flags post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "clone" $clone "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/flags/($projectKey)" $qp)
+  let full_url = (build-url $base ({project_key: $project_key} | format pattern "/flags/{project_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -555,9 +555,9 @@ export def "flags post" [
 #
 # GET /flags/{projectKey}/{environmentKey}/{featureFlagKey}/dependent-flags
 export def "flags-dependent-flags get" [
-  projectKey: string
-  environmentKey: string
-  featureFlagKey: string
+  project_key: string
+  environment_key: string
+  feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "flags-dependent-flags get" [
 ]: nothing -> record<_links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, _site: record<href: string, type: string>, items: table<_links: record, _site: record, key: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/flags/($projectKey)/($environmentKey)/($featureFlagKey)/dependent-flags")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, feature_flag_key: $feature_flag_key} | format pattern "/flags/{project_key}/{environment_key}/{feature_flag_key}/dependent-flags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -579,9 +579,9 @@ export def "flags-dependent-flags get" [
 #
 # DELETE /flags/{projectKey}/{featureFlagKey}
 # operationId: deleteFeatureFlag
-export def "flags delete" [
-  projectKey: string
-  featureFlagKey: string
+export def "flags delete-feature" [
+  project_key: string
+  feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "flags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/flags/($projectKey)/($featureFlagKey)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key} | format pattern "/flags/{project_key}/{feature_flag_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -603,9 +603,9 @@ export def "flags delete" [
 #
 # GET /flags/{projectKey}/{featureFlagKey}
 # operationId: getFeatureFlag
-export def "flags get" [
-  projectKey: string
-  featureFlagKey: string
+export def "flags get-feature" [
+  project_key: string
+  feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,12 +614,12 @@ export def "flags get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --env: list # By default, each feature will include configurations for each environment. You can filter environments with the env query parameter. For example, setting env=["production"] will restrict the returned configurations to just your production environment.
+  --qp-env: list # By default, each feature will include configurations for each environment. You can filter environments with the env query parameter. For example, setting env=["production"] will restrict the returned configurations to just your production environment.
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _maintainer: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, _version: int, archived: bool, archivedDate: int, clientSideAvailability: record<usingEnvironmentId: bool, usingMobileKey: bool>, creationDate: int, customProperties: record, defaults: record<offVariation: int, onVariation: int>, description: string, environments: record, goalIds: list<string>, includeInSnippet: bool, key: string, kind: string, maintainerId: string, name: string, tags: list<string>, temporary: bool, variations: table<_id: string, description: string, name: string, value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "env" $env "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/flags/($projectKey)/($featureFlagKey)" $qp)
+  let qp = [(serialize-qp "env" $qp_env "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key} | format pattern "/flags/{project_key}/{feature_flag_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -629,9 +629,9 @@ export def "flags get" [
 #
 # PATCH /flags/{projectKey}/{featureFlagKey}
 # operationId: patchFeatureFlag
-export def "flags patch" [
-  projectKey: string
-  featureFlagKey: string
+export def "flags update-feature" [
+  project_key: string
+  feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,7 +643,7 @@ export def "flags patch" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _maintainer: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, _version: int, archived: bool, archivedDate: int, clientSideAvailability: record<usingEnvironmentId: bool, usingMobileKey: bool>, creationDate: int, customProperties: record, defaults: record<offVariation: int, onVariation: int>, description: string, environments: record, goalIds: list<string>, includeInSnippet: bool, key: string, kind: string, maintainerId: string, name: string, tags: list<string>, temporary: bool, variations: table<_id: string, description: string, name: string, value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/flags/($projectKey)/($featureFlagKey)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key} | format pattern "/flags/{project_key}/{feature_flag_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -653,9 +653,9 @@ export def "flags patch" [
 #
 # POST /flags/{projectKey}/{featureFlagKey}/copy
 # operationId: copyFeatureFlag
-export def "flags-copy copyFeatureFlag" [
-  projectKey: string
-  featureFlagKey: string
+export def "flags-copy copy-feature" [
+  project_key: string
+  feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,7 +667,7 @@ export def "flags-copy copyFeatureFlag" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _maintainer: record<_id: string, _lastSeen: int, _lastSeenMetadata: record<tokenId: string>, _links: record<next: record, self: record>, _pendingInvite: bool, _verified: bool, customRoles: list<string>, email: string, firstName: string, isBeta: bool, lastName: string, role: string>, _version: int, archived: bool, archivedDate: int, clientSideAvailability: record<usingEnvironmentId: bool, usingMobileKey: bool>, creationDate: int, customProperties: record, defaults: record<offVariation: int, onVariation: int>, description: string, environments: record, goalIds: list<string>, includeInSnippet: bool, key: string, kind: string, maintainerId: string, name: string, tags: list<string>, temporary: bool, variations: table<_id: string, description: string, name: string, value: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/flags/($projectKey)/($featureFlagKey)/copy")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key} | format pattern "/flags/{project_key}/{feature_flag_key}/copy"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -677,8 +677,8 @@ export def "flags-copy copyFeatureFlag" [
 #
 # GET /flags/{projectKey}/{featureFlagKey}/dependent-flags
 export def "flags-dependent-flags list" [
-  projectKey: string
-  featureFlagKey: string
+  project_key: string
+  feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "flags-dependent-flags list" [
 ]: nothing -> record<_links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, _site: record<href: string, type: string>, items: table<_links: record, _site: record, environments: list, key: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/flags/($projectKey)/($featureFlagKey)/dependent-flags")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key} | format pattern "/flags/{project_key}/{feature_flag_key}/dependent-flags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -701,9 +701,9 @@ export def "flags-dependent-flags list" [
 # GET /flags/{projectKey}/{featureFlagKey}/expiring-user-targets/{environmentKey}
 # operationId: getExpiringUserTargets
 export def "flags-expiring-user-targets get" [
-  projectKey: string
-  environmentKey: string
-  featureFlagKey: string
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,7 +715,7 @@ export def "flags-expiring-user-targets get" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _links: record, _resourceId: record, _version: int, expirationDate: int, userKey: string, variationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/flags/($projectKey)/($featureFlagKey)/expiring-user-targets/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key} | format pattern "/flags/{project_key}/{feature_flag_key}/expiring-user-targets/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -725,10 +725,10 @@ export def "flags-expiring-user-targets get" [
 #
 # PATCH /flags/{projectKey}/{featureFlagKey}/expiring-user-targets/{environmentKey}
 # operationId: patchExpiringUserTargets
-export def "flags-expiring-user-targets patch" [
-  projectKey: string
-  environmentKey: string
-  featureFlagKey: string
+export def "flags-expiring-user-targets update" [
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -740,7 +740,7 @@ export def "flags-expiring-user-targets patch" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _links: record, _resourceId: record, _version: int, expirationDate: int, userKey: string, variationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/flags/($projectKey)/($featureFlagKey)/expiring-user-targets/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key} | format pattern "/flags/{project_key}/{feature_flag_key}/expiring-user-targets/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -772,8 +772,8 @@ export def "integrations get" [
 #
 # GET /integrations/{integrationKey}
 # operationId: getIntegrationSubscriptions
-export def "integrations get-by-integrationKey" [
-  integrationKey: string
+export def "integrations get-integration-subscriptions" [
+  integration_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -785,7 +785,7 @@ export def "integrations get-by-integrationKey" [
 ]: nothing -> record<_links: record<self: record<href: string, type: string>>, items: table<_id: string, _links: record, _status: record, config: record, kind: string, name: string, on: bool, statements: list, tags: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/integrations/($integrationKey)")
+  let full_url = (build-url $base ({integration_key: $integration_key} | format pattern "/integrations/{integration_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -795,8 +795,8 @@ export def "integrations get-by-integrationKey" [
 #
 # POST /integrations/{integrationKey}
 # operationId: postIntegrationSubscription
-export def "integrations post" [
-  integrationKey: string
+export def "integrations create-integration-subscription" [
+  integration_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,7 +808,7 @@ export def "integrations post" [
 ]: nothing -> record<_id: string, _links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, _status: record<errorCount: int, lastSuccess: int, successCount: int>, config: record, kind: string, name: string, on: bool, statements: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/integrations/($integrationKey)")
+  let full_url = (build-url $base ({integration_key: $integration_key} | format pattern "/integrations/{integration_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -818,9 +818,9 @@ export def "integrations post" [
 #
 # DELETE /integrations/{integrationKey}/{integrationId}
 # operationId: deleteIntegrationSubscription
-export def "integrations delete" [
-  integrationKey: string
-  integrationId: string
+export def "integrations delete-integration-subscription" [
+  integration_key: string
+  integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -832,7 +832,7 @@ export def "integrations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/integrations/($integrationKey)/($integrationId)")
+  let full_url = (build-url $base ({integration_key: $integration_key, integration_id: $integration_id} | format pattern "/integrations/{integration_key}/{integration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -842,9 +842,9 @@ export def "integrations delete" [
 #
 # GET /integrations/{integrationKey}/{integrationId}
 # operationId: getIntegrationSubscription
-export def "integrations get-by-integrationKey-integrationId" [
-  integrationKey: string
-  integrationId: string
+export def "integrations get-integration-subscription" [
+  integration_key: string
+  integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "integrations get-by-integrationKey-integrationId" [
 ]: nothing -> record<_id: string, _links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, _status: record<errorCount: int, lastSuccess: int, successCount: int>, config: record, kind: string, name: string, on: bool, statements: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/integrations/($integrationKey)/($integrationId)")
+  let full_url = (build-url $base ({integration_key: $integration_key, integration_id: $integration_id} | format pattern "/integrations/{integration_key}/{integration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -866,9 +866,9 @@ export def "integrations get-by-integrationKey-integrationId" [
 #
 # PATCH /integrations/{integrationKey}/{integrationId}
 # operationId: patchIntegrationSubscription
-export def "integrations patch" [
-  integrationKey: string
-  integrationId: string
+export def "integrations update-integration-subscription" [
+  integration_key: string
+  integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -880,7 +880,7 @@ export def "integrations patch" [
 ]: nothing -> record<_id: string, _links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, _status: record<errorCount: int, lastSuccess: int, successCount: int>, config: record, kind: string, name: string, on: bool, statements: table<actions: list, effect: string, notActions: list, notResources: list, resources: list>, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/integrations/($integrationKey)/($integrationId)")
+  let full_url = (build-url $base ({integration_key: $integration_key, integration_id: $integration_id} | format pattern "/integrations/{integration_key}/{integration_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -917,7 +917,7 @@ export def "members list" [
 #
 # POST /members
 # operationId: postMembers
-export def "members post" [
+export def "members create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "members-me get" [
 # DELETE /members/{memberId}
 # operationId: deleteMember
 export def "members delete" [
-  memberId: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,7 +974,7 @@ export def "members delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/members/($memberId)")
+  let full_url = (build-url $base ({member_id: $member_id} | format pattern "/members/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -985,7 +985,7 @@ export def "members delete" [
 # GET /members/{memberId}
 # operationId: getMember
 export def "members get" [
-  memberId: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,7 +997,7 @@ export def "members get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/members/($memberId)")
+  let full_url = (build-url $base ({member_id: $member_id} | format pattern "/members/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1007,8 +1007,8 @@ export def "members get" [
 #
 # PATCH /members/{memberId}
 # operationId: patchMember
-export def "members patch" [
-  memberId: string
+export def "members update" [
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "members patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/members/($memberId)")
+  let full_url = (build-url $base ({member_id: $member_id} | format pattern "/members/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1052,7 +1052,7 @@ export def "projects list" [
 #
 # POST /projects
 # operationId: postProject
-export def "projects post" [
+export def "projects create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,7 +1075,7 @@ export def "projects post" [
 # DELETE /projects/{projectKey}
 # operationId: deleteProject
 export def "projects delete" [
-  projectKey: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1087,7 +1087,7 @@ export def "projects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)")
+  let full_url = (build-url $base ({project_key: $project_key} | format pattern "/projects/{project_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1098,7 +1098,7 @@ export def "projects delete" [
 # GET /projects/{projectKey}
 # operationId: getProject
 export def "projects get" [
-  projectKey: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1110,7 +1110,7 @@ export def "projects get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)")
+  let full_url = (build-url $base ({project_key: $project_key} | format pattern "/projects/{project_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1120,8 +1120,8 @@ export def "projects get" [
 #
 # PATCH /projects/{projectKey}
 # operationId: patchProject
-export def "projects patch" [
-  projectKey: string
+export def "projects update" [
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1133,7 +1133,7 @@ export def "projects patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)")
+  let full_url = (build-url $base ({project_key: $project_key} | format pattern "/projects/{project_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1143,8 +1143,8 @@ export def "projects patch" [
 #
 # POST /projects/{projectKey}/environments
 # operationId: postEnvironment
-export def "projects-environments post" [
-  projectKey: string
+export def "projects-environments create" [
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,7 +1156,7 @@ export def "projects-environments post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/environments")
+  let full_url = (build-url $base ({project_key: $project_key} | format pattern "/projects/{project_key}/environments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1167,8 +1167,8 @@ export def "projects-environments post" [
 # DELETE /projects/{projectKey}/environments/{environmentKey}
 # operationId: deleteEnvironment
 export def "projects-environments delete" [
-  projectKey: string
-  environmentKey: string
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1180,7 +1180,7 @@ export def "projects-environments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/environments/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/projects/{project_key}/environments/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1191,8 +1191,8 @@ export def "projects-environments delete" [
 # GET /projects/{projectKey}/environments/{environmentKey}
 # operationId: getEnvironment
 export def "projects-environments get" [
-  projectKey: string
-  environmentKey: string
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1204,7 @@ export def "projects-environments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/environments/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/projects/{project_key}/environments/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1214,9 +1214,9 @@ export def "projects-environments get" [
 #
 # PATCH /projects/{projectKey}/environments/{environmentKey}
 # operationId: patchEnvironment
-export def "projects-environments patch" [
-  projectKey: string
-  environmentKey: string
+export def "projects-environments update" [
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1228,7 +1228,7 @@ export def "projects-environments patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/environments/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/projects/{project_key}/environments/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1238,9 +1238,9 @@ export def "projects-environments patch" [
 #
 # POST /projects/{projectKey}/environments/{environmentKey}/apiKey
 # operationId: resetEnvironmentSDKKey
-export def "projects-environments-api-key resetEnvironmentSDKKey" [
-  projectKey: string
-  environmentKey: string
+export def "projects-environments-api-key reset-environment-sdk" [
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,7 +1254,7 @@ export def "projects-environments-api-key resetEnvironmentSDKKey" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiry" $expiry "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($projectKey)/environments/($environmentKey)/apiKey" $qp)
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/projects/{project_key}/environments/{environment_key}/apiKey") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1264,9 +1264,9 @@ export def "projects-environments-api-key resetEnvironmentSDKKey" [
 #
 # POST /projects/{projectKey}/environments/{environmentKey}/mobileKey
 # operationId: resetEnvironmentMobileKey
-export def "projects-environments-mobile-key resetEnvironmentMobileKey" [
-  projectKey: string
-  environmentKey: string
+export def "projects-environments-mobile-key reset" [
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "projects-environments-mobile-key resetEnvironmentMobileKey" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiry" $expiry "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($projectKey)/environments/($environmentKey)/mobileKey" $qp)
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/projects/{project_key}/environments/{environment_key}/mobileKey") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1291,9 +1291,9 @@ export def "projects-environments-mobile-key resetEnvironmentMobileKey" [
 # GET /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests
 # operationId: getApprovalRequests
 export def "projects-flags-environments-approval-requests list" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1305,7 +1305,7 @@ export def "projects-flags-environments-approval-requests list" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _version: int, allReviews: list, appliedByMemberID: string, appliedDate: int, creationDate: int, executionDate: int, instructions: list, notifyMemberIds: list, operatingOnId: string, requestorId: string, reviewStatus: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/approval-requests")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/approval-requests"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1316,10 +1316,10 @@ export def "projects-flags-environments-approval-requests list" [
 # DELETE /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests/{approvalRequestId}
 # operationId: deleteApprovalRequest
 export def "projects-flags-environments-approval-requests delete" [
-  projectKey: string
-  environmentKey: string
-  featureFlagKey: string
-  approvalRequestId: string
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
+  approval_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1331,7 +1331,7 @@ export def "projects-flags-environments-approval-requests delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/approval-requests/($approvalRequestId)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key, approval_request_id: $approval_request_id} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/approval-requests/{approval_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1342,10 +1342,10 @@ export def "projects-flags-environments-approval-requests delete" [
 # GET /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests/{approvalRequestId}
 # operationId: getApprovalRequest
 export def "projects-flags-environments-approval-requests get" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
-  approvalRequestId: string
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
+  approval_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1357,7 +1357,7 @@ export def "projects-flags-environments-approval-requests get" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _version: int, allReviews: list, appliedByMemberID: string, appliedDate: int, creationDate: int, executionDate: int, instructions: list, notifyMemberIds: list, operatingOnId: string, requestorId: string, reviewStatus: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/approval-requests/($approvalRequestId)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key, approval_request_id: $approval_request_id} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/approval-requests/{approval_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1367,11 +1367,11 @@ export def "projects-flags-environments-approval-requests get" [
 #
 # POST /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests/{approvalRequestId}
 # operationId: postApprovalRequest
-export def "projects-flags-environments-approval-requests post" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
-  approvalRequestId: string
+export def "projects-flags-environments-approval-requests create" [
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
+  approval_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1383,7 +1383,7 @@ export def "projects-flags-environments-approval-requests post" [
 ]: nothing -> record<_id: string, _version: int, allReviews: table<_id: string, creationDate: int, kind: string, memberId: string>, appliedByMemberID: string, appliedDate: int, creationDate: int, executionDate: int, instructions: table<kind: string>, notifyMemberIds: list<string>, operatingOnId: string, requestorId: string, reviewStatus: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/approval-requests/($approvalRequestId)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key, approval_request_id: $approval_request_id} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/approval-requests/{approval_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1393,11 +1393,11 @@ export def "projects-flags-environments-approval-requests post" [
 #
 # POST /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests/{approvalRequestId}/apply
 # operationId: postApplyApprovalRequest
-export def "projects-flags-environments-approval-requests-apply post" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
-  approvalRequestId: string
+export def "projects-flags-environments-approval-requests-apply create" [
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
+  approval_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1409,7 +1409,7 @@ export def "projects-flags-environments-approval-requests-apply post" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _version: int, allReviews: list, appliedByMemberID: string, appliedDate: int, creationDate: int, executionDate: int, instructions: list, notifyMemberIds: list, operatingOnId: string, requestorId: string, reviewStatus: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/approval-requests/($approvalRequestId)/apply")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key, approval_request_id: $approval_request_id} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/approval-requests/{approval_request_id}/apply"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1419,11 +1419,11 @@ export def "projects-flags-environments-approval-requests-apply post" [
 #
 # POST /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/approval-requests/{approvalRequestId}/review
 # operationId: postReviewApprovalRequest
-export def "projects-flags-environments-approval-requests-review post" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
-  approvalRequestId: string
+export def "projects-flags-environments-approval-requests-review create" [
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
+  approval_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1435,7 @@ export def "projects-flags-environments-approval-requests-review post" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _version: int, allReviews: list, appliedByMemberID: string, appliedDate: int, creationDate: int, executionDate: int, instructions: list, notifyMemberIds: list, operatingOnId: string, requestorId: string, reviewStatus: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/approval-requests/($approvalRequestId)/review")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key, approval_request_id: $approval_request_id} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/approval-requests/{approval_request_id}/review"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1446,9 +1446,9 @@ export def "projects-flags-environments-approval-requests-review post" [
 # GET /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes
 # operationId: getFlagConfigScheduledChanges
 export def "projects-flags-environments-scheduled-changes list" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1460,7 +1460,7 @@ export def "projects-flags-environments-scheduled-changes list" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _version: int, executionDate: int, instructions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/scheduled-changes")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/scheduled-changes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1470,10 +1470,10 @@ export def "projects-flags-environments-scheduled-changes list" [
 #
 # POST /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes
 # operationId: postFlagConfigScheduledChanges
-export def "projects-flags-environments-scheduled-changes post" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
+export def "projects-flags-environments-scheduled-changes create-flag-config" [
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,7 +1485,7 @@ export def "projects-flags-environments-scheduled-changes post" [
 ]: nothing -> record<_id: string, _version: int, executionDate: int, instructions: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/scheduled-changes")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/scheduled-changes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1495,10 +1495,10 @@ export def "projects-flags-environments-scheduled-changes post" [
 #
 # POST /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes-conflicts
 # operationId: getFlagConfigScheduledChangesConflicts
-export def "projects-flags-environments-scheduled-changes-conflicts post" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
+export def "projects-flags-environments-scheduled-changes-conflicts get-flag-config" [
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,7 +1510,7 @@ export def "projects-flags-environments-scheduled-changes-conflicts post" [
 ]: nothing -> record<instructions: table<conflicts: list, kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/scheduled-changes-conflicts")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/scheduled-changes-conflicts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1520,11 +1520,11 @@ export def "projects-flags-environments-scheduled-changes-conflicts post" [
 #
 # DELETE /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes/{scheduledChangeId}
 # operationId: deleteFlagConfigScheduledChanges
-export def "projects-flags-environments-scheduled-changes delete" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
-  scheduledChangeId: string
+export def "projects-flags-environments-scheduled-changes delete-flag-config" [
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
+  scheduled_change_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,7 +1536,7 @@ export def "projects-flags-environments-scheduled-changes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/scheduled-changes/($scheduledChangeId)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key, scheduled_change_id: $scheduled_change_id} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/scheduled-changes/{scheduled_change_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1546,11 +1546,11 @@ export def "projects-flags-environments-scheduled-changes delete" [
 #
 # GET /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes/{scheduledChangeId}
 # operationId: getFlagConfigScheduledChange
-export def "projects-flags-environments-scheduled-changes get" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
-  scheduledChangeId: string
+export def "projects-flags-environments-scheduled-changes get-flag-config" [
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
+  scheduled_change_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1562,7 +1562,7 @@ export def "projects-flags-environments-scheduled-changes get" [
 ]: nothing -> record<_id: string, _version: int, executionDate: int, instructions: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/scheduled-changes/($scheduledChangeId)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key, scheduled_change_id: $scheduled_change_id} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/scheduled-changes/{scheduled_change_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1572,11 +1572,11 @@ export def "projects-flags-environments-scheduled-changes get" [
 #
 # PATCH /projects/{projectKey}/flags/{featureFlagKey}/environments/{environmentKey}/scheduled-changes/{scheduledChangeId}
 # operationId: patchFlagConfigScheduledChange
-export def "projects-flags-environments-scheduled-changes patch" [
-  projectKey: string
-  featureFlagKey: string
-  environmentKey: string
-  scheduledChangeId: string
+export def "projects-flags-environments-scheduled-changes update-flag-config" [
+  project_key: string
+  feature_flag_key: string
+  environment_key: string
+  scheduled_change_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1588,7 +1588,7 @@ export def "projects-flags-environments-scheduled-changes patch" [
 ]: nothing -> record<_id: string, _version: int, executionDate: int, instructions: table<kind: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($projectKey)/flags/($featureFlagKey)/environments/($environmentKey)/scheduled-changes/($scheduledChangeId)")
+  let full_url = (build-url $base ({project_key: $project_key, feature_flag_key: $feature_flag_key, environment_key: $environment_key, scheduled_change_id: $scheduled_change_id} | format pattern "/projects/{project_key}/flags/{feature_flag_key}/environments/{environment_key}/scheduled-changes/{scheduled_change_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1620,7 +1620,7 @@ export def "roles list" [
 #
 # POST /roles
 # operationId: postCustomRole
-export def "roles post" [
+export def "roles create-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,8 +1642,8 @@ export def "roles post" [
 #
 # DELETE /roles/{customRoleKey}
 # operationId: deleteCustomRole
-export def "roles delete" [
-  customRoleKey: string
+export def "roles delete-custom" [
+  custom_role_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1655,7 +1655,7 @@ export def "roles delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/roles/($customRoleKey)")
+  let full_url = (build-url $base ({custom_role_key: $custom_role_key} | format pattern "/roles/{custom_role_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1665,8 +1665,8 @@ export def "roles delete" [
 #
 # GET /roles/{customRoleKey}
 # operationId: getCustomRole
-export def "roles get" [
-  customRoleKey: string
+export def "roles get-custom" [
+  custom_role_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1678,7 +1678,7 @@ export def "roles get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/roles/($customRoleKey)")
+  let full_url = (build-url $base ({custom_role_key: $custom_role_key} | format pattern "/roles/{custom_role_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1688,8 +1688,8 @@ export def "roles get" [
 #
 # PATCH /roles/{customRoleKey}
 # operationId: patchCustomRole
-export def "roles patch" [
-  customRoleKey: string
+export def "roles update-custom" [
+  custom_role_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1701,7 +1701,7 @@ export def "roles patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/roles/($customRoleKey)")
+  let full_url = (build-url $base ({custom_role_key: $custom_role_key} | format pattern "/roles/{custom_role_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1712,8 +1712,8 @@ export def "roles patch" [
 # GET /segments/{projectKey}/{environmentKey}
 # operationId: getUserSegments
 export def "segments list" [
-  projectKey: string
-  environmentKey: string
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1727,7 +1727,7 @@ export def "segments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tag" $tag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/segments/($projectKey)/($environmentKey)" $qp)
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/segments/{project_key}/{environment_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1737,9 +1737,9 @@ export def "segments list" [
 #
 # POST /segments/{projectKey}/{environmentKey}
 # operationId: postUserSegment
-export def "segments post" [
-  projectKey: string
-  environmentKey: string
+export def "segments create-user" [
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1751,7 +1751,7 @@ export def "segments post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/segments/($projectKey)/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/segments/{project_key}/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1761,10 +1761,10 @@ export def "segments post" [
 #
 # DELETE /segments/{projectKey}/{environmentKey}/{userSegmentKey}
 # operationId: deleteUserSegment
-export def "segments delete" [
-  projectKey: string
-  environmentKey: string
-  userSegmentKey: string
+export def "segments delete-user" [
+  project_key: string
+  environment_key: string
+  user_segment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,7 +1776,7 @@ export def "segments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/segments/($projectKey)/($environmentKey)/($userSegmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, user_segment_key: $user_segment_key} | format pattern "/segments/{project_key}/{environment_key}/{user_segment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1786,10 +1786,10 @@ export def "segments delete" [
 #
 # GET /segments/{projectKey}/{environmentKey}/{userSegmentKey}
 # operationId: getUserSegment
-export def "segments get" [
-  projectKey: string
-  environmentKey: string
-  userSegmentKey: string
+export def "segments get-user" [
+  project_key: string
+  environment_key: string
+  user_segment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1801,7 +1801,7 @@ export def "segments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/segments/($projectKey)/($environmentKey)/($userSegmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, user_segment_key: $user_segment_key} | format pattern "/segments/{project_key}/{environment_key}/{user_segment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1811,10 +1811,10 @@ export def "segments get" [
 #
 # PATCH /segments/{projectKey}/{environmentKey}/{userSegmentKey}
 # operationId: patchUserSegment
-export def "segments patch" [
-  projectKey: string
-  environmentKey: string
-  userSegmentKey: string
+export def "segments update-user" [
+  project_key: string
+  environment_key: string
+  user_segment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,7 +1826,7 @@ export def "segments patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/segments/($projectKey)/($environmentKey)/($userSegmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, user_segment_key: $user_segment_key} | format pattern "/segments/{project_key}/{environment_key}/{user_segment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1836,10 +1836,10 @@ export def "segments patch" [
 #
 # POST /segments/{projectKey}/{environmentKey}/{userSegmentKey}/users
 # operationId: updateBigSegmentTargets
-export def "segments-users updateBigSegmentTargets" [
-  projectKey: string
-  environmentKey: string
-  userSegmentKey: string
+export def "segments-users update-big-segment-targets" [
+  project_key: string
+  environment_key: string
+  user_segment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1851,7 +1851,7 @@ export def "segments-users updateBigSegmentTargets" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/segments/($projectKey)/($environmentKey)/($userSegmentKey)/users")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, user_segment_key: $user_segment_key} | format pattern "/segments/{project_key}/{environment_key}/{user_segment_key}/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1861,10 +1861,10 @@ export def "segments-users updateBigSegmentTargets" [
 #
 # GET /segments/{projectKey}/{userSegmentKey}/expiring-user-targets/{environmentKey}
 # operationId: getExpiringUserTargetsOnSegment
-export def "segments-expiring-user-targets get" [
-  projectKey: string
-  environmentKey: string
-  userSegmentKey: string
+export def "segments-expiring-user-targets get-expiring-user-targets-on" [
+  project_key: string
+  user_segment_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1876,7 +1876,7 @@ export def "segments-expiring-user-targets get" [
 ]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _resourceId: record<environmentKey: string, flagKey: string, key: string, kind: string, projectKey: string>, _version: int, expirationDate: int, targetType: string, userKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/segments/($projectKey)/($userSegmentKey)/expiring-user-targets/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, user_segment_key: $user_segment_key, environment_key: $environment_key} | format pattern "/segments/{project_key}/{user_segment_key}/expiring-user-targets/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1886,10 +1886,10 @@ export def "segments-expiring-user-targets get" [
 #
 # PATCH /segments/{projectKey}/{userSegmentKey}/expiring-user-targets/{environmentKey}
 # operationId: patchExpiringUserTargetsOnSegment
-export def "segments-expiring-user-targets patch" [
-  projectKey: string
-  environmentKey: string
-  userSegmentKey: string
+export def "segments-expiring-user-targets update-expiring-user-targets-on" [
+  project_key: string
+  user_segment_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1901,7 +1901,7 @@ export def "segments-expiring-user-targets patch" [
 ]: nothing -> record<_id: string, _links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _resourceId: record<environmentKey: string, flagKey: string, key: string, kind: string, projectKey: string>, _version: int, expirationDate: int, targetType: string, userKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/segments/($projectKey)/($userSegmentKey)/expiring-user-targets/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, user_segment_key: $user_segment_key, environment_key: $environment_key} | format pattern "/segments/{project_key}/{user_segment_key}/expiring-user-targets/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1920,11 +1920,11 @@ export def "tokens list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --showAll: oneof<nothing, bool> # If set to true, and the authentication access token has the "Admin" role, personal access tokens for all members will be retrieved.
+  --show-all: oneof<nothing, bool> # If set to true, and the authentication access token has the "Admin" role, personal access tokens for all members will be retrieved.
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _links: record, _member: record, creationDate: int, customRoleIds: list, defaultApiVersion: int, inlineRole: list, lastModified: int, lastUsed: int, memberId: string, name: string, ownerId: string, role: string, serviceToken: bool, token: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "showAll" $showAll "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "showAll" $show_all "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tokens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1935,7 +1935,7 @@ export def "tokens list" [
 #
 # POST /tokens
 # operationId: postToken
-export def "tokens post" [
+export def "tokens create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1958,7 +1958,7 @@ export def "tokens post" [
 # DELETE /tokens/{tokenId}
 # operationId: deleteToken
 export def "tokens delete" [
-  tokenId: string
+  token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1970,7 +1970,7 @@ export def "tokens delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tokens/($tokenId)")
+  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/tokens/{token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1981,7 +1981,7 @@ export def "tokens delete" [
 # GET /tokens/{tokenId}
 # operationId: getToken
 export def "tokens get" [
-  tokenId: string
+  token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1993,7 +1993,7 @@ export def "tokens get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tokens/($tokenId)")
+  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/tokens/{token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2003,8 +2003,8 @@ export def "tokens get" [
 #
 # PATCH /tokens/{tokenId}
 # operationId: patchToken
-export def "tokens patch" [
-  tokenId: string
+export def "tokens update" [
+  token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2016,7 +2016,7 @@ export def "tokens patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tokens/($tokenId)")
+  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/tokens/{token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2026,8 +2026,8 @@ export def "tokens patch" [
 #
 # POST /tokens/{tokenId}/reset
 # operationId: resetToken
-export def "tokens-reset resetToken" [
-  tokenId: string
+export def "tokens-reset reset" [
+  token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2041,7 +2041,7 @@ export def "tokens-reset resetToken" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expiry" $expiry "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tokens/($tokenId)/reset" $qp)
+  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/tokens/{token_id}/reset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2074,8 +2074,8 @@ export def "usage get" [
 # GET /usage/evaluations/{envId}/{flagKey}
 # operationId: getEvaluations
 export def "usage-evaluations get" [
-  envId: string
-  flagKey: string
+  env_id: string
+  flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2087,7 +2087,7 @@ export def "usage-evaluations get" [
 ]: nothing -> record<_links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, sdkVersions: table<sdk: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/usage/evaluations/($envId)/($flagKey)")
+  let full_url = (build-url $base ({env_id: $env_id, flag_key: $flag_key} | format pattern "/usage/evaluations/{env_id}/{flag_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2132,7 +2132,7 @@ export def "usage-events get" [
 ]: nothing -> record<_links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, sdkVersions: table<sdk: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/usage/events/($type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/usage/events/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2221,7 +2221,7 @@ export def "usage-streams get" [
 ]: nothing -> record<_links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>, subseries: list<record>>, metadata: table<sdk: string, source: string, version: string>, series: table<0: int, time: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/usage/streams/($source)")
+  let full_url = (build-url $base ({source: $source} | format pattern "/usage/streams/{source}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2244,7 +2244,7 @@ export def "usage-streams-bysdkversion get" [
 ]: nothing -> record<_links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, metadata: table<sdk: string, source: string, version: string>, series: table<0: int, time: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/usage/streams/($source)/bysdkversion")
+  let full_url = (build-url $base ({source: $source} | format pattern "/usage/streams/{source}/bysdkversion"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2267,7 +2267,7 @@ export def "usage-streams-sdkversions get" [
 ]: nothing -> record<_links: record<parent: record<href: string, type: string>, self: record<href: string, type: string>>, sdkVersions: table<sdk: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/usage/streams/($source)/sdkversions")
+  let full_url = (build-url $base ({source: $source} | format pattern "/usage/streams/{source}/sdkversions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2278,8 +2278,8 @@ export def "usage-streams-sdkversions get" [
 # GET /user-search/{projectKey}/{environmentKey}
 # operationId: getSearchUsers
 export def "user-search get" [
-  projectKey: string
-  environmentKey: string
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2296,7 +2296,7 @@ export def "user-search get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/user-search/($projectKey)/($environmentKey)" $qp)
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/user-search/{project_key}/{environment_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2307,8 +2307,8 @@ export def "user-search get" [
 # GET /users/{projectKey}/{environmentKey}
 # operationId: getUsers
 export def "users list" [
-  projectKey: string
-  environmentKey: string
+  project_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2319,12 +2319,12 @@ export def "users list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Pagination limit.
   --h: string # This parameter is required when following "next" links.
-  --scrollId: string # This parameter is required when following "next" links.
+  --scroll-id: string # This parameter is required when following "next" links.
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<avatar: string, environmentId: string, lastPing: string, ownerId: string, user: record>, totalCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "h" $h "scalar") (serialize-qp "scrollId" $scrollId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($projectKey)/($environmentKey)" $qp)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "h" $h "scalar") (serialize-qp "scrollId" $scroll_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key} | format pattern "/users/{project_key}/{environment_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2335,9 +2335,9 @@ export def "users list" [
 # DELETE /users/{projectKey}/{environmentKey}/{userKey}
 # operationId: deleteUser
 export def "users delete" [
-  projectKey: string
-  environmentKey: string
-  userKey: string
+  project_key: string
+  environment_key: string
+  user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2349,7 +2349,7 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($projectKey)/($environmentKey)/($userKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, user_key: $user_key} | format pattern "/users/{project_key}/{environment_key}/{user_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2360,9 +2360,9 @@ export def "users delete" [
 # GET /users/{projectKey}/{environmentKey}/{userKey}
 # operationId: getUser
 export def "users get" [
-  projectKey: string
-  environmentKey: string
-  userKey: string
+  project_key: string
+  environment_key: string
+  user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2374,7 +2374,7 @@ export def "users get" [
 ]: nothing -> record<avatar: string, environmentId: string, lastPing: string, ownerId: string, user: record<anonymous: bool, avatar: string, country: string, custom: record, email: string, firstName: string, ip: string, key: string, lastName: string, name: string, secondary: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($projectKey)/($environmentKey)/($userKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, user_key: $user_key} | format pattern "/users/{project_key}/{environment_key}/{user_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2384,10 +2384,10 @@ export def "users get" [
 #
 # GET /users/{projectKey}/{environmentKey}/{userKey}/flags
 # operationId: getUserFlagSettings
-export def "users-flags list" [
-  projectKey: string
-  environmentKey: string
-  userKey: string
+export def "users-flags get-user-flag-settings" [
+  project_key: string
+  environment_key: string
+  user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2399,7 +2399,7 @@ export def "users-flags list" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($projectKey)/($environmentKey)/($userKey)/flags")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, user_key: $user_key} | format pattern "/users/{project_key}/{environment_key}/{user_key}/flags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2409,11 +2409,11 @@ export def "users-flags list" [
 #
 # GET /users/{projectKey}/{environmentKey}/{userKey}/flags/{featureFlagKey}
 # operationId: getUserFlagSetting
-export def "users-flags get" [
-  projectKey: string
-  environmentKey: string
-  userKey: string
-  featureFlagKey: string
+export def "users-flags get-user-flag-setting" [
+  project_key: string
+  environment_key: string
+  user_key: string
+  feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2425,7 +2425,7 @@ export def "users-flags get" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, _value: bool, setting: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($projectKey)/($environmentKey)/($userKey)/flags/($featureFlagKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, user_key: $user_key, feature_flag_key: $feature_flag_key} | format pattern "/users/{project_key}/{environment_key}/{user_key}/flags/{feature_flag_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2435,11 +2435,11 @@ export def "users-flags get" [
 #
 # PUT /users/{projectKey}/{environmentKey}/{userKey}/flags/{featureFlagKey}
 # operationId: putFlagSetting
-export def "users-flags put" [
-  projectKey: string
-  environmentKey: string
-  userKey: string
-  featureFlagKey: string
+export def "users-flags update-flag-setting" [
+  project_key: string
+  environment_key: string
+  user_key: string
+  feature_flag_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2451,7 +2451,7 @@ export def "users-flags put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($projectKey)/($environmentKey)/($userKey)/flags/($featureFlagKey)")
+  let full_url = (build-url $base ({project_key: $project_key, environment_key: $environment_key, user_key: $user_key, feature_flag_key: $feature_flag_key} | format pattern "/users/{project_key}/{environment_key}/{user_key}/flags/{feature_flag_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2461,10 +2461,10 @@ export def "users-flags put" [
 #
 # GET /users/{projectKey}/{userKey}/expiring-user-targets/{environmentKey}
 # operationId: getExpiringUserTargetsForUser
-export def "users-expiring-user-targets get" [
-  projectKey: string
-  environmentKey: string
-  userKey: string
+export def "users-expiring-user-targets get-expiring-user-targets-for" [
+  project_key: string
+  user_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2476,7 +2476,7 @@ export def "users-expiring-user-targets get" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _links: record, _resourceId: record, _version: int, expirationDate: int, userKey: string, variationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($projectKey)/($userKey)/expiring-user-targets/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, user_key: $user_key, environment_key: $environment_key} | format pattern "/users/{project_key}/{user_key}/expiring-user-targets/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2486,10 +2486,10 @@ export def "users-expiring-user-targets get" [
 #
 # PATCH /users/{projectKey}/{userKey}/expiring-user-targets/{environmentKey}
 # operationId: patchExpiringUserTargetsForFlags
-export def "users-expiring-user-targets patch" [
-  projectKey: string
-  environmentKey: string
-  userKey: string
+export def "users-expiring-user-targets update-expiring-user-targets-for-flags" [
+  project_key: string
+  user_key: string
+  environment_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2501,7 +2501,7 @@ export def "users-expiring-user-targets patch" [
 ]: nothing -> record<_links: record<next: record<href: string, type: string>, self: record<href: string, type: string>>, items: table<_id: string, _links: record, _resourceId: record, _version: int, expirationDate: int, userKey: string, variationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($projectKey)/($userKey)/expiring-user-targets/($environmentKey)")
+  let full_url = (build-url $base ({project_key: $project_key, user_key: $user_key, environment_key: $environment_key} | format pattern "/users/{project_key}/{user_key}/expiring-user-targets/{environment_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2533,7 +2533,7 @@ export def "webhooks list" [
 #
 # POST /webhooks
 # operationId: postWebhook
-export def "webhooks post" [
+export def "webhooks create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2556,7 +2556,7 @@ export def "webhooks post" [
 # DELETE /webhooks/{resourceId}
 # operationId: deleteWebhook
 export def "webhooks delete" [
-  resourceId: string
+  resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2568,7 +2568,7 @@ export def "webhooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($resourceId)")
+  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/webhooks/{resource_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2579,7 +2579,7 @@ export def "webhooks delete" [
 # GET /webhooks/{resourceId}
 # operationId: getWebhook
 export def "webhooks get" [
-  resourceId: string
+  resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2591,7 +2591,7 @@ export def "webhooks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($resourceId)")
+  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/webhooks/{resource_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2601,8 +2601,8 @@ export def "webhooks get" [
 #
 # PATCH /webhooks/{resourceId}
 # operationId: patchWebhook
-export def "webhooks patch" [
-  resourceId: string
+export def "webhooks update" [
+  resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2614,7 +2614,7 @@ export def "webhooks patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/webhooks/($resourceId)")
+  let full_url = (build-url $base ({resource_id: $resource_id} | format pattern "/webhooks/{resource_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

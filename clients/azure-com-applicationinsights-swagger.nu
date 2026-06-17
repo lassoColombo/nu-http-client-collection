@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-insights-components-events-metadata GetOdataMetadata" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-insights-components-events-metadata get-odata" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/events/$metadata
 # operationId: Events_GetOdataMetadata
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-events-metadata GetOdataMetadata" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationName: string
+export def "subscriptions-resourcegroups-providers-microsoft-insights-components-events-metadata get-odata" [
+  subscription_id: string
+  resource_group_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,12 +105,12 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiVersion: string # Client API version.
+  --api-version: string # Client API version.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiVersion" $apiVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Insights/components/($applicationName)/events/$metadata" $qp)
+  let qp = [(serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_name: $application_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/events/$metadata") $qp)
   let accept_val = "application/xml;charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,11 +120,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/events/{eventType}
 # operationId: Events_GetByType
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-events GetByType" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationName: string
-  eventType: string
+export def "subscriptions-resourcegroups-providers-microsoft-insights-components-events get-by-type" [
+  subscription_id: string
+  resource_group_name: string
+  application_name: string
+  event_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,12 +143,12 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
   --format: string # Format for the returned events
   --count: oneof<nothing, bool> # Request a count of matching items included with the returned events
   --apply: string # An expression used for aggregation over returned events
-  --apiVersion: string # Client API version.
+  --api-version: string # Client API version.
 ]: nothing -> record<_ai_messages: table<additionalProperties: record, code: string, details: list, innererror: any, message: string>, _odata_context: string, value: table<ai: record, application: record, client: record, cloud: record, count: int, customDimensions: record, customMeasurements: record, id: string, operation: record, session: record, timestamp: string, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$search" $search "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$format" $format "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "$apply" $apply "scalar") (serialize-qp "apiVersion" $apiVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Insights/components/($applicationName)/events/($eventType)" $qp)
+  let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$search" $search "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$format" $format "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "$apply" $apply "scalar") (serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_name: $application_name, event_type: $event_type} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/events/{event_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -158,12 +158,12 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/events/{eventType}/{eventId}
 # operationId: Events_Get
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-events Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationName: string
-  eventType: string
-  eventId: string
+export def "subscriptions-resourcegroups-providers-microsoft-insights-components-events get" [
+  subscription_id: string
+  resource_group_name: string
+  application_name: string
+  event_type: string
+  event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,12 +173,12 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --timespan: string # Optional. The timespan over which to retrieve events. This is an ISO8601 time period value.  This timespan is applied in addition to any that are specified in the Odata expression.
-  --apiVersion: string # Client API version.
+  --api-version: string # Client API version.
 ]: nothing -> record<_ai_messages: table<additionalProperties: record, code: string, details: list, innererror: any, message: string>, _odata_context: string, value: table<ai: record, application: record, client: record, cloud: record, count: int, customDimensions: record, customMeasurements: record, id: string, operation: record, session: record, timestamp: string, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "apiVersion" $apiVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Insights/components/($applicationName)/events/($eventType)/($eventId)" $qp)
+  let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_name: $application_name, event_type: $event_type, event_id: $event_id} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/events/{event_type}/{event_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -188,10 +188,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/metrics/metadata
 # operationId: Metrics_GetMetadata
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-metrics-metadata GetMetadata" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationName: string
+export def "subscriptions-resourcegroups-providers-microsoft-insights-components-metrics-metadata get" [
+  subscription_id: string
+  resource_group_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,12 +200,12 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiVersion: string # Client API version.
+  --api-version: string # Client API version.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiVersion" $apiVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Insights/components/($applicationName)/metrics/metadata" $qp)
+  let qp = [(serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_name: $application_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/metrics/metadata") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -215,11 +215,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/metrics/{metricId}
 # operationId: Metrics_Get
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-metrics Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationName: string
-  metricId: string
+export def "subscriptions-resourcegroups-providers-microsoft-insights-components-metrics get" [
+  subscription_id: string
+  resource_group_name: string
+  application_name: string
+  metric_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,12 +235,12 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
   --top: int # The number of segments to return.  This value is only valid when segment is specified. (format: int32)
   --orderby: string # The aggregation function and direction to sort the segments by.  This value is only valid when segment is specified.
   --filter: string # An expression used to filter the results.  This value should be a valid OData filter expression where the keys of each clause should be applicable dimensions for the metric you are retrieving.
-  --apiVersion: string # Client API version.
+  --api-version: string # Client API version.
 ]: nothing -> record<value: record<end: string, interval: string, segments: list<record>, start: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "aggregation" $aggregation "csv") (serialize-qp "segment" $segment "csv") (serialize-qp "top" $top "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "apiVersion" $apiVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Insights/components/($applicationName)/metrics/($metricId)" $qp)
+  let qp = [(serialize-qp "timespan" $timespan "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "aggregation" $aggregation "csv") (serialize-qp "segment" $segment "csv") (serialize-qp "top" $top "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_name: $application_name, metric_id: $metric_id} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/metrics/{metric_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,10 +250,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/query
 # operationId: Query_Get
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-query Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationName: string
+export def "subscriptions-resourcegroups-providers-microsoft-insights-components-query get" [
+  subscription_id: string
+  resource_group_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,12 +264,12 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The Analytics query. Learn more about the [Analytics query syntax](https://azure.microsoft.com/documentation/articles/app-insights-analytics-reference/)
   --timespan: string # Optional. The timespan over which to query data. This is an ISO8601 time period value.  This timespan is applied in addition to any that are specified in the query expression.
-  --apiVersion: string # Client API version.
+  --api-version: string # Client API version.
 ]: nothing -> record<tables: table<columns: list, name: string, rows: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "apiVersion" $apiVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Insights/components/($applicationName)/query" $qp)
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "timespan" $timespan "scalar") (serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_name: $application_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/query") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,10 +279,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Insights/components/{applicationName}/query
 # operationId: Query_Execute
-export def "subscriptions-resourcegroups-providers-microsoft-insights-components-query Execute" [
-  subscriptionId: string
-  resourceGroupName: string
-  applicationName: string
+export def "subscriptions-resourcegroups-providers-microsoft-insights-components-query exec-ute" [
+  subscription_id: string
+  resource_group_name: string
+  application_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,12 +291,12 @@ export def "subscriptions-resourcegroups-providers-microsoft-insights-components
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiVersion: string # Client API version.
+  --api-version: string # Client API version.
 ]: nothing -> record<tables: table<columns: list, name: string, rows: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiVersion" $apiVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Insights/components/($applicationName)/query" $qp)
+  let qp = [(serialize-qp "apiVersion" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, application_name: $application_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Insights/components/{application_name}/query") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

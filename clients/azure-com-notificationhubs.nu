@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-notification-hubs-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-notification-hubs-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.NotificationHubs/operations
 # operationId: Operations_List
-export def "providers-microsoft-notification-hubs-operations List" [
+export def "providers-microsoft-notification-hubs-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,8 +118,8 @@ export def "providers-microsoft-notification-hubs-operations List" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.NotificationHubs/checkNamespaceAvailability
 # operationId: Namespaces_CheckAvailability
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-providers-microsoft-notification-hubs-check-namespace-availability CheckAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-notification-hubs-check-namespace-availability check" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,7 +129,7 @@ export def "subscriptions-providers-microsoft-notification-hubs-check-namespace-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --isAvailiable: oneof<nothing, bool> # True if the name is available and can be used to create new Namespace/NotificationHub. Otherwise false.
+  --is-availiable: oneof<nothing, bool> # True if the name is available and can be used to create new Namespace/NotificationHub. Otherwise false.
   --location: string # Resource location
   name: string # Resource name
   --sku: any # The Sku description for a namespace — shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
@@ -139,8 +139,8 @@ export def "subscriptions-providers-microsoft-notification-hubs-check-namespace-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.NotificationHubs/checkNamespaceAvailability" $qp)
-  let body = {isAvailiable: $isAvailiable, location: $location, name: $name, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.NotificationHubs/checkNamespaceAvailability") $qp)
+  let body = {"isAvailiable": $is_availiable, "location": $location, "name": $name, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,8 +151,8 @@ export def "subscriptions-providers-microsoft-notification-hubs-check-namespace-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.NotificationHubs/namespaces
 # operationId: Namespaces_ListAll
-export def "subscriptions-providers-microsoft-notification-hubs-namespaces ListAll" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-notification-hubs-namespaces list-all" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "subscriptions-providers-microsoft-notification-hubs-namespaces ListA
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.NotificationHubs/namespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.NotificationHubs/namespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,9 +176,9 @@ export def "subscriptions-providers-microsoft-notification-hubs-namespaces ListA
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces
 # operationId: Namespaces_List
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces List" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -203,10 +203,10 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}
 # Docs: http://msdn.microsoft.com/en-us/library/windowsazure/jj856296.aspx
 # operationId: Namespaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces Delete" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,10 +230,10 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}
 # operationId: Namespaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces Get" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -258,10 +258,10 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}
 # operationId: Namespaces_Patch
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces Patch" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,8 +278,8 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)" $qp)
-  let body = {sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}") $qp)
+  let body = {"sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,10 +293,10 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # operationId: Namespaces_CreateOrUpdate
 # --properties shape: {createdAt?: string, critical?: bool, dataCenter?: string, enabled?: bool, name?: string, namespaceType?: "Messaging"|"NotificationHub", provisioningState?: string, region?: string, scaleUnit?: string, serviceBusEndpoint?: string, status?: string, subscriptionId?: string, updatedAt?: string}
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces CreateOrUpdate" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,8 +315,8 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)" $qp)
-  let body = {properties: $properties, location: $location, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -327,10 +327,10 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules
 # operationId: Namespaces_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules ListAuthorizationRules" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/AuthorizationRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/AuthorizationRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -354,11 +354,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules DeleteAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/AuthorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/AuthorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -382,11 +382,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules GetAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/AuthorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/AuthorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,11 +411,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights?: list}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules CreateOrUpdateAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,8 +431,8 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/AuthorizationRules/($authorizationRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/AuthorizationRules/{authorization_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -443,11 +443,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}/listKeys
 # operationId: Namespaces_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules-list-keys ListKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/AuthorizationRules/($authorizationRuleName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/AuthorizationRules/{authorization_rule_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -471,11 +471,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: Namespaces_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules-regenerate-keys RegenerateKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-authorization-rules-regenerate-keys post" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,14 +485,14 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --policyKey: string # Name of the key that has to be regenerated for the Namespace/Notification Hub Authorization Rule. The value can be Primary Key/Secondary Key.
+  --policy-key: string # Name of the key that has to be regenerated for the Namespace/Notification Hub Authorization Rule. The value can be Primary Key/Secondary Key.
 ]: any -> record<keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/AuthorizationRules/($authorizationRuleName)/regenerateKeys" $qp)
-  let body = {policyKey: $policyKey} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/AuthorizationRules/{authorization_rule_name}/regenerateKeys") $qp)
+  let body = {"policyKey": $policy_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -504,10 +504,10 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/checkNotificationHubAvailability
 # operationId: NotificationHubs_CheckNotificationHubAvailability
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-check-notification-hub-availability CheckNotificationHubAvailability" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-check-notification-hub-availability check" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --isAvailiable: oneof<nothing, bool> # True if the name is available and can be used to create new Namespace/NotificationHub. Otherwise false.
+  --is-availiable: oneof<nothing, bool> # True if the name is available and can be used to create new Namespace/NotificationHub. Otherwise false.
   --location: string # Resource location
   name: string # Resource name
   --sku: any # The Sku description for a namespace — shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
@@ -527,8 +527,8 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/checkNotificationHubAvailability" $qp)
-  let body = {isAvailiable: $isAvailiable, location: $location, name: $name, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/checkNotificationHubAvailability") $qp)
+  let body = {"isAvailiable": $is_availiable, "location": $location, "name": $name, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -539,10 +539,10 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs
 # operationId: NotificationHubs_List
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs List" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -556,7 +556,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -566,11 +566,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}
 # operationId: NotificationHubs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs Delete" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -594,11 +594,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}
 # operationId: NotificationHubs_Get
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs Get" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,7 +612,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -624,11 +624,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # operationId: NotificationHubs_Patch
 # --properties shape: {admCredential?: any, apnsCredential?: any, authorizationRules?: list, baiduCredential?: any, gcmCredential?: any, mpnsCredential?: any, name?: string, registrationTtl?: string, wnsCredential?: any}
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs Patch" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,8 +647,8 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)" $qp)
-  let body = {properties: $properties, location: $location, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -661,11 +661,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # operationId: NotificationHubs_CreateOrUpdate
 # --properties shape: {admCredential?: any, apnsCredential?: any, authorizationRules?: list, baiduCredential?: any, gcmCredential?: any, mpnsCredential?: any, name?: string, registrationTtl?: string, wnsCredential?: any}
 # --sku shape: {capacity?: int, family?: string, name: "Free"|"Basic"|"Standard", size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs CreateOrUpdate" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,8 +684,8 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)" $qp)
-  let body = {properties: $properties, location: $location, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -696,11 +696,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules
 # operationId: NotificationHubs_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules ListAuthorizationRules" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +714,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)/AuthorizationRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}/AuthorizationRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -724,12 +724,12 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules/{authorizationRuleName}
 # operationId: NotificationHubs_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules DeleteAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -743,7 +743,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)/AuthorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}/AuthorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -753,12 +753,12 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules/{authorizationRuleName}
 # operationId: NotificationHubs_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules GetAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)/AuthorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}/AuthorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -783,12 +783,12 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules/{authorizationRuleName}
 # operationId: NotificationHubs_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights?: list}
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules CreateOrUpdateAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,8 +804,8 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)/AuthorizationRules/($authorizationRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}/AuthorizationRules/{authorization_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -816,12 +816,12 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules/{authorizationRuleName}/listKeys
 # operationId: NotificationHubs_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules-list-keys ListKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,7 +835,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)/AuthorizationRules/($authorizationRuleName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}/AuthorizationRules/{authorization_rule_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -845,12 +845,12 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/AuthorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: NotificationHubs_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules-regenerate-keys RegenerateKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-authorization-rules-regenerate-keys post" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,14 +860,14 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --policyKey: string # Name of the key that has to be regenerated for the Namespace/Notification Hub Authorization Rule. The value can be Primary Key/Secondary Key.
+  --policy-key: string # Name of the key that has to be regenerated for the Namespace/Notification Hub Authorization Rule. The value can be Primary Key/Secondary Key.
 ]: any -> record<keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)/AuthorizationRules/($authorizationRuleName)/regenerateKeys" $qp)
-  let body = {policyKey: $policyKey} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}/AuthorizationRules/{authorization_rule_name}/regenerateKeys") $qp)
+  let body = {"policyKey": $policy_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -878,11 +878,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/debugsend
 # operationId: NotificationHubs_DebugSend
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-debugsend DebugSend" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-debugsend post" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,7 +898,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)/debugsend" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}/debugsend") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -909,11 +909,11 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.NotificationHubs/namespaces/{namespaceName}/notificationHubs/{notificationHubName}/pnsCredentials
 # operationId: NotificationHubs_GetPnsCredentials
-export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-pns-credentials GetPnsCredentials" [
-  resourceGroupName: string
-  namespaceName: string
-  notificationHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-namespaces-notification-hubs-pns-credentials get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  notification_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,7 +927,7 @@ export def "subscriptions-resource-groups-providers-microsoft-notification-hubs-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.NotificationHubs/namespaces/($namespaceName)/notificationHubs/($notificationHubName)/pnsCredentials" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, notification_hub_name: $notification_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.NotificationHubs/namespaces/{namespace_name}/notificationHubs/{notification_hub_name}/pnsCredentials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

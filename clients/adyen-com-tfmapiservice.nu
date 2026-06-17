@@ -103,9 +103,9 @@ export def "assign-terminals post-assignTerminals" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  companyAccount: string # Your company account. To return terminals to the company inventory, specify only this parameter and the `terminals`.
-  --merchantAccount: string # Name of the merchant account. Specify this parameter to assign terminals to this merchant account or to a store under this merchant account.
-  --merchantInventory: oneof<nothing, bool> # Boolean that indicates if you are assigning the terminals to the merchant inventory. Do not use when assigning terminals to a store. Required when assigning the terminal to a merchant account.  - Set this to **true** to assign the terminals to the merchant inventory. This also means that the terminals cannot be boarded.  - Set this to **false** to assign the terminals to the merchant account as in-store terminals. This makes the terminals ready to be boarded and to process payments through the specified merchant account.
+  company_account: string # Your company account. To return terminals to the company inventory, specify only this parameter and the `terminals`.
+  --merchant-account: string # Name of the merchant account. Specify this parameter to assign terminals to this merchant account or to a store under this merchant account.
+  --merchant-inventory: oneof<nothing, bool> # Boolean that indicates if you are assigning the terminals to the merchant inventory. Do not use when assigning terminals to a store. Required when assigning the terminal to a merchant account.  - Set this to **true** to assign the terminals to the merchant inventory. This also means that the terminals cannot be boarded.  - Set this to **false** to assign the terminals to the merchant account as in-store terminals. This makes the terminals ready to be boarded and to process payments through the specified merchant account.
   --store: string # The store code of the store that you want to assign the terminals to.
   terminals: list # Array containing a list of terminal IDs that you want to assign or reassign to the merchant account or store, or that you want to return to the company inventory.  For example, `["V400m-324689776","P400Plus-329127412"]`.
 ]: any -> record<results: record> {
@@ -113,7 +113,7 @@ export def "assign-terminals post-assignTerminals" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assignTerminals")
-  let body = {companyAccount: $companyAccount, merchantAccount: $merchantAccount, merchantInventory: $merchantInventory, store: $store, terminals: $terminals} | compact
+  let body = {"companyAccount": $company_account, "merchantAccount": $merchant_account, "merchantInventory": $merchant_inventory, "store": $store, "terminals": $terminals} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -139,7 +139,7 @@ export def "find-terminal post-findTerminal" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/findTerminal")
-  let body = {terminal: $terminal} | compact
+  let body = {"terminal": $terminal} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -159,14 +159,14 @@ export def "get-stores-under-account post-getStoresUnderAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  companyAccount: string # The company account. If you only specify this parameter, the response includes the stores of all merchant accounts that are associated with the company account.
-  --merchantAccount: string # The merchant account. With this parameter, the response only includes the stores of the specified merchant account.
+  company_account: string # The company account. If you only specify this parameter, the response includes the stores of all merchant accounts that are associated with the company account.
+  --merchant-account: string # The merchant account. With this parameter, the response only includes the stores of the specified merchant account.
 ]: any -> record<stores: table<address: record, description: string, inStoreTerminals: list, merchantAccountCode: string, status: string, store: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getStoresUnderAccount")
-  let body = {companyAccount: $companyAccount, merchantAccount: $merchantAccount} | compact
+  let body = {"companyAccount": $company_account, "merchantAccount": $merchant_account} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -192,7 +192,7 @@ export def "get-terminal-details post-getTerminalDetails" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getTerminalDetails")
-  let body = {terminal: $terminal} | compact
+  let body = {"terminal": $terminal} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,15 +212,15 @@ export def "get-terminals-under-account post-getTerminalsUnderAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  companyAccount: string # Your company account. If you only specify this parameter, the response includes all terminals at all account levels.
-  --merchantAccount: string # The merchant account. This is required if you are retrieving the terminals assigned to a store.If you don't specify a `store` the response includes the terminals assigned to the specified merchant account and the terminals assigned to the stores under this merchant account.
+  company_account: string # Your company account. If you only specify this parameter, the response includes all terminals at all account levels.
+  --merchant-account: string # The merchant account. This is required if you are retrieving the terminals assigned to a store.If you don't specify a `store` the response includes the terminals assigned to the specified merchant account and the terminals assigned to the stores under this merchant account.
   --store: string # The store code of the store. With this parameter, the response only includes the terminals assigned to the specified store.
 ]: any -> record<companyAccount: string, inventoryTerminals: list<string>, merchantAccounts: table<inStoreTerminals: list, inventoryTerminals: list, merchantAccount: string, stores: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getTerminalsUnderAccount")
-  let body = {companyAccount: $companyAccount, merchantAccount: $merchantAccount, store: $store} | compact
+  let body = {"companyAccount": $company_account, "merchantAccount": $merchant_account, "store": $store} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

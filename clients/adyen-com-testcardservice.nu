@@ -104,15 +104,15 @@ export def "create-test-card-ranges post-createTestCardRanges" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountCode: string # The code of the account, for which the test card ranges should be created.
-  accountTypeCode: string # The type of the account, for which the test card ranges should be created.  Permitted values: * Company * MerchantAccount > These values are case-sensitive.
-  testCardRanges: list # A list of test card ranges to create. — item shape: {address?: any, cardHolderName: string, cvc?: string, expiryMonth: "APRIL"|"AUGUST"|"DECEMBER"|"FEBRUARY"|"JANUARY"|"JULY"|"JUNE"|"MARCH"|"MAY"|"NOVEMBER"|"OCTOBER"|"SEPTEMBER", expiryYear: int, rangeEnd: string, rangeStart: string, threeDDirectoryServerResponse?: "N"|"U"|"Y", threeDPassword?: string, threeDUsername?: string}
+  account_code: string # The code of the account, for which the test card ranges should be created.
+  account_type_code: string # The type of the account, for which the test card ranges should be created.  Permitted values: * Company * MerchantAccount > These values are case-sensitive.
+  test_card_ranges: list # A list of test card ranges to create. — item shape: {address?: any, cardHolderName: string, cvc?: string, expiryMonth: "APRIL"|"AUGUST"|"DECEMBER"|"FEBRUARY"|"JANUARY"|"JULY"|"JUNE"|"MARCH"|"MAY"|"NOVEMBER"|"OCTOBER"|"SEPTEMBER", expiryYear: int, rangeEnd: string, rangeStart: string, threeDDirectoryServerResponse?: "N"|"U"|"Y", threeDPassword?: string, threeDUsername?: string}
 ]: any -> record<rangeCreationResults: table<cardNumberRangeEnd: string, cardNumberRangeStart: string, creationResultCode: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createTestCardRanges")
-  let body = {accountCode: $accountCode, accountTypeCode: $accountTypeCode, testCardRanges: $testCardRanges} | compact
+  let body = {"accountCode": $account_code, "accountTypeCode": $account_type_code, "testCardRanges": $test_card_ranges} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

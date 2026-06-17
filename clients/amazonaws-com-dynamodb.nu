@@ -66,65 +66,65 @@ def base-url-completer [] { ["http://dynamodb.us-east-1.amazonaws.com" "http://d
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def ReturnConsumedCapacity-completer [] { ["INDEXES" "NONE" "TOTAL"] }
-def X-Amz-Target-completer [] { ["DynamoDB_20120810.BatchExecuteStatement"] }
-def X-Amz-Target-completer-1 [] { ["DynamoDB_20120810.BatchGetItem"] }
-def X-Amz-Target-completer-2 [] { ["DynamoDB_20120810.BatchWriteItem"] }
-def X-Amz-Target-completer-3 [] { ["DynamoDB_20120810.CreateBackup"] }
-def X-Amz-Target-completer-4 [] { ["DynamoDB_20120810.CreateGlobalTable"] }
-def X-Amz-Target-completer-5 [] { ["DynamoDB_20120810.CreateTable"] }
-def X-Amz-Target-completer-6 [] { ["DynamoDB_20120810.DeleteBackup"] }
-def X-Amz-Target-completer-7 [] { ["DynamoDB_20120810.DeleteItem"] }
-def X-Amz-Target-completer-8 [] { ["DynamoDB_20120810.DeleteTable"] }
-def X-Amz-Target-completer-9 [] { ["DynamoDB_20120810.DescribeBackup"] }
-def X-Amz-Target-completer-10 [] { ["DynamoDB_20120810.DescribeContinuousBackups"] }
-def X-Amz-Target-completer-11 [] { ["DynamoDB_20120810.DescribeContributorInsights"] }
-def X-Amz-Target-completer-12 [] { ["DynamoDB_20120810.DescribeEndpoints"] }
-def X-Amz-Target-completer-13 [] { ["DynamoDB_20120810.DescribeExport"] }
-def X-Amz-Target-completer-14 [] { ["DynamoDB_20120810.DescribeGlobalTable"] }
-def X-Amz-Target-completer-15 [] { ["DynamoDB_20120810.DescribeGlobalTableSettings"] }
-def X-Amz-Target-completer-16 [] { ["DynamoDB_20120810.DescribeImport"] }
-def X-Amz-Target-completer-17 [] { ["DynamoDB_20120810.DescribeKinesisStreamingDestination"] }
-def X-Amz-Target-completer-18 [] { ["DynamoDB_20120810.DescribeLimits"] }
-def X-Amz-Target-completer-19 [] { ["DynamoDB_20120810.DescribeTable"] }
-def X-Amz-Target-completer-20 [] { ["DynamoDB_20120810.DescribeTableReplicaAutoScaling"] }
-def X-Amz-Target-completer-21 [] { ["DynamoDB_20120810.DescribeTimeToLive"] }
-def X-Amz-Target-completer-22 [] { ["DynamoDB_20120810.DisableKinesisStreamingDestination"] }
-def X-Amz-Target-completer-23 [] { ["DynamoDB_20120810.EnableKinesisStreamingDestination"] }
-def X-Amz-Target-completer-24 [] { ["DynamoDB_20120810.ExecuteStatement"] }
-def X-Amz-Target-completer-25 [] { ["DynamoDB_20120810.ExecuteTransaction"] }
-def X-Amz-Target-completer-26 [] { ["DynamoDB_20120810.ExportTableToPointInTime"] }
-def X-Amz-Target-completer-27 [] { ["DynamoDB_20120810.GetItem"] }
-def X-Amz-Target-completer-28 [] { ["DynamoDB_20120810.ImportTable"] }
-def X-Amz-Target-completer-29 [] { ["DynamoDB_20120810.ListBackups"] }
-def X-Amz-Target-completer-30 [] { ["DynamoDB_20120810.ListContributorInsights"] }
-def X-Amz-Target-completer-31 [] { ["DynamoDB_20120810.ListExports"] }
-def X-Amz-Target-completer-32 [] { ["DynamoDB_20120810.ListGlobalTables"] }
-def X-Amz-Target-completer-33 [] { ["DynamoDB_20120810.ListImports"] }
-def X-Amz-Target-completer-34 [] { ["DynamoDB_20120810.ListTables"] }
-def X-Amz-Target-completer-35 [] { ["DynamoDB_20120810.ListTagsOfResource"] }
-def X-Amz-Target-completer-36 [] { ["DynamoDB_20120810.PutItem"] }
-def X-Amz-Target-completer-37 [] { ["DynamoDB_20120810.Query"] }
-def X-Amz-Target-completer-38 [] { ["DynamoDB_20120810.RestoreTableFromBackup"] }
-def X-Amz-Target-completer-39 [] { ["DynamoDB_20120810.RestoreTableToPointInTime"] }
-def X-Amz-Target-completer-40 [] { ["DynamoDB_20120810.Scan"] }
-def X-Amz-Target-completer-41 [] { ["DynamoDB_20120810.TagResource"] }
-def X-Amz-Target-completer-42 [] { ["DynamoDB_20120810.TransactGetItems"] }
-def X-Amz-Target-completer-43 [] { ["DynamoDB_20120810.TransactWriteItems"] }
-def X-Amz-Target-completer-44 [] { ["DynamoDB_20120810.UntagResource"] }
-def X-Amz-Target-completer-45 [] { ["DynamoDB_20120810.UpdateContinuousBackups"] }
-def X-Amz-Target-completer-46 [] { ["DynamoDB_20120810.UpdateContributorInsights"] }
-def X-Amz-Target-completer-47 [] { ["DynamoDB_20120810.UpdateGlobalTable"] }
-def X-Amz-Target-completer-48 [] { ["DynamoDB_20120810.UpdateGlobalTableSettings"] }
-def X-Amz-Target-completer-49 [] { ["DynamoDB_20120810.UpdateItem"] }
-def X-Amz-Target-completer-50 [] { ["DynamoDB_20120810.UpdateTable"] }
-def X-Amz-Target-completer-51 [] { ["DynamoDB_20120810.UpdateTableReplicaAutoScaling"] }
-def X-Amz-Target-completer-52 [] { ["DynamoDB_20120810.UpdateTimeToLive"] }
+def return-consumed-capacity-completer [] { ["INDEXES" "NONE" "TOTAL"] }
+def x-amz-target-completer [] { ["DynamoDB_20120810.BatchExecuteStatement"] }
+def x-amz-target-completer-1 [] { ["DynamoDB_20120810.BatchGetItem"] }
+def x-amz-target-completer-2 [] { ["DynamoDB_20120810.BatchWriteItem"] }
+def x-amz-target-completer-3 [] { ["DynamoDB_20120810.CreateBackup"] }
+def x-amz-target-completer-4 [] { ["DynamoDB_20120810.CreateGlobalTable"] }
+def x-amz-target-completer-5 [] { ["DynamoDB_20120810.CreateTable"] }
+def x-amz-target-completer-6 [] { ["DynamoDB_20120810.DeleteBackup"] }
+def x-amz-target-completer-7 [] { ["DynamoDB_20120810.DeleteItem"] }
+def x-amz-target-completer-8 [] { ["DynamoDB_20120810.DeleteTable"] }
+def x-amz-target-completer-9 [] { ["DynamoDB_20120810.DescribeBackup"] }
+def x-amz-target-completer-10 [] { ["DynamoDB_20120810.DescribeContinuousBackups"] }
+def x-amz-target-completer-11 [] { ["DynamoDB_20120810.DescribeContributorInsights"] }
+def x-amz-target-completer-12 [] { ["DynamoDB_20120810.DescribeEndpoints"] }
+def x-amz-target-completer-13 [] { ["DynamoDB_20120810.DescribeExport"] }
+def x-amz-target-completer-14 [] { ["DynamoDB_20120810.DescribeGlobalTable"] }
+def x-amz-target-completer-15 [] { ["DynamoDB_20120810.DescribeGlobalTableSettings"] }
+def x-amz-target-completer-16 [] { ["DynamoDB_20120810.DescribeImport"] }
+def x-amz-target-completer-17 [] { ["DynamoDB_20120810.DescribeKinesisStreamingDestination"] }
+def x-amz-target-completer-18 [] { ["DynamoDB_20120810.DescribeLimits"] }
+def x-amz-target-completer-19 [] { ["DynamoDB_20120810.DescribeTable"] }
+def x-amz-target-completer-20 [] { ["DynamoDB_20120810.DescribeTableReplicaAutoScaling"] }
+def x-amz-target-completer-21 [] { ["DynamoDB_20120810.DescribeTimeToLive"] }
+def x-amz-target-completer-22 [] { ["DynamoDB_20120810.DisableKinesisStreamingDestination"] }
+def x-amz-target-completer-23 [] { ["DynamoDB_20120810.EnableKinesisStreamingDestination"] }
+def x-amz-target-completer-24 [] { ["DynamoDB_20120810.ExecuteStatement"] }
+def x-amz-target-completer-25 [] { ["DynamoDB_20120810.ExecuteTransaction"] }
+def x-amz-target-completer-26 [] { ["DynamoDB_20120810.ExportTableToPointInTime"] }
+def x-amz-target-completer-27 [] { ["DynamoDB_20120810.GetItem"] }
+def x-amz-target-completer-28 [] { ["DynamoDB_20120810.ImportTable"] }
+def x-amz-target-completer-29 [] { ["DynamoDB_20120810.ListBackups"] }
+def x-amz-target-completer-30 [] { ["DynamoDB_20120810.ListContributorInsights"] }
+def x-amz-target-completer-31 [] { ["DynamoDB_20120810.ListExports"] }
+def x-amz-target-completer-32 [] { ["DynamoDB_20120810.ListGlobalTables"] }
+def x-amz-target-completer-33 [] { ["DynamoDB_20120810.ListImports"] }
+def x-amz-target-completer-34 [] { ["DynamoDB_20120810.ListTables"] }
+def x-amz-target-completer-35 [] { ["DynamoDB_20120810.ListTagsOfResource"] }
+def x-amz-target-completer-36 [] { ["DynamoDB_20120810.PutItem"] }
+def x-amz-target-completer-37 [] { ["DynamoDB_20120810.Query"] }
+def x-amz-target-completer-38 [] { ["DynamoDB_20120810.RestoreTableFromBackup"] }
+def x-amz-target-completer-39 [] { ["DynamoDB_20120810.RestoreTableToPointInTime"] }
+def x-amz-target-completer-40 [] { ["DynamoDB_20120810.Scan"] }
+def x-amz-target-completer-41 [] { ["DynamoDB_20120810.TagResource"] }
+def x-amz-target-completer-42 [] { ["DynamoDB_20120810.TransactGetItems"] }
+def x-amz-target-completer-43 [] { ["DynamoDB_20120810.TransactWriteItems"] }
+def x-amz-target-completer-44 [] { ["DynamoDB_20120810.UntagResource"] }
+def x-amz-target-completer-45 [] { ["DynamoDB_20120810.UpdateContinuousBackups"] }
+def x-amz-target-completer-46 [] { ["DynamoDB_20120810.UpdateContributorInsights"] }
+def x-amz-target-completer-47 [] { ["DynamoDB_20120810.UpdateGlobalTable"] }
+def x-amz-target-completer-48 [] { ["DynamoDB_20120810.UpdateGlobalTableSettings"] }
+def x-amz-target-completer-49 [] { ["DynamoDB_20120810.UpdateItem"] }
+def x-amz-target-completer-50 [] { ["DynamoDB_20120810.UpdateTable"] }
+def x-amz-target-completer-51 [] { ["DynamoDB_20120810.UpdateTableReplicaAutoScaling"] }
+def x-amz-target-completer-52 [] { ["DynamoDB_20120810.UpdateTimeToLive"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-dynamo-db-20120810batch-execute-statement BatchExecuteStatement" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-dynamo-db-20120810batch-execute-statement post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.BatchExecuteStatement
 # operationId: BatchExecuteStatement
-export def "x-amz-target-dynamo-db-20120810batch-execute-statement BatchExecuteStatement" [
+export def "x-amz-target-dynamo-db-20120810batch-execute-statement post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,24 +157,24 @@ export def "x-amz-target-dynamo-db-20120810batch-execute-statement BatchExecuteS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  Statements: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  statements: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
 ]: any -> record<Responses: record, ConsumedCapacity: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.BatchExecuteStatement")
-  let body = {Statements: $Statements, ReturnConsumedCapacity: $ReturnConsumedCapacity} | compact
+  let body = {"Statements": $statements, "ReturnConsumedCapacity": $return_consumed_capacity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -185,7 +185,7 @@ export def "x-amz-target-dynamo-db-20120810batch-execute-statement BatchExecuteS
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.BatchGetItem
 # operationId: BatchGetItem
-export def "x-amz-target-dynamo-db-20120810batch-get-item BatchGetItem" [
+export def "x-amz-target-dynamo-db-20120810batch-get-item post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,26 +194,26 @@ export def "x-amz-target-dynamo-db-20120810batch-get-item BatchGetItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --RequestItems: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  RequestItems: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --request-items: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  request_items: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
 ]: any -> record<Responses: record, UnprocessedKeys: record, ConsumedCapacity: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "RequestItems" $RequestItems "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "RequestItems" $request_items "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.BatchGetItem" $qp)
-  let body = {RequestItems: $RequestItems, ReturnConsumedCapacity: $ReturnConsumedCapacity} | compact
+  let body = {"RequestItems": $request_items, "ReturnConsumedCapacity": $return_consumed_capacity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -224,7 +224,7 @@ export def "x-amz-target-dynamo-db-20120810batch-get-item BatchGetItem" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.BatchWriteItem
 # operationId: BatchWriteItem
-export def "x-amz-target-dynamo-db-20120810batch-write-item BatchWriteItem" [
+export def "x-amz-target-dynamo-db-20120810batch-write-item post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,25 +233,25 @@ export def "x-amz-target-dynamo-db-20120810batch-write-item BatchWriteItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  RequestItems: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
-  --ReturnItemCollectionMetrics: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  request_items: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --return-item-collection-metrics: any
 ]: any -> record<UnprocessedItems: record, ItemCollectionMetrics: record, ConsumedCapacity: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.BatchWriteItem")
-  let body = {RequestItems: $RequestItems, ReturnConsumedCapacity: $ReturnConsumedCapacity, ReturnItemCollectionMetrics: $ReturnItemCollectionMetrics} | compact
+  let body = {"RequestItems": $request_items, "ReturnConsumedCapacity": $return_consumed_capacity, "ReturnItemCollectionMetrics": $return_item_collection_metrics} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -262,7 +262,7 @@ export def "x-amz-target-dynamo-db-20120810batch-write-item BatchWriteItem" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.CreateBackup
 # operationId: CreateBackup
-export def "x-amz-target-dynamo-db-20120810create-backup CreateBackup" [
+export def "x-amz-target-dynamo-db-20120810create-backup create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,24 +271,24 @@ export def "x-amz-target-dynamo-db-20120810create-backup CreateBackup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  TableName: any
-  BackupName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  table_name: any
+  backup_name: any
 ]: any -> record<BackupDetails: record<BackupArn: record, BackupName: record, BackupSizeBytes: record, BackupStatus: record, BackupType: record, BackupCreationDateTime: record, BackupExpiryDateTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.CreateBackup")
-  let body = {TableName: $TableName, BackupName: $BackupName} | compact
+  let body = {"TableName": $table_name, "BackupName": $backup_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -299,7 +299,7 @@ export def "x-amz-target-dynamo-db-20120810create-backup CreateBackup" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.CreateGlobalTable
 # operationId: CreateGlobalTable
-export def "x-amz-target-dynamo-db-20120810create-global-table CreateGlobalTable" [
+export def "x-amz-target-dynamo-db-20120810create-global-table create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,24 +308,24 @@ export def "x-amz-target-dynamo-db-20120810create-global-table CreateGlobalTable
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  GlobalTableName: any
-  ReplicationGroup: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  global_table_name: any
+  replication_group: any
 ]: any -> record<GlobalTableDescription: record<ReplicationGroup: record, GlobalTableArn: record, CreationDateTime: record, GlobalTableStatus: record, GlobalTableName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.CreateGlobalTable")
-  let body = {GlobalTableName: $GlobalTableName, ReplicationGroup: $ReplicationGroup} | compact
+  let body = {"GlobalTableName": $global_table_name, "ReplicationGroup": $replication_group} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -336,7 +336,7 @@ export def "x-amz-target-dynamo-db-20120810create-global-table CreateGlobalTable
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.CreateTable
 # operationId: CreateTable
-export def "x-amz-target-dynamo-db-20120810create-table CreateTable" [
+export def "x-amz-target-dynamo-db-20120810create-table create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,34 +345,34 @@ export def "x-amz-target-dynamo-db-20120810create-table CreateTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  AttributeDefinitions: any
-  TableName: any
-  KeySchema: any
-  --LocalSecondaryIndexes: any
-  --GlobalSecondaryIndexes: any
-  --BillingMode: any
-  --ProvisionedThroughput: any
-  --StreamSpecification: any
-  --SSESpecification: any
-  --Tags: any
-  --TableClass: any
-  --DeletionProtectionEnabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  attribute_definitions: any
+  table_name: any
+  key_schema: any
+  --local-secondary-indexes: any
+  --global-secondary-indexes: any
+  --billing-mode: any
+  --provisioned-throughput: any
+  --stream-specification: any
+  --sse-specification: any
+  --tags: any
+  --table-class: any
+  --deletion-protection-enabled: any
 ]: any -> record<TableDescription: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.CreateTable")
-  let body = {AttributeDefinitions: $AttributeDefinitions, TableName: $TableName, KeySchema: $KeySchema, LocalSecondaryIndexes: $LocalSecondaryIndexes, GlobalSecondaryIndexes: $GlobalSecondaryIndexes, BillingMode: $BillingMode, ProvisionedThroughput: $ProvisionedThroughput, StreamSpecification: $StreamSpecification, SSESpecification: $SSESpecification, Tags: $Tags, TableClass: $TableClass, DeletionProtectionEnabled: $DeletionProtectionEnabled} | compact
+  let body = {"AttributeDefinitions": $attribute_definitions, "TableName": $table_name, "KeySchema": $key_schema, "LocalSecondaryIndexes": $local_secondary_indexes, "GlobalSecondaryIndexes": $global_secondary_indexes, "BillingMode": $billing_mode, "ProvisionedThroughput": $provisioned_throughput, "StreamSpecification": $stream_specification, "SSESpecification": $sse_specification, "Tags": $tags, "TableClass": $table_class, "DeletionProtectionEnabled": $deletion_protection_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -383,7 +383,7 @@ export def "x-amz-target-dynamo-db-20120810create-table CreateTable" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DeleteBackup
 # operationId: DeleteBackup
-export def "x-amz-target-dynamo-db-20120810delete-backup DeleteBackup" [
+export def "x-amz-target-dynamo-db-20120810delete-backup delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,23 +392,23 @@ export def "x-amz-target-dynamo-db-20120810delete-backup DeleteBackup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  BackupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  backup_arn: any
 ]: any -> record<BackupDescription: record<BackupDetails: record<BackupArn: record, BackupName: record, BackupSizeBytes: record, BackupStatus: record, BackupType: record, BackupCreationDateTime: record, BackupExpiryDateTime: record>, SourceTableDetails: record<TableName: record, TableId: record, TableArn: record, TableSizeBytes: record, KeySchema: record, TableCreationDateTime: record, ProvisionedThroughput: record, ItemCount: record, BillingMode: record>, SourceTableFeatureDetails: record<LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamDescription: record, TimeToLiveDescription: record, SSEDescription: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DeleteBackup")
-  let body = {BackupArn: $BackupArn} | compact
+  let body = {"BackupArn": $backup_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,7 +419,7 @@ export def "x-amz-target-dynamo-db-20120810delete-backup DeleteBackup" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DeleteItem
 # operationId: DeleteItem
-export def "x-amz-target-dynamo-db-20120810delete-item DeleteItem" [
+export def "x-amz-target-dynamo-db-20120810delete-item delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,32 +428,32 @@ export def "x-amz-target-dynamo-db-20120810delete-item DeleteItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  TableName: any
-  Key: any
-  --Expected: any
-  --ConditionalOperator: any
-  --ReturnValues: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
-  --ReturnItemCollectionMetrics: any
-  --ConditionExpression: any
-  --ExpressionAttributeNames: any
-  --ExpressionAttributeValues: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  table_name: any
+  key: any
+  --expected: any
+  --conditional-operator: any
+  --return-values: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --return-item-collection-metrics: any
+  --condition-expression: any
+  --expression-attribute-names: any
+  --expression-attribute-values: any
 ]: any -> record<Attributes: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, ItemCollectionMetrics: record<ItemCollectionKey: record, SizeEstimateRangeGB: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DeleteItem")
-  let body = {TableName: $TableName, Key: $Key, Expected: $Expected, ConditionalOperator: $ConditionalOperator, ReturnValues: $ReturnValues, ReturnConsumedCapacity: $ReturnConsumedCapacity, ReturnItemCollectionMetrics: $ReturnItemCollectionMetrics, ConditionExpression: $ConditionExpression, ExpressionAttributeNames: $ExpressionAttributeNames, ExpressionAttributeValues: $ExpressionAttributeValues} | compact
+  let body = {"TableName": $table_name, "Key": $key, "Expected": $expected, "ConditionalOperator": $conditional_operator, "ReturnValues": $return_values, "ReturnConsumedCapacity": $return_consumed_capacity, "ReturnItemCollectionMetrics": $return_item_collection_metrics, "ConditionExpression": $condition_expression, "ExpressionAttributeNames": $expression_attribute_names, "ExpressionAttributeValues": $expression_attribute_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -464,7 +464,7 @@ export def "x-amz-target-dynamo-db-20120810delete-item DeleteItem" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DeleteTable
 # operationId: DeleteTable
-export def "x-amz-target-dynamo-db-20120810delete-table DeleteTable" [
+export def "x-amz-target-dynamo-db-20120810delete-table delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -473,23 +473,23 @@ export def "x-amz-target-dynamo-db-20120810delete-table DeleteTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  TableName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  table_name: any
 ]: any -> record<TableDescription: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DeleteTable")
-  let body = {TableName: $TableName} | compact
+  let body = {"TableName": $table_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -500,7 +500,7 @@ export def "x-amz-target-dynamo-db-20120810delete-table DeleteTable" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeBackup
 # operationId: DescribeBackup
-export def "x-amz-target-dynamo-db-20120810describe-backup DescribeBackup" [
+export def "x-amz-target-dynamo-db-20120810describe-backup post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,23 +509,23 @@ export def "x-amz-target-dynamo-db-20120810describe-backup DescribeBackup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  BackupArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  backup_arn: any
 ]: any -> record<BackupDescription: record<BackupDetails: record<BackupArn: record, BackupName: record, BackupSizeBytes: record, BackupStatus: record, BackupType: record, BackupCreationDateTime: record, BackupExpiryDateTime: record>, SourceTableDetails: record<TableName: record, TableId: record, TableArn: record, TableSizeBytes: record, KeySchema: record, TableCreationDateTime: record, ProvisionedThroughput: record, ItemCount: record, BillingMode: record>, SourceTableFeatureDetails: record<LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamDescription: record, TimeToLiveDescription: record, SSEDescription: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeBackup")
-  let body = {BackupArn: $BackupArn} | compact
+  let body = {"BackupArn": $backup_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -536,7 +536,7 @@ export def "x-amz-target-dynamo-db-20120810describe-backup DescribeBackup" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeContinuousBackups
 # operationId: DescribeContinuousBackups
-export def "x-amz-target-dynamo-db-20120810describe-continuous-backups DescribeContinuousBackups" [
+export def "x-amz-target-dynamo-db-20120810describe-continuous-backups post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,23 +545,23 @@ export def "x-amz-target-dynamo-db-20120810describe-continuous-backups DescribeC
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  TableName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  table_name: any
 ]: any -> record<ContinuousBackupsDescription: record<ContinuousBackupsStatus: record, PointInTimeRecoveryDescription: record<PointInTimeRecoveryStatus: record, EarliestRestorableDateTime: record, LatestRestorableDateTime: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeContinuousBackups")
-  let body = {TableName: $TableName} | compact
+  let body = {"TableName": $table_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -572,7 +572,7 @@ export def "x-amz-target-dynamo-db-20120810describe-continuous-backups DescribeC
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeContributorInsights
 # operationId: DescribeContributorInsights
-export def "x-amz-target-dynamo-db-20120810describe-contributor-insights DescribeContributorInsights" [
+export def "x-amz-target-dynamo-db-20120810describe-contributor-insights post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,24 +581,24 @@ export def "x-amz-target-dynamo-db-20120810describe-contributor-insights Describ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  TableName: any
-  --IndexName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  table_name: any
+  --index-name: any
 ]: any -> record<TableName: record, IndexName: record, ContributorInsightsRuleList: record, ContributorInsightsStatus: record, LastUpdateDateTime: record, FailureException: record<ExceptionName: record, ExceptionDescription: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeContributorInsights")
-  let body = {TableName: $TableName, IndexName: $IndexName} | compact
+  let body = {"TableName": $table_name, "IndexName": $index_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -609,7 +609,7 @@ export def "x-amz-target-dynamo-db-20120810describe-contributor-insights Describ
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeEndpoints
 # operationId: DescribeEndpoints
-export def "x-amz-target-dynamo-db-20120810describe-endpoints DescribeEndpoints" [
+export def "x-amz-target-dynamo-db-20120810describe-endpoints post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,14 +618,14 @@ export def "x-amz-target-dynamo-db-20120810describe-endpoints DescribeEndpoints"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
   --body: record
 ]: any -> record<Endpoints: record> {
   let input = $in
@@ -633,7 +633,7 @@ export def "x-amz-target-dynamo-db-20120810describe-endpoints DescribeEndpoints"
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeEndpoints")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -644,7 +644,7 @@ export def "x-amz-target-dynamo-db-20120810describe-endpoints DescribeEndpoints"
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeExport
 # operationId: DescribeExport
-export def "x-amz-target-dynamo-db-20120810describe-export DescribeExport" [
+export def "x-amz-target-dynamo-db-20120810describe-export post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,23 +653,23 @@ export def "x-amz-target-dynamo-db-20120810describe-export DescribeExport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  ExportArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  export_arn: any
 ]: any -> record<ExportDescription: record<ExportArn: record, ExportStatus: record, StartTime: record, EndTime: record, ExportManifest: record, TableArn: record, TableId: record, ExportTime: record, ClientToken: record, S3Bucket: record, S3BucketOwner: record, S3Prefix: record, S3SseAlgorithm: record, S3SseKmsKeyId: record, FailureCode: record, FailureMessage: record, ExportFormat: record, BilledSizeBytes: record, ItemCount: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeExport")
-  let body = {ExportArn: $ExportArn} | compact
+  let body = {"ExportArn": $export_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -680,7 +680,7 @@ export def "x-amz-target-dynamo-db-20120810describe-export DescribeExport" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeGlobalTable
 # operationId: DescribeGlobalTable
-export def "x-amz-target-dynamo-db-20120810describe-global-table DescribeGlobalTable" [
+export def "x-amz-target-dynamo-db-20120810describe-global-table post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,23 +689,23 @@ export def "x-amz-target-dynamo-db-20120810describe-global-table DescribeGlobalT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  GlobalTableName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  global_table_name: any
 ]: any -> record<GlobalTableDescription: record<ReplicationGroup: record, GlobalTableArn: record, CreationDateTime: record, GlobalTableStatus: record, GlobalTableName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeGlobalTable")
-  let body = {GlobalTableName: $GlobalTableName} | compact
+  let body = {"GlobalTableName": $global_table_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -716,7 +716,7 @@ export def "x-amz-target-dynamo-db-20120810describe-global-table DescribeGlobalT
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeGlobalTableSettings
 # operationId: DescribeGlobalTableSettings
-export def "x-amz-target-dynamo-db-20120810describe-global-table-settings DescribeGlobalTableSettings" [
+export def "x-amz-target-dynamo-db-20120810describe-global-table-settings post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,23 +725,23 @@ export def "x-amz-target-dynamo-db-20120810describe-global-table-settings Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  GlobalTableName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  global_table_name: any
 ]: any -> record<GlobalTableName: record, ReplicaSettings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeGlobalTableSettings")
-  let body = {GlobalTableName: $GlobalTableName} | compact
+  let body = {"GlobalTableName": $global_table_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -752,7 +752,7 @@ export def "x-amz-target-dynamo-db-20120810describe-global-table-settings Descri
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeImport
 # operationId: DescribeImport
-export def "x-amz-target-dynamo-db-20120810describe-import DescribeImport" [
+export def "x-amz-target-dynamo-db-20120810describe-import post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -761,23 +761,23 @@ export def "x-amz-target-dynamo-db-20120810describe-import DescribeImport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  ImportArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  import_arn: any
 ]: any -> record<ImportTableDescription: record<ImportArn: record, ImportStatus: record, TableArn: record, TableId: record, ClientToken: record, S3BucketSource: record<S3BucketOwner: record, S3Bucket: record, S3KeyPrefix: record>, ErrorCount: record, CloudWatchLogGroupArn: record, InputFormat: record, InputFormatOptions: record<Csv: record>, InputCompressionType: record, TableCreationParameters: record<TableName: record, AttributeDefinitions: record, KeySchema: record, BillingMode: record, ProvisionedThroughput: record, SSESpecification: record, GlobalSecondaryIndexes: record>, StartTime: record, EndTime: record, ProcessedSizeBytes: record, ProcessedItemCount: record, ImportedItemCount: record, FailureCode: record, FailureMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeImport")
-  let body = {ImportArn: $ImportArn} | compact
+  let body = {"ImportArn": $import_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -788,7 +788,7 @@ export def "x-amz-target-dynamo-db-20120810describe-import DescribeImport" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeKinesisStreamingDestination
 # operationId: DescribeKinesisStreamingDestination
-export def "x-amz-target-dynamo-db-20120810describe-kinesis-streaming-destination DescribeKinesisStreamingDestination" [
+export def "x-amz-target-dynamo-db-20120810describe-kinesis-streaming-destination post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,23 +797,23 @@ export def "x-amz-target-dynamo-db-20120810describe-kinesis-streaming-destinatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  TableName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  table_name: any
 ]: any -> record<TableName: record, KinesisDataStreamDestinations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeKinesisStreamingDestination")
-  let body = {TableName: $TableName} | compact
+  let body = {"TableName": $table_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -824,7 +824,7 @@ export def "x-amz-target-dynamo-db-20120810describe-kinesis-streaming-destinatio
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeLimits
 # operationId: DescribeLimits
-export def "x-amz-target-dynamo-db-20120810describe-limits DescribeLimits" [
+export def "x-amz-target-dynamo-db-20120810describe-limits post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,14 +833,14 @@ export def "x-amz-target-dynamo-db-20120810describe-limits DescribeLimits" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
   --body: record
 ]: any -> record<AccountMaxReadCapacityUnits: record, AccountMaxWriteCapacityUnits: record, TableMaxReadCapacityUnits: record, TableMaxWriteCapacityUnits: record> {
   let input = $in
@@ -848,7 +848,7 @@ export def "x-amz-target-dynamo-db-20120810describe-limits DescribeLimits" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeLimits")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -859,7 +859,7 @@ export def "x-amz-target-dynamo-db-20120810describe-limits DescribeLimits" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeTable
 # operationId: DescribeTable
-export def "x-amz-target-dynamo-db-20120810describe-table DescribeTable" [
+export def "x-amz-target-dynamo-db-20120810describe-table post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,23 +868,23 @@ export def "x-amz-target-dynamo-db-20120810describe-table DescribeTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  TableName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  table_name: any
 ]: any -> record<Table: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeTable")
-  let body = {TableName: $TableName} | compact
+  let body = {"TableName": $table_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -895,7 +895,7 @@ export def "x-amz-target-dynamo-db-20120810describe-table DescribeTable" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeTableReplicaAutoScaling
 # operationId: DescribeTableReplicaAutoScaling
-export def "x-amz-target-dynamo-db-20120810describe-table-replica-auto-scaling DescribeTableReplicaAutoScaling" [
+export def "x-amz-target-dynamo-db-20120810describe-table-replica-auto-scaling post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -904,23 +904,23 @@ export def "x-amz-target-dynamo-db-20120810describe-table-replica-auto-scaling D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  TableName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  table_name: any
 ]: any -> record<TableAutoScalingDescription: record<TableName: record, TableStatus: record, Replicas: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeTableReplicaAutoScaling")
-  let body = {TableName: $TableName} | compact
+  let body = {"TableName": $table_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -931,7 +931,7 @@ export def "x-amz-target-dynamo-db-20120810describe-table-replica-auto-scaling D
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DescribeTimeToLive
 # operationId: DescribeTimeToLive
-export def "x-amz-target-dynamo-db-20120810describe-time-to-live DescribeTimeToLive" [
+export def "x-amz-target-dynamo-db-20120810describe-time-to-live post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,23 +940,23 @@ export def "x-amz-target-dynamo-db-20120810describe-time-to-live DescribeTimeToL
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  TableName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  table_name: any
 ]: any -> record<TimeToLiveDescription: record<TimeToLiveStatus: record, AttributeName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DescribeTimeToLive")
-  let body = {TableName: $TableName} | compact
+  let body = {"TableName": $table_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -967,7 +967,7 @@ export def "x-amz-target-dynamo-db-20120810describe-time-to-live DescribeTimeToL
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.DisableKinesisStreamingDestination
 # operationId: DisableKinesisStreamingDestination
-export def "x-amz-target-dynamo-db-20120810disable-kinesis-streaming-destination DisableKinesisStreamingDestination" [
+export def "x-amz-target-dynamo-db-20120810disable-kinesis-streaming-destination disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -976,24 +976,24 @@ export def "x-amz-target-dynamo-db-20120810disable-kinesis-streaming-destination
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  TableName: any
-  StreamArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  table_name: any
+  stream_arn: any
 ]: any -> record<TableName: record, StreamArn: record, DestinationStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.DisableKinesisStreamingDestination")
-  let body = {TableName: $TableName, StreamArn: $StreamArn} | compact
+  let body = {"TableName": $table_name, "StreamArn": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1004,7 +1004,7 @@ export def "x-amz-target-dynamo-db-20120810disable-kinesis-streaming-destination
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.EnableKinesisStreamingDestination
 # operationId: EnableKinesisStreamingDestination
-export def "x-amz-target-dynamo-db-20120810enable-kinesis-streaming-destination EnableKinesisStreamingDestination" [
+export def "x-amz-target-dynamo-db-20120810enable-kinesis-streaming-destination enable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1013,24 +1013,24 @@ export def "x-amz-target-dynamo-db-20120810enable-kinesis-streaming-destination 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  TableName: any
-  StreamArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  table_name: any
+  stream_arn: any
 ]: any -> record<TableName: record, StreamArn: record, DestinationStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.EnableKinesisStreamingDestination")
-  let body = {TableName: $TableName, StreamArn: $StreamArn} | compact
+  let body = {"TableName": $table_name, "StreamArn": $stream_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1041,7 +1041,7 @@ export def "x-amz-target-dynamo-db-20120810enable-kinesis-streaming-destination 
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ExecuteStatement
 # operationId: ExecuteStatement
-export def "x-amz-target-dynamo-db-20120810execute-statement ExecuteStatement" [
+export def "x-amz-target-dynamo-db-20120810execute-statement exec-ute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,28 +1050,28 @@ export def "x-amz-target-dynamo-db-20120810execute-statement ExecuteStatement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  Statement: any
-  --Parameters: any
-  --ConsistentRead: any
-  --NextToken: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
-  --Limit: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  statement: any
+  --parameters: any
+  --consistent-read: any
+  --next-token: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --limit: any
 ]: any -> record<Items: record, NextToken: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, LastEvaluatedKey: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ExecuteStatement")
-  let body = {Statement: $Statement, Parameters: $Parameters, ConsistentRead: $ConsistentRead, NextToken: $NextToken, ReturnConsumedCapacity: $ReturnConsumedCapacity, Limit: $Limit} | compact
+  let body = {"Statement": $statement, "Parameters": $parameters, "ConsistentRead": $consistent_read, "NextToken": $next_token, "ReturnConsumedCapacity": $return_consumed_capacity, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1082,7 +1082,7 @@ export def "x-amz-target-dynamo-db-20120810execute-statement ExecuteStatement" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ExecuteTransaction
 # operationId: ExecuteTransaction
-export def "x-amz-target-dynamo-db-20120810execute-transaction ExecuteTransaction" [
+export def "x-amz-target-dynamo-db-20120810execute-transaction exec-ute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,25 +1091,25 @@ export def "x-amz-target-dynamo-db-20120810execute-transaction ExecuteTransactio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  TransactStatements: any
-  --ClientRequestToken: any
-  --ReturnConsumedCapacity: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  transact_statements: any
+  --client-request-token: any
+  --return-consumed-capacity: any
 ]: any -> record<Responses: record, ConsumedCapacity: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ExecuteTransaction")
-  let body = {TransactStatements: $TransactStatements, ClientRequestToken: $ClientRequestToken, ReturnConsumedCapacity: $ReturnConsumedCapacity} | compact
+  let body = {"TransactStatements": $transact_statements, "ClientRequestToken": $client_request_token, "ReturnConsumedCapacity": $return_consumed_capacity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1120,7 +1120,7 @@ export def "x-amz-target-dynamo-db-20120810execute-transaction ExecuteTransactio
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ExportTableToPointInTime
 # operationId: ExportTableToPointInTime
-export def "x-amz-target-dynamo-db-20120810export-table-to-point-in-time ExportTableToPointInTime" [
+export def "x-amz-target-dynamo-db-20120810export-table-to-point-in-time export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,31 +1129,31 @@ export def "x-amz-target-dynamo-db-20120810export-table-to-point-in-time ExportT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  TableArn: any
-  --ExportTime: any
-  --ClientToken: any
-  S3Bucket: any
-  --S3BucketOwner: any
-  --S3Prefix: any
-  --S3SseAlgorithm: any
-  --S3SseKmsKeyId: any
-  --ExportFormat: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  table_arn: any
+  --export-time: any
+  --client-token: any
+  s3_bucket: any
+  --s3-bucket-owner: any
+  --s3-prefix: any
+  --s3-sse-algorithm: any
+  --s3-sse-kms-key-id: any
+  --export-format: any
 ]: any -> record<ExportDescription: record<ExportArn: record, ExportStatus: record, StartTime: record, EndTime: record, ExportManifest: record, TableArn: record, TableId: record, ExportTime: record, ClientToken: record, S3Bucket: record, S3BucketOwner: record, S3Prefix: record, S3SseAlgorithm: record, S3SseKmsKeyId: record, FailureCode: record, FailureMessage: record, ExportFormat: record, BilledSizeBytes: record, ItemCount: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ExportTableToPointInTime")
-  let body = {TableArn: $TableArn, ExportTime: $ExportTime, ClientToken: $ClientToken, S3Bucket: $S3Bucket, S3BucketOwner: $S3BucketOwner, S3Prefix: $S3Prefix, S3SseAlgorithm: $S3SseAlgorithm, S3SseKmsKeyId: $S3SseKmsKeyId, ExportFormat: $ExportFormat} | compact
+  let body = {"TableArn": $table_arn, "ExportTime": $export_time, "ClientToken": $client_token, "S3Bucket": $s3_bucket, "S3BucketOwner": $s3_bucket_owner, "S3Prefix": $s3_prefix, "S3SseAlgorithm": $s3_sse_algorithm, "S3SseKmsKeyId": $s3_sse_kms_key_id, "ExportFormat": $export_format} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1164,7 +1164,7 @@ export def "x-amz-target-dynamo-db-20120810export-table-to-point-in-time ExportT
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.GetItem
 # operationId: GetItem
-export def "x-amz-target-dynamo-db-20120810get-item GetItem" [
+export def "x-amz-target-dynamo-db-20120810get-item get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1173,29 +1173,29 @@ export def "x-amz-target-dynamo-db-20120810get-item GetItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  TableName: any
-  Key: any
-  --AttributesToGet: any
-  --ConsistentRead: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
-  --ProjectionExpression: any
-  --ExpressionAttributeNames: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  table_name: any
+  key: any
+  --attributes-to-get: any
+  --consistent-read: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --projection-expression: any
+  --expression-attribute-names: any
 ]: any -> record<Item: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.GetItem")
-  let body = {TableName: $TableName, Key: $Key, AttributesToGet: $AttributesToGet, ConsistentRead: $ConsistentRead, ReturnConsumedCapacity: $ReturnConsumedCapacity, ProjectionExpression: $ProjectionExpression, ExpressionAttributeNames: $ExpressionAttributeNames} | compact
+  let body = {"TableName": $table_name, "Key": $key, "AttributesToGet": $attributes_to_get, "ConsistentRead": $consistent_read, "ReturnConsumedCapacity": $return_consumed_capacity, "ProjectionExpression": $projection_expression, "ExpressionAttributeNames": $expression_attribute_names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1206,7 +1206,7 @@ export def "x-amz-target-dynamo-db-20120810get-item GetItem" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ImportTable
 # operationId: ImportTable
-export def "x-amz-target-dynamo-db-20120810import-table ImportTable" [
+export def "x-amz-target-dynamo-db-20120810import-table import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1215,28 +1215,28 @@ export def "x-amz-target-dynamo-db-20120810import-table ImportTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --ClientToken: any
-  S3BucketSource: any
-  InputFormat: any
-  --InputFormatOptions: any
-  --InputCompressionType: any
-  TableCreationParameters: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --client-token: any
+  s3_bucket_source: any
+  input_format: any
+  --input-format-options: any
+  --input-compression-type: any
+  table_creation_parameters: any
 ]: any -> record<ImportTableDescription: record<ImportArn: record, ImportStatus: record, TableArn: record, TableId: record, ClientToken: record, S3BucketSource: record<S3BucketOwner: record, S3Bucket: record, S3KeyPrefix: record>, ErrorCount: record, CloudWatchLogGroupArn: record, InputFormat: record, InputFormatOptions: record<Csv: record>, InputCompressionType: record, TableCreationParameters: record<TableName: record, AttributeDefinitions: record, KeySchema: record, BillingMode: record, ProvisionedThroughput: record, SSESpecification: record, GlobalSecondaryIndexes: record>, StartTime: record, EndTime: record, ProcessedSizeBytes: record, ProcessedItemCount: record, ImportedItemCount: record, FailureCode: record, FailureMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ImportTable")
-  let body = {ClientToken: $ClientToken, S3BucketSource: $S3BucketSource, InputFormat: $InputFormat, InputFormatOptions: $InputFormatOptions, InputCompressionType: $InputCompressionType, TableCreationParameters: $TableCreationParameters} | compact
+  let body = {"ClientToken": $client_token, "S3BucketSource": $s3_bucket_source, "InputFormat": $input_format, "InputFormatOptions": $input_format_options, "InputCompressionType": $input_compression_type, "TableCreationParameters": $table_creation_parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1247,7 +1247,7 @@ export def "x-amz-target-dynamo-db-20120810import-table ImportTable" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ListBackups
 # operationId: ListBackups
-export def "x-amz-target-dynamo-db-20120810list-backups ListBackups" [
+export def "x-amz-target-dynamo-db-20120810list-backups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1256,28 +1256,28 @@ export def "x-amz-target-dynamo-db-20120810list-backups ListBackups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --TableName: any
-  --Limit: any
-  --TimeRangeLowerBound: any
-  --TimeRangeUpperBound: any
-  --ExclusiveStartBackupArn: any
-  --BackupType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --table-name: any
+  --limit: any
+  --time-range-lower-bound: any
+  --time-range-upper-bound: any
+  --exclusive-start-backup-arn: any
+  --backup-type: any
 ]: any -> record<BackupSummaries: record, LastEvaluatedBackupArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ListBackups")
-  let body = {TableName: $TableName, Limit: $Limit, TimeRangeLowerBound: $TimeRangeLowerBound, TimeRangeUpperBound: $TimeRangeUpperBound, ExclusiveStartBackupArn: $ExclusiveStartBackupArn, BackupType: $BackupType} | compact
+  let body = {"TableName": $table_name, "Limit": $limit, "TimeRangeLowerBound": $time_range_lower_bound, "TimeRangeUpperBound": $time_range_upper_bound, "ExclusiveStartBackupArn": $exclusive_start_backup_arn, "BackupType": $backup_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1288,7 +1288,7 @@ export def "x-amz-target-dynamo-db-20120810list-backups ListBackups" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ListContributorInsights
 # operationId: ListContributorInsights
-export def "x-amz-target-dynamo-db-20120810list-contributor-insights ListContributorInsights" [
+export def "x-amz-target-dynamo-db-20120810list-contributor-insights list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1297,28 +1297,28 @@ export def "x-amz-target-dynamo-db-20120810list-contributor-insights ListContrib
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  --TableName: any
-  --NextToken: any
-  --MaxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  --table-name: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<ContributorInsightsSummaries: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ListContributorInsights" $qp)
-  let body = {TableName: $TableName, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"TableName": $table_name, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1329,7 +1329,7 @@ export def "x-amz-target-dynamo-db-20120810list-contributor-insights ListContrib
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ListExports
 # operationId: ListExports
-export def "x-amz-target-dynamo-db-20120810list-exports ListExports" [
+export def "x-amz-target-dynamo-db-20120810list-exports list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1338,28 +1338,28 @@ export def "x-amz-target-dynamo-db-20120810list-exports ListExports" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  --TableArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  --table-arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ExportSummaries: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ListExports" $qp)
-  let body = {TableArn: $TableArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"TableArn": $table_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1370,7 +1370,7 @@ export def "x-amz-target-dynamo-db-20120810list-exports ListExports" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ListGlobalTables
 # operationId: ListGlobalTables
-export def "x-amz-target-dynamo-db-20120810list-global-tables ListGlobalTables" [
+export def "x-amz-target-dynamo-db-20120810list-global-tables list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1379,25 +1379,25 @@ export def "x-amz-target-dynamo-db-20120810list-global-tables ListGlobalTables" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --ExclusiveStartGlobalTableName: any
-  --Limit: any
-  --RegionName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --exclusive-start-global-table-name: any
+  --limit: any
+  --region-name: any
 ]: any -> record<GlobalTables: record, LastEvaluatedGlobalTableName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ListGlobalTables")
-  let body = {ExclusiveStartGlobalTableName: $ExclusiveStartGlobalTableName, Limit: $Limit, RegionName: $RegionName} | compact
+  let body = {"ExclusiveStartGlobalTableName": $exclusive_start_global_table_name, "Limit": $limit, "RegionName": $region_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1408,7 +1408,7 @@ export def "x-amz-target-dynamo-db-20120810list-global-tables ListGlobalTables" 
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ListImports
 # operationId: ListImports
-export def "x-amz-target-dynamo-db-20120810list-imports ListImports" [
+export def "x-amz-target-dynamo-db-20120810list-imports list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1417,28 +1417,28 @@ export def "x-amz-target-dynamo-db-20120810list-imports ListImports" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  --TableArn: any
-  --PageSize: any
-  --NextToken: any
+  --page-size: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  --table-arn: any
+  --page-size: any
+  --next-token: any
 ]: any -> record<ImportSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ListImports" $qp)
-  let body = {TableArn: $TableArn, PageSize: $PageSize, NextToken: $NextToken} | compact
+  let body = {"TableArn": $table_arn, "PageSize": $page_size, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1449,7 +1449,7 @@ export def "x-amz-target-dynamo-db-20120810list-imports ListImports" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ListTables
 # operationId: ListTables
-export def "x-amz-target-dynamo-db-20120810list-tables ListTables" [
+export def "x-amz-target-dynamo-db-20120810list-tables list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1458,27 +1458,27 @@ export def "x-amz-target-dynamo-db-20120810list-tables ListTables" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --ExclusiveStartTableName: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  --ExclusiveStartTableName: any
-  --Limit: any
+  --limit: string # Pagination limit
+  --exclusive-start-table-name: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  --exclusive-start-table-name: any
+  --limit: any
 ]: any -> record<TableNames: record, LastEvaluatedTableName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "ExclusiveStartTableName" $ExclusiveStartTableName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "ExclusiveStartTableName" $exclusive_start_table_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ListTables" $qp)
-  let body = {ExclusiveStartTableName: $ExclusiveStartTableName, Limit: $Limit} | compact
+  let body = {"ExclusiveStartTableName": $exclusive_start_table_name, "Limit": $limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1489,7 +1489,7 @@ export def "x-amz-target-dynamo-db-20120810list-tables ListTables" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.ListTagsOfResource
 # operationId: ListTagsOfResource
-export def "x-amz-target-dynamo-db-20120810list-tags-of-resource ListTagsOfResource" [
+export def "x-amz-target-dynamo-db-20120810list-tags-of-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1498,24 +1498,24 @@ export def "x-amz-target-dynamo-db-20120810list-tags-of-resource ListTagsOfResou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  ResourceArn: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  resource_arn: any
+  --next-token: any
 ]: any -> record<Tags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.ListTagsOfResource")
-  let body = {ResourceArn: $ResourceArn, NextToken: $NextToken} | compact
+  let body = {"ResourceArn": $resource_arn, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1526,7 +1526,7 @@ export def "x-amz-target-dynamo-db-20120810list-tags-of-resource ListTagsOfResou
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.PutItem
 # operationId: PutItem
-export def "x-amz-target-dynamo-db-20120810put-item PutItem" [
+export def "x-amz-target-dynamo-db-20120810put-item update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1535,32 +1535,32 @@ export def "x-amz-target-dynamo-db-20120810put-item PutItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  TableName: any
-  Item: any
-  --Expected: any
-  --ReturnValues: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
-  --ReturnItemCollectionMetrics: any
-  --ConditionalOperator: any
-  --ConditionExpression: any
-  --ExpressionAttributeNames: any
-  --ExpressionAttributeValues: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  table_name: any
+  item: any
+  --expected: any
+  --return-values: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --return-item-collection-metrics: any
+  --conditional-operator: any
+  --condition-expression: any
+  --expression-attribute-names: any
+  --expression-attribute-values: any
 ]: any -> record<Attributes: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, ItemCollectionMetrics: record<ItemCollectionKey: record, SizeEstimateRangeGB: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.PutItem")
-  let body = {TableName: $TableName, Item: $Item, Expected: $Expected, ReturnValues: $ReturnValues, ReturnConsumedCapacity: $ReturnConsumedCapacity, ReturnItemCollectionMetrics: $ReturnItemCollectionMetrics, ConditionalOperator: $ConditionalOperator, ConditionExpression: $ConditionExpression, ExpressionAttributeNames: $ExpressionAttributeNames, ExpressionAttributeValues: $ExpressionAttributeValues} | compact
+  let body = {"TableName": $table_name, "Item": $item, "Expected": $expected, "ReturnValues": $return_values, "ReturnConsumedCapacity": $return_consumed_capacity, "ReturnItemCollectionMetrics": $return_item_collection_metrics, "ConditionalOperator": $conditional_operator, "ConditionExpression": $condition_expression, "ExpressionAttributeNames": $expression_attribute_names, "ExpressionAttributeValues": $expression_attribute_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1571,7 +1571,7 @@ export def "x-amz-target-dynamo-db-20120810put-item PutItem" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.Query
 # operationId: Query
-export def "x-amz-target-dynamo-db-20120810query Query" [
+export def "x-amz-target-dynamo-db-20120810query list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1580,42 +1580,42 @@ export def "x-amz-target-dynamo-db-20120810query Query" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --ExclusiveStartKey: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  TableName: any
-  --IndexName: any
-  --Select: any
-  --AttributesToGet: any
-  --Limit: any
-  --ConsistentRead: any
-  --KeyConditions: any
-  --QueryFilter: any
-  --ConditionalOperator: any
-  --ScanIndexForward: any
-  --ExclusiveStartKey: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
-  --ProjectionExpression: any
-  --FilterExpression: any
-  --KeyConditionExpression: any
-  --ExpressionAttributeNames: any
-  --ExpressionAttributeValues: any
+  --limit: string # Pagination limit
+  --exclusive-start-key: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  table_name: any
+  --index-name: any
+  --select: any
+  --attributes-to-get: any
+  --limit: any
+  --consistent-read: any
+  --key-conditions: any
+  --query-filter: any
+  --conditional-operator: any
+  --scan-index-forward: any
+  --exclusive-start-key: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --projection-expression: any
+  --filter-expression: any
+  --key-condition-expression: any
+  --expression-attribute-names: any
+  --expression-attribute-values: any
 ]: any -> record<Items: record, Count: record, ScannedCount: record, LastEvaluatedKey: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "ExclusiveStartKey" $ExclusiveStartKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "ExclusiveStartKey" $exclusive_start_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.Query" $qp)
-  let body = {TableName: $TableName, IndexName: $IndexName, Select: $Select, AttributesToGet: $AttributesToGet, Limit: $Limit, ConsistentRead: $ConsistentRead, KeyConditions: $KeyConditions, QueryFilter: $QueryFilter, ConditionalOperator: $ConditionalOperator, ScanIndexForward: $ScanIndexForward, ExclusiveStartKey: $ExclusiveStartKey, ReturnConsumedCapacity: $ReturnConsumedCapacity, ProjectionExpression: $ProjectionExpression, FilterExpression: $FilterExpression, KeyConditionExpression: $KeyConditionExpression, ExpressionAttributeNames: $ExpressionAttributeNames, ExpressionAttributeValues: $ExpressionAttributeValues} | compact
+  let body = {"TableName": $table_name, "IndexName": $index_name, "Select": $select, "AttributesToGet": $attributes_to_get, "Limit": $limit, "ConsistentRead": $consistent_read, "KeyConditions": $key_conditions, "QueryFilter": $query_filter, "ConditionalOperator": $conditional_operator, "ScanIndexForward": $scan_index_forward, "ExclusiveStartKey": $exclusive_start_key, "ReturnConsumedCapacity": $return_consumed_capacity, "ProjectionExpression": $projection_expression, "FilterExpression": $filter_expression, "KeyConditionExpression": $key_condition_expression, "ExpressionAttributeNames": $expression_attribute_names, "ExpressionAttributeValues": $expression_attribute_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1626,7 +1626,7 @@ export def "x-amz-target-dynamo-db-20120810query Query" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.RestoreTableFromBackup
 # operationId: RestoreTableFromBackup
-export def "x-amz-target-dynamo-db-20120810restore-table-from-backup RestoreTableFromBackup" [
+export def "x-amz-target-dynamo-db-20120810restore-table-from-backup post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,29 +1635,29 @@ export def "x-amz-target-dynamo-db-20120810restore-table-from-backup RestoreTabl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  TargetTableName: any
-  BackupArn: any
-  --BillingModeOverride: any
-  --GlobalSecondaryIndexOverride: any
-  --LocalSecondaryIndexOverride: any
-  --ProvisionedThroughputOverride: any
-  --SSESpecificationOverride: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  target_table_name: any
+  backup_arn: any
+  --billing-mode-override: any
+  --global-secondary-index-override: any
+  --local-secondary-index-override: any
+  --provisioned-throughput-override: any
+  --sse-specification-override: any
 ]: any -> record<TableDescription: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.RestoreTableFromBackup")
-  let body = {TargetTableName: $TargetTableName, BackupArn: $BackupArn, BillingModeOverride: $BillingModeOverride, GlobalSecondaryIndexOverride: $GlobalSecondaryIndexOverride, LocalSecondaryIndexOverride: $LocalSecondaryIndexOverride, ProvisionedThroughputOverride: $ProvisionedThroughputOverride, SSESpecificationOverride: $SSESpecificationOverride} | compact
+  let body = {"TargetTableName": $target_table_name, "BackupArn": $backup_arn, "BillingModeOverride": $billing_mode_override, "GlobalSecondaryIndexOverride": $global_secondary_index_override, "LocalSecondaryIndexOverride": $local_secondary_index_override, "ProvisionedThroughputOverride": $provisioned_throughput_override, "SSESpecificationOverride": $sse_specification_override} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1668,7 +1668,7 @@ export def "x-amz-target-dynamo-db-20120810restore-table-from-backup RestoreTabl
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.RestoreTableToPointInTime
 # operationId: RestoreTableToPointInTime
-export def "x-amz-target-dynamo-db-20120810restore-table-to-point-in-time RestoreTableToPointInTime" [
+export def "x-amz-target-dynamo-db-20120810restore-table-to-point-in-time post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1677,32 +1677,32 @@ export def "x-amz-target-dynamo-db-20120810restore-table-to-point-in-time Restor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  --SourceTableArn: any
-  --SourceTableName: any
-  TargetTableName: any
-  --UseLatestRestorableTime: any
-  --RestoreDateTime: any
-  --BillingModeOverride: any
-  --GlobalSecondaryIndexOverride: any
-  --LocalSecondaryIndexOverride: any
-  --ProvisionedThroughputOverride: any
-  --SSESpecificationOverride: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  --source-table-arn: any
+  --source-table-name: any
+  target_table_name: any
+  --use-latest-restorable-time: any
+  --restore-date-time: any
+  --billing-mode-override: any
+  --global-secondary-index-override: any
+  --local-secondary-index-override: any
+  --provisioned-throughput-override: any
+  --sse-specification-override: any
 ]: any -> record<TableDescription: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.RestoreTableToPointInTime")
-  let body = {SourceTableArn: $SourceTableArn, SourceTableName: $SourceTableName, TargetTableName: $TargetTableName, UseLatestRestorableTime: $UseLatestRestorableTime, RestoreDateTime: $RestoreDateTime, BillingModeOverride: $BillingModeOverride, GlobalSecondaryIndexOverride: $GlobalSecondaryIndexOverride, LocalSecondaryIndexOverride: $LocalSecondaryIndexOverride, ProvisionedThroughputOverride: $ProvisionedThroughputOverride, SSESpecificationOverride: $SSESpecificationOverride} | compact
+  let body = {"SourceTableArn": $source_table_arn, "SourceTableName": $source_table_name, "TargetTableName": $target_table_name, "UseLatestRestorableTime": $use_latest_restorable_time, "RestoreDateTime": $restore_date_time, "BillingModeOverride": $billing_mode_override, "GlobalSecondaryIndexOverride": $global_secondary_index_override, "LocalSecondaryIndexOverride": $local_secondary_index_override, "ProvisionedThroughputOverride": $provisioned_throughput_override, "SSESpecificationOverride": $sse_specification_override} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1713,7 +1713,7 @@ export def "x-amz-target-dynamo-db-20120810restore-table-to-point-in-time Restor
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.Scan
 # operationId: Scan
-export def "x-amz-target-dynamo-db-20120810scan Scan" [
+export def "x-amz-target-dynamo-db-20120810scan post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,41 +1722,41 @@ export def "x-amz-target-dynamo-db-20120810scan Scan" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Limit: string # Pagination limit
-  --ExclusiveStartKey: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  TableName: any
-  --IndexName: any
-  --AttributesToGet: any
-  --Limit: any
-  --Select: any
-  --ScanFilter: any
-  --ConditionalOperator: any
-  --ExclusiveStartKey: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
-  --TotalSegments: any
-  --Segment: any
-  --ProjectionExpression: any
-  --FilterExpression: any
-  --ExpressionAttributeNames: any
-  --ExpressionAttributeValues: any
-  --ConsistentRead: any
+  --limit: string # Pagination limit
+  --exclusive-start-key: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  table_name: any
+  --index-name: any
+  --attributes-to-get: any
+  --limit: any
+  --select: any
+  --scan-filter: any
+  --conditional-operator: any
+  --exclusive-start-key: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --total-segments: any
+  --segment: any
+  --projection-expression: any
+  --filter-expression: any
+  --expression-attribute-names: any
+  --expression-attribute-values: any
+  --consistent-read: any
 ]: any -> record<Items: record, Count: record, ScannedCount: record, LastEvaluatedKey: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Limit" $Limit "scalar") (serialize-qp "ExclusiveStartKey" $ExclusiveStartKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Limit" $limit "scalar") (serialize-qp "ExclusiveStartKey" $exclusive_start_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.Scan" $qp)
-  let body = {TableName: $TableName, IndexName: $IndexName, AttributesToGet: $AttributesToGet, Limit: $Limit, Select: $Select, ScanFilter: $ScanFilter, ConditionalOperator: $ConditionalOperator, ExclusiveStartKey: $ExclusiveStartKey, ReturnConsumedCapacity: $ReturnConsumedCapacity, TotalSegments: $TotalSegments, Segment: $Segment, ProjectionExpression: $ProjectionExpression, FilterExpression: $FilterExpression, ExpressionAttributeNames: $ExpressionAttributeNames, ExpressionAttributeValues: $ExpressionAttributeValues, ConsistentRead: $ConsistentRead} | compact
+  let body = {"TableName": $table_name, "IndexName": $index_name, "AttributesToGet": $attributes_to_get, "Limit": $limit, "Select": $select, "ScanFilter": $scan_filter, "ConditionalOperator": $conditional_operator, "ExclusiveStartKey": $exclusive_start_key, "ReturnConsumedCapacity": $return_consumed_capacity, "TotalSegments": $total_segments, "Segment": $segment, "ProjectionExpression": $projection_expression, "FilterExpression": $filter_expression, "ExpressionAttributeNames": $expression_attribute_names, "ExpressionAttributeValues": $expression_attribute_values, "ConsistentRead": $consistent_read} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1767,7 +1767,7 @@ export def "x-amz-target-dynamo-db-20120810scan Scan" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.TagResource
 # operationId: TagResource
-export def "x-amz-target-dynamo-db-20120810tag-resource TagResource" [
+export def "x-amz-target-dynamo-db-20120810tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,24 +1776,24 @@ export def "x-amz-target-dynamo-db-20120810tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  resource_arn: any
+  tags: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1804,7 +1804,7 @@ export def "x-amz-target-dynamo-db-20120810tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.TransactGetItems
 # operationId: TransactGetItems
-export def "x-amz-target-dynamo-db-20120810transact-get-items TransactGetItems" [
+export def "x-amz-target-dynamo-db-20120810transact-get-items post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1813,24 +1813,24 @@ export def "x-amz-target-dynamo-db-20120810transact-get-items TransactGetItems" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  TransactItems: any
-  --ReturnConsumedCapacity: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  transact_items: any
+  --return-consumed-capacity: any
 ]: any -> record<ConsumedCapacity: record, Responses: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.TransactGetItems")
-  let body = {TransactItems: $TransactItems, ReturnConsumedCapacity: $ReturnConsumedCapacity} | compact
+  let body = {"TransactItems": $transact_items, "ReturnConsumedCapacity": $return_consumed_capacity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1841,7 +1841,7 @@ export def "x-amz-target-dynamo-db-20120810transact-get-items TransactGetItems" 
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.TransactWriteItems
 # operationId: TransactWriteItems
-export def "x-amz-target-dynamo-db-20120810transact-write-items TransactWriteItems" [
+export def "x-amz-target-dynamo-db-20120810transact-write-items post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1850,26 +1850,26 @@ export def "x-amz-target-dynamo-db-20120810transact-write-items TransactWriteIte
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  TransactItems: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
-  --ReturnItemCollectionMetrics: any
-  --ClientRequestToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  transact_items: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --return-item-collection-metrics: any
+  --client-request-token: any
 ]: any -> record<ConsumedCapacity: record, ItemCollectionMetrics: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.TransactWriteItems")
-  let body = {TransactItems: $TransactItems, ReturnConsumedCapacity: $ReturnConsumedCapacity, ReturnItemCollectionMetrics: $ReturnItemCollectionMetrics, ClientRequestToken: $ClientRequestToken} | compact
+  let body = {"TransactItems": $transact_items, "ReturnConsumedCapacity": $return_consumed_capacity, "ReturnItemCollectionMetrics": $return_item_collection_metrics, "ClientRequestToken": $client_request_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1880,7 +1880,7 @@ export def "x-amz-target-dynamo-db-20120810transact-write-items TransactWriteIte
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-dynamo-db-20120810untag-resource UntagResource" [
+export def "x-amz-target-dynamo-db-20120810untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1889,24 +1889,24 @@ export def "x-amz-target-dynamo-db-20120810untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  ResourceArn: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  resource_arn: any
+  tag_keys: any
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.UntagResource")
-  let body = {ResourceArn: $ResourceArn, TagKeys: $TagKeys} | compact
+  let body = {"ResourceArn": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1917,7 +1917,7 @@ export def "x-amz-target-dynamo-db-20120810untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.UpdateContinuousBackups
 # operationId: UpdateContinuousBackups
-export def "x-amz-target-dynamo-db-20120810update-continuous-backups UpdateContinuousBackups" [
+export def "x-amz-target-dynamo-db-20120810update-continuous-backups update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1926,24 +1926,24 @@ export def "x-amz-target-dynamo-db-20120810update-continuous-backups UpdateConti
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-45
-  TableName: any
-  PointInTimeRecoverySpecification: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-45
+  table_name: any
+  point_in_time_recovery_specification: any
 ]: any -> record<ContinuousBackupsDescription: record<ContinuousBackupsStatus: record, PointInTimeRecoveryDescription: record<PointInTimeRecoveryStatus: record, EarliestRestorableDateTime: record, LatestRestorableDateTime: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.UpdateContinuousBackups")
-  let body = {TableName: $TableName, PointInTimeRecoverySpecification: $PointInTimeRecoverySpecification} | compact
+  let body = {"TableName": $table_name, "PointInTimeRecoverySpecification": $point_in_time_recovery_specification} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1954,7 +1954,7 @@ export def "x-amz-target-dynamo-db-20120810update-continuous-backups UpdateConti
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.UpdateContributorInsights
 # operationId: UpdateContributorInsights
-export def "x-amz-target-dynamo-db-20120810update-contributor-insights UpdateContributorInsights" [
+export def "x-amz-target-dynamo-db-20120810update-contributor-insights update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1963,25 +1963,25 @@ export def "x-amz-target-dynamo-db-20120810update-contributor-insights UpdateCon
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-46
-  TableName: any
-  --IndexName: any
-  ContributorInsightsAction: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-46
+  table_name: any
+  --index-name: any
+  contributor_insights_action: any
 ]: any -> record<TableName: record, IndexName: record, ContributorInsightsStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.UpdateContributorInsights")
-  let body = {TableName: $TableName, IndexName: $IndexName, ContributorInsightsAction: $ContributorInsightsAction} | compact
+  let body = {"TableName": $table_name, "IndexName": $index_name, "ContributorInsightsAction": $contributor_insights_action} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1992,7 +1992,7 @@ export def "x-amz-target-dynamo-db-20120810update-contributor-insights UpdateCon
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.UpdateGlobalTable
 # operationId: UpdateGlobalTable
-export def "x-amz-target-dynamo-db-20120810update-global-table UpdateGlobalTable" [
+export def "x-amz-target-dynamo-db-20120810update-global-table update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2001,24 +2001,24 @@ export def "x-amz-target-dynamo-db-20120810update-global-table UpdateGlobalTable
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-47
-  GlobalTableName: any
-  ReplicaUpdates: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-47
+  global_table_name: any
+  replica_updates: any
 ]: any -> record<GlobalTableDescription: record<ReplicationGroup: record, GlobalTableArn: record, CreationDateTime: record, GlobalTableStatus: record, GlobalTableName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.UpdateGlobalTable")
-  let body = {GlobalTableName: $GlobalTableName, ReplicaUpdates: $ReplicaUpdates} | compact
+  let body = {"GlobalTableName": $global_table_name, "ReplicaUpdates": $replica_updates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2029,7 +2029,7 @@ export def "x-amz-target-dynamo-db-20120810update-global-table UpdateGlobalTable
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.UpdateGlobalTableSettings
 # operationId: UpdateGlobalTableSettings
-export def "x-amz-target-dynamo-db-20120810update-global-table-settings UpdateGlobalTableSettings" [
+export def "x-amz-target-dynamo-db-20120810update-global-table-settings update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2038,28 +2038,28 @@ export def "x-amz-target-dynamo-db-20120810update-global-table-settings UpdateGl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-48
-  GlobalTableName: any
-  --GlobalTableBillingMode: any
-  --GlobalTableProvisionedWriteCapacityUnits: any
-  --GlobalTableProvisionedWriteCapacityAutoScalingSettingsUpdate: any
-  --GlobalTableGlobalSecondaryIndexSettingsUpdate: any
-  --ReplicaSettingsUpdate: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-48
+  global_table_name: any
+  --global-table-billing-mode: any
+  --global-table-provisioned-write-capacity-units: any
+  --global-table-provisioned-write-capacity-auto-scaling-settings-update: any
+  --global-table-global-secondary-index-settings-update: any
+  --replica-settings-update: any
 ]: any -> record<GlobalTableName: record, ReplicaSettings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.UpdateGlobalTableSettings")
-  let body = {GlobalTableName: $GlobalTableName, GlobalTableBillingMode: $GlobalTableBillingMode, GlobalTableProvisionedWriteCapacityUnits: $GlobalTableProvisionedWriteCapacityUnits, GlobalTableProvisionedWriteCapacityAutoScalingSettingsUpdate: $GlobalTableProvisionedWriteCapacityAutoScalingSettingsUpdate, GlobalTableGlobalSecondaryIndexSettingsUpdate: $GlobalTableGlobalSecondaryIndexSettingsUpdate, ReplicaSettingsUpdate: $ReplicaSettingsUpdate} | compact
+  let body = {"GlobalTableName": $global_table_name, "GlobalTableBillingMode": $global_table_billing_mode, "GlobalTableProvisionedWriteCapacityUnits": $global_table_provisioned_write_capacity_units, "GlobalTableProvisionedWriteCapacityAutoScalingSettingsUpdate": $global_table_provisioned_write_capacity_auto_scaling_settings_update, "GlobalTableGlobalSecondaryIndexSettingsUpdate": $global_table_global_secondary_index_settings_update, "ReplicaSettingsUpdate": $replica_settings_update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2070,7 +2070,7 @@ export def "x-amz-target-dynamo-db-20120810update-global-table-settings UpdateGl
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.UpdateItem
 # operationId: UpdateItem
-export def "x-amz-target-dynamo-db-20120810update-item UpdateItem" [
+export def "x-amz-target-dynamo-db-20120810update-item update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,34 +2079,34 @@ export def "x-amz-target-dynamo-db-20120810update-item UpdateItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-49
-  TableName: any
-  Key: any
-  --AttributeUpdates: any
-  --Expected: any
-  --ConditionalOperator: any
-  --ReturnValues: any
-  --ReturnConsumedCapacity: string@ReturnConsumedCapacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
-  --ReturnItemCollectionMetrics: any
-  --UpdateExpression: any
-  --ConditionExpression: any
-  --ExpressionAttributeNames: any
-  --ExpressionAttributeValues: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-49
+  table_name: any
+  key: any
+  --attribute-updates: any
+  --expected: any
+  --conditional-operator: any
+  --return-values: any
+  --return-consumed-capacity: string@return-consumed-capacity-completer # <p>Determines the level of detail about either provisioned or on-demand throughput consumption that is returned in the response:</p> <ul> <li> <p> <code>INDEXES</code> - The response includes the aggregate <code>ConsumedCapacity</code> for the operation, together with <code>ConsumedCapacity</code> for each table and secondary index that was accessed.</p> <p>Note that some operations, such as <code>GetItem</code> and <code>BatchGetItem</code>, do not access any indexes at all. In these cases, specifying <code>INDEXES</code> will only return <code>ConsumedCapacity</code> information for table(s).</p> </li> <li> <p> <code>TOTAL</code> - The response includes only the aggregate <code>ConsumedCapacity</code> for the operation.</p> </li> <li> <p> <code>NONE</code> - No <code>ConsumedCapacity</code> details are included in the response.</p> </li> </ul>
+  --return-item-collection-metrics: any
+  --update-expression: any
+  --condition-expression: any
+  --expression-attribute-names: any
+  --expression-attribute-values: any
 ]: any -> record<Attributes: record, ConsumedCapacity: record<TableName: record, CapacityUnits: record, ReadCapacityUnits: record, WriteCapacityUnits: record, Table: record<ReadCapacityUnits: record, WriteCapacityUnits: record, CapacityUnits: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record>, ItemCollectionMetrics: record<ItemCollectionKey: record, SizeEstimateRangeGB: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.UpdateItem")
-  let body = {TableName: $TableName, Key: $Key, AttributeUpdates: $AttributeUpdates, Expected: $Expected, ConditionalOperator: $ConditionalOperator, ReturnValues: $ReturnValues, ReturnConsumedCapacity: $ReturnConsumedCapacity, ReturnItemCollectionMetrics: $ReturnItemCollectionMetrics, UpdateExpression: $UpdateExpression, ConditionExpression: $ConditionExpression, ExpressionAttributeNames: $ExpressionAttributeNames, ExpressionAttributeValues: $ExpressionAttributeValues} | compact
+  let body = {"TableName": $table_name, "Key": $key, "AttributeUpdates": $attribute_updates, "Expected": $expected, "ConditionalOperator": $conditional_operator, "ReturnValues": $return_values, "ReturnConsumedCapacity": $return_consumed_capacity, "ReturnItemCollectionMetrics": $return_item_collection_metrics, "UpdateExpression": $update_expression, "ConditionExpression": $condition_expression, "ExpressionAttributeNames": $expression_attribute_names, "ExpressionAttributeValues": $expression_attribute_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2117,7 +2117,7 @@ export def "x-amz-target-dynamo-db-20120810update-item UpdateItem" [
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.UpdateTable
 # operationId: UpdateTable
-export def "x-amz-target-dynamo-db-20120810update-table UpdateTable" [
+export def "x-amz-target-dynamo-db-20120810update-table update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2126,32 +2126,32 @@ export def "x-amz-target-dynamo-db-20120810update-table UpdateTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-50
-  --AttributeDefinitions: any
-  TableName: any
-  --BillingMode: any
-  --ProvisionedThroughput: any
-  --GlobalSecondaryIndexUpdates: any
-  --StreamSpecification: any
-  --SSESpecification: any
-  --ReplicaUpdates: any
-  --TableClass: any
-  --DeletionProtectionEnabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-50
+  --attribute-definitions: any
+  table_name: any
+  --billing-mode: any
+  --provisioned-throughput: any
+  --global-secondary-index-updates: any
+  --stream-specification: any
+  --sse-specification: any
+  --replica-updates: any
+  --table-class: any
+  --deletion-protection-enabled: any
 ]: any -> record<TableDescription: record<AttributeDefinitions: record, TableName: record, KeySchema: record, TableStatus: record, CreationDateTime: record, ProvisionedThroughput: record<LastIncreaseDateTime: record, LastDecreaseDateTime: record, NumberOfDecreasesToday: record, ReadCapacityUnits: record, WriteCapacityUnits: record>, TableSizeBytes: record, ItemCount: record, TableArn: record, TableId: record, BillingModeSummary: record<BillingMode: record, LastUpdateToPayPerRequestDateTime: record>, LocalSecondaryIndexes: record, GlobalSecondaryIndexes: record, StreamSpecification: record<StreamEnabled: record, StreamViewType: record>, LatestStreamLabel: record, LatestStreamArn: record, GlobalTableVersion: record, Replicas: record, RestoreSummary: record<SourceBackupArn: record, SourceTableArn: record, RestoreDateTime: record, RestoreInProgress: record>, SSEDescription: record<Status: record, SSEType: record, KMSMasterKeyArn: record, InaccessibleEncryptionDateTime: record>, ArchivalSummary: record<ArchivalDateTime: record, ArchivalReason: record, ArchivalBackupArn: record>, TableClassSummary: record<TableClass: record, LastUpdateDateTime: record>, DeletionProtectionEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.UpdateTable")
-  let body = {AttributeDefinitions: $AttributeDefinitions, TableName: $TableName, BillingMode: $BillingMode, ProvisionedThroughput: $ProvisionedThroughput, GlobalSecondaryIndexUpdates: $GlobalSecondaryIndexUpdates, StreamSpecification: $StreamSpecification, SSESpecification: $SSESpecification, ReplicaUpdates: $ReplicaUpdates, TableClass: $TableClass, DeletionProtectionEnabled: $DeletionProtectionEnabled} | compact
+  let body = {"AttributeDefinitions": $attribute_definitions, "TableName": $table_name, "BillingMode": $billing_mode, "ProvisionedThroughput": $provisioned_throughput, "GlobalSecondaryIndexUpdates": $global_secondary_index_updates, "StreamSpecification": $stream_specification, "SSESpecification": $sse_specification, "ReplicaUpdates": $replica_updates, "TableClass": $table_class, "DeletionProtectionEnabled": $deletion_protection_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2163,7 +2163,7 @@ export def "x-amz-target-dynamo-db-20120810update-table UpdateTable" [
 # POST /#X-Amz-Target=DynamoDB_20120810.UpdateTableReplicaAutoScaling
 # operationId: UpdateTableReplicaAutoScaling
 # --ProvisionedWriteCapacityAutoScalingUpdate shape: {MinimumUnits?: any, MaximumUnits?: any, AutoScalingDisabled?: any, AutoScalingRoleArn?: any, ScalingPolicyUpdate?: any}
-export def "x-amz-target-dynamo-db-20120810update-table-replica-auto-scaling UpdateTableReplicaAutoScaling" [
+export def "x-amz-target-dynamo-db-20120810update-table-replica-auto-scaling update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2172,26 +2172,26 @@ export def "x-amz-target-dynamo-db-20120810update-table-replica-auto-scaling Upd
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-51
-  --GlobalSecondaryIndexUpdates: any
-  TableName: any
-  --ProvisionedWriteCapacityAutoScalingUpdate: record # Represents the auto scaling settings to be modified for a global table or global secondary index. — shape: {MinimumUnits?: any, MaximumUnits?: any, AutoScalingDisabled?: any, AutoScalingRoleArn?: any, ScalingPolicyUpdate?: any}
-  --ReplicaUpdates: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-51
+  --global-secondary-index-updates: any
+  table_name: any
+  --provisioned-write-capacity-auto-scaling-update: record # Represents the auto scaling settings to be modified for a global table or global secondary index. — shape: {MinimumUnits?: any, MaximumUnits?: any, AutoScalingDisabled?: any, AutoScalingRoleArn?: any, ScalingPolicyUpdate?: any}
+  --replica-updates: any
 ]: any -> record<TableAutoScalingDescription: record<TableName: record, TableStatus: record, Replicas: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.UpdateTableReplicaAutoScaling")
-  let body = {GlobalSecondaryIndexUpdates: $GlobalSecondaryIndexUpdates, TableName: $TableName, ProvisionedWriteCapacityAutoScalingUpdate: $ProvisionedWriteCapacityAutoScalingUpdate, ReplicaUpdates: $ReplicaUpdates} | compact
+  let body = {"GlobalSecondaryIndexUpdates": $global_secondary_index_updates, "TableName": $table_name, "ProvisionedWriteCapacityAutoScalingUpdate": $provisioned_write_capacity_auto_scaling_update, "ReplicaUpdates": $replica_updates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2202,7 +2202,7 @@ export def "x-amz-target-dynamo-db-20120810update-table-replica-auto-scaling Upd
 #
 # POST /#X-Amz-Target=DynamoDB_20120810.UpdateTimeToLive
 # operationId: UpdateTimeToLive
-export def "x-amz-target-dynamo-db-20120810update-time-to-live UpdateTimeToLive" [
+export def "x-amz-target-dynamo-db-20120810update-time-to-live update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2211,24 +2211,24 @@ export def "x-amz-target-dynamo-db-20120810update-time-to-live UpdateTimeToLive"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-52
-  TableName: any
-  TimeToLiveSpecification: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-52
+  table_name: any
+  time_to_live_specification: any
 ]: any -> record<TimeToLiveSpecification: record<Enabled: record, AttributeName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=DynamoDB_20120810.UpdateTimeToLive")
-  let body = {TableName: $TableName, TimeToLiveSpecification: $TimeToLiveSpecification} | compact
+  let body = {"TableName": $table_name, "TimeToLiveSpecification": $time_to_live_specification} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

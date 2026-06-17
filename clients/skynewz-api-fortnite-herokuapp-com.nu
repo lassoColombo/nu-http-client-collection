@@ -150,7 +150,7 @@ export def "oauth-token post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/token")
-  let body = {email: $email, password: $password} | compact
+  let body = {"email": $email, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -194,7 +194,7 @@ export def "pve-user get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pve/user/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/pve/user/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -217,7 +217,7 @@ export def "stats-id get" [
 ]: nothing -> record<group: record<duo: record<k_d: float, kills: int, killsPerMatch: string, killsPerMin: string, score: int, timePlayed: string, top10: int, top12: int, top25: int, top3: int, top5: int, top6: int, win_: float, wins: int>, solo: record<k_d: float, kills: int, killsPerMatch: string, killsPerMin: string, score: int, timePlayed: string, top10: int, top12: int, top25: int, top3: int, top5: int, top6: int, win_: float, wins: int>, squad: record<k_d: float, kills: int, killsPerMatch: string, killsPerMin: string, score: int, timePlayed: string, top10: int, top12: int, top25: int, top3: int, top5: int, top6: int, win_: float, wins: int>>, info: record<accountId: int, plateform: string, username: string>, lifetimeStats: record<k_d: float, kills: int, killsPerMatch: string, killsPerMin: string, score: int, timePlayed: string, top10: int, top12: int, top25: int, top3: int, top5: int, top6: int, win_: float, wins: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/id/($plateform)/($id)")
+  let full_url = (build-url $base ({plateform: $plateform, id: $id} | format pattern "/stats/id/{plateform}/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -240,7 +240,7 @@ export def "stats get" [
 ]: nothing -> record<group: record<duo: record<k_d: float, kills: int, killsPerMatch: string, killsPerMin: string, score: int, timePlayed: string, top10: int, top12: int, top25: int, top3: int, top5: int, top6: int, win_: float, wins: int>, solo: record<k_d: float, kills: int, killsPerMatch: string, killsPerMin: string, score: int, timePlayed: string, top10: int, top12: int, top25: int, top3: int, top5: int, top6: int, win_: float, wins: int>, squad: record<k_d: float, kills: int, killsPerMatch: string, killsPerMin: string, score: int, timePlayed: string, top10: int, top12: int, top25: int, top3: int, top5: int, top6: int, win_: float, wins: int>>, info: record<accountId: int, plateform: string, username: string>, lifetimeStats: record<k_d: float, kills: int, killsPerMatch: string, killsPerMin: string, score: int, timePlayed: string, top10: int, top12: int, top25: int, top3: int, top5: int, top6: int, win_: float, wins: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stats/($plateform)/($username)")
+  let full_url = (build-url $base ({plateform: $plateform, username: $username} | format pattern "/stats/{plateform}/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,7 +284,7 @@ export def "user get" [
 ]: nothing -> record<displayName: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/($plateform)/($username)")
+  let full_url = (build-url $base ({plateform: $plateform, username: $username} | format pattern "/user/{plateform}/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

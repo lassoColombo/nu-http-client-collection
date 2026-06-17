@@ -119,7 +119,7 @@ export def "analyze-pricing betaScrapeProductCopy" [
 #
 # GET /api/customers
 # operationId: customers
-export def "customers customers" [
+export def "customers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "login loginAndGetBearerToken" [
 #
 # POST /api/logout
 # operationId: logout
-export def "logout logout" [
+export def "logout post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "logout logout" [
 #
 # GET /api/orders
 # operationId: orders
-export def "orders orders" [
+export def "orders get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "orders-1137 orders1" [
 #
 # GET /api/products
 # operationId: products
-export def "products products" [
+export def "products get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "products-1137 products1" [
 #
 # POST /api/register
 # operationId: register
-export def "register register" [
+export def "register post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "register register" [
 #
 # POST /api/register_woocommerce
 # operationId: registerAndCreateStoreConnectionForWooCommerce
-export def "register-woocommerce registerAndCreateStoreConnectionForWooCommerce" [
+export def "register-woocommerce create-and-create-store-connection-for" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

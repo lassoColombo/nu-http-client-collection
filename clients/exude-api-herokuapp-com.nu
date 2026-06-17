@@ -108,8 +108,8 @@ export def "exude-data filterStoppings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/exude/($type)/data")
-  let body = {data: $data, links: $links} | compact
+  let full_url = (build-url $base ({type: $type} | format pattern "/exude/{type}/data"))
+  let body = {"data": $data, "links": $links} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -135,8 +135,8 @@ export def "exude-file filterFileDataStoppings" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/exude/($type)/file")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({type: $type} | format pattern "/exude/{type}/file"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

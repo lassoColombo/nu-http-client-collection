@@ -107,7 +107,7 @@ export def "main post" [
   let auth = (build-auth $token ($auth_scheme | default "x-iptwist-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
-  let body = {ip: $ip} | compact
+  let body = {"ip": $ip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

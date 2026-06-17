@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://products.izettle.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def taxationMode-completer [] { ["EXCLUSIVE" "INCLUSIVE"] }
+def taxation-mode-completer [] { ["EXCLUSIVE" "INCLUSIVE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "organizations-categories get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "organizations-categories get-product-types" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,8 +95,8 @@ export def commands []: nothing -> table {
 #
 # GET /organizations/{organizationUuid}/categories/v2
 # operationId: getProductTypes
-export def "organizations-categories get" [
-  organizationUuid: string
+export def "organizations-categories get-product-types" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "organizations-categories get" [
 ]: nothing -> record<categories: table<name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/categories/v2")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/categories/v2"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,8 +119,8 @@ export def "organizations-categories get" [
 # POST /organizations/{organizationUuid}/categories/v2
 # operationId: createCategories
 # --categories item shape: {name: string, uuid: string}
-export def "organizations-categories createCategories" [
-  organizationUuid: string
+export def "organizations-categories create" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -134,8 +134,8 @@ export def "organizations-categories createCategories" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/categories/v2")
-  let body = {categories: $categories} | compact
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/categories/v2"))
+  let body = {"categories": $categories} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,9 +146,9 @@ export def "organizations-categories createCategories" [
 #
 # DELETE /organizations/{organizationUuid}/categories/v2/{categoryUuid}
 # operationId: deleteCategory
-export def "organizations-categories delete" [
-  organizationUuid: string
-  categoryUuid: string
+export def "organizations-categories delete-category" [
+  organization_uuid: string
+  category_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "organizations-categories delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/categories/v2/($categoryUuid)")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid, category_uuid: $category_uuid} | format pattern "/organizations/{organization_uuid}/categories/v2/{category_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,9 +170,9 @@ export def "organizations-categories delete" [
 #
 # PATCH /organizations/{organizationUuid}/categories/v2/{categoryUuid}
 # operationId: renameCategory
-export def "organizations-categories renameCategory" [
-  organizationUuid: string
-  categoryUuid: string
+export def "organizations-categories rename-category" [
+  organization_uuid: string
+  category_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,8 +186,8 @@ export def "organizations-categories renameCategory" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/categories/v2/($categoryUuid)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid, category_uuid: $category_uuid} | format pattern "/organizations/{organization_uuid}/categories/v2/{category_uuid}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -198,8 +198,8 @@ export def "organizations-categories renameCategory" [
 #
 # GET /organizations/{organizationUuid}/discounts
 # operationId: getAllDiscounts
-export def "organizations-discounts list" [
-  organizationUuid: string
+export def "organizations-discounts get-all" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "organizations-discounts list" [
 ]: nothing -> table<amount: record<amount: int, currencyId: string>, created: string, description: string, etag: string, externalReference: string, imageLookupKeys: list<string>, name: string, percentage: float, updated: string, updatedBy: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/discounts")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/discounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,8 +222,8 @@ export def "organizations-discounts list" [
 # POST /organizations/{organizationUuid}/discounts
 # operationId: createDiscount
 # --amount shape: {amount: int, currencyId: "AED"|"AFA"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZM"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHF"|"CLP"|"CNY"|"COP"|"CRC"|"CSD"|"CUC"|"CUP"|"CVE"|"CYP"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EEK"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GGP"|"GHC"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"IMP"|"INR"|"IQD"|"IRR"|"ISK"|"JEP"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MTL"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZM"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDD"|"SDG"|"SEK"|"SGD"|"SHP"|"SIT"|"SKK"|"SLL"|"SOS"|"SPL"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMM"|"TMT"|"TND"|"TOP"|"TRL"|"TRY"|"TTD"|"TVD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VEB"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"YER"|"ZAR"|"ZMK"|"ZMW"|"ZWD"|"ZWL"}
-export def "organizations-discounts createDiscount" [
-  organizationUuid: string
+export def "organizations-discounts create" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,8 +234,8 @@ export def "organizations-discounts createDiscount" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: record # shape: {amount: int, currencyId: "AED"|"AFA"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZM"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHF"|"CLP"|"CNY"|"COP"|"CRC"|"CSD"|"CUC"|"CUP"|"CVE"|"CYP"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EEK"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GGP"|"GHC"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"IMP"|"INR"|"IQD"|"IRR"|"ISK"|"JEP"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MTL"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZM"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDD"|"SDG"|"SEK"|"SGD"|"SHP"|"SIT"|"SKK"|"SLL"|"SOS"|"SPL"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMM"|"TMT"|"TND"|"TOP"|"TRL"|"TRY"|"TTD"|"TVD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VEB"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"YER"|"ZAR"|"ZMK"|"ZMW"|"ZWD"|"ZWL"}
   --description: string
-  --externalReference: string
-  --imageLookupKeys: list
+  --external-reference: string
+  --image-lookup-keys: list
   --name: string
   --percentage: float
   uuid: string # format: uuid
@@ -243,8 +243,8 @@ export def "organizations-discounts createDiscount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/discounts")
-  let body = {amount: $amount, description: $description, externalReference: $externalReference, imageLookupKeys: $imageLookupKeys, name: $name, percentage: $percentage, uuid: $uuid} | compact
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/discounts"))
+  let body = {"amount": $amount, "description": $description, "externalReference": $external_reference, "imageLookupKeys": $image_lookup_keys, "name": $name, "percentage": $percentage, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -256,8 +256,8 @@ export def "organizations-discounts createDiscount" [
 # DELETE /organizations/{organizationUuid}/discounts/{discountUuid}
 # operationId: deleteDiscount
 export def "organizations-discounts delete" [
-  organizationUuid: string
-  discountUuid: string
+  organization_uuid: string
+  discount_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "organizations-discounts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/discounts/($discountUuid)")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid, discount_uuid: $discount_uuid} | format pattern "/organizations/{organization_uuid}/discounts/{discount_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -280,8 +280,8 @@ export def "organizations-discounts delete" [
 # GET /organizations/{organizationUuid}/discounts/{discountUuid}
 # operationId: getDiscount
 export def "organizations-discounts get" [
-  organizationUuid: string
-  discountUuid: string
+  organization_uuid: string
+  discount_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,12 +290,12 @@ export def "organizations-discounts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string
+  --if-none-match: string
 ]: nothing -> record<amount: record<amount: int, currencyId: string>, created: string, description: string, etag: string, externalReference: string, imageLookupKeys: list<string>, name: string, percentage: float, updated: string, updatedBy: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/discounts/($discountUuid)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid, discount_uuid: $discount_uuid} | format pattern "/organizations/{organization_uuid}/discounts/{discount_uuid}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,9 +307,9 @@ export def "organizations-discounts get" [
 # PUT /organizations/{organizationUuid}/discounts/{discountUuid}
 # operationId: updateDiscount
 # --amount shape: {amount: int, currencyId: "AED"|"AFA"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZM"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHF"|"CLP"|"CNY"|"COP"|"CRC"|"CSD"|"CUC"|"CUP"|"CVE"|"CYP"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EEK"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GGP"|"GHC"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"IMP"|"INR"|"IQD"|"IRR"|"ISK"|"JEP"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MTL"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZM"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDD"|"SDG"|"SEK"|"SGD"|"SHP"|"SIT"|"SKK"|"SLL"|"SOS"|"SPL"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMM"|"TMT"|"TND"|"TOP"|"TRL"|"TRY"|"TTD"|"TVD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VEB"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"YER"|"ZAR"|"ZMK"|"ZMW"|"ZWD"|"ZWL"}
-export def "organizations-discounts updateDiscount" [
-  organizationUuid: string
-  discountUuid: string
+export def "organizations-discounts update" [
+  organization_uuid: string
+  discount_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,11 +318,11 @@ export def "organizations-discounts updateDiscount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string
+  --if-match: string
   --amount: record # shape: {amount: int, currencyId: "AED"|"AFA"|"AFN"|"ALL"|"AMD"|"ANG"|"AOA"|"ARS"|"AUD"|"AWG"|"AZM"|"AZN"|"BAM"|"BBD"|"BDT"|"BGN"|"BHD"|"BIF"|"BMD"|"BND"|"BOB"|"BRL"|"BSD"|"BTN"|"BWP"|"BYR"|"BZD"|"CAD"|"CDF"|"CHF"|"CLP"|"CNY"|"COP"|"CRC"|"CSD"|"CUC"|"CUP"|"CVE"|"CYP"|"CZK"|"DJF"|"DKK"|"DOP"|"DZD"|"EEK"|"EGP"|"ERN"|"ETB"|"EUR"|"FJD"|"FKP"|"GBP"|"GEL"|"GGP"|"GHC"|"GHS"|"GIP"|"GMD"|"GNF"|"GTQ"|"GYD"|"HKD"|"HNL"|"HRK"|"HTG"|"HUF"|"IDR"|"ILS"|"IMP"|"INR"|"IQD"|"IRR"|"ISK"|"JEP"|"JMD"|"JOD"|"JPY"|"KES"|"KGS"|"KHR"|"KMF"|"KPW"|"KRW"|"KWD"|"KYD"|"KZT"|"LAK"|"LBP"|"LKR"|"LRD"|"LSL"|"LTL"|"LVL"|"LYD"|"MAD"|"MDL"|"MGA"|"MKD"|"MMK"|"MNT"|"MOP"|"MRO"|"MTL"|"MUR"|"MVR"|"MWK"|"MXN"|"MYR"|"MZM"|"MZN"|"NAD"|"NGN"|"NIO"|"NOK"|"NPR"|"NZD"|"OMR"|"PAB"|"PEN"|"PGK"|"PHP"|"PKR"|"PLN"|"PYG"|"QAR"|"RON"|"RSD"|"RUB"|"RWF"|"SAR"|"SBD"|"SCR"|"SDD"|"SDG"|"SEK"|"SGD"|"SHP"|"SIT"|"SKK"|"SLL"|"SOS"|"SPL"|"SRD"|"SSP"|"STD"|"SVC"|"SYP"|"SZL"|"THB"|"TJS"|"TMM"|"TMT"|"TND"|"TOP"|"TRL"|"TRY"|"TTD"|"TVD"|"TWD"|"TZS"|"UAH"|"UGX"|"USD"|"UYU"|"UZS"|"VEB"|"VEF"|"VND"|"VUV"|"WST"|"XAF"|"XAG"|"XAU"|"XCD"|"XDR"|"XOF"|"XPD"|"XPF"|"XPT"|"YER"|"ZAR"|"ZMK"|"ZMW"|"ZWD"|"ZWL"}
   --description: string
-  --externalReference: string
-  --imageLookupKeys: list
+  --external-reference: string
+  --image-lookup-keys: list
   --name: string
   --percentage: float
   uuid: string # format: uuid
@@ -330,10 +330,10 @@ export def "organizations-discounts updateDiscount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/discounts/($discountUuid)")
-  let body = {amount: $amount, description: $description, externalReference: $externalReference, imageLookupKeys: $imageLookupKeys, name: $name, percentage: $percentage, uuid: $uuid} | compact
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid, discount_uuid: $discount_uuid} | format pattern "/organizations/{organization_uuid}/discounts/{discount_uuid}"))
+  let body = {"amount": $amount, "description": $description, "externalReference": $external_reference, "imageLookupKeys": $image_lookup_keys, "name": $name, "percentage": $percentage, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,8 +344,8 @@ export def "organizations-discounts updateDiscount" [
 #
 # GET /organizations/{organizationUuid}/images
 # operationId: getAllImageUrls
-export def "organizations-images get" [
-  organizationUuid: string
+export def "organizations-images get-all-image-urls" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "organizations-images get" [
 ]: nothing -> record<imageUrls: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/images")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/images"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,8 +367,8 @@ export def "organizations-images get" [
 #
 # GET /organizations/{organizationUuid}/import/status
 # operationId: getLatestImportStatus
-export def "organizations-import-status list" [
-  organizationUuid: string
+export def "organizations-import-status get-latest" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "organizations-import-status list" [
 ]: nothing -> record<created: string, errorMessage: string, finished: string, items: int, state: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/import/status")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/import/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,8 +391,8 @@ export def "organizations-import-status list" [
 # GET /organizations/{organizationUuid}/import/status/{importUuid}
 # operationId: getStatusByUuid
 export def "organizations-import-status get" [
-  organizationUuid: string
-  importUuid: string
+  organization_uuid: string
+  import_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "organizations-import-status get" [
 ]: nothing -> record<created: string, errorMessage: string, finished: string, items: int, state: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/import/status/($importUuid)")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid, import_uuid: $import_uuid} | format pattern "/organizations/{organization_uuid}/import/status/{import_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -415,8 +415,8 @@ export def "organizations-import-status get" [
 # POST /organizations/{organizationUuid}/import/v2
 # operationId: importLibraryV2
 # --products item shape: {categories?: list, category?: record, description?: string, externalReference?: string, imageLookupKeys?: list, metadata?: record, name: string, online?: record, presentation?: record, taxCode?: string, taxExempt?: bool, taxRates?: list, unitName?: string, uuid: string, variantOptionDefinitions?: record, variants?: list, vatPercentage?: float}
-export def "organizations-import importLibraryV2" [
-  organizationUuid: string
+export def "organizations-import import-library-v2" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,8 +430,8 @@ export def "organizations-import importLibraryV2" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/import/v2")
-  let body = {products: $products} | compact
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/import/v2"))
+  let body = {"products": $products} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -443,7 +443,7 @@ export def "organizations-import importLibraryV2" [
 # GET /organizations/{organizationUuid}/library
 # operationId: getLibrary
 export def "organizations-library get" [
-  organizationUuid: string
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,15 +452,15 @@ export def "organizations-library get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --eventLogUuid: string # format: uuid
+  --event-log-uuid: string # format: uuid
   --limit: int # format: int32, default: 500
   --offset: string
   --all: oneof<nothing, bool>
 ]: nothing -> record<deletedDiscounts: list<string>, deletedProducts: list<string>, discounts: table<amount: record, created: string, description: string, etag: string, externalReference: string, imageLookupKeys: list, name: string, percentage: float, updated: string, updatedBy: string, uuid: string>, fromEventLogUuid: string, products: table<categories: list, category: record, created: string, description: string, etag: string, externalReference: string, imageLookupKeys: list, metadata: record, name: string, online: record, presentation: record, taxCode: string, taxExempt: bool, taxRates: list, unitName: string, updated: string, updatedBy: string, uuid: string, variantOptionDefinitions: record, variants: list, vatPercentage: float>, untilEventLogUuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "eventLogUuid" $eventLogUuid "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "all" $all "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/library" $qp)
+  let qp = [(serialize-qp "eventLogUuid" $event_log_uuid "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "all" $all "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/library") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -471,7 +471,7 @@ export def "organizations-library get" [
 # DELETE /organizations/{organizationUuid}/products
 # operationId: deleteProducts
 export def "organizations-products delete-by-organizationUuid" [
-  organizationUuid: string
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "organizations-products delete-by-organizationUuid" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "uuid" $uuid "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/products" $qp)
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/products") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -495,8 +495,8 @@ export def "organizations-products delete-by-organizationUuid" [
 #
 # GET /organizations/{organizationUuid}/products
 # operationId: getAllProductsInPos
-export def "organizations-products get-by-organizationUuid" [
-  organizationUuid: string
+export def "organizations-products get-all-products-in-pos" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "organizations-products get-by-organizationUuid" [
 ]: nothing -> table<categories: list<string>, category: record<name: string, uuid: string>, created: string, description: string, etag: string, externalReference: string, imageLookupKeys: list<string>, metadata: record<inPos: bool, source: record>, name: string, online: record<description: string, presentation: record, seo: record, shipping: record, status: string, title: string>, presentation: record<backgroundColor: string, imageUrl: string, textColor: string>, taxCode: string, taxExempt: bool, taxRates: list<string>, unitName: string, updated: string, updatedBy: string, uuid: string, variantOptionDefinitions: record<definitions: list>, variants: list<record>, vatPercentage: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/products")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/products"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -524,8 +524,8 @@ export def "organizations-products get-by-organizationUuid" [
 # --presentation shape: {backgroundColor?: string, imageUrl?: string, textColor?: string}
 # --variantOptionDefinitions shape: {definitions: list}
 # --variants item shape: {barcode?: string, costPrice?: record, description?: string, name?: string, options?: list, presentation?: record, price?: record, sku?: string, uuid: string, vatPercentage?: float}
-export def "organizations-products createProduct" [
-  organizationUuid: string
+export def "organizations-products create" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,32 +534,32 @@ export def "organizations-products createProduct" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnEntity: oneof<nothing, bool> # default: false
+  --return-entity: oneof<nothing, bool> # default: false
   --categories: list
   --category: record # shape: {name: string, uuid: string}
-  --createWithDefaultTax: oneof<nothing, bool>
+  --create-with-default-tax: oneof<nothing, bool>
   --description: string
-  --externalReference: string
-  --imageLookupKeys: list
+  --external-reference: string
+  --image-lookup-keys: list
   --metadata: record # shape: {inPos: bool, source?: record}
   name: string
   --online: record # shape: {description?: string, presentation?: record, seo?: record, shipping?: record, status: "ACTIVE"|"HIDDEN", title?: string}
   --presentation: record # shape: {backgroundColor?: string, imageUrl?: string, textColor?: string}
-  --taxCode: string
-  --taxExempt: oneof<nothing, bool>
-  --taxRates: list
-  --unitName: string
+  --tax-code: string
+  --tax-exempt: oneof<nothing, bool>
+  --tax-rates: list
+  --unit-name: string
   uuid: string # format: uuid
-  --variantOptionDefinitions: record # shape: {definitions: list}
+  --variant-option-definitions: record # shape: {definitions: list}
   --variants: list # item shape: {barcode?: string, costPrice?: record, description?: string, name?: string, options?: list, presentation?: record, price?: record, sku?: string, uuid: string, vatPercentage?: float}
-  --vatPercentage: float
+  --vat-percentage: float
 ]: any -> record<categories: list<string>, category: record<name: string, uuid: string>, created: string, description: string, etag: string, externalReference: string, imageLookupKeys: list<string>, metadata: record<inPos: bool, source: record<external: bool, name: string>>, name: string, online: record<description: string, presentation: record<additionalImageUrls: list, displayImageUrl: string, mediaUrls: list>, seo: record<metaDescription: string, slug: string, title: string>, shipping: record<shippingPricingModel: string, weight: record, weightInGrams: int>, status: string, title: string>, presentation: record<backgroundColor: string, imageUrl: string, textColor: string>, taxCode: string, taxExempt: bool, taxRates: list<string>, unitName: string, updated: string, updatedBy: string, uuid: string, variantOptionDefinitions: record<definitions: list<record>>, variants: table<barcode: string, costPrice: record, description: string, name: string, options: list, presentation: record, price: record, sku: string, uuid: string, vatPercentage: float>, vatPercentage: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnEntity" $returnEntity "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/products" $qp)
-  let body = {categories: $categories, category: $category, createWithDefaultTax: $createWithDefaultTax, description: $description, externalReference: $externalReference, imageLookupKeys: $imageLookupKeys, metadata: $metadata, name: $name, online: $online, presentation: $presentation, taxCode: $taxCode, taxExempt: $taxExempt, taxRates: $taxRates, unitName: $unitName, uuid: $uuid, variantOptionDefinitions: $variantOptionDefinitions, variants: $variants, vatPercentage: $vatPercentage} | compact
+  let qp = [(serialize-qp "returnEntity" $return_entity "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/products") $qp)
+  let body = {"categories": $categories, "category": $category, "createWithDefaultTax": $create_with_default_tax, "description": $description, "externalReference": $external_reference, "imageLookupKeys": $image_lookup_keys, "metadata": $metadata, "name": $name, "online": $online, "presentation": $presentation, "taxCode": $tax_code, "taxExempt": $tax_exempt, "taxRates": $tax_rates, "unitName": $unit_name, "uuid": $uuid, "variantOptionDefinitions": $variant_option_definitions, "variants": $variants, "vatPercentage": $vat_percentage} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -570,8 +570,8 @@ export def "organizations-products createProduct" [
 #
 # POST /organizations/{organizationUuid}/products/online/slug
 # operationId: createProductSlug
-export def "organizations-products-online-slug createProductSlug" [
-  organizationUuid: string
+export def "organizations-products-online-slug create" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,13 +580,13 @@ export def "organizations-products-online-slug createProductSlug" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  productName: string
+  product_name: string
 ]: any -> record<productName: string, slug: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/products/online/slug")
-  let body = {productName: $productName} | compact
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/products/online/slug"))
+  let body = {"productName": $product_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -597,8 +597,8 @@ export def "organizations-products-online-slug createProductSlug" [
 #
 # GET /organizations/{organizationUuid}/products/options
 # operationId: getAllOptions
-export def "organizations-products-options get" [
-  organizationUuid: string
+export def "organizations-products-options get-all" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "organizations-products-options get" [
 ]: nothing -> table<options: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/products/options")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/products/options"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -620,8 +620,8 @@ export def "organizations-products-options get" [
 #
 # GET /organizations/{organizationUuid}/products/v2
 # operationId: getAllProductsV2
-export def "organizations-products get-by-organizationUuid-1" [
-  organizationUuid: string
+export def "organizations-products get-all-products-v2" [
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -635,7 +635,7 @@ export def "organizations-products get-by-organizationUuid-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/products/v2" $qp)
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/products/v2") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -646,7 +646,7 @@ export def "organizations-products get-by-organizationUuid-1" [
 # GET /organizations/{organizationUuid}/products/v2/count
 # operationId: countAllProducts
 export def "organizations-products-count countAllProducts" [
-  organizationUuid: string
+  organization_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "organizations-products-count countAllProducts" [
 ]: nothing -> table<productCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/products/v2/count")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid} | format pattern "/organizations/{organization_uuid}/products/v2/count"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,9 +674,9 @@ export def "organizations-products-count countAllProducts" [
 # --presentation shape: {backgroundColor?: string, imageUrl?: string, textColor?: string}
 # --variantOptionDefinitions shape: {definitions: list}
 # --variants item shape: {barcode?: string, costPrice?: record, description?: string, name?: string, options?: list, presentation?: record, price?: record, sku?: string, uuid: string, vatPercentage?: float}
-export def "organizations-products updateProduct" [
-  organizationUuid: string
-  productUuid: string
+export def "organizations-products update" [
+  organization_uuid: string
+  product_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,32 +685,32 @@ export def "organizations-products updateProduct" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-Match: string
+  --if-match: string
   --categories: list
   --category: record # shape: {name: string, uuid: string}
   --description: string
-  --externalReference: string
-  --imageLookupKeys: list
+  --external-reference: string
+  --image-lookup-keys: list
   --metadata: record # shape: {inPos: bool, source?: record}
   name: string
   --online: record # shape: {description?: string, presentation?: record, seo?: record, shipping?: record, status: "ACTIVE"|"HIDDEN", title?: string}
   --presentation: record # shape: {backgroundColor?: string, imageUrl?: string, textColor?: string}
-  --taxCode: string
-  --taxExempt: oneof<nothing, bool>
-  --taxRates: list
-  --unitName: string
+  --tax-code: string
+  --tax-exempt: oneof<nothing, bool>
+  --tax-rates: list
+  --unit-name: string
   uuid: string # format: uuid
-  --variantOptionDefinitions: record # shape: {definitions: list}
+  --variant-option-definitions: record # shape: {definitions: list}
   --variants: list # item shape: {barcode?: string, costPrice?: record, description?: string, name?: string, options?: list, presentation?: record, price?: record, sku?: string, uuid: string, vatPercentage?: float}
-  --vatPercentage: float
+  --vat-percentage: float
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/products/v2/($productUuid)")
-  let body = {categories: $categories, category: $category, description: $description, externalReference: $externalReference, imageLookupKeys: $imageLookupKeys, metadata: $metadata, name: $name, online: $online, presentation: $presentation, taxCode: $taxCode, taxExempt: $taxExempt, taxRates: $taxRates, unitName: $unitName, uuid: $uuid, variantOptionDefinitions: $variantOptionDefinitions, variants: $variants, vatPercentage: $vatPercentage} | compact
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid, product_uuid: $product_uuid} | format pattern "/organizations/{organization_uuid}/products/v2/{product_uuid}"))
+  let body = {"categories": $categories, "category": $category, "description": $description, "externalReference": $external_reference, "imageLookupKeys": $image_lookup_keys, "metadata": $metadata, "name": $name, "online": $online, "presentation": $presentation, "taxCode": $tax_code, "taxExempt": $tax_exempt, "taxRates": $tax_rates, "unitName": $unit_name, "uuid": $uuid, "variantOptionDefinitions": $variant_option_definitions, "variants": $variants, "vatPercentage": $vat_percentage} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"If-Match": $If_Match} | compact
+  let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,8 +722,8 @@ export def "organizations-products updateProduct" [
 # DELETE /organizations/{organizationUuid}/products/{productUuid}
 # operationId: deleteProduct
 export def "organizations-products delete-by-organizationUuid-productUuid" [
-  organizationUuid: string
-  productUuid: string
+  organization_uuid: string
+  product_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,7 +735,7 @@ export def "organizations-products delete-by-organizationUuid-productUuid" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/products/($productUuid)")
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid, product_uuid: $product_uuid} | format pattern "/organizations/{organization_uuid}/products/{product_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -745,9 +745,9 @@ export def "organizations-products delete-by-organizationUuid-productUuid" [
 #
 # GET /organizations/{organizationUuid}/products/{productUuid}
 # operationId: getProduct
-export def "organizations-products get-by-organizationUuid-productUuid" [
-  organizationUuid: string
-  productUuid: string
+export def "organizations-products get" [
+  organization_uuid: string
+  product_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,12 +756,12 @@ export def "organizations-products get-by-organizationUuid-productUuid" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --If-None-Match: string
+  --if-none-match: string
 ]: nothing -> record<categories: list<string>, category: record<name: string, uuid: string>, created: string, description: string, etag: string, externalReference: string, imageLookupKeys: list<string>, metadata: record<inPos: bool, source: record<external: bool, name: string>>, name: string, online: record<description: string, presentation: record<additionalImageUrls: list, displayImageUrl: string, mediaUrls: list>, seo: record<metaDescription: string, slug: string, title: string>, shipping: record<shippingPricingModel: string, weight: record, weightInGrams: int>, status: string, title: string>, presentation: record<backgroundColor: string, imageUrl: string, textColor: string>, taxCode: string, taxExempt: bool, taxRates: list<string>, unitName: string, updated: string, updatedBy: string, uuid: string, variantOptionDefinitions: record<definitions: list<record>>, variants: table<barcode: string, costPrice: record, description: string, name: string, options: list, presentation: record, price: record, sku: string, uuid: string, vatPercentage: float>, vatPercentage: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/organizations/($organizationUuid)/products/($productUuid)")
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({organization_uuid: $organization_uuid, product_uuid: $product_uuid} | format pattern "/organizations/{organization_uuid}/products/{product_uuid}"))
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -772,7 +772,7 @@ export def "organizations-products get-by-organizationUuid-productUuid" [
 #
 # GET /v1/taxes
 # operationId: getTaxRates
-export def "taxes list" [
+export def "taxes get-tax-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,7 +795,7 @@ export def "taxes list" [
 # POST /v1/taxes
 # operationId: createTaxRates
 # --taxRates item shape: {default?: bool, label: string, percentage?: float, uuid: string}
-export def "taxes createTaxRates" [
+export def "taxes create-tax-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -804,13 +804,13 @@ export def "taxes createTaxRates" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  taxRates: list # item shape: {default?: bool, label: string, percentage?: float, uuid: string}
+  tax_rates: list # item shape: {default?: bool, label: string, percentage?: float, uuid: string}
 ]: any -> record<taxRates: table<default: bool, label: string, percentage: float, uuid: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/taxes")
-  let body = {taxRates: $taxRates} | compact
+  let body = {"taxRates": $tax_rates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -821,7 +821,7 @@ export def "taxes createTaxRates" [
 #
 # GET /v1/taxes/count
 # operationId: getProductCountForAllTaxes
-export def "taxes-count get" [
+export def "taxes-count get-product-count-for-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,7 +843,7 @@ export def "taxes-count get" [
 #
 # GET /v1/taxes/settings
 # operationId: getTaxSettings
-export def "taxes-settings get" [
+export def "taxes-settings get-tax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,13 +874,13 @@ export def "taxes-settings setTaxationMode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  taxationMode: string@taxationMode-completer
+  taxation_mode: string@taxation-mode-completer
 ]: any -> record<organizationUuid: string, taxationMode: string, taxationType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/taxes/settings")
-  let body = {taxationMode: $taxationMode} | compact
+  let body = {"taxationMode": $taxation_mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -891,8 +891,8 @@ export def "taxes-settings setTaxationMode" [
 #
 # DELETE /v1/taxes/{taxRateUuid}
 # operationId: deleteTaxRate
-export def "taxes delete" [
-  taxRateUuid: string
+export def "taxes delete-tax-rate" [
+  tax_rate_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -904,7 +904,7 @@ export def "taxes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/taxes/($taxRateUuid)")
+  let full_url = (build-url $base ({tax_rate_uuid: $tax_rate_uuid} | format pattern "/v1/taxes/{tax_rate_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -914,8 +914,8 @@ export def "taxes delete" [
 #
 # GET /v1/taxes/{taxRateUuid}
 # operationId: getTaxRate
-export def "taxes get" [
-  taxRateUuid: string
+export def "taxes get-tax-rate" [
+  tax_rate_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,7 +927,7 @@ export def "taxes get" [
 ]: nothing -> record<default: bool, label: string, percentage: float, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/taxes/($taxRateUuid)")
+  let full_url = (build-url $base ({tax_rate_uuid: $tax_rate_uuid} | format pattern "/v1/taxes/{tax_rate_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -937,8 +937,8 @@ export def "taxes get" [
 #
 # PUT /v1/taxes/{taxRateUuid}
 # operationId: updateTaxRate
-export def "taxes updateTaxRate" [
-  taxRateUuid: string
+export def "taxes update-tax-rate" [
+  tax_rate_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,8 +954,8 @@ export def "taxes updateTaxRate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/taxes/($taxRateUuid)")
-  let body = {default: $default, label: $label, percentage: $percentage} | compact
+  let full_url = (build-url $base ({tax_rate_uuid: $tax_rate_uuid} | format pattern "/v1/taxes/{tax_rate_uuid}"))
+  let body = {"default": $default, "label": $label, "percentage": $percentage} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

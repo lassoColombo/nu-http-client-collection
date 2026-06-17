@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-sql-managed-instances List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-sql-managed-instances list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/managedInstances
 # operationId: ManagedInstances_List
-export def "subscriptions-providers-microsoft-sql-managed-instances List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-sql-managed-instances list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-sql-managed-instances List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Sql/managedInstances" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Sql/managedInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,10 +118,10 @@ export def "subscriptions-providers-microsoft-sql-managed-instances List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/instancePools/{instancePoolName}/managedInstances
 # operationId: ManagedInstances_ListByInstancePool
-export def "subscriptions-resource-groups-providers-microsoft-sql-instance-pools-managed-instances ListByInstancePool" [
-  resourceGroupName: string
-  instancePoolName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-instance-pools-managed-instances list-by" [
+  subscription_id: string
+  resource_group_name: string
+  instance_pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +135,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-instance-pools
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/instancePools/($instancePoolName)/managedInstances" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, instance_pool_name: $instance_pool_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/instancePools/{instance_pool_name}/managedInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,9 +145,9 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-instance-pools
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances
 # operationId: ManagedInstances_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,10 +171,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}
 # operationId: ManagedInstances_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances Delete" [
-  resourceGroupName: string
-  managedInstanceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances delete" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,10 +198,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}
 # operationId: ManagedInstances_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances Get" [
-  resourceGroupName: string
-  managedInstanceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances get" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,10 +227,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 # operationId: ManagedInstances_Update
 # --properties shape: {administratorLogin?: string, administratorLoginPassword?: string, collation?: string, dnsZonePartner?: string, instancePoolId?: string, licenseType?: "LicenseIncluded"|"BasePrice", managedInstanceCreateMode?: "Default"|"PointInTimeRestore", proxyOverride?: "Proxy"|"Redirect"|"Default", publicDataEndpointEnabled?: bool, restorePointInTime?: string, sourceManagedInstanceId?: string, storageSizeInGB?: int, subnetId?: string, timezoneId?: string, vCores?: int}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances Update" [
-  resourceGroupName: string
-  managedInstanceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances update" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,8 +248,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)" $qp)
-  let body = {properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -263,10 +263,10 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 # --identity shape: {type?: "SystemAssigned"}
 # --properties shape: {administratorLogin?: string, administratorLoginPassword?: string, collation?: string, dnsZonePartner?: string, instancePoolId?: string, licenseType?: "LicenseIncluded"|"BasePrice", managedInstanceCreateMode?: "Default"|"PointInTimeRestore", proxyOverride?: "Proxy"|"Redirect"|"Default", publicDataEndpointEnabled?: bool, restorePointInTime?: string, sourceManagedInstanceId?: string, storageSizeInGB?: int, subnetId?: string, timezoneId?: string, vCores?: int}
 # --sku shape: {capacity?: int, family?: string, name: string, size?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances CreateOrUpdate" [
-  resourceGroupName: string
-  managedInstanceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  managed_instance_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,8 +286,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/managedInstances/($managedInstanceName)" $qp)
-  let body = {identity: $identity, properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, managed_instance_name: $managed_instance_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/managedInstances/{managed_instance_name}") $qp)
+  let body = {"identity": $identity, "properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

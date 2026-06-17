@@ -138,7 +138,7 @@ export def "connector-apis apisOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/connector/apis/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/connector/apis/{id}"))
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -165,7 +165,7 @@ export def "connector-apis-resources apiResourcesOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/connector/apis/($id)/resources/($resource_id)")
+  let full_url = (build-url $base ({id: $id, resource_id: $resource_id} | format pattern "/connector/apis/{id}/resources/{resource_id}"))
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -192,7 +192,7 @@ export def "connector-apis-resources-coverage apiResourceCoverageOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/connector/apis/($id)/resources/($resource_id)/coverage")
+  let full_url = (build-url $base ({id: $id, resource_id: $resource_id} | format pattern "/connector/apis/{id}/resources/{resource_id}/coverage"))
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -247,7 +247,7 @@ export def "connector-connectors connectorsOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/connector/connectors/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/connector/connectors/{id}"))
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -274,7 +274,7 @@ export def "connector-connectors-docs connectorDocsOne" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/connector/connectors/($id)/docs/($doc_id)")
+  let full_url = (build-url $base ({id: $id, doc_id: $doc_id} | format pattern "/connector/connectors/{id}/docs/{doc_id}"))
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -303,7 +303,7 @@ export def "connector-connectors-resources connectorResourcesOne" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "unified_api" $unified_api "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/connector/connectors/($id)/resources/($resource_id)" $qp)
+  let full_url = (build-url $base ({id: $id, resource_id: $resource_id} | format pattern "/connector/connectors/{id}/resources/{resource_id}") $qp)
   let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"

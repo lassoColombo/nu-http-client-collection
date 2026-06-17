@@ -109,14 +109,14 @@ export def "payment-links list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # format: int32, default: 0
   --limit: int # format: int32, default: 25
-  --merchantId: string
-  --accountId: string
-  --portalId: string
+  --merchant-id: string
+  --account-id: string
+  --portal-id: string
   --mode: string
 ]: nothing -> record<content: table<accountId: string, active: bool, amount: int, backgroundImage: string, billing: record, created: int, currency: string, description: string, email: string, errorUrl: string, expiration: string, hash: string, id: string, intent: string, invoiceInformation: record, language: string, link: string, logo: string, merchantId: string, mode: string, modified: int, notifyUrl: string, paymentMethod: string, paymentMethods: list, paymentProcess: string, portalId: string, redirectUrl: string, reference: string, shipping: record, shoppingCart: list, status: string, successUrl: string, userId: string>, empty: bool, first: bool, last: bool, number: int, numberOfElements: int, pageable: record<offset: int, pageNumber: int, pageSize: int, paged: bool, sort: record<empty: bool, sorted: bool, unsorted: bool>, unpaged: bool>, size: int, sort: record<empty: bool, sorted: bool, unsorted: bool>, totalElements: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "payone-hmac-sha256"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "merchantId" $merchantId "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "portalId" $portalId "scalar") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "merchantId" $merchant_id "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "portalId" $portal_id "scalar") (serialize-qp "mode" $mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/payment-links" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,7 +131,7 @@ export def "payment-links list" [
 # --invoiceInformation shape: {invoiceId?: string, invoiceText?: string}
 # --shipping shape: {addressAddition?: string, city?: string, company?: string, country?: string, firstName?: string, lastName?: string, state?: string, street?: string, zip?: string}
 # --shoppingCart item shape: {deliveryDateEnd?: string, deliveryDateStart?: string, description?: string, number: string, price: int, quantity: int, type: "goods"|"shipment"|"handling"|"voucher", vatRate?: int}
-export def "payment-links createPaymentLink" [
+export def "payment-links create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,35 +140,35 @@ export def "payment-links createPaymentLink" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountId: string # identifier for the subaccount (e.g. 12345)
+  account_id: string # identifier for the subaccount (e.g. 12345)
   --active: oneof<nothing, bool> # link activation status (default: true, e.g. true)
-  --backgroundImage: string # backgroundImage css property (format: css, e.g. linear-gradient(to bottom right, #ffffff, #3295d6))
+  --background-image: string # backgroundImage css property (format: css, e.g. linear-gradient(to bottom right, #ffffff, #3295d6))
   --billing: record # shape: {addressAddition?: string, city?: string, company?: string, country?: string, firstName?: string, lastName?: string, state?: string, street?: string, zip?: string}
   currency: string@currency-completer # currency code (e.g. EUR)
   --description: string # free format description of the payment (e.g. This payment is awesome!!)
   --email: string # email the invoice should be delivered to
-  --errorUrl: string # final redirect after a final payment
+  --error-url: string # final redirect after a final payment
   --expiration: string # link expiration date, the link will only be executable until end of that day (format: date, e.g. 2020-02-20)
   --intent: string@intent-completer # designates the type of transaction that will be created (default: authorization)
-  --invoiceInformation: record # relevant information for the invoice module — shape: {invoiceId?: string, invoiceText?: string}
+  --invoice-information: record # relevant information for the invoice module — shape: {invoiceId?: string, invoiceText?: string}
   --language: string@language-completer # link ISO language code (e.g. en_US)
   --logo: string # logo url (format: url, e.g. https://www.payone.com/wp-content/uploads/2018/12/Payone-Logo-2020.jpg)
-  merchantId: string # identifier for the merchant (e.g. 12345)
+  merchant_id: string # identifier for the merchant (e.g. 12345)
   mode: string@mode-completer # execution mode (e.g. live)
-  --notifyUrl: string # Url where the notification will be send after link was executed
-  --paymentMethods: list # list of available payment methods (e.g. [visa, mastercard])
-  portalId: string # identifier for the portal (e.g. 1234567)
+  --notify-url: string # Url where the notification will be send after link was executed
+  --payment-methods: list # list of available payment methods (e.g. [visa, mastercard])
+  portal_id: string # identifier for the portal (e.g. 1234567)
   reference: string # payment reference number, has to be unique per merchant and mode (e.g. payment_1)
   --shipping: record # shape: {addressAddition?: string, city?: string, company?: string, country?: string, firstName?: string, lastName?: string, state?: string, street?: string, zip?: string}
-  shoppingCart: list # item shape: {deliveryDateEnd?: string, deliveryDateStart?: string, description?: string, number: string, price: int, quantity: int, type: "goods"|"shipment"|"handling"|"voucher", vatRate?: int}
-  --successUrl: string # final redirect after a successful payment
-  --userId: string # identifier for the user (e.g. 12345678)
+  shopping_cart: list # item shape: {deliveryDateEnd?: string, deliveryDateStart?: string, description?: string, number: string, price: int, quantity: int, type: "goods"|"shipment"|"handling"|"voucher", vatRate?: int}
+  --success-url: string # final redirect after a successful payment
+  --user-id: string # identifier for the user (e.g. 12345678)
 ]: any -> record<accountId: string, active: bool, amount: int, backgroundImage: string, billing: record<addressAddition: string, city: string, company: string, country: string, firstName: string, lastName: string, state: string, street: string, zip: string>, created: int, currency: string, description: string, email: string, errorUrl: string, expiration: string, hash: string, id: string, intent: string, invoiceInformation: record<invoiceId: string, invoiceText: string>, language: string, link: string, logo: string, merchantId: string, mode: string, modified: int, notifyUrl: string, paymentMethod: string, paymentMethods: list<string>, paymentProcess: string, portalId: string, redirectUrl: string, reference: string, shipping: record<addressAddition: string, city: string, company: string, country: string, firstName: string, lastName: string, state: string, street: string, zip: string>, shoppingCart: table<deliveryDateEnd: string, deliveryDateStart: string, description: string, number: string, price: int, quantity: int, type: string, vatRate: int>, status: string, successUrl: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "payone-hmac-sha256"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/payment-links")
-  let body = {accountId: $accountId, active: $active, backgroundImage: $backgroundImage, billing: $billing, currency: $currency, description: $description, email: $email, errorUrl: $errorUrl, expiration: $expiration, intent: $intent, invoiceInformation: $invoiceInformation, language: $language, logo: $logo, merchantId: $merchantId, mode: $mode, notifyUrl: $notifyUrl, paymentMethods: $paymentMethods, portalId: $portalId, reference: $reference, shipping: $shipping, shoppingCart: $shoppingCart, successUrl: $successUrl, userId: $userId} | compact
+  let body = {"accountId": $account_id, "active": $active, "backgroundImage": $background_image, "billing": $billing, "currency": $currency, "description": $description, "email": $email, "errorUrl": $error_url, "expiration": $expiration, "intent": $intent, "invoiceInformation": $invoice_information, "language": $language, "logo": $logo, "merchantId": $merchant_id, "mode": $mode, "notifyUrl": $notify_url, "paymentMethods": $payment_methods, "portalId": $portal_id, "reference": $reference, "shipping": $shipping, "shoppingCart": $shopping_cart, "successUrl": $success_url, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,7 +180,7 @@ export def "payment-links createPaymentLink" [
 # GET /v1/payment-links/{linkId}
 # operationId: getPaymentLink
 export def "payment-links get" [
-  linkId: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "payment-links get" [
 ]: nothing -> record<accountId: string, active: bool, amount: int, backgroundImage: string, billing: record<addressAddition: string, city: string, company: string, country: string, firstName: string, lastName: string, state: string, street: string, zip: string>, created: int, currency: string, description: string, email: string, errorUrl: string, expiration: string, hash: string, id: string, intent: string, invoiceInformation: record<invoiceId: string, invoiceText: string>, language: string, link: string, logo: string, merchantId: string, mode: string, modified: int, notifyUrl: string, paymentMethod: string, paymentMethods: list<string>, paymentProcess: string, portalId: string, redirectUrl: string, reference: string, shipping: record<addressAddition: string, city: string, company: string, country: string, firstName: string, lastName: string, state: string, street: string, zip: string>, shoppingCart: table<deliveryDateEnd: string, deliveryDateStart: string, description: string, number: string, price: int, quantity: int, type: string, vatRate: int>, status: string, successUrl: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "payone-hmac-sha256"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payment-links/($linkId)")
+  let full_url = (build-url $base ({link_id: $link_id} | format pattern "/v1/payment-links/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -206,8 +206,8 @@ export def "payment-links get" [
 # --invoiceInformation shape: {invoiceId?: string, invoiceText?: string}
 # --shipping shape: {addressAddition?: string, city?: string, company?: string, country?: string, firstName?: string, lastName?: string, state?: string, street?: string, zip?: string}
 # --shoppingCart item shape: {deliveryDateEnd?: string, deliveryDateStart?: string, description?: string, number: string, price: int, quantity: int, type: "goods"|"shipment"|"handling"|"voucher", vatRate?: int}
-export def "payment-links updatePaymentLink" [
-  linkId: string
+export def "payment-links update" [
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,35 +216,35 @@ export def "payment-links updatePaymentLink" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountId: string # identifier for the subaccount (e.g. 12345)
+  account_id: string # identifier for the subaccount (e.g. 12345)
   --active: oneof<nothing, bool> # link activation status (default: true, e.g. true)
-  --backgroundImage: string # backgroundImage css property (format: css, e.g. linear-gradient(to bottom right, #ffffff, #3295d6))
+  --background-image: string # backgroundImage css property (format: css, e.g. linear-gradient(to bottom right, #ffffff, #3295d6))
   --billing: record # shape: {addressAddition?: string, city?: string, company?: string, country?: string, firstName?: string, lastName?: string, state?: string, street?: string, zip?: string}
   currency: string@currency-completer # currency code (e.g. EUR)
   --description: string # free format description of the payment (e.g. This payment is awesome!!)
   --email: string # email the invoice should be delivered to
-  --errorUrl: string # final redirect after a final payment
+  --error-url: string # final redirect after a final payment
   --expiration: string # link expiration date, the link will only be executable until end of that day (format: date, e.g. 2020-02-20)
   --intent: string@intent-completer # designates the type of transaction that will be created (default: authorization)
-  --invoiceInformation: record # relevant information for the invoice module — shape: {invoiceId?: string, invoiceText?: string}
+  --invoice-information: record # relevant information for the invoice module — shape: {invoiceId?: string, invoiceText?: string}
   --language: string@language-completer # link ISO language code (e.g. en_US)
   --logo: string # logo url (format: url, e.g. https://www.payone.com/wp-content/uploads/2018/12/Payone-Logo-2020.jpg)
-  merchantId: string # identifier for the merchant (e.g. 12345)
+  merchant_id: string # identifier for the merchant (e.g. 12345)
   mode: string@mode-completer # execution mode (e.g. live)
-  --notifyUrl: string # Url where the notification will be send after link was executed
-  --paymentMethods: list # list of available payment methods (e.g. [visa, mastercard])
-  portalId: string # identifier for the portal (e.g. 1234567)
+  --notify-url: string # Url where the notification will be send after link was executed
+  --payment-methods: list # list of available payment methods (e.g. [visa, mastercard])
+  portal_id: string # identifier for the portal (e.g. 1234567)
   reference: string # payment reference number, has to be unique per merchant and mode (e.g. payment_1)
   --shipping: record # shape: {addressAddition?: string, city?: string, company?: string, country?: string, firstName?: string, lastName?: string, state?: string, street?: string, zip?: string}
-  shoppingCart: list # item shape: {deliveryDateEnd?: string, deliveryDateStart?: string, description?: string, number: string, price: int, quantity: int, type: "goods"|"shipment"|"handling"|"voucher", vatRate?: int}
-  --successUrl: string # final redirect after a successful payment
-  --userId: string # identifier for the user (e.g. 12345678)
+  shopping_cart: list # item shape: {deliveryDateEnd?: string, deliveryDateStart?: string, description?: string, number: string, price: int, quantity: int, type: "goods"|"shipment"|"handling"|"voucher", vatRate?: int}
+  --success-url: string # final redirect after a successful payment
+  --user-id: string # identifier for the user (e.g. 12345678)
 ]: any -> record<accountId: string, active: bool, amount: int, backgroundImage: string, billing: record<addressAddition: string, city: string, company: string, country: string, firstName: string, lastName: string, state: string, street: string, zip: string>, created: int, currency: string, description: string, email: string, errorUrl: string, expiration: string, hash: string, id: string, intent: string, invoiceInformation: record<invoiceId: string, invoiceText: string>, language: string, link: string, logo: string, merchantId: string, mode: string, modified: int, notifyUrl: string, paymentMethod: string, paymentMethods: list<string>, paymentProcess: string, portalId: string, redirectUrl: string, reference: string, shipping: record<addressAddition: string, city: string, company: string, country: string, firstName: string, lastName: string, state: string, street: string, zip: string>, shoppingCart: table<deliveryDateEnd: string, deliveryDateStart: string, description: string, number: string, price: int, quantity: int, type: string, vatRate: int>, status: string, successUrl: string, userId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "payone-hmac-sha256"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/payment-links/($linkId)")
-  let body = {accountId: $accountId, active: $active, backgroundImage: $backgroundImage, billing: $billing, currency: $currency, description: $description, email: $email, errorUrl: $errorUrl, expiration: $expiration, intent: $intent, invoiceInformation: $invoiceInformation, language: $language, logo: $logo, merchantId: $merchantId, mode: $mode, notifyUrl: $notifyUrl, paymentMethods: $paymentMethods, portalId: $portalId, reference: $reference, shipping: $shipping, shoppingCart: $shoppingCart, successUrl: $successUrl, userId: $userId} | compact
+  let full_url = (build-url $base ({link_id: $link_id} | format pattern "/v1/payment-links/{link_id}"))
+  let body = {"accountId": $account_id, "active": $active, "backgroundImage": $background_image, "billing": $billing, "currency": $currency, "description": $description, "email": $email, "errorUrl": $error_url, "expiration": $expiration, "intent": $intent, "invoiceInformation": $invoice_information, "language": $language, "logo": $logo, "merchantId": $merchant_id, "mode": $mode, "notifyUrl": $notify_url, "paymentMethods": $payment_methods, "portalId": $portal_id, "reference": $reference, "shipping": $shipping, "shoppingCart": $shopping_cart, "successUrl": $success_url, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

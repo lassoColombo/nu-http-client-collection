@@ -113,7 +113,7 @@ export def "id-media get-media" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rendering" $rendering "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/id/media/($path)" $qp)
+  let full_url = (build-url $base ({path: $path} | format pattern "/id/media/{path}") $qp)
   let accept_val = ($accept | default "image/jpeg")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -137,7 +137,7 @@ export def "id get-subject" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/id/($identifier)")
+  let full_url = (build-url $base ({identifier: $identifier} | format pattern "/id/{identifier}"))
   let accept_val = ($accept | default "text/html")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +163,7 @@ export def "search get-search" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($index)/($operation)" $qp)
+  let full_url = (build-url $base ({index: $index, operation: $operation} | format pattern "/search/{index}/{operation}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,7 +189,7 @@ export def "search post-search" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/search/($index)/($operation)")
+  let full_url = (build-url $base ({index: $index, operation: $operation} | format pattern "/search/{index}/{operation}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -244,7 +244,7 @@ export def "sparql post-sparql" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sparql")
-  let body = {query: $query, infer: $infer} | compact
+  let body = {"query": $query, "infer": $infer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/sparql-results+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

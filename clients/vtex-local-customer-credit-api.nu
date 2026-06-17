@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "creditcontrol-accounts Searchallaccounts" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "creditcontrol-accounts list-allaccounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/creditcontrol/accounts
 # operationId: Searchallaccounts
-export def "creditcontrol-accounts Searchallaccounts" [
+export def "creditcontrol-accounts list-allaccounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,13 +103,13 @@ export def "creditcontrol-accounts Searchallaccounts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/accounts")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -120,7 +120,7 @@ export def "creditcontrol-accounts Searchallaccounts" [
 #
 # POST /api/creditcontrol/accounts
 # operationId: OpenanAccount
-export def "creditcontrol-accounts OpenanAccount" [
+export def "creditcontrol-accounts open-an" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -129,12 +129,12 @@ export def "creditcontrol-accounts OpenanAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  creditLimit: string # default: 500
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  credit_limit: string # default: 500
   description: string # default: example
   document: string # default: 99999999999
-  documentType: string # default: CPF
+  document_type: string # default: CPF
   email: string # default: email@domain.com
   tolerance: string # default: 1
 ]: any -> any {
@@ -142,9 +142,9 @@ export def "creditcontrol-accounts OpenanAccount" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/accounts")
-  let body = {creditLimit: $creditLimit, description: $description, document: $document, documentType: $documentType, email: $email, tolerance: $tolerance} | compact
+  let body = {"creditLimit": $credit_limit, "description": $description, "document": $document, "documentType": $document_type, "email": $email, "tolerance": $tolerance} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -155,8 +155,8 @@ export def "creditcontrol-accounts OpenanAccount" [
 #
 # PUT /api/creditcontrol/accounts/{accountId}
 # operationId: OpenorChangeAccount
-export def "creditcontrol-accounts OpenorChangeAccount" [
-  accountId: string
+export def "creditcontrol-accounts open-or-change" [
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,9 +165,9 @@ export def "creditcontrol-accounts OpenorChangeAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --creditLimit: int # If the user don't set a credit limit, the system will define 100 for default (default: 100.0)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --credit-limit: int # If the user don't set a credit limit, the system will define 100 for default (default: 100.0)
   --document: string # default: 00221292404
   email: string # default: email@email.com
   id: string # default: teste
@@ -175,10 +175,10 @@ export def "creditcontrol-accounts OpenorChangeAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($accountId)")
-  let body = {creditLimit: $creditLimit, document: $document, email: $email, id: $id} | compact
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/api/creditcontrol/accounts/{account_id}"))
+  let body = {"creditLimit": $credit_limit, "document": $document, "email": $email, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -189,8 +189,8 @@ export def "creditcontrol-accounts OpenorChangeAccount" [
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}
 # operationId: CloseanAccount
-export def "creditcontrol-accounts CloseanAccount" [
-  creditAccountId: string
+export def "creditcontrol-accounts close-an" [
+  credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,19 +199,19 @@ export def "creditcontrol-accounts CloseanAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --document: string # default: 99999999999
-  --documentType: string # default: CPF
+  --document-type: string # default: CPF
   --email: string # default: email@domain.com
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)")
-  let body = {document: $document, documentType: $documentType, email: $email} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
+  let body = {"document": $document, "documentType": $document_type, "email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -222,8 +222,8 @@ export def "creditcontrol-accounts CloseanAccount" [
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}
 # operationId: RetrieveaAccountbyId
-export def "creditcontrol-accounts RetrieveaAccountbyId" [
-  creditAccountId: string
+export def "creditcontrol-accounts retrieve-a-accountby" [
+  credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,13 +232,13 @@ export def "creditcontrol-accounts RetrieveaAccountbyId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -249,8 +249,8 @@ export def "creditcontrol-accounts RetrieveaAccountbyId" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}
 # operationId: Updateemailanddescriptionofaaccount
-export def "creditcontrol-accounts Updateemailanddescriptionofaaccount" [
-  creditAccountId: string
+export def "creditcontrol-accounts update-emailanddescriptionofaaccount" [
+  credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,18 +259,18 @@ export def "creditcontrol-accounts Updateemailanddescriptionofaaccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   description: string # default: example
   email: string # default: email@domain.com
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)")
-  let body = {description: $description, email: $email} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
+  let body = {"description": $description, "email": $email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,8 +281,8 @@ export def "creditcontrol-accounts Updateemailanddescriptionofaaccount" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/creditlimit
 # operationId: ChangecreditlimitofanAccount
-export def "creditcontrol-accounts-creditlimit ChangecreditlimitofanAccount" [
-  creditAccountId: string
+export def "creditcontrol-accounts-creditlimit put" [
+  credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,17 +291,17 @@ export def "creditcontrol-accounts-creditlimit ChangecreditlimitofanAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   value: int # format: number, default: 500.0
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/creditlimit")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/creditlimit"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,8 +313,8 @@ export def "creditcontrol-accounts-creditlimit ChangecreditlimitofanAccount" [
 # POST /api/creditcontrol/accounts/{creditAccountId}/holders
 # operationId: AddanaccountHolder
 # --claims shape: {email: string}
-export def "creditcontrol-accounts-holders AddanaccountHolder" [
-  creditAccountId: string
+export def "creditcontrol-accounts-holders create-anaccount" [
+  credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,17 +323,17 @@ export def "creditcontrol-accounts-holders AddanaccountHolder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   claims: record # e.g. {email: USER-EMAIL} — shape: {email: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/holders")
-  let body = {claims: $claims} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders"))
+  let body = {"claims": $claims} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -344,9 +344,9 @@ export def "creditcontrol-accounts-holders AddanaccountHolder" [
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/holders/{holderId}
 # operationId: Deleteanaccountholder
-export def "creditcontrol-accounts-holders Deleteanaccountholder" [
-  creditAccountId: string
-  holderId: string
+export def "creditcontrol-accounts-holders delete-anaccountholder" [
+  credit_account_id: string
+  holder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,13 +355,13 @@ export def "creditcontrol-accounts-holders Deleteanaccountholder" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/holders/($holderId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, holder_id: $holder_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders/{holder_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -372,8 +372,8 @@ export def "creditcontrol-accounts-holders Deleteanaccountholder" [
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/invoices
 # operationId: SearchallinvoicesofaAccount
-export def "creditcontrol-accounts-invoices SearchallinvoicesofaAccount" [
-  creditAccountId: string
+export def "creditcontrol-accounts-invoices list-allinvoicesofa" [
+  credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,13 +382,13 @@ export def "creditcontrol-accounts-invoices SearchallinvoicesofaAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/invoices")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -399,9 +399,9 @@ export def "creditcontrol-accounts-invoices SearchallinvoicesofaAccount" [
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
 # operationId: CancelInvoice
-export def "creditcontrol-accounts-invoices CancelInvoice" [
-  creditAccountId: string
-  invoiceId: string
+export def "creditcontrol-accounts-invoices cancel" [
+  credit_account_id: string
+  invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,13 +410,13 @@ export def "creditcontrol-accounts-invoices CancelInvoice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/invoices/($invoiceId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, invoice_id: $invoice_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -427,9 +427,9 @@ export def "creditcontrol-accounts-invoices CancelInvoice" [
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
 # operationId: RetrieveInvoicebyId
-export def "creditcontrol-accounts-invoices RetrieveInvoicebyId" [
-  creditAccountId: string
-  invoiceId: string
+export def "creditcontrol-accounts-invoices retrieve-invoiceby" [
+  credit_account_id: string
+  invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,13 +438,13 @@ export def "creditcontrol-accounts-invoices RetrieveInvoicebyId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/invoices/($invoiceId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, invoice_id: $invoice_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -455,9 +455,9 @@ export def "creditcontrol-accounts-invoices RetrieveInvoicebyId" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}
 # operationId: ChangeInvoice
-export def "creditcontrol-accounts-invoices ChangeInvoice" [
-  creditAccountId: string
-  invoiceId: string
+export def "creditcontrol-accounts-invoices put" [
+  credit_account_id: string
+  invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,21 +466,21 @@ export def "creditcontrol-accounts-invoices ChangeInvoice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --friendlyId: string # Invoice's identification (default: insert identifier here)
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --friendly-id: string # Invoice's identification (default: insert identifier here)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   observation: string # default: example
-  paymentLink: string # default: example
+  payment_link: string # default: example
   status: string # Invoice's status. It must be completed with &quot;Paid&quot;, &quot;Cancelled&quot; or &quot;Open&quot; value. (default: Paid)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "friendlyId" $friendlyId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/invoices/($invoiceId)" $qp)
-  let body = {observation: $observation, paymentLink: $paymentLink, status: $status} | compact
+  let qp = [(serialize-qp "friendlyId" $friendly_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, invoice_id: $invoice_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}") $qp)
+  let body = {"observation": $observation, "paymentLink": $payment_link, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -491,9 +491,9 @@ export def "creditcontrol-accounts-invoices ChangeInvoice" [
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/payments
 # operationId: MarkaninvoiceasPaid
-export def "creditcontrol-accounts-invoices-payments MarkaninvoiceasPaid" [
-  creditAccountId: string
-  invoiceId: string
+export def "creditcontrol-accounts-invoices-payments post" [
+  credit_account_id: string
+  invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,17 +502,17 @@ export def "creditcontrol-accounts-invoices-payments MarkaninvoiceasPaid" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   value: string # default: example
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/invoices/($invoiceId)/payments")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, invoice_id: $invoice_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}/payments"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -523,9 +523,9 @@ export def "creditcontrol-accounts-invoices-payments MarkaninvoiceasPaid" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/postponement
 # operationId: Postponeaninvoice
-export def "creditcontrol-accounts-invoices-postponement Postponeaninvoice" [
-  creditAccountId: string
-  invoiceId: string
+export def "creditcontrol-accounts-invoices-postponement create-poneaninvoice" [
+  credit_account_id: string
+  invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,17 +534,17 @@ export def "creditcontrol-accounts-invoices-postponement Postponeaninvoice" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  dueDays: string
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  due_days: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/invoices/($invoiceId)/postponement")
-  let body = {dueDays: $dueDays} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, invoice_id: $invoice_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices/{invoice_id}/postponement"))
+  let body = {"dueDays": $due_days} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -555,8 +555,8 @@ export def "creditcontrol-accounts-invoices-postponement Postponeaninvoice" [
 #
 # GET /api/creditcontrol/accounts/{creditAccountId}/statements
 # operationId: Accountstatements
-export def "creditcontrol-accounts-statements Accountstatements" [
-  creditAccountId: string
+export def "creditcontrol-accounts-statements get" [
+  credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,13 +565,13 @@ export def "creditcontrol-accounts-statements Accountstatements" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/statements")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -582,9 +582,9 @@ export def "creditcontrol-accounts-statements Accountstatements" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/statements/{statementId}
 # operationId: Decreasebalanceofanaccount
-export def "creditcontrol-accounts-statements Decreasebalanceofanaccount" [
-  creditAccountId: string
-  statementId: string
+export def "creditcontrol-accounts-statements put" [
+  credit_account_id: string
+  statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,17 +593,17 @@ export def "creditcontrol-accounts-statements Decreasebalanceofanaccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   value: string # default: -490.0
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/statements/($statementId)")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, statement_id: $statement_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements/{statement_id}"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -614,8 +614,8 @@ export def "creditcontrol-accounts-statements Decreasebalanceofanaccount" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/tolerance
 # operationId: Changetoleranceofanaccount
-export def "creditcontrol-accounts-tolerance Changetoleranceofanaccount" [
-  creditAccountId: string
+export def "creditcontrol-accounts-tolerance put" [
+  credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,17 +624,17 @@ export def "creditcontrol-accounts-tolerance Changetoleranceofanaccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   value: float # default: 0.2
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/tolerance")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/tolerance"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -645,8 +645,8 @@ export def "creditcontrol-accounts-tolerance Changetoleranceofanaccount" [
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/transaction
 # operationId: CreateaPreAuthorization
-export def "creditcontrol-accounts-transaction CreateaPreAuthorization" [
-  creditAccountId: string
+export def "creditcontrol-accounts-transaction create-a-pre-authorization" [
+  credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,9 +655,9 @@ export def "creditcontrol-accounts-transaction CreateaPreAuthorization" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  expirationDate: string # date in ISO8601 (UTC) dateformat (optional default is 1(one) day) (default: 1)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  expiration_date: string # date in ISO8601 (UTC) dateformat (optional default is 1(one) day) (default: 1)
   installments: string # default: 1
   --settle: oneof<nothing, bool> # default: false
   value: string # default: 490.0
@@ -665,10 +665,10 @@ export def "creditcontrol-accounts-transaction CreateaPreAuthorization" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/transaction")
-  let body = {expirationDate: $expirationDate, installments: $installments, settle: $settle, value: $value} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transaction"))
+  let body = {"expirationDate": $expiration_date, "installments": $installments, "settle": $settle, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -679,9 +679,9 @@ export def "creditcontrol-accounts-transaction CreateaPreAuthorization" [
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}
 # operationId: CancelaPreAuthorization
-export def "creditcontrol-accounts-transactions CancelaPreAuthorization" [
-  creditAccountId: string
-  transactionId: string
+export def "creditcontrol-accounts-transactions cancel-a-pre-authorization" [
+  credit_account_id: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,13 +690,13 @@ export def "creditcontrol-accounts-transactions CancelaPreAuthorization" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/transactions/($transactionId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, transaction_id: $transaction_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -707,9 +707,9 @@ export def "creditcontrol-accounts-transactions CancelaPreAuthorization" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}
 # operationId: CreateaPreAuthorization(usingid)
-export def "creditcontrol-accounts-transactions CreateaPreAuthorizationusingid" [
-  creditAccountId: string
-  transactionId: string
+export def "creditcontrol-accounts-transactions create-a-pre-authorization-usingid" [
+  credit_account_id: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,9 +718,9 @@ export def "creditcontrol-accounts-transactions CreateaPreAuthorizationusingid" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  expirationDate: string # date in ISO8601 (UTC) dateformat (optional default is 1(one) day) (default: 1)
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  expiration_date: string # date in ISO8601 (UTC) dateformat (optional default is 1(one) day) (default: 1)
   installments: string # default: 1
   --settle: oneof<nothing, bool> # default: false
   value: string # default: 20.0
@@ -728,10 +728,10 @@ export def "creditcontrol-accounts-transactions CreateaPreAuthorizationusingid" 
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/transactions/($transactionId)")
-  let body = {expirationDate: $expirationDate, installments: $installments, settle: $settle, value: $value} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, transaction_id: $transaction_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}"))
+  let body = {"expirationDate": $expiration_date, "installments": $installments, "settle": $settle, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -742,9 +742,9 @@ export def "creditcontrol-accounts-transactions CreateaPreAuthorizationusingid" 
 #
 # POST /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}/refunds
 # operationId: PartialorTotalRefundaSettlement
-export def "creditcontrol-accounts-transactions-refunds PartialorTotalRefundaSettlement" [
-  creditAccountId: string
-  transactionId: string
+export def "creditcontrol-accounts-transactions-refunds post" [
+  credit_account_id: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -753,17 +753,17 @@ export def "creditcontrol-accounts-transactions-refunds PartialorTotalRefundaSet
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   value: string # default: 20
 ]: any -> record<id: string, value: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/transactions/($transactionId)/refunds")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, transaction_id: $transaction_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}/refunds"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -774,9 +774,9 @@ export def "creditcontrol-accounts-transactions-refunds PartialorTotalRefundaSet
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/transactions/{transactionId}/settlement
 # operationId: CreateorUpdateSettlement
-export def "creditcontrol-accounts-transactions-settlement CreateorUpdateSettlement" [
-  creditAccountId: string
-  transactionId: string
+export def "creditcontrol-accounts-transactions-settlement create-or-update" [
+  credit_account_id: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -785,17 +785,17 @@ export def "creditcontrol-accounts-transactions-settlement CreateorUpdateSettlem
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   value: string # default: 490.0
 ]: any -> record<id: string, value: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/creditcontrol/accounts/($creditAccountId)/transactions/($transactionId)/settlement")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({credit_account_id: $credit_account_id, transaction_id: $transaction_id} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transactions/{transaction_id}/settlement"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -806,7 +806,7 @@ export def "creditcontrol-accounts-transactions-settlement CreateorUpdateSettlem
 #
 # GET /api/creditcontrol/invoices
 # operationId: Searchallinvoices
-export def "creditcontrol-invoices Searchallinvoices" [
+export def "creditcontrol-invoices list-allinvoices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -817,20 +817,20 @@ export def "creditcontrol-invoices Searchallinvoices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # default: 
   --qp-to: string # default: 
-  --createdDateFrom: string # e.g. 
-  --createdDateTo: string # e.g. 
+  --created-date-from: string # e.g. 
+  --created-date-to: string # e.g. 
   --value: float # Invoice's value. It must be completed with a decimal value. (default: 101.22)
   --status: string # Invoice's status. It must be completed with "Paid", "Cancelled" or "Open" value. (default: Paid)
-  --friendlyId: string # Invoice's identifier (default: insert identifier here)
-  --creditAccountId: string # Credit account's identifier (default: B75F0)
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --friendly-id: string # Invoice's identifier (default: insert identifier here)
+  --credit-account-id: string # Credit account's identifier (default: B75F0)
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "createdDateFrom" $createdDateFrom "scalar") (serialize-qp "createdDateTo" $createdDateTo "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "friendlyId" $friendlyId "scalar") (serialize-qp "creditAccountId" $creditAccountId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "createdDateFrom" $created_date_from "scalar") (serialize-qp "createdDateTo" $created_date_to "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "friendlyId" $friendly_id "scalar") (serialize-qp "creditAccountId" $credit_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/creditcontrol/invoices" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -841,7 +841,7 @@ export def "creditcontrol-invoices Searchallinvoices" [
 #
 # GET /api/creditcontrol/storeconfig
 # operationId: Retrievestoreconfiguration
-export def "creditcontrol-storeconfig Retrievestoreconfiguration" [
+export def "creditcontrol-storeconfig retrieve-storeconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -850,13 +850,13 @@ export def "creditcontrol-storeconfig Retrievestoreconfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/storeconfig")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -868,7 +868,7 @@ export def "creditcontrol-storeconfig Retrievestoreconfiguration" [
 # PUT /api/creditcontrol/storeconfig
 # operationId: Createorchangestoreconfiguration
 # --notificationsSettings shape: {daysAfter?: list, daysPrior?: list}
-export def "creditcontrol-storeconfig Createorchangestoreconfiguration" [
+export def "creditcontrol-storeconfig create-orchangestoreconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -877,27 +877,27 @@ export def "creditcontrol-storeconfig Createorchangestoreconfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --automaticCheckingAccountCreationEnabled: oneof<nothing, bool> # default: false
-  dailyInterestRate: string # default: 0.6
-  defaultCreditValue: string # default: 150.0
-  invoicePostponementLimit: string # default: 2
-  maxPostponementDays: string # default: 3
-  maxPreAuthorizationGrowthRate: string # default: 0.1
-  --myCreditsEnabled: oneof<nothing, bool> # default: true
-  --notificationsSettings: record # shape: {daysAfter?: list, daysPrior?: list}
-  --postponementEnabled: oneof<nothing, bool> # default: false
-  taxRate: string # default: 0.4
-  --toleranceEnabled: oneof<nothing, bool> # default: true
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --automatic-checking-account-creation-enabled: oneof<nothing, bool> # default: false
+  daily_interest_rate: string # default: 0.6
+  default_credit_value: string # default: 150.0
+  invoice_postponement_limit: string # default: 2
+  max_postponement_days: string # default: 3
+  max_pre_authorization_growth_rate: string # default: 0.1
+  --my-credits-enabled: oneof<nothing, bool> # default: true
+  --notifications-settings: record # shape: {daysAfter?: list, daysPrior?: list}
+  --postponement-enabled: oneof<nothing, bool> # default: false
+  tax_rate: string # default: 0.4
+  --tolerance-enabled: oneof<nothing, bool> # default: true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/storeconfig")
-  let body = {automaticCheckingAccountCreationEnabled: $automaticCheckingAccountCreationEnabled, dailyInterestRate: $dailyInterestRate, defaultCreditValue: $defaultCreditValue, invoicePostponementLimit: $invoicePostponementLimit, maxPostponementDays: $maxPostponementDays, maxPreAuthorizationGrowthRate: $maxPreAuthorizationGrowthRate, myCreditsEnabled: $myCreditsEnabled, notificationsSettings: $notificationsSettings, postponementEnabled: $postponementEnabled, taxRate: $taxRate, toleranceEnabled: $toleranceEnabled} | compact
+  let body = {"automaticCheckingAccountCreationEnabled": $automatic_checking_account_creation_enabled, "dailyInterestRate": $daily_interest_rate, "defaultCreditValue": $default_credit_value, "invoicePostponementLimit": $invoice_postponement_limit, "maxPostponementDays": $max_postponement_days, "maxPreAuthorizationGrowthRate": $max_pre_authorization_growth_rate, "myCreditsEnabled": $my_credits_enabled, "notificationsSettings": $notifications_settings, "postponementEnabled": $postponement_enabled, "taxRate": $tax_rate, "toleranceEnabled": $tolerance_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json; charset=utf-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

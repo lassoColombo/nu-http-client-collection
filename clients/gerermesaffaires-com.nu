@@ -66,40 +66,40 @@ def base-url-completer [] { ["https://sandbox.gerermesaffaires.com/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def Type-completer [] { ["association" "company" "enterprise" "private"] }
-def Groups-completer [] { ["legal" "tax" "wealth management"] }
-def Role-completer [] { ["collaborator" "manager"] }
-def Type-completer-1 [] { ["association" "company" "enterprise"] }
-def Sex-completer [] { ["female" "male"] }
-def Level-completer [] { ["confidential" "public" "regular"] }
-def HasCompanyRegistrationCertificate-completer [] { ["false" "true"] }
-def HasStatus-completer [] { ["false" "true"] }
-def HasSireneRegister-completer [] { ["false" "true"] }
-def HasMinutes-completer [] { ["false" "true"] }
-def Event-completer [] { ["Board" "CGM" "ConstituentAssembly" "Consulting" "EGM" "ExecutiveCommittee" "OGM" "Office" "Other" "OtherEvent" "PartnersMeeting" "SolePartner"] }
+def type-completer [] { ["association" "company" "enterprise" "private"] }
+def groups-completer [] { ["legal" "tax" "wealth management"] }
+def role-completer [] { ["collaborator" "manager"] }
+def type-completer-1 [] { ["association" "company" "enterprise"] }
+def sex-completer [] { ["female" "male"] }
+def level-completer [] { ["confidential" "public" "regular"] }
+def has-company-registration-certificate-completer [] { ["false" "true"] }
+def has-status-completer [] { ["false" "true"] }
+def has-sirene-register-completer [] { ["false" "true"] }
+def has-minutes-completer [] { ["false" "true"] }
+def event-completer [] { ["Board" "CGM" "ConstituentAssembly" "Consulting" "EGM" "ExecutiveCommittee" "OGM" "Office" "Other" "OtherEvent" "PartnersMeeting" "SolePartner"] }
 def accept-completer [] { ["application/json" "multipart/form-data"] }
-def Groups-completer-1 [] { ["accounting" "legal" "purchases" "sales" "social" "social manager" "tax" "wealth management"] }
-def Role-completer-1 [] { ["assistant" "collaborator" "empty"] }
-def Right-completer [] { ["read" "write"] }
-def Validated-completer [] { ["false" "true"] }
-def ClientManagement-completer [] { ["adn" "manager" "no"] }
-def Player-completer [] { ["assistant" "collaborator" "guest" "manager" "owner"] }
-def RootFolders-completer [] { ["all"] }
-def Type-completer-2 [] { ["amendment" "contract" "delivery-order" "engagement-letter" "other" "purchase-order" "quotation"] }
-def Order-completer [] { ["1st advance" "2nd advance" "3rd advance" "4th advance" "regularization"] }
-def Account-completer [] { ["CAB" "DIV" "FHR" "IKM" "PRK" "PTT" "RES" "TXI" "VOY"] }
-def Status-completer [] { ["R" "V" "W"] }
-def Type-completer-3 [] { ["amending-invoice" "commercial-invoice" "credit-note" "credit-self-billing" "down-payment-invoice" "informations-invoice" "self-billing"] }
-def WithExtend-completer [] { ["false" "true"] }
-def SortOrder-completer [] { ["asc" "desc"] }
-def SortName-completer [] { ["ExpenseDate" "InclVAT" "Title"] }
-def SortName-completer-1 [] { ["Contracting" "DueDate" "InclVAT" "InvoiceDate" "PaymentDate" "Title"] }
-def Category-completer [] { ["bank loan" "current account" "debt spreading" "leasing" "obligation" "overdraft agreement"] }
-def Level-completer-1 [] { ["confidential" "regular"] }
-def Status-completer-1 [] { ["ended" "validated" "waiting"] }
-def Periodicity-completer [] { ["annual" "half-yearly" "monthly" "null" "quarterly"] }
-def Type-completer-4 [] { ["mandatory" "null" "optional"] }
-def Right-completer-1 [] { ["none" "read" "write"] }
+def groups-completer-1 [] { ["accounting" "legal" "purchases" "sales" "social" "social manager" "tax" "wealth management"] }
+def role-completer-1 [] { ["assistant" "collaborator" "empty"] }
+def right-completer [] { ["read" "write"] }
+def validated-completer [] { ["false" "true"] }
+def client-management-completer [] { ["adn" "manager" "no"] }
+def player-completer [] { ["assistant" "collaborator" "guest" "manager" "owner"] }
+def root-folders-completer [] { ["all"] }
+def type-completer-2 [] { ["amendment" "contract" "delivery-order" "engagement-letter" "other" "purchase-order" "quotation"] }
+def order-completer [] { ["1st advance" "2nd advance" "3rd advance" "4th advance" "regularization"] }
+def account-completer [] { ["CAB" "DIV" "FHR" "IKM" "PRK" "PTT" "RES" "TXI" "VOY"] }
+def status-completer [] { ["R" "V" "W"] }
+def type-completer-3 [] { ["amending-invoice" "commercial-invoice" "credit-note" "credit-self-billing" "down-payment-invoice" "informations-invoice" "self-billing"] }
+def with-extend-completer [] { ["false" "true"] }
+def sort-order-completer [] { ["asc" "desc"] }
+def sort-name-completer [] { ["ExpenseDate" "InclVAT" "Title"] }
+def sort-name-completer-1 [] { ["Contracting" "DueDate" "InclVAT" "InvoiceDate" "PaymentDate" "Title"] }
+def category-completer [] { ["bank loan" "current account" "debt spreading" "leasing" "obligation" "overdraft agreement"] }
+def level-completer-1 [] { ["confidential" "regular"] }
+def status-completer-1 [] { ["ended" "validated" "waiting"] }
+def periodicity-completer [] { ["annual" "half-yearly" "monthly" "null" "quarterly"] }
+def type-completer-4 [] { ["mandatory" "null" "optional"] }
+def right-completer-1 [] { ["none" "read" "write"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -157,11 +157,11 @@ export def "business-groups list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the group (e.g. Dupond)
+  --name: string # Name of the group (e.g. Dupond)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/business-groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,13 +180,13 @@ export def "business-groups patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # e.g. Client Durand
+  --name: string # e.g. Client Durand
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/business-groups")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -205,13 +205,13 @@ export def "business-groups post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Name: string # e.g. Client Durand
+  name: string # e.g. Client Durand
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/business-groups")
-  let body = {Name: $Name} | compact
+  let body = {"Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -230,11 +230,11 @@ export def "business-groups-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the group
+  --name: string # Name of the group
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/business-groups/all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,7 +257,7 @@ export def "business-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/business-groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/business-groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -276,14 +276,14 @@ export def "business-groups-spaces get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the space (e.g. Mon Entreprise)
-  --Type: string@Type-completer # Type of the space (e.g. private)
-  --RegistrationNumber: string # registration number of the space (e.g. 12345)
+  --name: string # Name of the space (e.g. Mon Entreprise)
+  --type: string@type-completer # Type of the space (e.g. private)
+  --registration-number: string # registration number of the space (e.g. 12345)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar") (serialize-qp "Type" $Type "scalar") (serialize-qp "RegistrationNumber" $RegistrationNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/business-groups/($id)/spaces" $qp)
+  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "RegistrationNumber" $registration_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/business-groups/{id}/spaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,7 +294,7 @@ export def "business-groups-spaces get" [
 # DELETE /business-groups/{id}/spaces/{spaceId}
 export def "business-groups-spaces delete" [
   id: string
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "business-groups-spaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/business-groups/($id)/spaces/($spaceId)")
+  let full_url = (build-url $base ({id: $id, space_id: $space_id} | format pattern "/business-groups/{id}/spaces/{space_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -317,9 +317,9 @@ export def "business-groups-spaces delete" [
 # POST /business-groups/{id}/spaces/{spaceId}/legal-entities/{personId}/customers/{folderId}/guest-in-space
 export def "business-groups-spaces-legal-entities-customers-guest-in-space post" [
   id: string
-  spaceId: string
-  personId: string
-  folderId: string
+  space_id: string
+  person_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,14 +328,14 @@ export def "business-groups-spaces-legal-entities-customers-guest-in-space post"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Groups: list@Groups-completer # e.g. [tax, legal]
-  Role: string@Role-completer # e.g. collaborator
+  --groups: list@groups-completer # e.g. [tax, legal]
+  role: string@role-completer # e.g. collaborator
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/business-groups/($id)/spaces/($spaceId)/legal-entities/($personId)/customers/($folderId)/guest-in-space")
-  let body = {Groups: $Groups, Role: $Role} | compact
+  let full_url = (build-url $base ({id: $id, space_id: $space_id, person_id: $person_id, folder_id: $folder_id} | format pattern "/business-groups/{id}/spaces/{space_id}/legal-entities/{person_id}/customers/{folder_id}/guest-in-space"))
+  let body = {"Groups": $groups, "Role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -348,9 +348,9 @@ export def "business-groups-spaces-legal-entities-customers-guest-in-space post"
 # --Logo shape: {Content64Encoded?: string, Name?: string}
 export def "business-groups-spaces-legal-entities-customers-spaces post" [
   id: string
-  spaceId: string
-  personId: string
-  folderId: string
+  space_id: string
+  person_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,16 +359,16 @@ export def "business-groups-spaces-legal-entities-customers-spaces post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Logo: record # shape: {Content64Encoded?: string, Name?: string}
-  --Name: string # e.g. Mon Entreprise
-  --TemplateSpaceId: string # e.g. PKOJOFOFKAOKF
-  Type: string@Type-completer-1 # e.g. company
+  --logo: record # shape: {Content64Encoded?: string, Name?: string}
+  --name: string # e.g. Mon Entreprise
+  --template-space-id: string # e.g. PKOJOFOFKAOKF
+  type: string@type-completer-1 # e.g. company
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/business-groups/($id)/spaces/($spaceId)/legal-entities/($personId)/customers/($folderId)/spaces")
-  let body = {Logo: $Logo, Name: $Name, TemplateSpaceId: $TemplateSpaceId, Type: $Type} | compact
+  let full_url = (build-url $base ({id: $id, space_id: $space_id, person_id: $person_id, folder_id: $folder_id} | format pattern "/business-groups/{id}/spaces/{space_id}/legal-entities/{person_id}/customers/{folder_id}/spaces"))
+  let body = {"Logo": $logo, "Name": $name, "TemplateSpaceId": $template_space_id, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -379,7 +379,7 @@ export def "business-groups-spaces-legal-entities-customers-spaces post" [
 #
 # GET /hub/business-groups/{Id}/menus
 export def "hub-business-groups-menus get" [
-  Id: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +391,7 @@ export def "hub-business-groups-menus get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hub/business-groups/($Id)/menus")
+  let full_url = (build-url $base ({id: $id} | format pattern "/hub/business-groups/{id}/menus"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -411,19 +411,19 @@ export def "hub-documents post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --AddContractAllowed: oneof<nothing, bool> # e.g. true
-  --Author: string # e.g. Antoine Dupond
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --add-contract-allowed: oneof<nothing, bool> # e.g. true
+  --author: string # e.g. Antoine Dupond
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hub/documents")
-  let body = {Accounting: $Accounting, AddContractAllowed: $AddContractAllowed, Author: $Author, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let body = {"Accounting": $accounting, "AddContractAllowed": $add_contract_allowed, "Author": $author, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -486,19 +486,19 @@ export def "hub-payslips post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --AddContractAllowed: oneof<nothing, bool> # e.g. true
-  --Author: string # e.g. Antoine Dupond
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --add-contract-allowed: oneof<nothing, bool> # e.g. true
+  --author: string # e.g. Antoine Dupond
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hub/payslips")
-  let body = {Accounting: $Accounting, AddContractAllowed: $AddContractAllowed, Author: $Author, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let body = {"Accounting": $accounting, "AddContractAllowed": $add_contract_allowed, "Author": $author, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -511,7 +511,7 @@ export def "hub-payslips post" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "hub-spaces-documents post" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,19 +520,19 @@ export def "hub-spaces-documents post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hub/spaces/($spaceId)/documents")
-  let body = {Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/hub/spaces/{space_id}/documents"))
+  let body = {"Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -543,7 +543,7 @@ export def "hub-spaces-documents post" [
 #
 # GET /hub/spaces/{spaceId}/menus
 export def "hub-spaces-menus get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "hub-spaces-menus get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hub/spaces/($spaceId)/menus")
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/hub/spaces/{space_id}/menus"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -567,7 +567,7 @@ export def "hub-spaces-menus get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "hub-spaces-payslips post" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -576,19 +576,19 @@ export def "hub-spaces-payslips post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hub/spaces/($spaceId)/payslips")
-  let body = {Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/hub/spaces/{space_id}/payslips"))
+  let body = {"Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -621,7 +621,7 @@ export def "menus get" [
 # POST /menus/{menuId}/documents
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "menus-documents post" [
-  menuId: string
+  menu_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,17 +630,17 @@ export def "menus-documents post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Author: string # e.g. Antoine Dupond
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --author: string # e.g. Antoine Dupond
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Report: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/menus/($menuId)/documents")
-  let body = {Author: $Author, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({menu_id: $menu_id} | format pattern "/menus/{menu_id}/documents"))
+  let body = {"Author": $author, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -659,11 +659,11 @@ export def "profile get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Contract: string # to get a contract (if not signed error 404 + html contract) (e.g. member)
+  --contract: string # to get a contract (if not signed error 404 + html contract) (e.g. member)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Contract" $Contract "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Contract" $contract "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/profile" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -684,19 +684,19 @@ export def "profile patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Birth: record # shape: {City?: string, Country?: string, Date?: string, ZipCode?: string}
-  --BirthName: string # e.g. Dupond
-  --Email: string # e.g. paule@durand.fr
-  --FirstName: string # e.g. Paule
-  --IDFile: record # shape: {Content64Encoded?: string, Name?: string}
-  --Name: string # e.g. Durand
-  --Sex: string@Sex-completer
+  --birth: record # shape: {City?: string, Country?: string, Date?: string, ZipCode?: string}
+  --birth-name: string # e.g. Dupond
+  --email: string # e.g. paule@durand.fr
+  --first-name: string # e.g. Paule
+  --id-file: record # shape: {Content64Encoded?: string, Name?: string}
+  --name: string # e.g. Durand
+  --sex: string@sex-completer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile")
-  let body = {Birth: $Birth, BirthName: $BirthName, Email: $Email, FirstName: $FirstName, IDFile: $IDFile, Name: $Name, Sex: $Sex} | compact
+  let body = {"Birth": $birth, "BirthName": $birth_name, "Email": $email, "FirstName": $first_name, "IDFile": $id_file, "Name": $name, "Sex": $sex} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -717,19 +717,19 @@ export def "profile post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Birth: record # shape: {City?: string, Country?: string, Date?: string, ZipCode?: string}
-  BirthName: string # e.g. Dupond
-  Email: string # e.g. paule@durand.fr
-  FirstName: string # e.g. Paule
-  --IDFile: record # shape: {Content64Encoded?: string, Name?: string}
-  Name: string # e.g. Durand
-  Sex: string@Sex-completer
+  birth: record # shape: {City?: string, Country?: string, Date?: string, ZipCode?: string}
+  birth_name: string # e.g. Dupond
+  email: string # e.g. paule@durand.fr
+  first_name: string # e.g. Paule
+  --id-file: record # shape: {Content64Encoded?: string, Name?: string}
+  name: string # e.g. Durand
+  sex: string@sex-completer
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile")
-  let body = {Birth: $Birth, BirthName: $BirthName, Email: $Email, FirstName: $FirstName, IDFile: $IDFile, Name: $Name, Sex: $Sex} | compact
+  let body = {"Birth": $birth, "BirthName": $birth_name, "Email": $email, "FirstName": $first_name, "IDFile": $id_file, "Name": $name, "Sex": $sex} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -748,15 +748,15 @@ export def "profile-email patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Email: string # e.g. paule@durand.fr
-  --EmailCode: string # e.g. 1256
-  --SMSCode: string # e.g. FAHF
+  --email: string # e.g. paule@durand.fr
+  --email-code: string # e.g. 1256
+  --sms-code: string # e.g. FAHF
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/email")
-  let body = {Email: $Email, EmailCode: $EmailCode, SMSCode: $SMSCode} | compact
+  let body = {"Email": $email, "EmailCode": $email_code, "SMSCode": $sms_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -775,11 +775,11 @@ export def "profile-id-file get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Contract: string # to get a contract (if not signed error 404 + html contract) (e.g. member)
+  --contract: string # to get a contract (if not signed error 404 + html contract) (e.g. member)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Contract" $Contract "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Contract" $contract "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/profile/id-file" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -798,15 +798,15 @@ export def "profile-mobile patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Mobile: string # e.g. 33606060606
-  --Password: string # e.g. azerty
-  --SMSCode: string # e.g. FAHF
+  --mobile: string # e.g. 33606060606
+  --password: string # e.g. azerty
+  --sms-code: string # e.g. FAHF
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile/mobile")
-  let body = {Mobile: $Mobile, Password: $Password, SMSCode: $SMSCode} | compact
+  let body = {"Mobile": $mobile, "Password": $password, "SMSCode": $sms_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -825,11 +825,11 @@ export def "registration get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Code: string # Code of the invitation (e.g. HFIHA)
+  --code: string # Code of the invitation (e.g. HFIHA)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Code" $Code "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Code" $code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/registration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -848,14 +848,14 @@ export def "registration post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Code: string # e.g. OJFOA
-  --Secret: string # e.g. 123456
+  --code: string # e.g. OJFOA
+  --secret: string # e.g. 123456
 ]: any -> record<Private: record<FolderId: string, SpaceId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/registration")
-  let body = {Code: $Code, Secret: $Secret} | compact
+  let body = {"Code": $code, "Secret": $secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -895,13 +895,13 @@ export def "spaces list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the space (e.g. Mon Entreprise)
-  --Type: string@Type-completer # Type of the space (e.g. private)
-  --RegistrationNumber: string # registration number of the space (e.g. 12345)
+  --name: string # Name of the space (e.g. Mon Entreprise)
+  --type: string@type-completer # Type of the space (e.g. private)
+  --registration-number: string # registration number of the space (e.g. 12345)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar") (serialize-qp "Type" $Type "scalar") (serialize-qp "RegistrationNumber" $RegistrationNumber "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "RegistrationNumber" $registration_number "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spaces" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -921,18 +921,18 @@ export def "spaces post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --LegalStatut: string # e.g. SA
-  --Logo: record # shape: {Content64Encoded?: string, Name?: string}
-  Name: string # e.g. Mon Entreprise
-  --RegistrationNumber: string # e.g. 5146486846
-  --TemplateSpaceId: string # e.g. PKOJOFOFKAOKF
-  Type: string@Type-completer-1 # e.g. company
+  --legal-statut: string # e.g. SA
+  --logo: record # shape: {Content64Encoded?: string, Name?: string}
+  name: string # e.g. Mon Entreprise
+  --registration-number: string # e.g. 5146486846
+  --template-space-id: string # e.g. PKOJOFOFKAOKF
+  type: string@type-completer-1 # e.g. company
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/spaces")
-  let body = {LegalStatut: $LegalStatut, Logo: $Logo, Name: $Name, RegistrationNumber: $RegistrationNumber, TemplateSpaceId: $TemplateSpaceId, Type: $Type} | compact
+  let body = {"LegalStatut": $legal_statut, "Logo": $logo, "Name": $name, "RegistrationNumber": $registration_number, "TemplateSpaceId": $template_space_id, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -951,12 +951,12 @@ export def "spaces-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the space (e.g. Mon Entreprise)
-  --Type: string@Type-completer # Type of the space (e.g. private)
+  --name: string # Name of the space (e.g. Mon Entreprise)
+  --type: string@type-completer # Type of the space (e.g. private)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar") (serialize-qp "Type" $Type "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/spaces/all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -979,7 +979,7 @@ export def "spaces delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1001,7 +1001,7 @@ export def "spaces get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1021,15 +1021,15 @@ export def "spaces patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Logo: record # shape: {Content64Encoded?: string, Name?: string}
-  --Name: string # e.g. Mon Entreprise
-  --TemplateSpaceId: string # e.g. PHAOH8486
+  --logo: record # shape: {Content64Encoded?: string, Name?: string}
+  --name: string # e.g. Mon Entreprise
+  --template-space-id: string # e.g. PHAOH8486
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)")
-  let body = {Logo: $Logo, Name: $Name, TemplateSpaceId: $TemplateSpaceId} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}"))
+  let body = {"Logo": $logo, "Name": $name, "TemplateSpaceId": $template_space_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1049,13 +1049,13 @@ export def "spaces-accounting-year get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --End: string # End date of the accounting year (YYYYMM or YYYYMMDD) (range not available) (e.g. 201603)
-  --EffectiveDate: string # Effective date inside  the accounting year  (range not available) (e.g. 20160301)
+  --end: string # End date of the accounting year (YYYYMM or YYYYMMDD) (range not available) (e.g. 201603)
+  --effective-date: string # Effective date inside  the accounting year  (range not available) (e.g. 20160301)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "End" $End "scalar") (serialize-qp "EffectiveDate" $EffectiveDate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($id)/accounting-year" $qp)
+  let qp = [(serialize-qp "End" $end "scalar") (serialize-qp "EffectiveDate" $effective_date "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/accounting-year") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1074,24 +1074,24 @@ export def "spaces-accounting-year post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. ogm of the company
-  End: string # e.g. 20181231
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --NetIncome: float # e.g. 52634.36
-  --NetPosition: float # e.g. 14580.36
-  --Start: string # e.g. 20180101
-  --Tax: float # e.g. 45698.36
-  --TaxableIncome: float # e.g. 869523.36
-  --Turnover: float # e.g. 1025.36
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. ogm of the company
+  end: string # e.g. 20181231
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --net-income: float # e.g. 52634.36
+  --net-position: float # e.g. 14580.36
+  --start: string # e.g. 20180101
+  --tax: float # e.g. 45698.36
+  --taxable-income: float # e.g. 869523.36
+  --turnover: float # e.g. 1025.36
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/accounting-year")
-  let body = {About: $About, Comment: $Comment, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, NetIncome: $NetIncome, NetPosition: $NetPosition, Start: $Start, Tax: $Tax, TaxableIncome: $TaxableIncome, Turnover: $Turnover} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/accounting-year"))
+  let body = {"About": $about, "Comment": $comment, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "NetIncome": $net_income, "NetPosition": $net_position, "Start": $start, "Tax": $tax, "TaxableIncome": $taxable_income, "Turnover": $turnover} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1111,18 +1111,18 @@ export def "spaces-collective-decision get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # Date of the collective decision YYYMMDD (e.g. 20160302,null)
-  --Event: string # Event of the collective decision (see post for the list of events) (e.g. OGM)
-  --Range: string # index range of the results (e.g. 10-19)
-  --HasCompanyRegistrationCertificate: string@HasCompanyRegistrationCertificate-completer # If true returns only invoices with a CompanyRegistrationCertificate (e.g. true)
-  --HasStatus: string@HasStatus-completer # If true returns only invoices with a Status (e.g. true)
-  --HasSireneRegister: string@HasSireneRegister-completer # If true returns only invoices with a SireneRegister (e.g. true)
-  --HasMinutes: string@HasMinutes-completer # If true returns only invoices with Minutes (e.g. true)
+  --date: string # Date of the collective decision YYYMMDD (e.g. 20160302,null)
+  --event: string # Event of the collective decision (see post for the list of events) (e.g. OGM)
+  --range: string # index range of the results (e.g. 10-19)
+  --has-company-registration-certificate: string@has-company-registration-certificate-completer # If true returns only invoices with a CompanyRegistrationCertificate (e.g. true)
+  --has-status: string@has-status-completer # If true returns only invoices with a Status (e.g. true)
+  --has-sirene-register: string@has-sirene-register-completer # If true returns only invoices with a SireneRegister (e.g. true)
+  --has-minutes: string@has-minutes-completer # If true returns only invoices with Minutes (e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Event" $Event "scalar") (serialize-qp "Range" $Range "scalar") (serialize-qp "HasCompanyRegistrationCertificate" $HasCompanyRegistrationCertificate "scalar") (serialize-qp "HasStatus" $HasStatus "scalar") (serialize-qp "HasSireneRegister" $HasSireneRegister "scalar") (serialize-qp "HasMinutes" $HasMinutes "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($id)/collective-decision" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Event" $event "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "HasCompanyRegistrationCertificate" $has_company_registration_certificate "scalar") (serialize-qp "HasStatus" $has_status "scalar") (serialize-qp "HasSireneRegister" $has_sirene_register "scalar") (serialize-qp "HasMinutes" $has_minutes "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/collective-decision") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1141,21 +1141,21 @@ export def "spaces-collective-decision post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. ogm of the company
-  Date: string # e.g. 20180202
-  --DividendDistributions: float # e.g. 1025.36
-  --DividendDistributionsDate: string # e.g. 20180203
-  Event: string@Event-completer # for space type 'company' enums allowed are  'EGM','CGM','OGM','ConstituentAssembly','SolePartner','OtherEvent','Office','ExecutiveCommittee','Consulting','Board','PartnersMeeting' and for space type 'association' enums allowed are 'EGM','CGM','OGM','Other','Office','ExecutiveCommittee' (e.g. EGM)
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. ogm of the company
+  date: string # e.g. 20180202
+  --dividend-distributions: float # e.g. 1025.36
+  --dividend-distributions-date: string # e.g. 20180203
+  event: string@event-completer # for space type 'company' enums allowed are  'EGM','CGM','OGM','ConstituentAssembly','SolePartner','OtherEvent','Office','ExecutiveCommittee','Consulting','Board','PartnersMeeting' and for space type 'association' enums allowed are 'EGM','CGM','OGM','Other','Office','ExecutiveCommittee' (e.g. EGM)
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/collective-decision")
-  let body = {About: $About, Comment: $Comment, Date: $Date, DividendDistributions: $DividendDistributions, DividendDistributionsDate: $DividendDistributionsDate, Event: $Event, Home: $Home, Keywords: $Keywords, Level: $Level} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/collective-decision"))
+  let body = {"About": $about, "Comment": $comment, "Date": $date, "DividendDistributions": $dividend_distributions, "DividendDistributionsDate": $dividend_distributions_date, "Event": $event, "Home": $home, "Keywords": $keywords, "Level": $level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1175,14 +1175,14 @@ export def "spaces-company-entities list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the company entity (e.g. Source de France)
-  --LegalName: string # Legal name of the company entity (e.g. Source de France SAS)
-  --RegistrationNumber: string # registration number of the company entity (e.g. 12356213854)
+  --name: string # Name of the company entity (e.g. Source de France)
+  --legal-name: string # Legal name of the company entity (e.g. Source de France SAS)
+  --registration-number: string # registration number of the company entity (e.g. 12356213854)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar") (serialize-qp "LegalName" $LegalName "scalar") (serialize-qp "RegistrationNumber" $RegistrationNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($id)/company-entities" $qp)
+  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "LegalName" $legal_name "scalar") (serialize-qp "RegistrationNumber" $registration_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/company-entities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1201,21 +1201,21 @@ export def "spaces-company-entities post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApeCode: string # e.g. 420F
-  --ArchivalDate: string # e.g. 20160203
-  --Comment: string # e.g. my brother
-  LegalName: string # e.g. Mon entreprise Dupond
-  --LegalStatut: string # e.g. SAS
-  Name: string # e.g. Dupond
-  --RegistrationNumber: string # e.g. 236542158
-  --Type: string # e.g. EPT
-  --VatNumber: string # e.g. 46546847864
+  --ape-code: string # e.g. 420F
+  --archival-date: string # e.g. 20160203
+  --comment: string # e.g. my brother
+  legal_name: string # e.g. Mon entreprise Dupond
+  --legal-statut: string # e.g. SAS
+  name: string # e.g. Dupond
+  --registration-number: string # e.g. 236542158
+  --type: string # e.g. EPT
+  --vat-number: string # e.g. 46546847864
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/company-entities")
-  let body = {ApeCode: $ApeCode, ArchivalDate: $ArchivalDate, Comment: $Comment, LegalName: $LegalName, LegalStatut: $LegalStatut, Name: $Name, RegistrationNumber: $RegistrationNumber, Type: $Type, VatNumber: $VatNumber} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/company-entities"))
+  let body = {"ApeCode": $ape_code, "ArchivalDate": $archival_date, "Comment": $comment, "LegalName": $legal_name, "LegalStatut": $legal_statut, "Name": $name, "RegistrationNumber": $registration_number, "Type": $type, "VatNumber": $vat_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1235,13 +1235,13 @@ export def "spaces-company-entities-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the company entity (e.g. Source de France)
-  --RegistrationNumber: string # registration number of the company entity (e.g. 12356213854)
+  --name: string # Name of the company entity (e.g. Source de France)
+  --registration-number: string # registration number of the company entity (e.g. 12356213854)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar") (serialize-qp "RegistrationNumber" $RegistrationNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($id)/company-entities/all" $qp)
+  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "RegistrationNumber" $registration_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/company-entities/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1252,7 +1252,7 @@ export def "spaces-company-entities-all get" [
 # GET /spaces/{id}/company-entities/{companyId}
 export def "spaces-company-entities get" [
   id: string
-  companyId: string
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1264,7 +1264,7 @@ export def "spaces-company-entities get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/company-entities/($companyId)")
+  let full_url = (build-url $base ({id: $id, company_id: $company_id} | format pattern "/spaces/{id}/company-entities/{company_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1275,7 +1275,7 @@ export def "spaces-company-entities get" [
 # PATCH /spaces/{id}/company-entities/{companyId}
 export def "spaces-company-entities patch" [
   id: string
-  companyId: string
+  company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1284,21 +1284,21 @@ export def "spaces-company-entities patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ApeCode: string # e.g. 420F
-  --ArchivalDate: string # e.g. 20160203
-  --Comment: string # e.g. my brother
-  --LegalName: string # e.g. Mon entreprise Dupond
-  --LegalStatut: string # e.g. SAS
-  --Name: string # e.g. Dupond
-  --RegistrationNumber: string # e.g. 236542158
-  --Type: string # e.g. EPT
-  --VatNumber: string # e.g. 46546847864
+  --ape-code: string # e.g. 420F
+  --archival-date: string # e.g. 20160203
+  --comment: string # e.g. my brother
+  --legal-name: string # e.g. Mon entreprise Dupond
+  --legal-statut: string # e.g. SAS
+  --name: string # e.g. Dupond
+  --registration-number: string # e.g. 236542158
+  --type: string # e.g. EPT
+  --vat-number: string # e.g. 46546847864
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/company-entities/($companyId)")
-  let body = {ApeCode: $ApeCode, ArchivalDate: $ArchivalDate, Comment: $Comment, LegalName: $LegalName, LegalStatut: $LegalStatut, Name: $Name, RegistrationNumber: $RegistrationNumber, Type: $Type, VatNumber: $VatNumber} | compact
+  let full_url = (build-url $base ({id: $id, company_id: $company_id} | format pattern "/spaces/{id}/company-entities/{company_id}"))
+  let body = {"ApeCode": $ape_code, "ArchivalDate": $archival_date, "Comment": $comment, "LegalName": $legal_name, "LegalStatut": $legal_statut, "Name": $name, "RegistrationNumber": $registration_number, "Type": $type, "VatNumber": $vat_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1310,7 +1310,7 @@ export def "spaces-company-entities patch" [
 # GET /spaces/{id}/company-entities/{personId}/details
 export def "spaces-company-entities-details get" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1322,7 +1322,7 @@ export def "spaces-company-entities-details get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/company-entities/($personId)/details")
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/company-entities/{person_id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1334,7 +1334,7 @@ export def "spaces-company-entities-details get" [
 # --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
 export def "spaces-company-entities-details post" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1343,16 +1343,16 @@ export def "spaces-company-entities-details post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
-  Designation: string # e.g. Office
-  --Email: list
-  --Phone: list
+  --address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
+  designation: string # e.g. Office
+  --email: list
+  --phone: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/company-entities/($personId)/details")
-  let body = {Address: $Address, Designation: $Designation, Email: $Email, Phone: $Phone} | compact
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/company-entities/{person_id}/details"))
+  let body = {"Address": $address, "Designation": $designation, "Email": $email, "Phone": $phone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1364,7 +1364,7 @@ export def "spaces-company-entities-details post" [
 # DELETE /spaces/{id}/company-entities/{personId}/details/{designation}
 export def "spaces-company-entities-details delete" [
   id: string
-  personId: string
+  person_id: string
   designation: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1377,7 +1377,7 @@ export def "spaces-company-entities-details delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/company-entities/($personId)/details/($designation)")
+  let full_url = (build-url $base ({id: $id, person_id: $person_id, designation: $designation} | format pattern "/spaces/{id}/company-entities/{person_id}/details/{designation}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1397,13 +1397,13 @@ export def "spaces-documents-download post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  DocumentId: list
+  document_id: list
 ]: any -> record<ZipFile: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/documents/download")
-  let body = {DocumentId: $DocumentId} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/documents/download"))
+  let body = {"DocumentId": $document_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1415,8 +1415,8 @@ export def "spaces-documents-download post" [
 # GET /spaces/{id}/folders/{folderId}/persons/{memberId}
 export def "spaces-folders-persons get" [
   id: string
-  memberId: string
-  folderId: string
+  folder_id: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1428,7 +1428,7 @@ export def "spaces-folders-persons get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/folders/($folderId)/persons/($memberId)")
+  let full_url = (build-url $base ({id: $id, folder_id: $folder_id, member_id: $member_id} | format pattern "/spaces/{id}/folders/{folder_id}/persons/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1439,8 +1439,8 @@ export def "spaces-folders-persons get" [
 # PATCH /spaces/{id}/folders/{folderId}/persons/{memberId}
 export def "spaces-folders-persons patch" [
   id: string
-  memberId: string
-  folderId: string
+  folder_id: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1449,15 +1449,15 @@ export def "spaces-folders-persons patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Groups: list@Groups-completer-1 # e.g. [social, legal]
-  --IsAdmin: oneof<nothing, bool> # e.g. false
-  --Role: string@Role-completer-1 # e.g. collaborator
+  --groups: list@groups-completer-1 # e.g. [social, legal]
+  --is-admin: oneof<nothing, bool> # e.g. false
+  --role: string@role-completer-1 # e.g. collaborator
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/folders/($folderId)/persons/($memberId)")
-  let body = {Groups: $Groups, IsAdmin: $IsAdmin, Role: $Role} | compact
+  let full_url = (build-url $base ({id: $id, folder_id: $folder_id, member_id: $member_id} | format pattern "/spaces/{id}/folders/{folder_id}/persons/{member_id}"))
+  let body = {"Groups": $groups, "IsAdmin": $is_admin, "Role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1469,8 +1469,8 @@ export def "spaces-folders-persons patch" [
 # PATCH /spaces/{id}/folders/{folderId}/persons/{memberId}/activeaccess
 export def "spaces-folders-persons-activeaccess patch" [
   id: string
-  memberId: string
-  folderId: string
+  folder_id: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1482,7 +1482,7 @@ export def "spaces-folders-persons-activeaccess patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/folders/($folderId)/persons/($memberId)/activeaccess")
+  let full_url = (build-url $base ({id: $id, folder_id: $folder_id, member_id: $member_id} | format pattern "/spaces/{id}/folders/{folder_id}/persons/{member_id}/activeaccess"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1493,8 +1493,8 @@ export def "spaces-folders-persons-activeaccess patch" [
 # PATCH /spaces/{id}/folders/{folderId}/persons/{memberId}/unactiveaccess
 export def "spaces-folders-persons-unactiveaccess patch" [
   id: string
-  memberId: string
-  folderId: string
+  folder_id: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1506,7 +1506,7 @@ export def "spaces-folders-persons-unactiveaccess patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/folders/($folderId)/persons/($memberId)/unactiveaccess")
+  let full_url = (build-url $base ({id: $id, folder_id: $folder_id, member_id: $member_id} | format pattern "/spaces/{id}/folders/{folder_id}/persons/{member_id}/unactiveaccess"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1516,9 +1516,9 @@ export def "spaces-folders-persons-unactiveaccess patch" [
 #
 # POST /spaces/{id}/folders/{folderId}/persons/{personId}/guest-in-space
 export def "spaces-folders-persons-guest-in-space post" [
-  folderId: string
-  personId: string
   id: string
+  folder_id: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1527,13 +1527,13 @@ export def "spaces-folders-persons-guest-in-space post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PersonId: string # e.g. PAIHIHFA79TFA
+  --body-person-id: string # e.g. PAIHIHFA79TFA
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/folders/($folderId)/persons/($personId)/guest-in-space")
-  let body = {PersonId: $PersonId} | compact
+  let full_url = (build-url $base ({id: $id, folder_id: $folder_id, person_id: $person_id} | format pattern "/spaces/{id}/folders/{folder_id}/persons/{person_id}/guest-in-space"))
+  let body = {"PersonId": $body_person_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1553,12 +1553,12 @@ export def "spaces-groups list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the groups (e.g. RH)
+  --name: string # Name of the groups (e.g. RH)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($id)/groups" $qp)
+  let qp = [(serialize-qp "Name" $name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/groups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1577,14 +1577,14 @@ export def "spaces-groups post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --EndDate: string # e.g. 20160203
-  Name: string # e.g. RH
+  --end-date: string # e.g. 20160203
+  name: string # e.g. RH
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/groups")
-  let body = {EndDate: $EndDate, Name: $Name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/groups"))
+  let body = {"EndDate": $end_date, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1604,12 +1604,12 @@ export def "spaces-groups-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the group (e.g. RH)
+  --name: string # Name of the group (e.g. RH)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($id)/groups/all" $qp)
+  let qp = [(serialize-qp "Name" $name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/groups/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1620,7 +1620,7 @@ export def "spaces-groups-all get" [
 # GET /spaces/{id}/groups/{groupId}
 export def "spaces-groups get" [
   id: string
-  groupId: string
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1632,7 +1632,7 @@ export def "spaces-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/groups/($groupId)")
+  let full_url = (build-url $base ({id: $id, group_id: $group_id} | format pattern "/spaces/{id}/groups/{group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1643,7 +1643,7 @@ export def "spaces-groups get" [
 # PATCH /spaces/{id}/groups/{groupId}
 export def "spaces-groups patch" [
   id: string
-  groupId: string
+  group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1652,14 +1652,14 @@ export def "spaces-groups patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --EndDate: string # e.g. 20160203
-  --Name: string # e.g. RH
+  --end-date: string # e.g. 20160203
+  --name: string # e.g. RH
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/groups/($groupId)")
-  let body = {EndDate: $EndDate, Name: $Name} | compact
+  let full_url = (build-url $base ({id: $id, group_id: $group_id} | format pattern "/spaces/{id}/groups/{group_id}"))
+  let body = {"EndDate": $end_date, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1671,8 +1671,8 @@ export def "spaces-groups patch" [
 # DELETE /spaces/{id}/groups/{groupId}/folders/{folderId}
 export def "spaces-groups-folders delete" [
   id: string
-  groupId: string
-  folderId: string
+  group_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1684,7 +1684,7 @@ export def "spaces-groups-folders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/groups/($groupId)/folders/($folderId)")
+  let full_url = (build-url $base ({id: $id, group_id: $group_id, folder_id: $folder_id} | format pattern "/spaces/{id}/groups/{group_id}/folders/{folder_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1695,8 +1695,8 @@ export def "spaces-groups-folders delete" [
 # PATCH /spaces/{id}/groups/{groupId}/folders/{folderId}
 export def "spaces-groups-folders patch" [
   id: string
-  groupId: string
-  folderId: string
+  group_id: string
+  folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1705,13 +1705,13 @@ export def "spaces-groups-folders patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Right: string@Right-completer # e.g. read
+  right: string@right-completer # e.g. read
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/groups/($groupId)/folders/($folderId)")
-  let body = {Right: $Right} | compact
+  let full_url = (build-url $base ({id: $id, group_id: $group_id, folder_id: $folder_id} | format pattern "/spaces/{id}/groups/{group_id}/folders/{folder_id}"))
+  let body = {"Right": $right} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1723,8 +1723,8 @@ export def "spaces-groups-folders patch" [
 # DELETE /spaces/{id}/groups/{groupId}/persons/{memberId}
 export def "spaces-groups-persons delete" [
   id: string
-  groupId: string
-  memberId: string
+  group_id: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1736,7 +1736,7 @@ export def "spaces-groups-persons delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/groups/($groupId)/persons/($memberId)")
+  let full_url = (build-url $base ({id: $id, group_id: $group_id, member_id: $member_id} | format pattern "/spaces/{id}/groups/{group_id}/persons/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1747,8 +1747,8 @@ export def "spaces-groups-persons delete" [
 # PATCH /spaces/{id}/groups/{groupId}/persons/{memberId}
 export def "spaces-groups-persons patch" [
   id: string
-  groupId: string
-  memberId: string
+  group_id: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1760,7 +1760,7 @@ export def "spaces-groups-persons patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/groups/($groupId)/persons/($memberId)")
+  let full_url = (build-url $base ({id: $id, group_id: $group_id, member_id: $member_id} | format pattern "/spaces/{id}/groups/{group_id}/persons/{member_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1782,7 +1782,7 @@ export def "spaces-legal get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/legal")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/legal"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1801,16 +1801,16 @@ export def "spaces-legal patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --IdentificationNumber: string # e.g. 548
-  --RegistrationDate: string # e.g. 20190325
-  --RegistrationNumber: string # e.g. 123456
-  --VATNumber: string # e.g. 123
+  --identification-number: string # e.g. 548
+  --registration-date: string # e.g. 20190325
+  --registration-number: string # e.g. 123456
+  --vat-number: string # e.g. 123
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/legal")
-  let body = {IdentificationNumber: $IdentificationNumber, RegistrationDate: $RegistrationDate, RegistrationNumber: $RegistrationNumber, VATNumber: $VATNumber} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/legal"))
+  let body = {"IdentificationNumber": $identification_number, "RegistrationDate": $registration_date, "RegistrationNumber": $registration_number, "VATNumber": $vat_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1833,7 +1833,7 @@ export def "spaces-logo get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/logo")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/logo"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1852,16 +1852,16 @@ export def "spaces-persons list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Function: string # Function of the person (e.g. employee)
-  --Range: string # index range of the results (e.g. 10-19)
-  --Name: string # Name of the person (e.g. Germain)
-  --Validated: string@Validated-completer # Status of the person (e.g. true)
-  --Email: string # Email of the person (e.g. maxgermain@maxgermain.com)
+  --function: string # Function of the person (e.g. employee)
+  --range: string # index range of the results (e.g. 10-19)
+  --name: string # Name of the person (e.g. Germain)
+  --validated: string@validated-completer # Status of the person (e.g. true)
+  --email: string # Email of the person (e.g. maxgermain@maxgermain.com)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Function" $Function "scalar") (serialize-qp "Range" $Range "scalar") (serialize-qp "Name" $Name "scalar") (serialize-qp "Validated" $Validated "scalar") (serialize-qp "Email" $Email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($id)/persons" $qp)
+  let qp = [(serialize-qp "Function" $function "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "Name" $name "scalar") (serialize-qp "Validated" $validated "scalar") (serialize-qp "Email" $email "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/persons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1882,21 +1882,21 @@ export def "spaces-persons post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
-  --ArchivalDate: string # e.g. 20160203
-  --Birth: record # shape: {Date?: int, Place?: string}
-  --Comment: string # e.g. my brother
-  --Email: string # e.g. bertrand@monmail.com
-  FirstName: string # e.g. Bertrand
-  --Mobile: string # e.g. +33606060606
-  Name: string # e.g. Dupond
-  Sex: string@Sex-completer # e.g. male
+  --address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
+  --archival-date: string # e.g. 20160203
+  --birth: record # shape: {Date?: int, Place?: string}
+  --comment: string # e.g. my brother
+  --email: string # e.g. bertrand@monmail.com
+  first_name: string # e.g. Bertrand
+  --mobile: string # e.g. +33606060606
+  name: string # e.g. Dupond
+  sex: string@sex-completer # e.g. male
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons")
-  let body = {Address: $Address, ArchivalDate: $ArchivalDate, Birth: $Birth, Comment: $Comment, Email: $Email, FirstName: $FirstName, Mobile: $Mobile, Name: $Name, Sex: $Sex} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/persons"))
+  let body = {"Address": $address, "ArchivalDate": $archival_date, "Birth": $birth, "Comment": $comment, "Email": $email, "FirstName": $first_name, "Mobile": $mobile, "Name": $name, "Sex": $sex} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1916,16 +1916,16 @@ export def "spaces-persons-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the person (e.g. Germain)
-  --Function: string # Function of the person (e.g. employee)
-  --Range: string # index range of the results (e.g. 10-19)
-  --Validated: string@Validated-completer # Status of the person (e.g. true)
-  --Email: string # Email of the person (e.g. maxgermain@maxgermain.com)
+  --name: string # Name of the person (e.g. Germain)
+  --function: string # Function of the person (e.g. employee)
+  --range: string # index range of the results (e.g. 10-19)
+  --validated: string@validated-completer # Status of the person (e.g. true)
+  --email: string # Email of the person (e.g. maxgermain@maxgermain.com)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar") (serialize-qp "Function" $Function "scalar") (serialize-qp "Range" $Range "scalar") (serialize-qp "Validated" $Validated "scalar") (serialize-qp "Email" $Email "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($id)/persons/all" $qp)
+  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Function" $function "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "Validated" $validated "scalar") (serialize-qp "Email" $email "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/persons/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1936,7 +1936,7 @@ export def "spaces-persons-all get" [
 # PATCH /spaces/{id}/persons/{memberId}/player
 export def "spaces-persons-player patch" [
   id: string
-  memberId: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1945,16 +1945,16 @@ export def "spaces-persons-player patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ClientManagement: string@ClientManagement-completer
-  --IsAdmin: oneof<nothing, bool> # e.g. true
-  Player: string@Player-completer # e.g. guest
-  --PlayerEnd: string # e.g. 20210203
+  --client-management: string@client-management-completer
+  --is-admin: oneof<nothing, bool> # e.g. true
+  player: string@player-completer # e.g. guest
+  --player-end: string # e.g. 20210203
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons/($memberId)/player")
-  let body = {ClientManagement: $ClientManagement, IsAdmin: $IsAdmin, Player: $Player, PlayerEnd: $PlayerEnd} | compact
+  let full_url = (build-url $base ({id: $id, member_id: $member_id} | format pattern "/spaces/{id}/persons/{member_id}/player"))
+  let body = {"ClientManagement": $client_management, "IsAdmin": $is_admin, "Player": $player, "PlayerEnd": $player_end} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1966,7 +1966,7 @@ export def "spaces-persons-player patch" [
 # DELETE /spaces/{id}/persons/{personId}
 export def "spaces-persons delete" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1978,7 +1978,7 @@ export def "spaces-persons delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons/($personId)")
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1989,7 +1989,7 @@ export def "spaces-persons delete" [
 # GET /spaces/{id}/persons/{personId}
 export def "spaces-persons get" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2001,7 +2001,7 @@ export def "spaces-persons get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons/($personId)")
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2014,7 +2014,7 @@ export def "spaces-persons get" [
 # --Birth shape: {Date?: int, Place?: string}
 export def "spaces-persons patch" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2023,21 +2023,21 @@ export def "spaces-persons patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
-  --ArchivalDate: string # e.g. 20160203
-  --Birth: record # shape: {Date?: int, Place?: string}
-  --Comment: string # e.g. my brother
-  --Email: string # e.g. bertrand@monmail.com
-  --FirstName: string # e.g. Bertrand
-  --Mobile: string # e.g. +33606060606
-  --Name: string # e.g. Dupond
-  --Sex: string@Sex-completer # e.g. male
+  --address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
+  --archival-date: string # e.g. 20160203
+  --birth: record # shape: {Date?: int, Place?: string}
+  --comment: string # e.g. my brother
+  --email: string # e.g. bertrand@monmail.com
+  --first-name: string # e.g. Bertrand
+  --mobile: string # e.g. +33606060606
+  --name: string # e.g. Dupond
+  --sex: string@sex-completer # e.g. male
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons/($personId)")
-  let body = {Address: $Address, ArchivalDate: $ArchivalDate, Birth: $Birth, Comment: $Comment, Email: $Email, FirstName: $FirstName, Mobile: $Mobile, Name: $Name, Sex: $Sex} | compact
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/persons/{person_id}"))
+  let body = {"Address": $address, "ArchivalDate": $archival_date, "Birth": $birth, "Comment": $comment, "Email": $email, "FirstName": $first_name, "Mobile": $mobile, "Name": $name, "Sex": $sex} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2049,7 +2049,7 @@ export def "spaces-persons patch" [
 # GET /spaces/{id}/persons/{personId}/details
 export def "spaces-persons-details get" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2061,7 +2061,7 @@ export def "spaces-persons-details get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons/($personId)/details")
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/persons/{person_id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2073,7 +2073,7 @@ export def "spaces-persons-details get" [
 # --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
 export def "spaces-persons-details post" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2082,16 +2082,16 @@ export def "spaces-persons-details post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
-  Designation: string # e.g. Office
-  --Email: list
-  --Phone: list
+  --address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
+  designation: string # e.g. Office
+  --email: list
+  --phone: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons/($personId)/details")
-  let body = {Address: $Address, Designation: $Designation, Email: $Email, Phone: $Phone} | compact
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/persons/{person_id}/details"))
+  let body = {"Address": $address, "Designation": $designation, "Email": $email, "Phone": $phone} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2103,7 +2103,7 @@ export def "spaces-persons-details post" [
 # DELETE /spaces/{id}/persons/{personId}/details/{designation}
 export def "spaces-persons-details delete" [
   id: string
-  personId: string
+  person_id: string
   designation: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2116,7 +2116,7 @@ export def "spaces-persons-details delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons/($personId)/details/($designation)")
+  let full_url = (build-url $base ({id: $id, person_id: $person_id, designation: $designation} | format pattern "/spaces/{id}/persons/{person_id}/details/{designation}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2127,7 +2127,7 @@ export def "spaces-persons-details delete" [
 # GET /spaces/{id}/persons/{personId}/folders
 export def "spaces-persons-folders list" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2136,12 +2136,12 @@ export def "spaces-persons-folders list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Range: string # index range of the results (e.g. 10-19)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($id)/persons/($personId)/folders" $qp)
+  let qp = [(serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/persons/{person_id}/folders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2152,7 +2152,7 @@ export def "spaces-persons-folders list" [
 # GET /spaces/{id}/persons/{personId}/groups
 export def "spaces-persons-groups get" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2164,7 +2164,7 @@ export def "spaces-persons-groups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons/($personId)/groups")
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/persons/{person_id}/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2175,7 +2175,7 @@ export def "spaces-persons-groups get" [
 # GET /spaces/{id}/persons/{personId}/portfolios
 export def "spaces-persons-portfolios get" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2187,7 +2187,7 @@ export def "spaces-persons-portfolios get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons/($personId)/portfolios")
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/persons/{person_id}/portfolios"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2198,7 +2198,7 @@ export def "spaces-persons-portfolios get" [
 # POST /spaces/{id}/persons/{personId}/portfolios
 export def "spaces-persons-portfolios post" [
   id: string
-  personId: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2207,19 +2207,19 @@ export def "spaces-persons-portfolios post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --ArchivalDate: string # e.g. 20160203
-  --Designation: string # e.g. My Portfolio
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --Name: string # e.g. Dupond
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --archival-date: string # e.g. 20160203
+  --designation: string # e.g. My Portfolio
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --name: string # e.g. Dupond
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/persons/($personId)/portfolios")
-  let body = {About: $About, ArchivalDate: $ArchivalDate, Designation: $Designation, Home: $Home, Keywords: $Keywords, Level: $Level, Name: $Name} | compact
+  let full_url = (build-url $base ({id: $id, person_id: $person_id} | format pattern "/spaces/{id}/persons/{person_id}/portfolios"))
+  let body = {"About": $about, "ArchivalDate": $archival_date, "Designation": $designation, "Home": $home, "Keywords": $keywords, "Level": $level, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2231,8 +2231,8 @@ export def "spaces-persons-portfolios post" [
 # PATCH /spaces/{id}/portfolios/{portfolioId}/persons/{memberId}
 export def "spaces-portfolios-persons patch" [
   id: string
-  memberId: string
-  portfolioId: string
+  portfolio_id: string
+  member_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2241,16 +2241,16 @@ export def "spaces-portfolios-persons patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Apply: oneof<nothing, bool> # e.g. true
-  --Groups: list@Groups-completer-1 # e.g. [social, legal]
-  --IsAdmin: oneof<nothing, bool> # e.g. false
-  --Role: string@Role-completer-1 # e.g. collaborator
+  --apply: oneof<nothing, bool> # e.g. true
+  --groups: list@groups-completer-1 # e.g. [social, legal]
+  --is-admin: oneof<nothing, bool> # e.g. false
+  --role: string@role-completer-1 # e.g. collaborator
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/portfolios/($portfolioId)/persons/($memberId)")
-  let body = {Apply: $Apply, Groups: $Groups, IsAdmin: $IsAdmin, Role: $Role} | compact
+  let full_url = (build-url $base ({id: $id, portfolio_id: $portfolio_id, member_id: $member_id} | format pattern "/spaces/{id}/portfolios/{portfolio_id}/persons/{member_id}"))
+  let body = {"Apply": $apply, "Groups": $groups, "IsAdmin": $is_admin, "Role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2270,12 +2270,12 @@ export def "spaces-professional-vehicles get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Designation: string # designation of the vehicle (e.g. peugeot)
+  --designation: string # designation of the vehicle (e.g. peugeot)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Designation" $Designation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($id)/professional-vehicles" $qp)
+  let qp = [(serialize-qp "Designation" $designation "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/professional-vehicles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2294,27 +2294,27 @@ export def "spaces-professional-vehicles post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Brand: string # e.g. Renault
-  --Comment: string # e.g. Peugeot Lyon
-  --CompanyTax: oneof<nothing, bool> # e.g. true
-  --DateIn: string # e.g. 20201802
-  --DateOut: string # e.g. 20201802
-  Designation: string # e.g. peugeot siège
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, clio]
-  --Level: string@Level-completer # e.g. confidential
-  --Model: string # e.g. Clio
-  --RegistrationDate: string # e.g. 20181231
-  --RegistrationNumber: string # e.g. AA001AA
-  --Type: string # e.g. car
-  --Value: float # e.g. 1500.23
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --brand: string # e.g. Renault
+  --comment: string # e.g. Peugeot Lyon
+  --company-tax: oneof<nothing, bool> # e.g. true
+  --date-in: string # e.g. 20201802
+  --date-out: string # e.g. 20201802
+  designation: string # e.g. peugeot siège
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, clio]
+  --level: string@level-completer # e.g. confidential
+  --model: string # e.g. Clio
+  --registration-date: string # e.g. 20181231
+  --registration-number: string # e.g. AA001AA
+  --type: string # e.g. car
+  --value: float # e.g. 1500.23
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/professional-vehicles")
-  let body = {About: $About, Brand: $Brand, Comment: $Comment, CompanyTax: $CompanyTax, DateIn: $DateIn, DateOut: $DateOut, Designation: $Designation, Home: $Home, Keywords: $Keywords, Level: $Level, Model: $Model, RegistrationDate: $RegistrationDate, RegistrationNumber: $RegistrationNumber, Type: $Type, Value: $Value} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/professional-vehicles"))
+  let body = {"About": $about, "Brand": $brand, "Comment": $comment, "CompanyTax": $company_tax, "DateIn": $date_in, "DateOut": $date_out, "Designation": $designation, "Home": $home, "Keywords": $keywords, "Level": $level, "Model": $model, "RegistrationDate": $registration_date, "RegistrationNumber": $registration_number, "Type": $type, "Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2337,7 +2337,7 @@ export def "spaces-settings-nf203-logs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/settings/nf203/logs")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/settings/nf203/logs"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2356,13 +2356,13 @@ export def "spaces-settings-nf203-logs post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Enabled: oneof<nothing, bool> # e.g. true
+  --enabled: oneof<nothing, bool> # e.g. true
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/settings/nf203/logs")
-  let body = {Enabled: $Enabled} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/settings/nf203/logs"))
+  let body = {"Enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2385,7 +2385,7 @@ export def "spaces-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/status")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2404,15 +2404,15 @@ export def "spaces-status post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Code: string # e.g. COD
-  --Comment: string # e.g. my first code
-  Label: string # e.g. code 1
+  code: string # e.g. COD
+  --comment: string # e.g. my first code
+  label: string # e.g. code 1
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/status")
-  let body = {Code: $Code, Comment: $Comment, Label: $Label} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/status"))
+  let body = {"Code": $code, "Comment": $comment, "Label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2436,7 +2436,7 @@ export def "spaces-status delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/status/($code)")
+  let full_url = (build-url $base ({id: $id, code: $code} | format pattern "/spaces/{id}/status/{code}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2458,7 +2458,7 @@ export def "spaces-tax-contracts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/tax-contracts")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/tax-contracts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2477,20 +2477,20 @@ export def "spaces-tax-contracts post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. ogm of the company
-  Designation: string # e.g. année 2019
-  --End: string # e.g. 20181231
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --Start: string # e.g. 20180101
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. ogm of the company
+  designation: string # e.g. année 2019
+  --end: string # e.g. 20181231
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --start: string # e.g. 20180101
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/tax-contracts")
-  let body = {About: $About, Comment: $Comment, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, Start: $Start} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/tax-contracts"))
+  let body = {"About": $about, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2513,7 +2513,7 @@ export def "spaces-triggers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/triggers")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spaces/{id}/triggers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2536,7 +2536,7 @@ export def "spaces-triggers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/triggers/($name)")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/spaces/{id}/triggers/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2559,7 +2559,7 @@ export def "spaces-triggers post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($id)/triggers/($name)")
+  let full_url = (build-url $base ({id: $id, name: $name} | format pattern "/spaces/{id}/triggers/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2569,8 +2569,8 @@ export def "spaces-triggers post" [
 #
 # DELETE /spaces/{spaceId}/common-folders/{id}
 export def "spaces-common-folders delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2582,7 +2582,7 @@ export def "spaces-common-folders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/common-folders/($id)")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/common-folders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2592,8 +2592,8 @@ export def "spaces-common-folders delete" [
 #
 # PATCH /spaces/{spaceId}/common-folders/{id}
 export def "spaces-common-folders patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2602,18 +2602,18 @@ export def "spaces-common-folders patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --ArchivalDate: string # e.g. 20160203
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --Name: string # e.g. Dupond
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --archival-date: string # e.g. 20160203
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --name: string # e.g. Dupond
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/common-folders/($id)")
-  let body = {About: $About, ArchivalDate: $ArchivalDate, Home: $Home, Keywords: $Keywords, Level: $Level, Name: $Name} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/common-folders/{id}"))
+  let body = {"About": $about, "ArchivalDate": $archival_date, "Home": $home, "Keywords": $keywords, "Level": $level, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2624,8 +2624,8 @@ export def "spaces-common-folders patch" [
 #
 # GET /spaces/{spaceId}/company-entities/{id}/follow-ups
 export def "spaces-company-entities-follow-ups get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2637,7 +2637,7 @@ export def "spaces-company-entities-follow-ups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/company-entities/($id)/follow-ups")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/company-entities/{id}/follow-ups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2647,7 +2647,7 @@ export def "spaces-company-entities-follow-ups get" [
 #
 # GET /spaces/{spaceId}/customers
 export def "spaces-customers get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2656,13 +2656,13 @@ export def "spaces-customers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CustomerNumber: string # CustomerNumber of the customer
-  --WithContractingPartner: string # if present returns infos of the ContractingPartner too
+  --customer-number: string # CustomerNumber of the customer
+  --with-contracting-partner: string # if present returns infos of the ContractingPartner too
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "CustomerNumber" $CustomerNumber "scalar") (serialize-qp "WithContractingPartner" $WithContractingPartner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/customers" $qp)
+  let qp = [(serialize-qp "CustomerNumber" $customer_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/customers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2672,7 +2672,7 @@ export def "spaces-customers get" [
 #
 # GET /spaces/{spaceId}/customers/all
 export def "spaces-customers-all get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2681,13 +2681,13 @@ export def "spaces-customers-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --CustomerNumber: string # CustomerNumber of the employee
-  --WithContractingPartner: string # if present returns infos of the ContractingPartner too
+  --customer-number: string # CustomerNumber of the employee
+  --with-contracting-partner: string # if present returns infos of the ContractingPartner too
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "CustomerNumber" $CustomerNumber "scalar") (serialize-qp "WithContractingPartner" $WithContractingPartner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/customers/all" $qp)
+  let qp = [(serialize-qp "CustomerNumber" $customer_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/customers/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2697,7 +2697,7 @@ export def "spaces-customers-all get" [
 #
 # GET /spaces/{spaceId}/documents
 export def "spaces-documents get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2706,14 +2706,14 @@ export def "spaces-documents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FullText: string # Text to find (e.g. durand)
-  --Range: string # index range of the results (e.g. 10-19)
-  --Class: string # class of the document to find (e.g. payslip)
+  --full-text: string # Text to find (e.g. durand)
+  --range: string # index range of the results (e.g. 10-19)
+  --class: string # class of the document to find (e.g. payslip)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "FullText" $FullText "scalar") (serialize-qp "Range" $Range "scalar") (serialize-qp "Class" $Class "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents" $qp)
+  let qp = [(serialize-qp "FullText" $full_text "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "Class" $class "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2724,8 +2724,8 @@ export def "spaces-documents get" [
 # PATCH /spaces/{spaceId}/documents/{documentId}
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 export def "spaces-documents patch" [
-  spaceId: string
-  documentId: string
+  space_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2734,18 +2734,18 @@ export def "spaces-documents patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  --Title: string # e.g. Facture décembre
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  --title: string # e.g. Facture décembre
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($documentId)")
-  let body = {Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, document_id: $document_id} | format pattern "/spaces/{space_id}/documents/{document_id}"))
+  let body = {"Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2756,8 +2756,8 @@ export def "spaces-documents patch" [
 #
 # GET /spaces/{spaceId}/documents/{documentId}/extend
 export def "spaces-documents-extend get" [
-  documentId: string
-  spaceId: string
+  space_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2769,7 +2769,7 @@ export def "spaces-documents-extend get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($documentId)/extend")
+  let full_url = (build-url $base ({space_id: $space_id, document_id: $document_id} | format pattern "/spaces/{space_id}/documents/{document_id}/extend"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2779,8 +2779,8 @@ export def "spaces-documents-extend get" [
 #
 # POST /spaces/{spaceId}/documents/{documentId}/extend
 export def "spaces-documents-extend post" [
-  documentId: string
-  spaceId: string
+  space_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,7 +2794,7 @@ export def "spaces-documents-extend post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($documentId)/extend")
+  let full_url = (build-url $base ({space_id: $space_id, document_id: $document_id} | format pattern "/spaces/{space_id}/documents/{document_id}/extend"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2805,8 +2805,8 @@ export def "spaces-documents-extend post" [
 #
 # GET /spaces/{spaceId}/documents/{documentId}/folders
 export def "spaces-documents-folders get" [
-  documentId: string
-  spaceId: string
+  space_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2818,7 +2818,7 @@ export def "spaces-documents-folders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($documentId)/folders")
+  let full_url = (build-url $base ({space_id: $space_id, document_id: $document_id} | format pattern "/spaces/{space_id}/documents/{document_id}/folders"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2829,8 +2829,8 @@ export def "spaces-documents-folders get" [
 # POST /spaces/{spaceId}/documents/{documentId}/mailing
 # --Address shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
 export def "spaces-documents-mailing post" [
-  documentId: string
-  spaceId: string
+  space_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2839,14 +2839,14 @@ export def "spaces-documents-mailing post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
-  --Name: string # e.g. Société Dupond
+  --address: record # shape: {City?: string, Complement?: string, Country?: string, Street?: string, ZipCode?: string}
+  --name: string # e.g. Société Dupond
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($documentId)/mailing")
-  let body = {Address: $Address, Name: $Name} | compact
+  let full_url = (build-url $base ({space_id: $space_id, document_id: $document_id} | format pattern "/spaces/{space_id}/documents/{document_id}/mailing"))
+  let body = {"Address": $address, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2857,8 +2857,8 @@ export def "spaces-documents-mailing post" [
 #
 # GET /spaces/{spaceId}/documents/{documentId}/mailingprice
 export def "spaces-documents-mailingprice get" [
-  documentId: string
-  spaceId: string
+  space_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2870,7 +2870,7 @@ export def "spaces-documents-mailingprice get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($documentId)/mailingprice")
+  let full_url = (build-url $base ({space_id: $space_id, document_id: $document_id} | format pattern "/spaces/{space_id}/documents/{document_id}/mailingprice"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2880,8 +2880,8 @@ export def "spaces-documents-mailingprice get" [
 #
 # GET /spaces/{spaceId}/documents/{documentId}/versions
 export def "spaces-documents-versions get" [
-  documentId: string
-  spaceId: string
+  space_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2893,7 +2893,7 @@ export def "spaces-documents-versions get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($documentId)/versions")
+  let full_url = (build-url $base ({space_id: $space_id, document_id: $document_id} | format pattern "/spaces/{space_id}/documents/{document_id}/versions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2904,8 +2904,8 @@ export def "spaces-documents-versions get" [
 # POST /spaces/{spaceId}/documents/{documentId}/versions
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-documents-versions post" [
-  documentId: string
-  spaceId: string
+  space_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2914,18 +2914,18 @@ export def "spaces-documents-versions post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($documentId)/versions")
-  let body = {Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, document_id: $document_id} | format pattern "/spaces/{space_id}/documents/{document_id}/versions"))
+  let body = {"Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2936,8 +2936,8 @@ export def "spaces-documents-versions post" [
 #
 # GET /spaces/{spaceId}/documents/{documentId}/versions/current
 export def "spaces-documents-versions-current get" [
-  documentId: string
-  spaceId: string
+  space_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2949,7 +2949,7 @@ export def "spaces-documents-versions-current get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($documentId)/versions/current")
+  let full_url = (build-url $base ({space_id: $space_id, document_id: $document_id} | format pattern "/spaces/{space_id}/documents/{document_id}/versions/current"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2959,8 +2959,8 @@ export def "spaces-documents-versions-current get" [
 #
 # GET /spaces/{spaceId}/documents/{id}/access
 export def "spaces-documents-access get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2972,7 +2972,7 @@ export def "spaces-documents-access get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($id)/access")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/documents/{id}/access"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2982,8 +2982,8 @@ export def "spaces-documents-access get" [
 #
 # GET /spaces/{spaceId}/documents/{id}/accounting
 export def "spaces-documents-accounting get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2995,7 +2995,7 @@ export def "spaces-documents-accounting get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($id)/accounting")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/documents/{id}/accounting"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3005,8 +3005,8 @@ export def "spaces-documents-accounting get" [
 #
 # GET /spaces/{spaceId}/documents/{id}/download
 export def "spaces-documents-download get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3018,7 +3018,7 @@ export def "spaces-documents-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/documents/($id)/download")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/documents/{id}/download"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3028,7 +3028,7 @@ export def "spaces-documents-download get" [
 #
 # GET /spaces/{spaceId}/employees
 export def "spaces-employees get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3037,14 +3037,14 @@ export def "spaces-employees get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --SSNumber: string # SSNumber of the employee
-  --EmployeeNumber: string # EmployeeNumber of the employee
-  --WithContractingPartner: string # if present returns infos of the ContractingPartner too
+  --ss-number: string # SSNumber of the employee
+  --employee-number: string # EmployeeNumber of the employee
+  --with-contracting-partner: string # if present returns infos of the ContractingPartner too
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "SSNumber" $SSNumber "scalar") (serialize-qp "EmployeeNumber" $EmployeeNumber "scalar") (serialize-qp "WithContractingPartner" $WithContractingPartner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/employees" $qp)
+  let qp = [(serialize-qp "SSNumber" $ss_number "scalar") (serialize-qp "EmployeeNumber" $employee_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/employees") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3054,7 +3054,7 @@ export def "spaces-employees get" [
 #
 # GET /spaces/{spaceId}/employees/all
 export def "spaces-employees-all get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3063,14 +3063,14 @@ export def "spaces-employees-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --SSNumber: string # SSNumber of the employee
-  --EmployeeNumber: string # EmployeeNumber of the employee
-  --WithContractingPartner: string # if present returns infos of the ContractingPartner too
+  --ss-number: string # SSNumber of the employee
+  --employee-number: string # EmployeeNumber of the employee
+  --with-contracting-partner: string # if present returns infos of the ContractingPartner too
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "SSNumber" $SSNumber "scalar") (serialize-qp "EmployeeNumber" $EmployeeNumber "scalar") (serialize-qp "WithContractingPartner" $WithContractingPartner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/employees/all" $qp)
+  let qp = [(serialize-qp "SSNumber" $ss_number "scalar") (serialize-qp "EmployeeNumber" $employee_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/employees/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3080,7 +3080,7 @@ export def "spaces-employees-all get" [
 #
 # GET /spaces/{spaceId}/employers
 export def "spaces-employers get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3089,13 +3089,13 @@ export def "spaces-employers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --EmployeeNumber: string # EmployeeNumber of the employer contract
-  --WithContractingPartner: string # if present returns infos of the ContractingPartner too
+  --employee-number: string # EmployeeNumber of the employer contract
+  --with-contracting-partner: string # if present returns infos of the ContractingPartner too
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "EmployeeNumber" $EmployeeNumber "scalar") (serialize-qp "WithContractingPartner" $WithContractingPartner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/employers" $qp)
+  let qp = [(serialize-qp "EmployeeNumber" $employee_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/employers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3105,7 +3105,7 @@ export def "spaces-employers get" [
 #
 # GET /spaces/{spaceId}/employers/all
 export def "spaces-employers-all get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3114,13 +3114,13 @@ export def "spaces-employers-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --EmployeeNumber: string # EmployeeNumber of the employer contract
-  --WithContractingPartner: string # if present returns infos of the ContractingPartner too
+  --employee-number: string # EmployeeNumber of the employer contract
+  --with-contracting-partner: string # if present returns infos of the ContractingPartner too
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "EmployeeNumber" $EmployeeNumber "scalar") (serialize-qp "WithContractingPartner" $WithContractingPartner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/employers/all" $qp)
+  let qp = [(serialize-qp "EmployeeNumber" $employee_number "scalar") (serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/employers/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3130,7 +3130,7 @@ export def "spaces-employers-all get" [
 #
 # GET /spaces/{spaceId}/extend
 export def "spaces-extend get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3142,7 +3142,7 @@ export def "spaces-extend get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/extend")
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/extend"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3152,7 +3152,7 @@ export def "spaces-extend get" [
 #
 # POST /spaces/{spaceId}/extend
 export def "spaces-extend post" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3166,7 +3166,7 @@ export def "spaces-extend post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/extend")
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/extend"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3177,7 +3177,7 @@ export def "spaces-extend post" [
 #
 # GET /spaces/{spaceId}/folders
 export def "spaces-folders get-by-spaceId" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3186,16 +3186,16 @@ export def "spaces-folders get-by-spaceId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the folder (e.g. Secrétariat juridique)
-  --Keywords: string # keywords attached to the folder (e.g. juridique)
-  --RootFolders: string@RootFolders-completer # only root folders (e.g. all)
-  --Range: string # index range of the results (e.g. 10-19)
-  --Class: string # class of the folder (e.g. social)
+  --name: string # Name of the folder (e.g. Secrétariat juridique)
+  --keywords: string # keywords attached to the folder (e.g. juridique)
+  --root-folders: string@root-folders-completer # only root folders (e.g. all)
+  --range: string # index range of the results (e.g. 10-19)
+  --class: string # class of the folder (e.g. social)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar") (serialize-qp "Keywords" $Keywords "scalar") (serialize-qp "RootFolders" $RootFolders "scalar") (serialize-qp "Range" $Range "scalar") (serialize-qp "Class" $Class "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders" $qp)
+  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Keywords" $keywords "scalar") (serialize-qp "RootFolders" $root_folders "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "Class" $class "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/folders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3205,7 +3205,7 @@ export def "spaces-folders get-by-spaceId" [
 #
 # GET /spaces/{spaceId}/folders/all
 export def "spaces-folders-all get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3214,15 +3214,15 @@ export def "spaces-folders-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the folder (e.g. Secrétariat juridique)
-  --Range: string # index range of the results (e.g. 10-19)
-  --Keywords: string # keywords attached to the folder (e.g. juridique)
-  --Class: string # class of the folder (e.g. social)
+  --name: string # Name of the folder (e.g. Secrétariat juridique)
+  --range: string # index range of the results (e.g. 10-19)
+  --keywords: string # keywords attached to the folder (e.g. juridique)
+  --class: string # class of the folder (e.g. social)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar") (serialize-qp "Range" $Range "scalar") (serialize-qp "Keywords" $Keywords "scalar") (serialize-qp "Class" $Class "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/all" $qp)
+  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "Keywords" $keywords "scalar") (serialize-qp "Class" $class "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/folders/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3232,9 +3232,9 @@ export def "spaces-folders-all get" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/bank-statements/{documentId}
 export def "spaces-folders-bank-statements delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3246,7 +3246,7 @@ export def "spaces-folders-bank-statements delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/bank-statements/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/bank-statements/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3256,9 +3256,9 @@ export def "spaces-folders-bank-statements delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/bank-statements/{documentId}
 export def "spaces-folders-bank-statements patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3267,15 +3267,15 @@ export def "spaces-folders-bank-statements patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Balance: float # format: number, e.g. 1352.63
-  --Number: float # format: string, e.g. 10015848
-  --StatementDate: string # e.g. 20160801
+  --balance: float # format: number, e.g. 1352.63
+  --number: float # format: string, e.g. 10015848
+  --statement-date: string # e.g. 20160801
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/bank-statements/($documentId)")
-  let body = {Balance: $Balance, Number: $Number, StatementDate: $StatementDate} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/bank-statements/{document_id}"))
+  let body = {"Balance": $balance, "Number": $number, "StatementDate": $statement_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3286,9 +3286,9 @@ export def "spaces-folders-bank-statements patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/contractual-documents/{documentId}
 export def "spaces-folders-contractual-documents delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3300,7 +3300,7 @@ export def "spaces-folders-contractual-documents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/contractual-documents/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/contractual-documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3310,9 +3310,9 @@ export def "spaces-folders-contractual-documents delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/contractual-documents/{documentId}
 export def "spaces-folders-contractual-documents patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3321,17 +3321,17 @@ export def "spaces-folders-contractual-documents patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Amount: string # e.g. 1001.36
-  --Designation: string # e.g. contrat client
-  --Reference: string # e.g. 151465AFHIA
-  --StartDate: string # e.g. 20181128
-  --Type: string@Type-completer-2 # e.g. quotation
+  --amount: string # e.g. 1001.36
+  --designation: string # e.g. contrat client
+  --reference: string # e.g. 151465AFHIA
+  --start-date: string # e.g. 20181128
+  --type: string@type-completer-2 # e.g. quotation
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/contractual-documents/($documentId)")
-  let body = {Amount: $Amount, Designation: $Designation, Reference: $Reference, StartDate: $StartDate, Type: $Type} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/contractual-documents/{document_id}"))
+  let body = {"Amount": $amount, "Designation": $designation, "Reference": $reference, "StartDate": $start_date, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3342,9 +3342,9 @@ export def "spaces-folders-contractual-documents patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/corporate-tax-declarations/{documentId}
 export def "spaces-folders-corporate-tax-declarations delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3356,7 +3356,7 @@ export def "spaces-folders-corporate-tax-declarations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/corporate-tax-declarations/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/corporate-tax-declarations/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3366,9 +3366,9 @@ export def "spaces-folders-corporate-tax-declarations delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/corporate-tax-declarations/{documentId}
 export def "spaces-folders-corporate-tax-declarations patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3377,17 +3377,17 @@ export def "spaces-folders-corporate-tax-declarations patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Amount: float # format: float, e.g. 132.63
-  --DeclarationDate: string # e.g. 20160801
-  --Order: string@Order-completer # e.g. 1st advance
-  --Rate: float # format: float, e.g. 10.63
-  --TaxBase: float # format: float, e.g. 123.36
+  --amount: float # format: float, e.g. 132.63
+  --declaration-date: string # e.g. 20160801
+  --order: string@order-completer # e.g. 1st advance
+  --rate: float # format: float, e.g. 10.63
+  --tax-base: float # format: float, e.g. 123.36
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/corporate-tax-declarations/($documentId)")
-  let body = {Amount: $Amount, DeclarationDate: $DeclarationDate, Order: $Order, Rate: $Rate, TaxBase: $TaxBase} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/corporate-tax-declarations/{document_id}"))
+  let body = {"Amount": $amount, "DeclarationDate": $declaration_date, "Order": $order, "Rate": $rate, "TaxBase": $tax_base} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3398,9 +3398,9 @@ export def "spaces-folders-corporate-tax-declarations patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/expense-proofs/{documentId}
 export def "spaces-folders-expense-proofs delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3412,7 +3412,7 @@ export def "spaces-folders-expense-proofs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/expense-proofs/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/expense-proofs/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3422,9 +3422,9 @@ export def "spaces-folders-expense-proofs delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/expense-proofs/{documentId}
 export def "spaces-folders-expense-proofs patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3433,21 +3433,21 @@ export def "spaces-folders-expense-proofs patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Account: string@Account-completer # e.g. CAB
-  --ArchivalDate: string # e.g. 20211231
-  --BeforeVAT: float # e.g. 1000
-  --ExpenseDate: string # e.g. 20200202
-  --ExpenseReportId: string # e.g. PFOIAHF874984
-  --Provider: string # e.g. G7
-  --Reason: string # e.g. taxi
-  --Status: string@Status-completer # e.g. R
-  --VAT: float # e.g. 19.5
+  --account: string@account-completer # e.g. CAB
+  --archival-date: string # e.g. 20211231
+  --before-vat: float # e.g. 1000
+  --expense-date: string # e.g. 20200202
+  --expense-report-id: string # e.g. PFOIAHF874984
+  --provider: string # e.g. G7
+  --reason: string # e.g. taxi
+  --status: string@status-completer # e.g. R
+  --vat: float # e.g. 19.5
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/expense-proofs/($documentId)")
-  let body = {Account: $Account, ArchivalDate: $ArchivalDate, BeforeVAT: $BeforeVAT, ExpenseDate: $ExpenseDate, ExpenseReportId: $ExpenseReportId, Provider: $Provider, Reason: $Reason, Status: $Status, VAT: $VAT} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/expense-proofs/{document_id}"))
+  let body = {"Account": $account, "ArchivalDate": $archival_date, "BeforeVAT": $before_vat, "ExpenseDate": $expense_date, "ExpenseReportId": $expense_report_id, "Provider": $provider, "Reason": $reason, "Status": $status, "VAT": $vat} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3458,9 +3458,9 @@ export def "spaces-folders-expense-proofs patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/expense-reports/{documentId}
 export def "spaces-folders-expense-reports delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3472,7 +3472,7 @@ export def "spaces-folders-expense-reports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/expense-reports/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/expense-reports/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3482,9 +3482,9 @@ export def "spaces-folders-expense-reports delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/expense-reports/{documentId}
 export def "spaces-folders-expense-reports patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3493,17 +3493,17 @@ export def "spaces-folders-expense-reports patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --BeforeVAT: float # e.g. 1000
-  --ExpenseDate: string # e.g. 20200202
-  --InclVAT: float # e.g. 1200
-  --ProcessingDate: string # e.g. 20200203
-  --VAT: float # e.g. 19.5
+  --before-vat: float # e.g. 1000
+  --expense-date: string # e.g. 20200202
+  --incl-vat: float # e.g. 1200
+  --processing-date: string # e.g. 20200203
+  --vat: float # e.g. 19.5
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/expense-reports/($documentId)")
-  let body = {BeforeVAT: $BeforeVAT, ExpenseDate: $ExpenseDate, InclVAT: $InclVAT, ProcessingDate: $ProcessingDate, VAT: $VAT} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/expense-reports/{document_id}"))
+  let body = {"BeforeVAT": $before_vat, "ExpenseDate": $expense_date, "InclVAT": $incl_vat, "ProcessingDate": $processing_date, "VAT": $vat} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3514,9 +3514,9 @@ export def "spaces-folders-expense-reports patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/invoices/{documentId}
 export def "spaces-folders-invoices delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3528,7 +3528,7 @@ export def "spaces-folders-invoices delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/invoices/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/invoices/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3538,9 +3538,9 @@ export def "spaces-folders-invoices delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/invoices/{documentId}
 export def "spaces-folders-invoices patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3549,20 +3549,20 @@ export def "spaces-folders-invoices patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --BeforeVAT: float # e.g. 1000
-  --DueDate: string # e.g. 20190130
-  --InclVAT: float # e.g. 1200
-  --InvoiceDate: string # e.g. 20200202
-  --Number: string # e.g. 036459879874
-  --PaymentDate: string # e.g. 20190131
-  --Type: string@Type-completer-3 # e.g. commercial-invoice
-  --VAT: float # e.g. 19.5
+  --before-vat: float # e.g. 1000
+  --due-date: string # e.g. 20190130
+  --incl-vat: float # e.g. 1200
+  --invoice-date: string # e.g. 20200202
+  --number: string # e.g. 036459879874
+  --payment-date: string # e.g. 20190131
+  --type: string@type-completer-3 # e.g. commercial-invoice
+  --vat: float # e.g. 19.5
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/invoices/($documentId)")
-  let body = {BeforeVAT: $BeforeVAT, DueDate: $DueDate, InclVAT: $InclVAT, InvoiceDate: $InvoiceDate, Number: $Number, PaymentDate: $PaymentDate, Type: $Type, VAT: $VAT} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/invoices/{document_id}"))
+  let body = {"BeforeVAT": $before_vat, "DueDate": $due_date, "InclVAT": $incl_vat, "InvoiceDate": $invoice_date, "Number": $number, "PaymentDate": $payment_date, "Type": $type, "VAT": $vat} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3573,9 +3573,9 @@ export def "spaces-folders-invoices patch" [
 #
 # GET /spaces/{spaceId}/folders/{folderId}/nominative-social-declarations/{documentId}
 export def "spaces-folders-nominative-social-declarations get" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3587,7 +3587,7 @@ export def "spaces-folders-nominative-social-declarations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/nominative-social-declarations/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/nominative-social-declarations/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3597,9 +3597,9 @@ export def "spaces-folders-nominative-social-declarations get" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/other-taxes/{documentId}
 export def "spaces-folders-other-taxes delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3611,7 +3611,7 @@ export def "spaces-folders-other-taxes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/other-taxes/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/other-taxes/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3621,9 +3621,9 @@ export def "spaces-folders-other-taxes delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/other-taxes/{documentId}
 export def "spaces-folders-other-taxes patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3632,15 +3632,15 @@ export def "spaces-folders-other-taxes patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Amount: float # format: float, e.g. 132.63
-  --DeclarationDate: string # e.g. 20160801
-  --Reference: string # e.g. décla CFE
+  --amount: float # format: float, e.g. 132.63
+  --declaration-date: string # e.g. 20160801
+  --reference: string # e.g. décla CFE
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/other-taxes/($documentId)")
-  let body = {Amount: $Amount, DeclarationDate: $DeclarationDate, Reference: $Reference} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/other-taxes/{document_id}"))
+  let body = {"Amount": $amount, "DeclarationDate": $declaration_date, "Reference": $reference} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3651,9 +3651,9 @@ export def "spaces-folders-other-taxes patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/payrolls/{documentId}
 export def "spaces-folders-payrolls delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3665,7 +3665,7 @@ export def "spaces-folders-payrolls delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/payrolls/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/payrolls/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3675,9 +3675,9 @@ export def "spaces-folders-payrolls delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/payrolls/{documentId}
 export def "spaces-folders-payrolls patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3686,18 +3686,18 @@ export def "spaces-folders-payrolls patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Begin: string # e.g. 20160801
-  --EmployeeContributions: float # format: float, e.g. 1352.63
-  --EmployerContributions: float # format: float, e.g. 132.63
-  --End: string # e.g. 20160831
-  --NetAmount: float # format: float, e.g. 1005.63
-  --TotalGrossAmount: float # format: float, e.g. 1548.63
+  --begin: string # e.g. 20160801
+  --employee-contributions: float # format: float, e.g. 1352.63
+  --employer-contributions: float # format: float, e.g. 132.63
+  --end: string # e.g. 20160831
+  --net-amount: float # format: float, e.g. 1005.63
+  --total-gross-amount: float # format: float, e.g. 1548.63
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/payrolls/($documentId)")
-  let body = {Begin: $Begin, EmployeeContributions: $EmployeeContributions, EmployerContributions: $EmployerContributions, End: $End, NetAmount: $NetAmount, TotalGrossAmount: $TotalGrossAmount} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/payrolls/{document_id}"))
+  let body = {"Begin": $begin, "EmployeeContributions": $employee_contributions, "EmployerContributions": $employer_contributions, "End": $end, "NetAmount": $net_amount, "TotalGrossAmount": $total_gross_amount} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3708,9 +3708,9 @@ export def "spaces-folders-payrolls patch" [
 #
 # POST /spaces/{spaceId}/folders/{folderId}/payrolls/{documentId}/refresh
 export def "spaces-folders-payrolls-refresh post" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3722,7 +3722,7 @@ export def "spaces-folders-payrolls-refresh post" [
 ]: nothing -> record<Id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/payrolls/($documentId)/refresh")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/payrolls/{document_id}/refresh"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3732,9 +3732,9 @@ export def "spaces-folders-payrolls-refresh post" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/payslips/{documentId}
 export def "spaces-folders-payslips delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3746,7 +3746,7 @@ export def "spaces-folders-payslips delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/payslips/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/payslips/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3756,9 +3756,9 @@ export def "spaces-folders-payslips delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/payslips/{documentId}
 export def "spaces-folders-payslips patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3767,21 +3767,21 @@ export def "spaces-folders-payslips patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Begin: string # e.g. 20160801
-  --EmployeeContributions: float # format: float, e.g. 2000.5
-  --EmployerContributions: float # format: float, e.g. 400.5
-  --End: string # e.g. 20160831
-  --FixedGrossAmount: float # format: float, e.g. 1352.63
-  --NetAmount: float # format: float, e.g. 1005.63
-  --TotalGrossAmount: float # format: float, e.g. 1548.63
-  --Vacation: float # format: float, e.g. 20.5
-  --VariableGrossAmount: float # format: float, e.g. 132.63
+  --begin: string # e.g. 20160801
+  --employee-contributions: float # format: float, e.g. 2000.5
+  --employer-contributions: float # format: float, e.g. 400.5
+  --end: string # e.g. 20160831
+  --fixed-gross-amount: float # format: float, e.g. 1352.63
+  --net-amount: float # format: float, e.g. 1005.63
+  --total-gross-amount: float # format: float, e.g. 1548.63
+  --vacation: float # format: float, e.g. 20.5
+  --variable-gross-amount: float # format: float, e.g. 132.63
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/payslips/($documentId)")
-  let body = {Begin: $Begin, EmployeeContributions: $EmployeeContributions, EmployerContributions: $EmployerContributions, End: $End, FixedGrossAmount: $FixedGrossAmount, NetAmount: $NetAmount, TotalGrossAmount: $TotalGrossAmount, Vacation: $Vacation, VariableGrossAmount: $VariableGrossAmount} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/payslips/{document_id}"))
+  let body = {"Begin": $begin, "EmployeeContributions": $employee_contributions, "EmployerContributions": $employer_contributions, "End": $end, "FixedGrossAmount": $fixed_gross_amount, "NetAmount": $net_amount, "TotalGrossAmount": $total_gross_amount, "Vacation": $vacation, "VariableGrossAmount": $variable_gross_amount} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3792,9 +3792,9 @@ export def "spaces-folders-payslips patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/social-contracts/{documentId}
 export def "spaces-folders-social-contracts delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3806,7 +3806,7 @@ export def "spaces-folders-social-contracts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/social-contracts/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/social-contracts/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3816,9 +3816,9 @@ export def "spaces-folders-social-contracts delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/social-contracts/{documentId}
 export def "spaces-folders-social-contracts patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3827,17 +3827,17 @@ export def "spaces-folders-social-contracts patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ContractDate: string # e.g. 20190202
-  --ContractDuration: string # e.g. 6 mois
-  --ContractualChange: string # e.g. augmentation
-  --Position: string # e.g. cadre
-  --WageDevelopments: float # format: float, e.g. 1548.63
+  --contract-date: string # e.g. 20190202
+  --contract-duration: string # e.g. 6 mois
+  --contractual-change: string # e.g. augmentation
+  --position: string # e.g. cadre
+  --wage-developments: float # format: float, e.g. 1548.63
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/social-contracts/($documentId)")
-  let body = {ContractDate: $ContractDate, ContractDuration: $ContractDuration, ContractualChange: $ContractualChange, Position: $Position, WageDevelopments: $WageDevelopments} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/social-contracts/{document_id}"))
+  let body = {"ContractDate": $contract_date, "ContractDuration": $contract_duration, "ContractualChange": $contractual_change, "Position": $position, "WageDevelopments": $wage_developments} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3848,9 +3848,9 @@ export def "spaces-folders-social-contracts patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/social-declarations/{documentId}
 export def "spaces-folders-social-declarations delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3862,7 +3862,7 @@ export def "spaces-folders-social-declarations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/social-declarations/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/social-declarations/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3872,9 +3872,9 @@ export def "spaces-folders-social-declarations delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/social-declarations/{documentId}
 export def "spaces-folders-social-declarations patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3883,14 +3883,14 @@ export def "spaces-folders-social-declarations patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Amount: float # format: float, e.g. 132.63
-  --DeclarationDate: string # e.g. 20160801
+  --amount: float # format: float, e.g. 132.63
+  --declaration-date: string # e.g. 20160801
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/social-declarations/($documentId)")
-  let body = {Amount: $Amount, DeclarationDate: $DeclarationDate} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/social-declarations/{document_id}"))
+  let body = {"Amount": $amount, "DeclarationDate": $declaration_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3901,9 +3901,9 @@ export def "spaces-folders-social-declarations patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{folderId}/vat-declarations/{documentId}
 export def "spaces-folders-vat-declarations delete" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3915,7 +3915,7 @@ export def "spaces-folders-vat-declarations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/vat-declarations/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/vat-declarations/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3925,9 +3925,9 @@ export def "spaces-folders-vat-declarations delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{folderId}/vat-declarations/{documentId}
 export def "spaces-folders-vat-declarations patch" [
-  spaceId: string
-  folderId: string
-  documentId: string
+  space_id: string
+  folder_id: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3936,21 +3936,21 @@ export def "spaces-folders-vat-declarations patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Begin: string # e.g. 20160801
-  --CollectedVAT: float # format: float, e.g. 1548.63
-  --CreditVAT: float # format: float, e.g. 400.5
-  --DeductibleVAT: float # format: float, e.g. 20.5
-  --End: string # e.g. 20160831
-  --ExemptTurnover: float # format: float, e.g. 132.63
-  --Number: string # e.g. 153126
-  --PayableVAT: float # format: float, e.g. 2000.5
-  --TaxableTurnover: float # format: float, e.g. 1352.63
+  --begin: string # e.g. 20160801
+  --collected-vat: float # format: float, e.g. 1548.63
+  --credit-vat: float # format: float, e.g. 400.5
+  --deductible-vat: float # format: float, e.g. 20.5
+  --end: string # e.g. 20160831
+  --exempt-turnover: float # format: float, e.g. 132.63
+  --number: string # e.g. 153126
+  --payable-vat: float # format: float, e.g. 2000.5
+  --taxable-turnover: float # format: float, e.g. 1352.63
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($folderId)/vat-declarations/($documentId)")
-  let body = {Begin: $Begin, CollectedVAT: $CollectedVAT, CreditVAT: $CreditVAT, DeductibleVAT: $DeductibleVAT, End: $End, ExemptTurnover: $ExemptTurnover, Number: $Number, PayableVAT: $PayableVAT, TaxableTurnover: $TaxableTurnover} | compact
+  let full_url = (build-url $base ({space_id: $space_id, folder_id: $folder_id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{folder_id}/vat-declarations/{document_id}"))
+  let body = {"Begin": $begin, "CollectedVAT": $collected_vat, "CreditVAT": $credit_vat, "DeductibleVAT": $deductible_vat, "End": $end, "ExemptTurnover": $exempt_turnover, "Number": $number, "PayableVAT": $payable_vat, "TaxableTurnover": $taxable_turnover} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3960,9 +3960,9 @@ export def "spaces-folders-vat-declarations patch" [
 # Returns folder with Id
 #
 # GET /spaces/{spaceId}/folders/{id}
-export def "spaces-folders get-by-id-spaceId" [
+export def "spaces-folders get-by-spaceId-id" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3974,7 +3974,7 @@ export def "spaces-folders get-by-id-spaceId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3984,8 +3984,8 @@ export def "spaces-folders get-by-id-spaceId" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}
 export def "spaces-folders patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3994,16 +3994,16 @@ export def "spaces-folders patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)")
-  let body = {About: $About, Home: $Home, Keywords: $Keywords, Level: $Level} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}"))
+  let body = {"About": $about, "Home": $home, "Keywords": $keywords, "Level": $level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4014,8 +4014,8 @@ export def "spaces-folders patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/accounting-year
 export def "spaces-folders-accounting-year delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4027,7 +4027,7 @@ export def "spaces-folders-accounting-year delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/accounting-year")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/accounting-year"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4037,8 +4037,8 @@ export def "spaces-folders-accounting-year delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/accounting-year
 export def "spaces-folders-accounting-year patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4047,24 +4047,24 @@ export def "spaces-folders-accounting-year patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. ogm of the company
-  --End: string # e.g. 20181231
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --NetIncome: float # e.g. 52634.36
-  --NetPosition: float # e.g. 14580.36
-  --Start: string # e.g. 20180101
-  --Tax: float # e.g. 45698.36
-  --TaxableIncome: float # e.g. 869523.36
-  --Turnover: float # e.g. 1025.36
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. ogm of the company
+  --end: string # e.g. 20181231
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --net-income: float # e.g. 52634.36
+  --net-position: float # e.g. 14580.36
+  --start: string # e.g. 20180101
+  --tax: float # e.g. 45698.36
+  --taxable-income: float # e.g. 869523.36
+  --turnover: float # e.g. 1025.36
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/accounting-year")
-  let body = {About: $About, Comment: $Comment, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, NetIncome: $NetIncome, NetPosition: $NetPosition, Start: $Start, Tax: $Tax, TaxableIncome: $TaxableIncome, Turnover: $Turnover} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/accounting-year"))
+  let body = {"About": $about, "Comment": $comment, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "NetIncome": $net_income, "NetPosition": $net_position, "Start": $start, "Tax": $tax, "TaxableIncome": $taxable_income, "Turnover": $turnover} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4075,8 +4075,8 @@ export def "spaces-folders-accounting-year patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/accountings
 export def "spaces-folders-accountings get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4085,19 +4085,19 @@ export def "spaces-folders-accountings get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # date range of the documents (e.g. 20160321,null)
-  --FolderDate: string # date range of attachment (e.g. 20180306,null)
-  --Title: string # Title of the accounting document (e.g. Accounting)
-  --Workbook: string # workbook of the accounting (e.g. Accounting)
-  --Class: string # class of the accounting (e.g. Invoice)
-  --AccountedOn: string # accountedon of the accounting (boolean available) (e.g. 20180201,null)
-  --WithFolders: string # if present, the folders containing the documents are returned (e.g. yes)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # date range of the documents (e.g. 20160321,null)
+  --folder-date: string # date range of attachment (e.g. 20180306,null)
+  --title: string # Title of the accounting document (e.g. Accounting)
+  --workbook: string # workbook of the accounting (e.g. Accounting)
+  --class: string # class of the accounting (e.g. Invoice)
+  --accounted-on: string # accountedon of the accounting (boolean available) (e.g. 20180201,null)
+  --with-folders: string # if present, the folders containing the documents are returned (e.g. yes)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "FolderDate" $FolderDate "scalar") (serialize-qp "Title" $Title "scalar") (serialize-qp "Workbook" $Workbook "scalar") (serialize-qp "Class" $Class "scalar") (serialize-qp "AccountedOn" $AccountedOn "scalar") (serialize-qp "WithFolders" $WithFolders "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/accountings" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "Title" $title "scalar") (serialize-qp "Workbook" $workbook "scalar") (serialize-qp "Class" $class "scalar") (serialize-qp "AccountedOn" $accounted_on "scalar") (serialize-qp "WithFolders" $with_folders "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/accountings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4107,8 +4107,8 @@ export def "spaces-folders-accountings get" [
 #
 # GET /spaces/{spaceId}/folders/{id}/accountings-journal
 export def "spaces-folders-accountings-journal get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4117,19 +4117,19 @@ export def "spaces-folders-accountings-journal get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DeliveryDate: string # delivery dates of the document (e.g. 20191123082536,null)
-  --AccountingDate: string # accounting dates of the document (e.g. 20170215,null)
-  --Number: int # numbers of the document (e.g. 12,17)
-  --Workbook: string # workbook of the document (e.g. cashwoucher)
-  --YearMonth: string # yearmonth of the document (e.g. 201802)
-  --Class: string # class of the document (e.g. invoice)
-  --Code: string # code of the document (e.g. delivered)
-  --TargetFolderName: string # Name of the target folder of the document (e.g. Exercice*)
+  --delivery-date: string # delivery dates of the document (e.g. 20191123082536,null)
+  --accounting-date: string # accounting dates of the document (e.g. 20170215,null)
+  --number: int # numbers of the document (e.g. 12,17)
+  --workbook: string # workbook of the document (e.g. cashwoucher)
+  --year-month: string # yearmonth of the document (e.g. 201802)
+  --class: string # class of the document (e.g. invoice)
+  --code: string # code of the document (e.g. delivered)
+  --target-folder-name: string # Name of the target folder of the document (e.g. Exercice*)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "DeliveryDate" $DeliveryDate "scalar") (serialize-qp "AccountingDate" $AccountingDate "scalar") (serialize-qp "Number" $Number "scalar") (serialize-qp "Workbook" $Workbook "scalar") (serialize-qp "YearMonth" $YearMonth "scalar") (serialize-qp "Class" $Class "scalar") (serialize-qp "Code" $Code "scalar") (serialize-qp "TargetFolderName" $TargetFolderName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/accountings-journal" $qp)
+  let qp = [(serialize-qp "DeliveryDate" $delivery_date "scalar") (serialize-qp "AccountingDate" $accounting_date "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "Workbook" $workbook "scalar") (serialize-qp "YearMonth" $year_month "scalar") (serialize-qp "Class" $class "scalar") (serialize-qp "Code" $code "scalar") (serialize-qp "TargetFolderName" $target_folder_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/accountings-journal") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4139,8 +4139,8 @@ export def "spaces-folders-accountings-journal get" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/bank
 export def "spaces-folders-bank delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4152,7 +4152,7 @@ export def "spaces-folders-bank delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/bank")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/bank"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4162,8 +4162,8 @@ export def "spaces-folders-bank delete" [
 #
 # GET /spaces/{spaceId}/folders/{id}/bank
 export def "spaces-folders-bank get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4175,7 +4175,7 @@ export def "spaces-folders-bank get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/bank")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/bank"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4185,8 +4185,8 @@ export def "spaces-folders-bank get" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/bank
 export def "spaces-folders-bank patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4195,21 +4195,21 @@ export def "spaces-folders-bank patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --ContractReference: string # e.g. 13587449420F
-  --Designation: string # e.g. client pièces détachées
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --contract-reference: string # e.g. 13587449420F
+  --designation: string # e.g. client pièces détachées
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --start: string # e.g. 20180630
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/bank")
-  let body = {About: $About, Comment: $Comment, ContractReference: $ContractReference, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/bank"))
+  let body = {"About": $about, "Comment": $comment, "ContractReference": $contract_reference, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4220,8 +4220,8 @@ export def "spaces-folders-bank patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/bank-statements
 export def "spaces-folders-bank-statements get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4230,14 +4230,14 @@ export def "spaces-folders-bank-statements get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # range date of the documents (e.g. 20160321, null)
-  --Number: string # Number of the bank statement (e.g. 201603)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # range date of the documents (e.g. 20160321, null)
+  --number: string # Number of the bank statement (e.g. 201603)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Number" $Number "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/bank-statements" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/bank-statements") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4249,8 +4249,8 @@ export def "spaces-folders-bank-statements get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-bank-statements post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4259,23 +4259,23 @@ export def "spaces-folders-bank-statements post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Balance: float # format: number, e.g. 1352.63
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --Number: float # format: string, e.g. 10015848
-  StatementDate: string # e.g. 20160801
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --balance: float # format: number, e.g. 1352.63
+  document_id: string # e.g. PBUFBAUBF1531
+  --number: float # format: string, e.g. 10015848
+  statement_date: string # e.g. 20160801
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/bank-statements")
-  let body = {Balance: $Balance, DocumentId: $DocumentId, Number: $Number, StatementDate: $StatementDate, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/bank-statements"))
+  let body = {"Balance": $balance, "DocumentId": $document_id, "Number": $number, "StatementDate": $statement_date, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4286,8 +4286,8 @@ export def "spaces-folders-bank-statements post" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/collective-decision
 export def "spaces-folders-collective-decision patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4296,21 +4296,21 @@ export def "spaces-folders-collective-decision patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. ogm of the company
-  --Date: string # e.g. 20180202
-  --DividendDistributions: float # e.g. 1025.36
-  --DividendDistributionsDate: string # e.g. 20180203
-  --Event: string@Event-completer # for space type 'company' enums allowed are  'EGM','CGM','OGM','ConstituentAssembly','SolePartner','OtherEvent','Office','ExecutiveCommittee','Consulting','Board','PartnersMeeting' and for space type 'association' enums allowed are 'EGM','CGM','OGM','Other','Office','ExecutiveCommittee' (e.g. EGM)
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. ogm of the company
+  --date: string # e.g. 20180202
+  --dividend-distributions: float # e.g. 1025.36
+  --dividend-distributions-date: string # e.g. 20180203
+  --event: string@event-completer # for space type 'company' enums allowed are  'EGM','CGM','OGM','ConstituentAssembly','SolePartner','OtherEvent','Office','ExecutiveCommittee','Consulting','Board','PartnersMeeting' and for space type 'association' enums allowed are 'EGM','CGM','OGM','Other','Office','ExecutiveCommittee' (e.g. EGM)
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/collective-decision")
-  let body = {About: $About, Comment: $Comment, Date: $Date, DividendDistributions: $DividendDistributions, DividendDistributionsDate: $DividendDistributionsDate, Event: $Event, Home: $Home, Keywords: $Keywords, Level: $Level} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/collective-decision"))
+  let body = {"About": $about, "Comment": $comment, "Date": $date, "DividendDistributions": $dividend_distributions, "DividendDistributionsDate": $dividend_distributions_date, "Event": $event, "Home": $home, "Keywords": $keywords, "Level": $level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4321,8 +4321,8 @@ export def "spaces-folders-collective-decision patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/common-folders
 export def "spaces-folders-common-folders get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4331,13 +4331,13 @@ export def "spaces-folders-common-folders get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the folder (e.g. Folder one)
-  --Keywords: string # keywords attached to the folder (e.g. juridique)
+  --name: string # Name of the folder (e.g. Folder one)
+  --keywords: string # keywords attached to the folder (e.g. juridique)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar") (serialize-qp "Keywords" $Keywords "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/common-folders" $qp)
+  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Keywords" $keywords "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/common-folders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4347,8 +4347,8 @@ export def "spaces-folders-common-folders get" [
 #
 # POST /spaces/{spaceId}/folders/{id}/common-folders
 export def "spaces-folders-common-folders post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4357,19 +4357,19 @@ export def "spaces-folders-common-folders post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --ArchivalDate: string # e.g. 20160203
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  Name: string # e.g. Dupond
-  --Rights: oneof<nothing, bool> # e.g. true
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --archival-date: string # e.g. 20160203
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  name: string # e.g. Dupond
+  --rights: oneof<nothing, bool> # e.g. true
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/common-folders")
-  let body = {About: $About, ArchivalDate: $ArchivalDate, Home: $Home, Keywords: $Keywords, Level: $Level, Name: $Name, Rights: $Rights} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/common-folders"))
+  let body = {"About": $about, "ArchivalDate": $archival_date, "Home": $home, "Keywords": $keywords, "Level": $level, "Name": $name, "Rights": $rights} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4380,8 +4380,8 @@ export def "spaces-folders-common-folders post" [
 #
 # GET /spaces/{spaceId}/folders/{id}/common-folders/all
 export def "spaces-folders-common-folders-all get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4390,13 +4390,13 @@ export def "spaces-folders-common-folders-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Name: string # Name of the folder (e.g. Folder one)
-  --Keywords: string # keywords attached to the folder (e.g. juridique)
+  --name: string # Name of the folder (e.g. Folder one)
+  --keywords: string # keywords attached to the folder (e.g. juridique)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Name" $Name "scalar") (serialize-qp "Keywords" $Keywords "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/common-folders/all" $qp)
+  let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Keywords" $keywords "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/common-folders/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4406,8 +4406,8 @@ export def "spaces-folders-common-folders-all get" [
 #
 # GET /spaces/{spaceId}/folders/{id}/contracting-partner
 export def "spaces-folders-contracting-partner get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4419,7 +4419,7 @@ export def "spaces-folders-contracting-partner get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/contracting-partner")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/contracting-partner"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4429,8 +4429,8 @@ export def "spaces-folders-contracting-partner get" [
 #
 # GET /spaces/{spaceId}/folders/{id}/contracting-partner/space
 export def "spaces-folders-contracting-partner-space get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4442,7 +4442,7 @@ export def "spaces-folders-contracting-partner-space get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/contracting-partner/space")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/contracting-partner/space"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4452,8 +4452,8 @@ export def "spaces-folders-contracting-partner-space get" [
 #
 # GET /spaces/{spaceId}/folders/{id}/contractual-documents
 export def "spaces-folders-contractual-documents get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4462,15 +4462,15 @@ export def "spaces-folders-contractual-documents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # date range of the documents (e.g. 20160321,null)
-  --FolderDate: string # date range of attachment (e.g. 20180306,null)
-  --Type: string@Type-completer-2 # Type of the document (e.g. amendment)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # date range of the documents (e.g. 20160321,null)
+  --folder-date: string # date range of attachment (e.g. 20180306,null)
+  --type: string@type-completer-2 # Type of the document (e.g. amendment)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "FolderDate" $FolderDate "scalar") (serialize-qp "Type" $Type "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/contractual-documents" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "Type" $type "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/contractual-documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4482,8 +4482,8 @@ export def "spaces-folders-contractual-documents get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-contractual-documents post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4492,25 +4492,25 @@ export def "spaces-folders-contractual-documents post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Amount: string # e.g. 1001.36
-  --Designation: string # e.g. contrat client
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --Reference: string # e.g. 151465AFHIA
-  --StartDate: string # e.g. 20181128
-  --Type: string@Type-completer-2 # e.g. quotation
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: any # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --amount: string # e.g. 1001.36
+  --designation: string # e.g. contrat client
+  document_id: string # e.g. PBUFBAUBF1531
+  --reference: string # e.g. 151465AFHIA
+  --start-date: string # e.g. 20181128
+  --type: string@type-completer-2 # e.g. quotation
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: any # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/contractual-documents")
-  let body = {Amount: $Amount, Designation: $Designation, DocumentId: $DocumentId, Reference: $Reference, StartDate: $StartDate, Type: $Type, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/contractual-documents"))
+  let body = {"Amount": $amount, "Designation": $designation, "DocumentId": $document_id, "Reference": $reference, "StartDate": $start_date, "Type": $type, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4521,8 +4521,8 @@ export def "spaces-folders-contractual-documents post" [
 #
 # GET /spaces/{spaceId}/folders/{id}/contractual-relationship
 export def "spaces-folders-contractual-relationship get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4534,7 +4534,7 @@ export def "spaces-folders-contractual-relationship get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/contractual-relationship")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/contractual-relationship"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4544,8 +4544,8 @@ export def "spaces-folders-contractual-relationship get" [
 #
 # GET /spaces/{spaceId}/folders/{id}/coporate-tax-declarations
 export def "spaces-folders-coporate-tax-declarations get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4554,13 +4554,13 @@ export def "spaces-folders-coporate-tax-declarations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # range date of the documents (e.g. 20160321, null)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # range date of the documents (e.g. 20160321, null)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/coporate-tax-declarations" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/coporate-tax-declarations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4572,8 +4572,8 @@ export def "spaces-folders-coporate-tax-declarations get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-coporate-tax-declarations post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4582,25 +4582,25 @@ export def "spaces-folders-coporate-tax-declarations post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Amount: float # format: float, e.g. 132.63
-  --DeclarationDate: string # e.g. 20160801
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --Order: string@Order-completer # e.g. 1st advance
-  --Rate: float # format: float, e.g. 10.63
-  --TaxBase: float # format: float, e.g. 123.36
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --amount: float # format: float, e.g. 132.63
+  --declaration-date: string # e.g. 20160801
+  document_id: string # e.g. PBUFBAUBF1531
+  --order: string@order-completer # e.g. 1st advance
+  --rate: float # format: float, e.g. 10.63
+  --tax-base: float # format: float, e.g. 123.36
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/coporate-tax-declarations")
-  let body = {Amount: $Amount, DeclarationDate: $DeclarationDate, DocumentId: $DocumentId, Order: $Order, Rate: $Rate, TaxBase: $TaxBase, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/coporate-tax-declarations"))
+  let body = {"Amount": $amount, "DeclarationDate": $declaration_date, "DocumentId": $document_id, "Order": $order, "Rate": $rate, "TaxBase": $tax_base, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4611,8 +4611,8 @@ export def "spaces-folders-coporate-tax-declarations post" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/customer
 export def "spaces-folders-customer delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4624,7 +4624,7 @@ export def "spaces-folders-customer delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/customer")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/customer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4634,8 +4634,8 @@ export def "spaces-folders-customer delete" [
 #
 # GET /spaces/{spaceId}/folders/{id}/customer
 export def "spaces-folders-customer get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4647,7 +4647,7 @@ export def "spaces-folders-customer get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/customer")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/customer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4657,8 +4657,8 @@ export def "spaces-folders-customer get" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/customer
 export def "spaces-folders-customer patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4667,24 +4667,24 @@ export def "spaces-folders-customer patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --CustomerNumber: string # e.g. 13587449420F
-  --Designation: string # e.g. client pièces détachées
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --KeepOld: oneof<nothing, bool> # e.g. true
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --PortfolioId: string # e.g. T1OJFOAZ7449420F
-  --SecondaryPortfolioId: string # e.g. T1OJFOAZ7449420F
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --customer-number: string # e.g. 13587449420F
+  --designation: string # e.g. client pièces détachées
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keep-old: oneof<nothing, bool> # e.g. true
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --portfolio-id: string # e.g. T1OJFOAZ7449420F
+  --secondary-portfolio-id: string # e.g. T1OJFOAZ7449420F
+  --start: string # e.g. 20180630
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/customer")
-  let body = {About: $About, Comment: $Comment, CustomerNumber: $CustomerNumber, Designation: $Designation, End: $End, Home: $Home, KeepOld: $KeepOld, Keywords: $Keywords, Level: $Level, PortfolioId: $PortfolioId, SecondaryPortfolioId: $SecondaryPortfolioId, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/customer"))
+  let body = {"About": $about, "Comment": $comment, "CustomerNumber": $customer_number, "Designation": $designation, "End": $end, "Home": $home, "KeepOld": $keep_old, "Keywords": $keywords, "Level": $level, "PortfolioId": $portfolio_id, "SecondaryPortfolioId": $secondary_portfolio_id, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4695,8 +4695,8 @@ export def "spaces-folders-customer patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/deliveries-journal
 export def "spaces-folders-deliveries-journal get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4705,16 +4705,16 @@ export def "spaces-folders-deliveries-journal get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DeliveryDate: string # delivery dates of the document (e.g. 20191123082536,null)
-  --AccountingDate: string # accounting dates of the document (e.g. 20170215,null)
-  --Number: int # numbers of the document (e.g. 12,17)
-  --Class: string # class of the document (e.g. invoice)
-  --TargetFolderName: string # Name of the target folder of the document (e.g. Exercice*)
+  --delivery-date: string # delivery dates of the document (e.g. 20191123082536,null)
+  --accounting-date: string # accounting dates of the document (e.g. 20170215,null)
+  --number: int # numbers of the document (e.g. 12,17)
+  --class: string # class of the document (e.g. invoice)
+  --target-folder-name: string # Name of the target folder of the document (e.g. Exercice*)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "DeliveryDate" $DeliveryDate "scalar") (serialize-qp "AccountingDate" $AccountingDate "scalar") (serialize-qp "Number" $Number "scalar") (serialize-qp "Class" $Class "scalar") (serialize-qp "TargetFolderName" $TargetFolderName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/deliveries-journal" $qp)
+  let qp = [(serialize-qp "DeliveryDate" $delivery_date "scalar") (serialize-qp "AccountingDate" $accounting_date "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "Class" $class "scalar") (serialize-qp "TargetFolderName" $target_folder_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/deliveries-journal") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4724,8 +4724,8 @@ export def "spaces-folders-deliveries-journal get" [
 #
 # GET /spaces/{spaceId}/folders/{id}/documents
 export def "spaces-folders-documents get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4734,16 +4734,16 @@ export def "spaces-folders-documents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # date range of the documents (e.g. 20160321,null)
-  --Title: string # Title of the document (e.g. Facture EDF)
-  --FolderDate: string # date range of attachment (e.g. 20180306,null)
-  --Class: string # Class of document (e.g. Contract)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # date range of the documents (e.g. 20160321,null)
+  --title: string # Title of the document (e.g. Facture EDF)
+  --folder-date: string # date range of attachment (e.g. 20180306,null)
+  --class: string # Class of document (e.g. Contract)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Title" $Title "scalar") (serialize-qp "FolderDate" $FolderDate "scalar") (serialize-qp "Class" $Class "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/documents" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Title" $title "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "Class" $class "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/documents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4755,8 +4755,8 @@ export def "spaces-folders-documents get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-documents post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4765,20 +4765,20 @@ export def "spaces-folders-documents post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DocumentId: string # e.g. PBUFBAUBF1531
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --document-id: string # e.g. PBUFBAUBF1531
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/documents")
-  let body = {DocumentId: $DocumentId, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/documents"))
+  let body = {"DocumentId": $document_id, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4789,9 +4789,9 @@ export def "spaces-folders-documents post" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/documents/{documentId}/detach
 export def "spaces-folders-documents-detach patch" [
+  space_id: string
   id: string
-  spaceId: string
-  documentId: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4803,7 +4803,7 @@ export def "spaces-folders-documents-detach patch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/documents/($documentId)/detach")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{id}/documents/{document_id}/detach"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4813,8 +4813,8 @@ export def "spaces-folders-documents-detach patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/employee
 export def "spaces-folders-employee delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4826,7 +4826,7 @@ export def "spaces-folders-employee delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/employee")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/employee"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4836,8 +4836,8 @@ export def "spaces-folders-employee delete" [
 #
 # GET /spaces/{spaceId}/folders/{id}/employee
 export def "spaces-folders-employee get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4849,7 +4849,7 @@ export def "spaces-folders-employee get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/employee")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/employee"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4859,8 +4859,8 @@ export def "spaces-folders-employee get" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/employee
 export def "spaces-folders-employee patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4869,24 +4869,24 @@ export def "spaces-folders-employee patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --ContractType: string # e.g. 01
-  --EmployeeNumber: string # e.g. 13587FAZCD420F
-  --End: string # e.g. 20190101
-  --Function: string # e.g. commercial
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --PostalMail: oneof<nothing, bool> # e.g. true
-  --SSNumber: string # e.g. 1542012365985215
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --contract-type: string # e.g. 01
+  --employee-number: string # e.g. 13587FAZCD420F
+  --end: string # e.g. 20190101
+  --function: string # e.g. commercial
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --postal-mail: oneof<nothing, bool> # e.g. true
+  --ss-number: string # e.g. 1542012365985215
+  --start: string # e.g. 20180630
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/employee")
-  let body = {About: $About, Comment: $Comment, ContractType: $ContractType, EmployeeNumber: $EmployeeNumber, End: $End, Function: $Function, Home: $Home, Keywords: $Keywords, Level: $Level, PostalMail: $PostalMail, SSNumber: $SSNumber, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/employee"))
+  let body = {"About": $about, "Comment": $comment, "ContractType": $contract_type, "EmployeeNumber": $employee_number, "End": $end, "Function": $function, "Home": $home, "Keywords": $keywords, "Level": $level, "PostalMail": $postal_mail, "SSNumber": $ss_number, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4897,8 +4897,8 @@ export def "spaces-folders-employee patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/expense-proofs
 export def "spaces-folders-expense-proofs get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4907,16 +4907,16 @@ export def "spaces-folders-expense-proofs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # date range of the documents (e.g. 20160321,null)
-  --FolderDate: string # date range of attachment (e.g. 20180306,null)
-  --Status: string@Status-completer # Status of the expense proof (e.g. R)
-  --NoExpenseReport: oneof<nothing, bool> # To return expense proofs not attached to an expense report (e.g. 1)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # date range of the documents (e.g. 20160321,null)
+  --folder-date: string # date range of attachment (e.g. 20180306,null)
+  --status: string@status-completer # Status of the expense proof (e.g. R)
+  --no-expense-report: oneof<nothing, bool> # To return expense proofs not attached to an expense report (e.g. 1)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "FolderDate" $FolderDate "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "NoExpenseReport" $NoExpenseReport "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/expense-proofs" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "NoExpenseReport" $no_expense_report "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/expense-proofs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4928,8 +4928,8 @@ export def "spaces-folders-expense-proofs get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-expense-proofs post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4938,29 +4938,29 @@ export def "spaces-folders-expense-proofs post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Account: string@Account-completer # e.g. CAB
-  --ArchivalDate: string # e.g. 20211231
-  --BeforeVAT: float # e.g. 1000
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --ExpenseDate: string # e.g. 20200202
-  --ExpenseReportId: string # e.g. PFOIAHF874984
-  --Provider: string # e.g. G7
-  --Reason: string # e.g. taxi
-  --Status: string@Status-completer # e.g. R
-  --VAT: float # e.g. 19.5
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --account: string@account-completer # e.g. CAB
+  --archival-date: string # e.g. 20211231
+  --before-vat: float # e.g. 1000
+  document_id: string # e.g. PBUFBAUBF1531
+  --expense-date: string # e.g. 20200202
+  --expense-report-id: string # e.g. PFOIAHF874984
+  --provider: string # e.g. G7
+  --reason: string # e.g. taxi
+  --status: string@status-completer # e.g. R
+  --vat: float # e.g. 19.5
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/expense-proofs")
-  let body = {Account: $Account, ArchivalDate: $ArchivalDate, BeforeVAT: $BeforeVAT, DocumentId: $DocumentId, ExpenseDate: $ExpenseDate, ExpenseReportId: $ExpenseReportId, Provider: $Provider, Reason: $Reason, Status: $Status, VAT: $VAT, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/expense-proofs"))
+  let body = {"Account": $account, "ArchivalDate": $archival_date, "BeforeVAT": $before_vat, "DocumentId": $document_id, "ExpenseDate": $expense_date, "ExpenseReportId": $expense_report_id, "Provider": $provider, "Reason": $reason, "Status": $status, "VAT": $vat, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4971,8 +4971,8 @@ export def "spaces-folders-expense-proofs post" [
 #
 # GET /spaces/{spaceId}/folders/{id}/expense-reports
 export def "spaces-folders-expense-reports get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4981,19 +4981,19 @@ export def "spaces-folders-expense-reports get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # date range of the documents (e.g. 20160321,null)
-  --FolderDate: string # date range of attachment (e.g. 20180306,null)
-  --WithExtend: string@WithExtend-completer # If present returns also the data extend (e.g. true)
-  --Range: string # index range of the results (e.g. 10-19)
-  --ProcessingDate: string # range of processing date (boolean available) (e.g. 20180526,null)
-  --ExpenseDate: string # range of ExpenseDate (valid available) (e.g. 20180526,null)
-  --SortOrder: string@SortOrder-completer # order of sort (if absent default is asc) (e.g. asc)
-  --SortName: string@SortName-completer # name of value for sort (e.g. ExpenseDate)
+  --date: string # date range of the documents (e.g. 20160321,null)
+  --folder-date: string # date range of attachment (e.g. 20180306,null)
+  --with-extend: string@with-extend-completer # If present returns also the data extend (e.g. true)
+  --range: string # index range of the results (e.g. 10-19)
+  --processing-date: string # range of processing date (boolean available) (e.g. 20180526,null)
+  --expense-date: string # range of ExpenseDate (valid available) (e.g. 20180526,null)
+  --sort-order: string@sort-order-completer # order of sort (if absent default is asc) (e.g. asc)
+  --sort-name: string@sort-name-completer # name of value for sort (e.g. ExpenseDate)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "FolderDate" $FolderDate "scalar") (serialize-qp "WithExtend" $WithExtend "scalar") (serialize-qp "Range" $Range "scalar") (serialize-qp "ProcessingDate" $ProcessingDate "scalar") (serialize-qp "ExpenseDate" $ExpenseDate "scalar") (serialize-qp "SortOrder" $SortOrder "scalar") (serialize-qp "SortName" $SortName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/expense-reports" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "WithExtend" $with_extend "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "ProcessingDate" $processing_date "scalar") (serialize-qp "ExpenseDate" $expense_date "scalar") (serialize-qp "SortOrder" $sort_order "scalar") (serialize-qp "SortName" $sort_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/expense-reports") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5005,8 +5005,8 @@ export def "spaces-folders-expense-reports get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-expense-reports post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5015,25 +5015,25 @@ export def "spaces-folders-expense-reports post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --BeforeVAT: float # e.g. 1000
-  --Date: string # e.g. 20161203
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --ExpenseDate: string # e.g. 20200202
-  --InclVAT: float # e.g. 1200
-  --ProcessingDate: string # e.g. 20200203
-  --VAT: float # e.g. 19.5
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --before-vat: float # e.g. 1000
+  --date: string # e.g. 20161203
+  document_id: string # e.g. PBUFBAUBF1531
+  --expense-date: string # e.g. 20200202
+  --incl-vat: float # e.g. 1200
+  --processing-date: string # e.g. 20200203
+  --vat: float # e.g. 19.5
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/expense-reports")
-  let body = {BeforeVAT: $BeforeVAT, Date: $Date, DocumentId: $DocumentId, ExpenseDate: $ExpenseDate, InclVAT: $InclVAT, ProcessingDate: $ProcessingDate, VAT: $VAT, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/expense-reports"))
+  let body = {"BeforeVAT": $before_vat, "Date": $date, "DocumentId": $document_id, "ExpenseDate": $expense_date, "InclVAT": $incl_vat, "ProcessingDate": $processing_date, "VAT": $vat, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5044,9 +5044,9 @@ export def "spaces-folders-expense-reports post" [
 #
 # GET /spaces/{spaceId}/folders/{id}/expense-reports/{expenseReportId}/expense-proofs
 export def "spaces-folders-expense-reports-expense-proofs get" [
+  space_id: string
   id: string
-  spaceId: string
-  expenseReportId: string
+  expense_report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5055,14 +5055,14 @@ export def "spaces-folders-expense-reports-expense-proofs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # Date of the documents (YYYY or YYYYMM or YYYYMMDD) (e.g. 20160321)
-  --Status: string@Status-completer # Status of the expense proof (e.g. R)
-  --FolderDate: string # Date of upload of the document (YYYY or YYYYMM or YYYYMMDD) (e.g. 20180202000000)
+  --date: string # Date of the documents (YYYY or YYYYMM or YYYYMMDD) (e.g. 20160321)
+  --status: string@status-completer # Status of the expense proof (e.g. R)
+  --folder-date: string # Date of upload of the document (YYYY or YYYYMM or YYYYMMDD) (e.g. 20180202000000)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "FolderDate" $FolderDate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/expense-reports/($expenseReportId)/expense-proofs" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "FolderDate" $folder_date "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, expense_report_id: $expense_report_id} | format pattern "/spaces/{space_id}/folders/{id}/expense-reports/{expense_report_id}/expense-proofs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5072,8 +5072,8 @@ export def "spaces-folders-expense-reports-expense-proofs get" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/insurance
 export def "spaces-folders-insurance delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5085,7 +5085,7 @@ export def "spaces-folders-insurance delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/insurance")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/insurance"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5095,8 +5095,8 @@ export def "spaces-folders-insurance delete" [
 #
 # GET /spaces/{spaceId}/folders/{id}/insurance
 export def "spaces-folders-insurance get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5108,7 +5108,7 @@ export def "spaces-folders-insurance get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/insurance")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/insurance"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5118,8 +5118,8 @@ export def "spaces-folders-insurance get" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/insurance
 export def "spaces-folders-insurance patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5128,22 +5128,22 @@ export def "spaces-folders-insurance patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --CustomerNumber: string # e.g. 13587449420F
-  --Designation: string # e.g. client pièces détachées
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --PolicyNumber: string # e.g. 1358
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --customer-number: string # e.g. 13587449420F
+  --designation: string # e.g. client pièces détachées
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --policy-number: string # e.g. 1358
+  --start: string # e.g. 20180630
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/insurance")
-  let body = {About: $About, Comment: $Comment, CustomerNumber: $CustomerNumber, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, PolicyNumber: $PolicyNumber, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/insurance"))
+  let body = {"About": $about, "Comment": $comment, "CustomerNumber": $customer_number, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "PolicyNumber": $policy_number, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5154,8 +5154,8 @@ export def "spaces-folders-insurance patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/invoices
 export def "spaces-folders-invoices get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5164,26 +5164,26 @@ export def "spaces-folders-invoices get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Title: string # Title of the documents (e.g. factrure)
-  --Date: string # date range of the documents (e.g. 20160321,null)
-  --Number: string # Number of the invoice (e.g. 23585)
-  --InclVAT: float # amount incl. VAT (e.g. 100.50,123.69)
-  --BeforeVAT: float # amount before VAT (e.g. 102.50,123.69)
-  --DueDate: string # date due payment (e.g. 20201231,20211231)
-  --PaymentDate: string # date of payment (boolean and valid available) (e.g. 20201201,20211201)
-  --InvoiceDate: string # range date of invoice (e.g. 20201201)
-  --FolderDate: string # date range of attachment (e.g. 20180306,null)
-  --AccountedOn: string # value of AccountedOn (boolean available but not range) (e.g. 20220101)
-  --WithExtend: string # If present returns also the data extend (e.g. 202102,null)
-  --Extend: string # json object to filter extend data (e.g. [{"Name":"field1","Equals":"test"},{"Name":"field2","Start":"20180101"},{"Name":"field3","End":"20190101"}])
-  --Range: string # index range of the results (e.g. 10-19)
-  --SortOrder: string@SortOrder-completer # order of sort (if absent default is asc) (e.g. asc)
-  --SortName: string@SortName-completer-1 # name of value for sort (e.g. PaymentDate)
+  --title: string # Title of the documents (e.g. factrure)
+  --date: string # date range of the documents (e.g. 20160321,null)
+  --number: string # Number of the invoice (e.g. 23585)
+  --incl-vat: float # amount incl. VAT (e.g. 100.50,123.69)
+  --before-vat: float # amount before VAT (e.g. 102.50,123.69)
+  --due-date: string # date due payment (e.g. 20201231,20211231)
+  --payment-date: string # date of payment (boolean and valid available) (e.g. 20201201,20211201)
+  --invoice-date: string # range date of invoice (e.g. 20201201)
+  --folder-date: string # date range of attachment (e.g. 20180306,null)
+  --accounted-on: string # value of AccountedOn (boolean available but not range) (e.g. 20220101)
+  --with-extend: string # If present returns also the data extend (e.g. 202102,null)
+  --extend: string # json object to filter extend data (e.g. [{"Name":"field1","Equals":"test"},{"Name":"field2","Start":"20180101"},{"Name":"field3","End":"20190101"}])
+  --range: string # index range of the results (e.g. 10-19)
+  --sort-order: string@sort-order-completer # order of sort (if absent default is asc) (e.g. asc)
+  --sort-name: string@sort-name-completer-1 # name of value for sort (e.g. PaymentDate)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Title" $Title "scalar") (serialize-qp "Date" $Date "scalar") (serialize-qp "Number" $Number "scalar") (serialize-qp "InclVAT" $InclVAT "scalar") (serialize-qp "BeforeVAT" $BeforeVAT "scalar") (serialize-qp "DueDate" $DueDate "scalar") (serialize-qp "PaymentDate" $PaymentDate "scalar") (serialize-qp "InvoiceDate" $InvoiceDate "scalar") (serialize-qp "FolderDate" $FolderDate "scalar") (serialize-qp "AccountedOn" $AccountedOn "scalar") (serialize-qp "WithExtend" $WithExtend "scalar") (serialize-qp "Extend" $Extend "scalar") (serialize-qp "Range" $Range "scalar") (serialize-qp "SortOrder" $SortOrder "scalar") (serialize-qp "SortName" $SortName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/invoices" $qp)
+  let qp = [(serialize-qp "Title" $title "scalar") (serialize-qp "Date" $date "scalar") (serialize-qp "Number" $number "scalar") (serialize-qp "InclVAT" $incl_vat "scalar") (serialize-qp "BeforeVAT" $before_vat "scalar") (serialize-qp "DueDate" $due_date "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "InvoiceDate" $invoice_date "scalar") (serialize-qp "FolderDate" $folder_date "scalar") (serialize-qp "AccountedOn" $accounted_on "scalar") (serialize-qp "WithExtend" $with_extend "scalar") (serialize-qp "Extend" $extend "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "SortOrder" $sort_order "scalar") (serialize-qp "SortName" $sort_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5195,8 +5195,8 @@ export def "spaces-folders-invoices get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-invoices post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5205,28 +5205,28 @@ export def "spaces-folders-invoices post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --BeforeVAT: float # e.g. 1000
-  --Date: string # e.g. 20161203
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --DueDate: string # e.g. 20190130
-  --InclVAT: float # e.g. 1200
-  --InvoiceDate: string # e.g. 20200202
-  --Number: string # e.g. 036459879874
-  --PaymentDate: string # e.g. 20190131
-  --Type: string@Type-completer-3 # e.g. commercial-invoice
-  --VAT: float # e.g. 19.5
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --before-vat: float # e.g. 1000
+  --date: string # e.g. 20161203
+  document_id: string # e.g. PBUFBAUBF1531
+  --due-date: string # e.g. 20190130
+  --incl-vat: float # e.g. 1200
+  --invoice-date: string # e.g. 20200202
+  --number: string # e.g. 036459879874
+  --payment-date: string # e.g. 20190131
+  --type: string@type-completer-3 # e.g. commercial-invoice
+  --vat: float # e.g. 19.5
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/invoices")
-  let body = {BeforeVAT: $BeforeVAT, Date: $Date, DocumentId: $DocumentId, DueDate: $DueDate, InclVAT: $InclVAT, InvoiceDate: $InvoiceDate, Number: $Number, PaymentDate: $PaymentDate, Type: $Type, VAT: $VAT, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/invoices"))
+  let body = {"BeforeVAT": $before_vat, "Date": $date, "DocumentId": $document_id, "DueDate": $due_date, "InclVAT": $incl_vat, "InvoiceDate": $invoice_date, "Number": $number, "PaymentDate": $payment_date, "Type": $type, "VAT": $vat, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5237,8 +5237,8 @@ export def "spaces-folders-invoices post" [
 #
 # GET /spaces/{spaceId}/folders/{id}/legal-entity
 export def "spaces-folders-legal-entity get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5250,7 +5250,7 @@ export def "spaces-folders-legal-entity get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/legal-entity")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/legal-entity"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5260,8 +5260,8 @@ export def "spaces-folders-legal-entity get" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/loan
 export def "spaces-folders-loan delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5273,7 +5273,7 @@ export def "spaces-folders-loan delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/loan")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/loan"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5283,8 +5283,8 @@ export def "spaces-folders-loan delete" [
 #
 # GET /spaces/{spaceId}/folders/{id}/loan
 export def "spaces-folders-loan get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5296,7 +5296,7 @@ export def "spaces-folders-loan get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/loan")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/loan"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5306,8 +5306,8 @@ export def "spaces-folders-loan get" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/loan
 export def "spaces-folders-loan patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5316,26 +5316,26 @@ export def "spaces-folders-loan patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Amount: float # format: float, e.g. 1000
-  --Category: string@Category-completer # e.g. debt spreading
-  --Comment: string # e.g. pieces company
-  --Designation: string # e.g. emprunt entreprise
-  --DueAmount: float # format: float, e.g. 1000.6
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --MonthsNumber: float # e.g. 12
-  --Rate: float # format: float, e.g. 2.5
-  --Start: string # e.g. 20180630
-  --TotalCost: float # format: float, e.g. 10200
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --amount: float # format: float, e.g. 1000
+  --category: string@category-completer # e.g. debt spreading
+  --comment: string # e.g. pieces company
+  --designation: string # e.g. emprunt entreprise
+  --due-amount: float # format: float, e.g. 1000.6
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --months-number: float # e.g. 12
+  --rate: float # format: float, e.g. 2.5
+  --start: string # e.g. 20180630
+  --total-cost: float # format: float, e.g. 10200
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/loan")
-  let body = {About: $About, Amount: $Amount, Category: $Category, Comment: $Comment, Designation: $Designation, DueAmount: $DueAmount, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, MonthsNumber: $MonthsNumber, Rate: $Rate, Start: $Start, TotalCost: $TotalCost} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/loan"))
+  let body = {"About": $about, "Amount": $amount, "Category": $category, "Comment": $comment, "Designation": $designation, "DueAmount": $due_amount, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "MonthsNumber": $months_number, "Rate": $rate, "Start": $start, "TotalCost": $total_cost} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5346,7 +5346,7 @@ export def "spaces-folders-loan patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/messages
 export def "spaces-folders-messages list" [
-  spaceId: string
+  space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5356,14 +5356,14 @@ export def "spaces-folders-messages list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Text: string # Name of the message (e.g. *welcom*)
-  --Range: string # index range of the results (e.g. 10-19)
-  --MessageDate: string # date of the message (e.g. 20190202)
+  --text: string # Name of the message (e.g. *welcom*)
+  --range: string # index range of the results (e.g. 10-19)
+  --message-date: string # date of the message (e.g. 20190202)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Text" $Text "scalar") (serialize-qp "Range" $Range "scalar") (serialize-qp "MessageDate" $MessageDate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/messages" $qp)
+  let qp = [(serialize-qp "Text" $text "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "MessageDate" $message_date "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5374,8 +5374,8 @@ export def "spaces-folders-messages list" [
 # POST /spaces/{spaceId}/folders/{id}/messages
 # --Notify shape: {How?: "std"|"mail"|"sms", MemberIds?: list}
 export def "spaces-folders-messages post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5384,16 +5384,16 @@ export def "spaces-folders-messages post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Level: string@Level-completer-1 # e.g. confidential
-  --MessageDate: string # e.g. 20160203
-  --Notify: record # shape: {How?: "std"|"mail"|"sms", MemberIds?: list}
-  Text: string # e.g. <p> hello world </p>
+  --level: string@level-completer-1 # e.g. confidential
+  --message-date: string # e.g. 20160203
+  --notify: record # shape: {How?: "std"|"mail"|"sms", MemberIds?: list}
+  text: string # e.g. <p> hello world </p>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/messages")
-  let body = {Level: $Level, MessageDate: $MessageDate, Notify: $Notify, Text: $Text} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/messages"))
+  let body = {"Level": $level, "MessageDate": $message_date, "Notify": $notify, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5404,9 +5404,9 @@ export def "spaces-folders-messages post" [
 #
 # GET /spaces/{spaceId}/folders/{id}/messages/{messageId}
 export def "spaces-folders-messages get" [
+  space_id: string
   id: string
-  spaceId: string
-  messageId: string
+  message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5418,7 +5418,7 @@ export def "spaces-folders-messages get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/messages/($messageId)")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, message_id: $message_id} | format pattern "/spaces/{space_id}/folders/{id}/messages/{message_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5429,9 +5429,9 @@ export def "spaces-folders-messages get" [
 # PATCH /spaces/{spaceId}/folders/{id}/messages/{messageId}
 # --Notify shape: {How?: "std"|"mail"|"sms", MemberIds?: list}
 export def "spaces-folders-messages patch" [
+  space_id: string
   id: string
-  spaceId: string
-  messageId: string
+  message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5440,16 +5440,16 @@ export def "spaces-folders-messages patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Level: string@Level-completer-1 # e.g. confidential
-  --MessageDate: string # e.g. 20160203
-  --Notify: record # shape: {How?: "std"|"mail"|"sms", MemberIds?: list}
-  --Text: string # e.g. <p> hello world </p>
+  --level: string@level-completer-1 # e.g. confidential
+  --message-date: string # e.g. 20160203
+  --notify: record # shape: {How?: "std"|"mail"|"sms", MemberIds?: list}
+  --text: string # e.g. <p> hello world </p>
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/messages/($messageId)")
-  let body = {Level: $Level, MessageDate: $MessageDate, Notify: $Notify, Text: $Text} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, message_id: $message_id} | format pattern "/spaces/{space_id}/folders/{id}/messages/{message_id}"))
+  let body = {"Level": $level, "MessageDate": $message_date, "Notify": $notify, "Text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5460,8 +5460,8 @@ export def "spaces-folders-messages patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/nominative-social-declarations
 export def "spaces-folders-nominative-social-declarations list" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5470,13 +5470,13 @@ export def "spaces-folders-nominative-social-declarations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # range date of the documents (e.g. 20160321, null)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # range date of the documents (e.g. 20160321, null)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/nominative-social-declarations" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/nominative-social-declarations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5486,8 +5486,8 @@ export def "spaces-folders-nominative-social-declarations list" [
 #
 # GET /spaces/{spaceId}/folders/{id}/other-taxes
 export def "spaces-folders-other-taxes get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5496,13 +5496,13 @@ export def "spaces-folders-other-taxes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # range date of the documents (e.g. 20160321, null)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # range date of the documents (e.g. 20160321, null)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/other-taxes" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/other-taxes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5514,8 +5514,8 @@ export def "spaces-folders-other-taxes get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-other-taxes post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5524,23 +5524,23 @@ export def "spaces-folders-other-taxes post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Amount: float # format: float, e.g. 132.63
-  --DeclarationDate: string # e.g. 20160801
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --Reference: string # e.g. décla CFE
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --amount: float # format: float, e.g. 132.63
+  --declaration-date: string # e.g. 20160801
+  document_id: string # e.g. PBUFBAUBF1531
+  --reference: string # e.g. décla CFE
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/other-taxes")
-  let body = {Amount: $Amount, DeclarationDate: $DeclarationDate, DocumentId: $DocumentId, Reference: $Reference, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/other-taxes"))
+  let body = {"Amount": $amount, "DeclarationDate": $declaration_date, "DocumentId": $document_id, "Reference": $reference, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5551,7 +5551,7 @@ export def "spaces-folders-other-taxes post" [
 #
 # GET /spaces/{spaceId}/folders/{id}/passwords
 export def "spaces-folders-passwords list" [
-  spaceId: string
+  space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5564,7 +5564,7 @@ export def "spaces-folders-passwords list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/passwords")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/passwords"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5574,8 +5574,8 @@ export def "spaces-folders-passwords list" [
 #
 # POST /spaces/{spaceId}/folders/{id}/passwords
 export def "spaces-folders-passwords post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5584,17 +5584,17 @@ export def "spaces-folders-passwords post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Comment: string # e.g. mon compte google
-  Designation: string # e.g. compte google
-  --Ident: string # e.g. test
-  --Link: string # e.g. www.google.fr
-  --Password: string # e.g. azerty
+  --comment: string # e.g. mon compte google
+  designation: string # e.g. compte google
+  --ident: string # e.g. test
+  --link: string # e.g. www.google.fr
+  --password: string # e.g. azerty
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/passwords")
-  let body = {Comment: $Comment, Designation: $Designation, Ident: $Ident, Link: $Link, Password: $Password} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/passwords"))
+  let body = {"Comment": $comment, "Designation": $designation, "Ident": $ident, "Link": $link, "Password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5605,9 +5605,9 @@ export def "spaces-folders-passwords post" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/passwords/{passwordId}
 export def "spaces-folders-passwords delete" [
+  space_id: string
   id: string
-  spaceId: string
-  passwordId: string
+  password_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5619,7 +5619,7 @@ export def "spaces-folders-passwords delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/passwords/($passwordId)")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, password_id: $password_id} | format pattern "/spaces/{space_id}/folders/{id}/passwords/{password_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5629,9 +5629,9 @@ export def "spaces-folders-passwords delete" [
 #
 # GET /spaces/{spaceId}/folders/{id}/passwords/{passwordId}
 export def "spaces-folders-passwords get" [
+  space_id: string
   id: string
-  spaceId: string
-  passwordId: string
+  password_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5643,7 +5643,7 @@ export def "spaces-folders-passwords get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/passwords/($passwordId)")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, password_id: $password_id} | format pattern "/spaces/{space_id}/folders/{id}/passwords/{password_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5653,9 +5653,9 @@ export def "spaces-folders-passwords get" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/passwords/{passwordId}
 export def "spaces-folders-passwords patch" [
+  space_id: string
   id: string
-  spaceId: string
-  passwordId: string
+  password_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5664,17 +5664,17 @@ export def "spaces-folders-passwords patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Comment: string # e.g. mon compte google
-  --Designation: string # e.g. compte google
-  --Ident: string # e.g. test
-  --Link: string # e.g. www.google.fr
-  --Password: string # e.g. azerty
+  --comment: string # e.g. mon compte google
+  --designation: string # e.g. compte google
+  --ident: string # e.g. test
+  --link: string # e.g. www.google.fr
+  --password: string # e.g. azerty
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/passwords/($passwordId)")
-  let body = {Comment: $Comment, Designation: $Designation, Ident: $Ident, Link: $Link, Password: $Password} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, password_id: $password_id} | format pattern "/spaces/{space_id}/folders/{id}/passwords/{password_id}"))
+  let body = {"Comment": $comment, "Designation": $designation, "Ident": $ident, "Link": $link, "Password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5685,8 +5685,8 @@ export def "spaces-folders-passwords patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/payrolls
 export def "spaces-folders-payrolls get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5695,15 +5695,15 @@ export def "spaces-folders-payrolls get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # range date of the documents (e.g. 20160321, null)
-  --Begin: string # begin date of the payrolls (e.g. 20160321,null)
-  --End: string # end date of the payrolls (e.g. 20160321,null)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # range date of the documents (e.g. 20160321, null)
+  --begin: string # begin date of the payrolls (e.g. 20160321,null)
+  --end: string # end date of the payrolls (e.g. 20160321,null)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Begin" $Begin "scalar") (serialize-qp "End" $End "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/payrolls" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Begin" $begin "scalar") (serialize-qp "End" $end "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/payrolls") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5715,8 +5715,8 @@ export def "spaces-folders-payrolls get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-payrolls post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5725,26 +5725,26 @@ export def "spaces-folders-payrolls post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Begin: string # e.g. 20160801
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --EmployeeContributions: float # format: float, e.g. 1352.63
-  --EmployerContributions: float # format: float, e.g. 132.63
-  --End: string # e.g. 20160831
-  --NetAmount: float # format: float, e.g. 1005.63
-  --TotalGrossAmount: float # format: float, e.g. 1548.63
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --begin: string # e.g. 20160801
+  document_id: string # e.g. PBUFBAUBF1531
+  --employee-contributions: float # format: float, e.g. 1352.63
+  --employer-contributions: float # format: float, e.g. 132.63
+  --end: string # e.g. 20160831
+  --net-amount: float # format: float, e.g. 1005.63
+  --total-gross-amount: float # format: float, e.g. 1548.63
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/payrolls")
-  let body = {Begin: $Begin, DocumentId: $DocumentId, EmployeeContributions: $EmployeeContributions, EmployerContributions: $EmployerContributions, End: $End, NetAmount: $NetAmount, TotalGrossAmount: $TotalGrossAmount, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/payrolls"))
+  let body = {"Begin": $begin, "DocumentId": $document_id, "EmployeeContributions": $employee_contributions, "EmployerContributions": $employer_contributions, "End": $end, "NetAmount": $net_amount, "TotalGrossAmount": $total_gross_amount, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5755,9 +5755,9 @@ export def "spaces-folders-payrolls post" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/payrolls/{payrollId}/nominative-social-declaration
 export def "spaces-folders-payrolls-nominative-social-declaration delete" [
+  space_id: string
   id: string
-  spaceId: string
-  payrollId: string
+  payroll_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5769,7 +5769,7 @@ export def "spaces-folders-payrolls-nominative-social-declaration delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/payrolls/($payrollId)/nominative-social-declaration")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, payroll_id: $payroll_id} | format pattern "/spaces/{space_id}/folders/{id}/payrolls/{payroll_id}/nominative-social-declaration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5781,9 +5781,9 @@ export def "spaces-folders-payrolls-nominative-social-declaration delete" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-payrolls-nominative-social-declaration post" [
+  space_id: string
   id: string
-  spaceId: string
-  payrollId: string
+  payroll_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5792,20 +5792,20 @@ export def "spaces-folders-payrolls-nominative-social-declaration post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DocumentId: string # e.g. PBUFBAUBF1531
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --document-id: string # e.g. PBUFBAUBF1531
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/payrolls/($payrollId)/nominative-social-declaration")
-  let body = {DocumentId: $DocumentId, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, payroll_id: $payroll_id} | format pattern "/spaces/{space_id}/folders/{id}/payrolls/{payroll_id}/nominative-social-declaration"))
+  let body = {"DocumentId": $document_id, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5816,8 +5816,8 @@ export def "spaces-folders-payrolls-nominative-social-declaration post" [
 #
 # GET /spaces/{spaceId}/folders/{id}/payslips
 export def "spaces-folders-payslips get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5826,13 +5826,13 @@ export def "spaces-folders-payslips get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # range date of the documents (e.g. 20160321, null)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # range date of the documents (e.g. 20160321, null)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/payslips" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/payslips") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5844,8 +5844,8 @@ export def "spaces-folders-payslips get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-payslips post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5854,29 +5854,29 @@ export def "spaces-folders-payslips post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Begin: string # e.g. 20160801
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --EmployeeContributions: float # format: float, e.g. 2000.5
-  --EmployerContributions: float # format: float, e.g. 400.5
-  --End: string # e.g. 20160831
-  --FixedGrossAmount: float # format: float, e.g. 1352.63
-  --NetAmount: float # format: float, e.g. 1005.63
-  --TotalGrossAmount: float # format: float, e.g. 1548.63
-  --Vacation: float # format: float, e.g. 20.5
-  --VariableGrossAmount: float # format: float, e.g. 132.63
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --begin: string # e.g. 20160801
+  document_id: string # e.g. PBUFBAUBF1531
+  --employee-contributions: float # format: float, e.g. 2000.5
+  --employer-contributions: float # format: float, e.g. 400.5
+  --end: string # e.g. 20160831
+  --fixed-gross-amount: float # format: float, e.g. 1352.63
+  --net-amount: float # format: float, e.g. 1005.63
+  --total-gross-amount: float # format: float, e.g. 1548.63
+  --vacation: float # format: float, e.g. 20.5
+  --variable-gross-amount: float # format: float, e.g. 132.63
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/payslips")
-  let body = {Begin: $Begin, DocumentId: $DocumentId, EmployeeContributions: $EmployeeContributions, EmployerContributions: $EmployerContributions, End: $End, FixedGrossAmount: $FixedGrossAmount, NetAmount: $NetAmount, TotalGrossAmount: $TotalGrossAmount, Vacation: $Vacation, VariableGrossAmount: $VariableGrossAmount, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/payslips"))
+  let body = {"Begin": $begin, "DocumentId": $document_id, "EmployeeContributions": $employee_contributions, "EmployerContributions": $employer_contributions, "End": $end, "FixedGrossAmount": $fixed_gross_amount, "NetAmount": $net_amount, "TotalGrossAmount": $total_gross_amount, "Vacation": $vacation, "VariableGrossAmount": $variable_gross_amount, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5887,9 +5887,9 @@ export def "spaces-folders-payslips post" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/portfolio/{portfolioId}
 export def "spaces-folders-portfolio delete" [
+  space_id: string
   id: string
-  spaceId: string
-  portfolioId: string
+  portfolio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5901,7 +5901,7 @@ export def "spaces-folders-portfolio delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/portfolio/($portfolioId)")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, portfolio_id: $portfolio_id} | format pattern "/spaces/{space_id}/folders/{id}/portfolio/{portfolio_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5911,8 +5911,8 @@ export def "spaces-folders-portfolio delete" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/professional-vehicle
 export def "spaces-folders-professional-vehicle delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5924,7 +5924,7 @@ export def "spaces-folders-professional-vehicle delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/professional-vehicle")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/professional-vehicle"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5934,8 +5934,8 @@ export def "spaces-folders-professional-vehicle delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/professional-vehicle
 export def "spaces-folders-professional-vehicle patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5944,27 +5944,27 @@ export def "spaces-folders-professional-vehicle patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Brand: string # e.g. Renault
-  --Comment: string # e.g. Peugeot Lyon
-  --CompanyTax: oneof<nothing, bool> # e.g. true
-  --DateIn: string # e.g. 20201802
-  --DateOut: string # e.g. 20201802
-  --Designation: string # e.g. peugeot siège
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, clio]
-  --Level: string@Level-completer # e.g. confidential
-  --Model: string # e.g. Clio
-  --RegistrationDate: string # e.g. 20181231
-  --RegistrationNumber: string # e.g. AA001AA
-  --Type: string # e.g. car
-  --Value: float # e.g. 1500.23
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --brand: string # e.g. Renault
+  --comment: string # e.g. Peugeot Lyon
+  --company-tax: oneof<nothing, bool> # e.g. true
+  --date-in: string # e.g. 20201802
+  --date-out: string # e.g. 20201802
+  --designation: string # e.g. peugeot siège
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, clio]
+  --level: string@level-completer # e.g. confidential
+  --model: string # e.g. Clio
+  --registration-date: string # e.g. 20181231
+  --registration-number: string # e.g. AA001AA
+  --type: string # e.g. car
+  --value: float # e.g. 1500.23
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/professional-vehicle")
-  let body = {About: $About, Brand: $Brand, Comment: $Comment, CompanyTax: $CompanyTax, DateIn: $DateIn, DateOut: $DateOut, Designation: $Designation, Home: $Home, Keywords: $Keywords, Level: $Level, Model: $Model, RegistrationDate: $RegistrationDate, RegistrationNumber: $RegistrationNumber, Type: $Type, Value: $Value} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/professional-vehicle"))
+  let body = {"About": $about, "Brand": $brand, "Comment": $comment, "CompanyTax": $company_tax, "DateIn": $date_in, "DateOut": $date_out, "Designation": $designation, "Home": $home, "Keywords": $keywords, "Level": $level, "Model": $model, "RegistrationDate": $registration_date, "RegistrationNumber": $registration_number, "Type": $type, "Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5975,8 +5975,8 @@ export def "spaces-folders-professional-vehicle patch" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/provider
 export def "spaces-folders-provider delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5988,7 +5988,7 @@ export def "spaces-folders-provider delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/provider")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/provider"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5998,8 +5998,8 @@ export def "spaces-folders-provider delete" [
 #
 # GET /spaces/{spaceId}/folders/{id}/provider
 export def "spaces-folders-provider get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6011,7 +6011,7 @@ export def "spaces-folders-provider get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/provider")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/provider"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6021,8 +6021,8 @@ export def "spaces-folders-provider get" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/provider
 export def "spaces-folders-provider patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6031,21 +6031,21 @@ export def "spaces-folders-provider patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --Designation: string # e.g. client pièces détachées
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --ProviderNumber: string # e.g. 13587449420F
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --designation: string # e.g. client pièces détachées
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --provider-number: string # e.g. 13587449420F
+  --start: string # e.g. 20180630
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/provider")
-  let body = {About: $About, Comment: $Comment, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, ProviderNumber: $ProviderNumber, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/provider"))
+  let body = {"About": $about, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "ProviderNumber": $provider_number, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6056,8 +6056,8 @@ export def "spaces-folders-provider patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/required-documents
 export def "spaces-folders-required-documents get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6069,7 +6069,7 @@ export def "spaces-folders-required-documents get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/required-documents")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/required-documents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6079,8 +6079,8 @@ export def "spaces-folders-required-documents get" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}
 export def "spaces-folders-required-documents patch" [
+  space_id: string
   id: string
-  spaceId: string
   requireddocumentid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6090,13 +6090,13 @@ export def "spaces-folders-required-documents patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Status: string@Status-completer-1 # e.g. waiting
+  --status: string@status-completer-1 # e.g. waiting
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/required-documents/($requireddocumentid)")
-  let body = {Status: $Status} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, requireddocumentid: $requireddocumentid} | format pattern "/spaces/{space_id}/folders/{id}/required-documents/{requireddocumentid}"))
+  let body = {"Status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6108,8 +6108,8 @@ export def "spaces-folders-required-documents patch" [
 # POST /spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-required-documents post" [
+  space_id: string
   id: string
-  spaceId: string
   requireddocumentid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6119,13 +6119,13 @@ export def "spaces-folders-required-documents post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  File: record # shape: {Content64Encoded?: string, Name?: string}
+  file: record # shape: {Content64Encoded?: string, Name?: string}
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/required-documents/($requireddocumentid)")
-  let body = {File: $File} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, requireddocumentid: $requireddocumentid} | format pattern "/spaces/{space_id}/folders/{id}/required-documents/{requireddocumentid}"))
+  let body = {"File": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6136,10 +6136,10 @@ export def "spaces-folders-required-documents post" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/required-documents/{requireddocumentid}/documents/{documentId}
 export def "spaces-folders-required-documents-documents delete" [
+  space_id: string
   id: string
-  spaceId: string
   requireddocumentid: string
-  documentId: string
+  document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6151,7 +6151,7 @@ export def "spaces-folders-required-documents-documents delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/required-documents/($requireddocumentid)/documents/($documentId)")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, requireddocumentid: $requireddocumentid, document_id: $document_id} | format pattern "/spaces/{space_id}/folders/{id}/required-documents/{requireddocumentid}/documents/{document_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6161,8 +6161,8 @@ export def "spaces-folders-required-documents-documents delete" [
 #
 # GET /spaces/{spaceId}/folders/{id}/sections
 export def "spaces-folders-sections get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6174,7 +6174,7 @@ export def "spaces-folders-sections get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/sections")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/sections"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6184,8 +6184,8 @@ export def "spaces-folders-sections get" [
 #
 # GET /spaces/{spaceId}/folders/{id}/social-contracts
 export def "spaces-folders-social-contracts get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6194,13 +6194,13 @@ export def "spaces-folders-social-contracts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # range date of the documents (e.g. 20160321, null)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # range date of the documents (e.g. 20160321, null)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/social-contracts" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/social-contracts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6212,8 +6212,8 @@ export def "spaces-folders-social-contracts get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-social-contracts post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6222,25 +6222,25 @@ export def "spaces-folders-social-contracts post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ContractDate: string # e.g. 20190202
-  --ContractDuration: string # e.g. 6 mois
-  --ContractualChange: string # e.g. augmentation
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --Position: string # e.g. cadre
-  --WageDevelopments: float # format: float, e.g. 1548.63
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --contract-date: string # e.g. 20190202
+  --contract-duration: string # e.g. 6 mois
+  --contractual-change: string # e.g. augmentation
+  document_id: string # e.g. PBUFBAUBF1531
+  --position: string # e.g. cadre
+  --wage-developments: float # format: float, e.g. 1548.63
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/social-contracts")
-  let body = {ContractDate: $ContractDate, ContractDuration: $ContractDuration, ContractualChange: $ContractualChange, DocumentId: $DocumentId, Position: $Position, WageDevelopments: $WageDevelopments, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/social-contracts"))
+  let body = {"ContractDate": $contract_date, "ContractDuration": $contract_duration, "ContractualChange": $contractual_change, "DocumentId": $document_id, "Position": $position, "WageDevelopments": $wage_developments, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6251,8 +6251,8 @@ export def "spaces-folders-social-contracts post" [
 #
 # GET /spaces/{spaceId}/folders/{id}/social-declarations
 export def "spaces-folders-social-declarations get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6261,13 +6261,13 @@ export def "spaces-folders-social-declarations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # range date of the documents (e.g. 20160321, null)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # range date of the documents (e.g. 20160321, null)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/social-declarations" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/social-declarations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6279,8 +6279,8 @@ export def "spaces-folders-social-declarations get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-social-declarations post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6289,22 +6289,22 @@ export def "spaces-folders-social-declarations post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Amount: float # format: float, e.g. 132.63
-  --DeclarationDate: string # e.g. 20160801
-  DocumentId: string # e.g. PBUFBAUBF1531
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --amount: float # format: float, e.g. 132.63
+  --declaration-date: string # e.g. 20160801
+  document_id: string # e.g. PBUFBAUBF1531
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/social-declarations")
-  let body = {Amount: $Amount, DeclarationDate: $DeclarationDate, DocumentId: $DocumentId, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/social-declarations"))
+  let body = {"Amount": $amount, "DeclarationDate": $declaration_date, "DocumentId": $document_id, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6315,8 +6315,8 @@ export def "spaces-folders-social-declarations post" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/social-regimes
 export def "spaces-folders-social-regimes delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6328,7 +6328,7 @@ export def "spaces-folders-social-regimes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/social-regimes")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/social-regimes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6338,8 +6338,8 @@ export def "spaces-folders-social-regimes delete" [
 #
 # GET /spaces/{spaceId}/folders/{id}/social-regimes
 export def "spaces-folders-social-regimes get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6351,7 +6351,7 @@ export def "spaces-folders-social-regimes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/social-regimes")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/social-regimes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6361,8 +6361,8 @@ export def "spaces-folders-social-regimes get" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/social-regimes
 export def "spaces-folders-social-regimes patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6371,22 +6371,22 @@ export def "spaces-folders-social-regimes patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --Designation: string # e.g. client pièces détachées
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --Periodicity: string@Periodicity-completer # e.g. monthly
-  --Start: string # e.g. 20180630
-  --Type: string@Type-completer-4 # e.g. mandatory
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --designation: string # e.g. client pièces détachées
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --periodicity: string@periodicity-completer # e.g. monthly
+  --start: string # e.g. 20180630
+  --type: string@type-completer-4 # e.g. mandatory
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/social-regimes")
-  let body = {About: $About, Comment: $Comment, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, Periodicity: $Periodicity, Start: $Start, Type: $Type} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/social-regimes"))
+  let body = {"About": $about, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Periodicity": $periodicity, "Start": $start, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6397,8 +6397,8 @@ export def "spaces-folders-social-regimes patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/sum-invoices
 export def "spaces-folders-sum-invoices get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6407,17 +6407,17 @@ export def "spaces-folders-sum-invoices get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Number: string # Number of the invoice (e.g. 23585)
-  --InclVat: float # amount incl. VAT (e.g. 100.50,101.50)
-  --BeforeVAT: float # amount before VAT (e.g. 102.50,101.50)
-  --DueDate: string # range date due payment (e.g. 20201231)
-  --PaymentDate: string # range date of payment (e.g. 20201201,null)
-  --InvoiceDate: string # range date of invoice (e.g. 20201201,null)
+  --number: string # Number of the invoice (e.g. 23585)
+  --incl-vat: float # amount incl. VAT (e.g. 100.50,101.50)
+  --before-vat: float # amount before VAT (e.g. 102.50,101.50)
+  --due-date: string # range date due payment (e.g. 20201231)
+  --payment-date: string # range date of payment (e.g. 20201201,null)
+  --invoice-date: string # range date of invoice (e.g. 20201201,null)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Number" $Number "scalar") (serialize-qp "InclVat" $InclVat "scalar") (serialize-qp "BeforeVAT" $BeforeVAT "scalar") (serialize-qp "DueDate" $DueDate "scalar") (serialize-qp "PaymentDate" $PaymentDate "scalar") (serialize-qp "InvoiceDate" $InvoiceDate "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/sum-invoices" $qp)
+  let qp = [(serialize-qp "Number" $number "scalar") (serialize-qp "InclVat" $incl_vat "scalar") (serialize-qp "BeforeVAT" $before_vat "scalar") (serialize-qp "DueDate" $due_date "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "InvoiceDate" $invoice_date "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/sum-invoices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6427,8 +6427,8 @@ export def "spaces-folders-sum-invoices get" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/tax-contract
 export def "spaces-folders-tax-contract delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6440,7 +6440,7 @@ export def "spaces-folders-tax-contract delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/tax-contract")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/tax-contract"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6450,8 +6450,8 @@ export def "spaces-folders-tax-contract delete" [
 #
 # PATCH /spaces/{spaceId}/folders/{id}/tax-contract
 export def "spaces-folders-tax-contract patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6460,21 +6460,21 @@ export def "spaces-folders-tax-contract patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --ArchivalDate: string # e.g. 20160203
-  --Comment: string # e.g. pieces company
-  --Designation: string # e.g. taxes foncières
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --archival-date: string # e.g. 20160203
+  --comment: string # e.g. pieces company
+  --designation: string # e.g. taxes foncières
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --start: string # e.g. 20180630
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/tax-contract")
-  let body = {About: $About, ArchivalDate: $ArchivalDate, Comment: $Comment, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/tax-contract"))
+  let body = {"About": $about, "ArchivalDate": $archival_date, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6485,8 +6485,8 @@ export def "spaces-folders-tax-contract patch" [
 #
 # GET /spaces/{spaceId}/folders/{id}/vat-declarations
 export def "spaces-folders-vat-declarations get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6495,13 +6495,13 @@ export def "spaces-folders-vat-declarations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # range date of the documents (e.g. 20160321, null)
-  --Range: string # index range of the results (e.g. 10-19)
+  --date: string # range date of the documents (e.g. 20160321, null)
+  --range: string # index range of the results (e.g. 10-19)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar") (serialize-qp "Range" $Range "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/vat-declarations" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar") (serialize-qp "Range" $range "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/vat-declarations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6513,8 +6513,8 @@ export def "spaces-folders-vat-declarations get" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders-vat-declarations post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6523,29 +6523,29 @@ export def "spaces-folders-vat-declarations post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Begin: string # e.g. 20160801
-  --CollectedVAT: float # format: float, e.g. 1548.63
-  --CreditVAT: float # format: float, e.g. 400.5
-  --DeductibleVAT: float # format: float, e.g. 20.5
-  DocumentId: string # e.g. PBUFBAUBF1531
-  End: string # e.g. 20160831
-  --ExemptTurnover: float # format: float, e.g. 132.63
-  --Number: string # e.g. 153126
-  --PayableVAT: float # format: float, e.g. 2000.5
-  --TaxableTurnover: float # format: float, e.g. 1352.63
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --begin: string # e.g. 20160801
+  --collected-vat: float # format: float, e.g. 1548.63
+  --credit-vat: float # format: float, e.g. 400.5
+  --deductible-vat: float # format: float, e.g. 20.5
+  document_id: string # e.g. PBUFBAUBF1531
+  end: string # e.g. 20160831
+  --exempt-turnover: float # format: float, e.g. 132.63
+  --number: string # e.g. 153126
+  --payable-vat: float # format: float, e.g. 2000.5
+  --taxable-turnover: float # format: float, e.g. 1352.63
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/vat-declarations")
-  let body = {Begin: $Begin, CollectedVAT: $CollectedVAT, CreditVAT: $CreditVAT, DeductibleVAT: $DeductibleVAT, DocumentId: $DocumentId, End: $End, ExemptTurnover: $ExemptTurnover, Number: $Number, PayableVAT: $PayableVAT, TaxableTurnover: $TaxableTurnover, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/folders/{id}/vat-declarations"))
+  let body = {"Begin": $begin, "CollectedVAT": $collected_vat, "CreditVAT": $credit_vat, "DeductibleVAT": $deductible_vat, "DocumentId": $document_id, "End": $end, "ExemptTurnover": $exempt_turnover, "Number": $number, "PayableVAT": $payable_vat, "TaxableTurnover": $taxable_turnover, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6556,9 +6556,9 @@ export def "spaces-folders-vat-declarations post" [
 #
 # DELETE /spaces/{spaceId}/folders/{id}/{documentClass}
 export def "spaces-folders delete" [
-  spaceId: string
+  space_id: string
   id: string
-  documentClass: string
+  document_class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6570,7 +6570,7 @@ export def "spaces-folders delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/($documentClass)")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, document_class: $document_class} | format pattern "/spaces/{space_id}/folders/{id}/{document_class}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6579,10 +6579,10 @@ export def "spaces-folders delete" [
 # Returns document of documentClass (without specific data) of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/{documentClass}
-export def "spaces-folders get-by-id-spaceId-documentClass" [
+export def "spaces-folders get-by-spaceId-id-documentClass" [
+  space_id: string
   id: string
-  spaceId: string
-  documentClass: string
+  document_class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6594,7 +6594,7 @@ export def "spaces-folders get-by-id-spaceId-documentClass" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/($documentClass)")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, document_class: $document_class} | format pattern "/spaces/{space_id}/folders/{id}/{document_class}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6606,9 +6606,9 @@ export def "spaces-folders get-by-id-spaceId-documentClass" [
 # --Accounting shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
 # --File shape: {Content64Encoded?: string, Name?: string}
 export def "spaces-folders post" [
+  space_id: string
   id: string
-  spaceId: string
-  documentClass: string
+  document_class: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6617,20 +6617,20 @@ export def "spaces-folders post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DocumentId: string # e.g. PBUFBAUBF1531
-  --Accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
-  --Author: string # e.g. Antoine Dupond
-  --Code: string # e.g. COD
-  --Comment: string # e.g. my document
-  --Date: string # e.g. 20161203
-  File: record # shape: {Content64Encoded?: string, Name?: string}
-  Title: string # e.g. Facture décembre
+  --document-id: string # e.g. PBUFBAUBF1531
+  --accounting: record # shape: {AccountedOn?: string, Workbook?: "customer"|"provider"|"bank"|"cashWoucher"|"fiscal"|"insurance"|"social"|"other"|"permanent", YearMonth?: string}
+  --author: string # e.g. Antoine Dupond
+  --code: string # e.g. COD
+  --comment: string # e.g. my document
+  --date: string # e.g. 20161203
+  file: record # shape: {Content64Encoded?: string, Name?: string}
+  title: string # e.g. Facture décembre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/folders/($id)/($documentClass)")
-  let body = {DocumentId: $DocumentId, Accounting: $Accounting, Author: $Author, Code: $Code, Comment: $Comment, Date: $Date, File: $File, Title: $Title} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, document_class: $document_class} | format pattern "/spaces/{space_id}/folders/{id}/{document_class}"))
+  let body = {"DocumentId": $document_id, "Accounting": $accounting, "Author": $author, "Code": $code, "Comment": $comment, "Date": $date, "File": $file, "Title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6641,8 +6641,8 @@ export def "spaces-folders post" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/banks
 export def "spaces-legal-entities-banks get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6654,7 +6654,7 @@ export def "spaces-legal-entities-banks get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/banks")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/banks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6664,8 +6664,8 @@ export def "spaces-legal-entities-banks get" [
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/banks
 export def "spaces-legal-entities-banks post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6674,21 +6674,21 @@ export def "spaces-legal-entities-banks post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --ContractReference: string # e.g. 13587449420F
-  --Designation: string # e.g. client pièces détachées
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --contract-reference: string # e.g. 13587449420F
+  --designation: string # e.g. client pièces détachées
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --start: string # e.g. 20180630
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/banks")
-  let body = {About: $About, Comment: $Comment, ContractReference: $ContractReference, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/banks"))
+  let body = {"About": $about, "Comment": $comment, "ContractReference": $contract_reference, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6699,8 +6699,8 @@ export def "spaces-legal-entities-banks post" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/banks/all
 export def "spaces-legal-entities-banks-all get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6712,7 +6712,7 @@ export def "spaces-legal-entities-banks-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/banks/all")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/banks/all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6722,8 +6722,8 @@ export def "spaces-legal-entities-banks-all get" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/contracts
 export def "spaces-legal-entities-contracts get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6735,7 +6735,7 @@ export def "spaces-legal-entities-contracts get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/contracts")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/contracts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6745,8 +6745,8 @@ export def "spaces-legal-entities-contracts get" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/contractual-relationships
 export def "spaces-legal-entities-contractual-relationships get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6758,7 +6758,7 @@ export def "spaces-legal-entities-contractual-relationships get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/contractual-relationships")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/contractual-relationships"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6768,8 +6768,8 @@ export def "spaces-legal-entities-contractual-relationships get" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/contractual-relationships/all
 export def "spaces-legal-entities-contractual-relationships-all get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6781,7 +6781,7 @@ export def "spaces-legal-entities-contractual-relationships-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/contractual-relationships/all")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/contractual-relationships/all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6791,8 +6791,8 @@ export def "spaces-legal-entities-contractual-relationships-all get" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/customers
 export def "spaces-legal-entities-customers get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6804,7 +6804,7 @@ export def "spaces-legal-entities-customers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/customers")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/customers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6814,8 +6814,8 @@ export def "spaces-legal-entities-customers get" [
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/customers
 export def "spaces-legal-entities-customers post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6824,22 +6824,22 @@ export def "spaces-legal-entities-customers post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --CustomerNumber: string # e.g. 13587449420F
-  --Designation: string # e.g. client pièces détachées
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --PortfolioId: string # e.g. T1OJFOAZ7449420F
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --customer-number: string # e.g. 13587449420F
+  --designation: string # e.g. client pièces détachées
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --portfolio-id: string # e.g. T1OJFOAZ7449420F
+  --start: string # e.g. 20180630
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/customers")
-  let body = {About: $About, Comment: $Comment, CustomerNumber: $CustomerNumber, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, PortfolioId: $PortfolioId, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/customers"))
+  let body = {"About": $about, "Comment": $comment, "CustomerNumber": $customer_number, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "PortfolioId": $portfolio_id, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6850,8 +6850,8 @@ export def "spaces-legal-entities-customers post" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/customers/all
 export def "spaces-legal-entities-customers-all get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6863,7 +6863,7 @@ export def "spaces-legal-entities-customers-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/customers/all")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/customers/all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6873,8 +6873,8 @@ export def "spaces-legal-entities-customers-all get" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/insurances
 export def "spaces-legal-entities-insurances get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6886,7 +6886,7 @@ export def "spaces-legal-entities-insurances get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/insurances")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/insurances"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6896,8 +6896,8 @@ export def "spaces-legal-entities-insurances get" [
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/insurances
 export def "spaces-legal-entities-insurances post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6906,22 +6906,22 @@ export def "spaces-legal-entities-insurances post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --CustomerNumber: string # e.g. 13587449420F
-  --Designation: string # e.g. client pièces détachées
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --PolicyNumber: string # e.g. 1358
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --customer-number: string # e.g. 13587449420F
+  --designation: string # e.g. client pièces détachées
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --policy-number: string # e.g. 1358
+  --start: string # e.g. 20180630
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/insurances")
-  let body = {About: $About, Comment: $Comment, CustomerNumber: $CustomerNumber, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, PolicyNumber: $PolicyNumber, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/insurances"))
+  let body = {"About": $about, "Comment": $comment, "CustomerNumber": $customer_number, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "PolicyNumber": $policy_number, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6932,8 +6932,8 @@ export def "spaces-legal-entities-insurances post" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/insurances/all
 export def "spaces-legal-entities-insurances-all get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6945,7 +6945,7 @@ export def "spaces-legal-entities-insurances-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/insurances/all")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/insurances/all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6955,8 +6955,8 @@ export def "spaces-legal-entities-insurances-all get" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/loans
 export def "spaces-legal-entities-loans get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6968,7 +6968,7 @@ export def "spaces-legal-entities-loans get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/loans")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/loans"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6978,8 +6978,8 @@ export def "spaces-legal-entities-loans get" [
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/loans
 export def "spaces-legal-entities-loans post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6988,26 +6988,26 @@ export def "spaces-legal-entities-loans post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Amount: float # format: float, e.g. 1000
-  --Category: string@Category-completer # e.g. debt spreading
-  --Comment: string # e.g. pieces company
-  --Designation: string # e.g. emprunt entreprise
-  --DueAmount: float # format: float, e.g. 1000.6
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --MonthsNumber: float # e.g. 12
-  --Rate: float # format: float, e.g. 2.5
-  --Start: string # e.g. 20180630
-  --TotalCost: float # format: float, e.g. 10200
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --amount: float # format: float, e.g. 1000
+  --category: string@category-completer # e.g. debt spreading
+  --comment: string # e.g. pieces company
+  --designation: string # e.g. emprunt entreprise
+  --due-amount: float # format: float, e.g. 1000.6
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --months-number: float # e.g. 12
+  --rate: float # format: float, e.g. 2.5
+  --start: string # e.g. 20180630
+  --total-cost: float # format: float, e.g. 10200
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/loans")
-  let body = {About: $About, Amount: $Amount, Category: $Category, Comment: $Comment, Designation: $Designation, DueAmount: $DueAmount, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, MonthsNumber: $MonthsNumber, Rate: $Rate, Start: $Start, TotalCost: $TotalCost} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/loans"))
+  let body = {"About": $about, "Amount": $amount, "Category": $category, "Comment": $comment, "Designation": $designation, "DueAmount": $due_amount, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "MonthsNumber": $months_number, "Rate": $rate, "Start": $start, "TotalCost": $total_cost} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7018,8 +7018,8 @@ export def "spaces-legal-entities-loans post" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/loans/all
 export def "spaces-legal-entities-loans-all get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7031,7 +7031,7 @@ export def "spaces-legal-entities-loans-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/loans/all")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/loans/all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7041,8 +7041,8 @@ export def "spaces-legal-entities-loans-all get" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/providers
 export def "spaces-legal-entities-providers get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7054,7 +7054,7 @@ export def "spaces-legal-entities-providers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/providers")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/providers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7064,8 +7064,8 @@ export def "spaces-legal-entities-providers get" [
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/providers
 export def "spaces-legal-entities-providers post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7074,21 +7074,21 @@ export def "spaces-legal-entities-providers post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --Designation: string # e.g. client pièces détachées
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --ProviderNumber: string # e.g. 13587449420F
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --designation: string # e.g. client pièces détachées
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --provider-number: string # e.g. 13587449420F
+  --start: string # e.g. 20180630
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/providers")
-  let body = {About: $About, Comment: $Comment, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, ProviderNumber: $ProviderNumber, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/providers"))
+  let body = {"About": $about, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "ProviderNumber": $provider_number, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7099,8 +7099,8 @@ export def "spaces-legal-entities-providers post" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/providers/all
 export def "spaces-legal-entities-providers-all get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7112,7 +7112,7 @@ export def "spaces-legal-entities-providers-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/providers/all")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/providers/all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7122,8 +7122,8 @@ export def "spaces-legal-entities-providers-all get" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/social-regimes
 export def "spaces-legal-entities-social-regimes get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7135,7 +7135,7 @@ export def "spaces-legal-entities-social-regimes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/social-regimes")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/social-regimes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7145,8 +7145,8 @@ export def "spaces-legal-entities-social-regimes get" [
 #
 # POST /spaces/{spaceId}/legal-entities/{id}/social-regimes
 export def "spaces-legal-entities-social-regimes post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7155,22 +7155,22 @@ export def "spaces-legal-entities-social-regimes post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --Designation: string # e.g. client pièces détachées
-  --End: string # e.g. 20190101
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --Periodicity: string@Periodicity-completer # e.g. monthly
-  --Start: string # e.g. 20180630
-  --Type: string@Type-completer-4 # e.g. mandatory
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --designation: string # e.g. client pièces détachées
+  --end: string # e.g. 20190101
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --periodicity: string@periodicity-completer # e.g. monthly
+  --start: string # e.g. 20180630
+  --type: string@type-completer-4 # e.g. mandatory
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/social-regimes")
-  let body = {About: $About, Comment: $Comment, Designation: $Designation, End: $End, Home: $Home, Keywords: $Keywords, Level: $Level, Periodicity: $Periodicity, Start: $Start, Type: $Type} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/social-regimes"))
+  let body = {"About": $about, "Comment": $comment, "Designation": $designation, "End": $end, "Home": $home, "Keywords": $keywords, "Level": $level, "Periodicity": $periodicity, "Start": $start, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7181,8 +7181,8 @@ export def "spaces-legal-entities-social-regimes post" [
 #
 # GET /spaces/{spaceId}/legal-entities/{id}/social-regimes/all
 export def "spaces-legal-entities-social-regimes-all get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7194,7 +7194,7 @@ export def "spaces-legal-entities-social-regimes-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/legal-entities/($id)/social-regimes/all")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/legal-entities/{id}/social-regimes/all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7204,7 +7204,7 @@ export def "spaces-legal-entities-social-regimes-all get" [
 #
 # GET /spaces/{spaceId}/loans
 export def "spaces-loans get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7216,7 +7216,7 @@ export def "spaces-loans get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/loans")
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/loans"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7226,7 +7226,7 @@ export def "spaces-loans get" [
 #
 # GET /spaces/{spaceId}/loans/all
 export def "spaces-loans-all get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7238,7 +7238,7 @@ export def "spaces-loans-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/loans/all")
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/loans/all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7248,8 +7248,8 @@ export def "spaces-loans-all get" [
 #
 # PATCH /spaces/{spaceId}/persons/{id}/call-for-document
 export def "spaces-persons-call-for-document patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7258,17 +7258,17 @@ export def "spaces-persons-call-for-document patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Categories: list
-  --ClientManagement: string@ClientManagement-completer
-  --IsAdmin: oneof<nothing, bool> # e.g. true
-  --Player: string@Player-completer # e.g. guest
-  --PlayerEnd: string # e.g. 20190601
+  --categories: list
+  --client-management: string@client-management-completer
+  --is-admin: oneof<nothing, bool> # e.g. true
+  --player: string@player-completer # e.g. guest
+  --player-end: string # e.g. 20190601
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/call-for-document")
-  let body = {Categories: $Categories, ClientManagement: $ClientManagement, IsAdmin: $IsAdmin, Player: $Player, PlayerEnd: $PlayerEnd} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/call-for-document"))
+  let body = {"Categories": $categories, "ClientManagement": $client_management, "IsAdmin": $is_admin, "Player": $player, "PlayerEnd": $player_end} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7279,8 +7279,8 @@ export def "spaces-persons-call-for-document patch" [
 #
 # POST /spaces/{spaceId}/persons/{id}/call-for-document
 export def "spaces-persons-call-for-document post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7289,22 +7289,22 @@ export def "spaces-persons-call-for-document post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Categories: list # e.g. [ID, Invoices]
-  --ClientManagement: string@ClientManagement-completer
-  --Comment: string # e.g. first invitation
-  --Contact: string # e.g. Dupond
-  --IsAdmin: oneof<nothing, bool> # e.g. true
-  --Message: string # e.g. <p> Bienvenue dans l'espace de l'entreprise SOCIETE </p>
-  --Player: string@Player-completer # e.g. guest
-  --PlayerEnd: string # e.g. 20190601
-  --Signature: string # e.g. cordialement
-  --Subject: string # e.g. invitation sur le coffre
+  --categories: list # e.g. [ID, Invoices]
+  --client-management: string@client-management-completer
+  --comment: string # e.g. first invitation
+  --contact: string # e.g. Dupond
+  --is-admin: oneof<nothing, bool> # e.g. true
+  --message: string # e.g. <p> Bienvenue dans l'espace de l'entreprise SOCIETE </p>
+  --player: string@player-completer # e.g. guest
+  --player-end: string # e.g. 20190601
+  --signature: string # e.g. cordialement
+  --subject: string # e.g. invitation sur le coffre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/call-for-document")
-  let body = {Categories: $Categories, ClientManagement: $ClientManagement, Comment: $Comment, Contact: $Contact, IsAdmin: $IsAdmin, Message: $Message, Player: $Player, PlayerEnd: $PlayerEnd, Signature: $Signature, Subject: $Subject} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/call-for-document"))
+  let body = {"Categories": $categories, "ClientManagement": $client_management, "Comment": $comment, "Contact": $contact, "IsAdmin": $is_admin, "Message": $message, "Player": $player, "PlayerEnd": $player_end, "Signature": $signature, "Subject": $subject} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7315,8 +7315,8 @@ export def "spaces-persons-call-for-document post" [
 #
 # GET /spaces/{spaceId}/persons/{id}/employees
 export def "spaces-persons-employees get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7328,7 +7328,7 @@ export def "spaces-persons-employees get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/employees")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/employees"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7338,8 +7338,8 @@ export def "spaces-persons-employees get" [
 #
 # POST /spaces/{spaceId}/persons/{id}/employees
 export def "spaces-persons-employees post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7348,24 +7348,24 @@ export def "spaces-persons-employees post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Comment: string # e.g. pieces company
-  --ContractType: string # e.g. 01
-  --EmployeeNumber: string # e.g. 13587FAZCD420F
-  --End: string # e.g. 20190101
-  --Function: string # e.g. commercial
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
-  --PostalMail: oneof<nothing, bool> # e.g. true
-  --SSNumber: string # e.g. 1542012365985215
-  --Start: string # e.g. 20180630
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --comment: string # e.g. pieces company
+  --contract-type: string # e.g. 01
+  --employee-number: string # e.g. 13587FAZCD420F
+  --end: string # e.g. 20190101
+  --function: string # e.g. commercial
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
+  --postal-mail: oneof<nothing, bool> # e.g. true
+  --ss-number: string # e.g. 1542012365985215
+  --start: string # e.g. 20180630
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/employees")
-  let body = {About: $About, Comment: $Comment, ContractType: $ContractType, EmployeeNumber: $EmployeeNumber, End: $End, Function: $Function, Home: $Home, Keywords: $Keywords, Level: $Level, PostalMail: $PostalMail, SSNumber: $SSNumber, Start: $Start} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/employees"))
+  let body = {"About": $about, "Comment": $comment, "ContractType": $contract_type, "EmployeeNumber": $employee_number, "End": $end, "Function": $function, "Home": $home, "Keywords": $keywords, "Level": $level, "PostalMail": $postal_mail, "SSNumber": $ss_number, "Start": $start} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7376,8 +7376,8 @@ export def "spaces-persons-employees post" [
 #
 # GET /spaces/{spaceId}/persons/{id}/employees/all
 export def "spaces-persons-employees-all get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7389,7 +7389,7 @@ export def "spaces-persons-employees-all get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/employees/all")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/employees/all"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7399,8 +7399,8 @@ export def "spaces-persons-employees-all get" [
 #
 # GET /spaces/{spaceId}/persons/{id}/exchange
 export def "spaces-persons-exchange get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7412,7 +7412,7 @@ export def "spaces-persons-exchange get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/exchange")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/exchange"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7422,8 +7422,8 @@ export def "spaces-persons-exchange get" [
 #
 # GET /spaces/{spaceId}/persons/{id}/follow-ups
 export def "spaces-persons-follow-ups get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7435,7 +7435,7 @@ export def "spaces-persons-follow-ups get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/follow-ups")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/follow-ups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7445,8 +7445,8 @@ export def "spaces-persons-follow-ups get" [
 #
 # DELETE /spaces/{spaceId}/persons/{id}/guest-in-space
 export def "spaces-persons-guest-in-space delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7458,7 +7458,7 @@ export def "spaces-persons-guest-in-space delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/guest-in-space")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/guest-in-space"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7469,8 +7469,8 @@ export def "spaces-persons-guest-in-space delete" [
 # PATCH /spaces/{spaceId}/persons/{id}/guest-in-space
 # --Folders item shape: {Id?: string, Right?: "read"|"write"}
 export def "spaces-persons-guest-in-space patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7479,18 +7479,18 @@ export def "spaces-persons-guest-in-space patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ClientManagement: string@ClientManagement-completer
-  --Folders: list # item shape: {Id?: string, Right?: "read"|"write"}
-  --GroupIds: list
-  --IsAdmin: oneof<nothing, bool> # e.g. true
-  --Player: string@Player-completer # e.g. guest
-  --PlayerEnd: string # e.g. 20190601
+  --client-management: string@client-management-completer
+  --folders: list # item shape: {Id?: string, Right?: "read"|"write"}
+  --group-ids: list
+  --is-admin: oneof<nothing, bool> # e.g. true
+  --player: string@player-completer # e.g. guest
+  --player-end: string # e.g. 20190601
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/guest-in-space")
-  let body = {ClientManagement: $ClientManagement, Folders: $Folders, GroupIds: $GroupIds, IsAdmin: $IsAdmin, Player: $Player, PlayerEnd: $PlayerEnd} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/guest-in-space"))
+  let body = {"ClientManagement": $client_management, "Folders": $folders, "GroupIds": $group_ids, "IsAdmin": $is_admin, "Player": $player, "PlayerEnd": $player_end} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7502,8 +7502,8 @@ export def "spaces-persons-guest-in-space patch" [
 # POST /spaces/{spaceId}/persons/{id}/guest-in-space
 # --Folders item shape: {Id?: string, Right?: "read"|"write"}
 export def "spaces-persons-guest-in-space post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7512,24 +7512,24 @@ export def "spaces-persons-guest-in-space post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ClientManagement: string@ClientManagement-completer
-  --Comment: string # e.g. first invitation
-  --Contact: string # e.g. Dupond
-  --Folders: list # item shape: {Id?: string, Right?: "read"|"write"}
-  --GroupIds: list
-  --IsAdmin: oneof<nothing, bool> # e.g. true
-  --MemberId: string # e.g. PAIHIHFA79TFA
-  --Message: string # e.g. <p> Bienvenue dans l'espace de l'entreprise SOCIETE </p>
-  --Player: string@Player-completer # e.g. guest
-  --PlayerEnd: string # e.g. 20190601
-  --Signature: string # e.g. cordialement
-  --Subject: string # e.g. invitation sur le coffre
+  --client-management: string@client-management-completer
+  --comment: string # e.g. first invitation
+  --contact: string # e.g. Dupond
+  --folders: list # item shape: {Id?: string, Right?: "read"|"write"}
+  --group-ids: list
+  --is-admin: oneof<nothing, bool> # e.g. true
+  --member-id: string # e.g. PAIHIHFA79TFA
+  --message: string # e.g. <p> Bienvenue dans l'espace de l'entreprise SOCIETE </p>
+  --player: string@player-completer # e.g. guest
+  --player-end: string # e.g. 20190601
+  --signature: string # e.g. cordialement
+  --subject: string # e.g. invitation sur le coffre
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/guest-in-space")
-  let body = {ClientManagement: $ClientManagement, Comment: $Comment, Contact: $Contact, Folders: $Folders, GroupIds: $GroupIds, IsAdmin: $IsAdmin, MemberId: $MemberId, Message: $Message, Player: $Player, PlayerEnd: $PlayerEnd, Signature: $Signature, Subject: $Subject} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/guest-in-space"))
+  let body = {"ClientManagement": $client_management, "Comment": $comment, "Contact": $contact, "Folders": $folders, "GroupIds": $group_ids, "IsAdmin": $is_admin, "MemberId": $member_id, "Message": $message, "Player": $player, "PlayerEnd": $player_end, "Signature": $signature, "Subject": $subject} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7540,8 +7540,8 @@ export def "spaces-persons-guest-in-space post" [
 #
 # DELETE /spaces/{spaceId}/persons/{id}/invitation
 export def "spaces-persons-invitation delete" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7553,7 +7553,7 @@ export def "spaces-persons-invitation delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/invitation")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/invitation"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7563,8 +7563,8 @@ export def "spaces-persons-invitation delete" [
 #
 # GET /spaces/{spaceId}/persons/{id}/invitation
 export def "spaces-persons-invitation get" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7576,7 +7576,7 @@ export def "spaces-persons-invitation get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/invitation")
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/invitation"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7587,8 +7587,8 @@ export def "spaces-persons-invitation get" [
 # PATCH /spaces/{spaceId}/persons/{id}/invitation
 # --Folders item shape: {Id?: string, Right?: "read"|"write"}
 export def "spaces-persons-invitation patch" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7597,19 +7597,19 @@ export def "spaces-persons-invitation patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ClientManagement: string@ClientManagement-completer
-  --EmployeeAccess: oneof<nothing, bool> # e.g. true
-  --Folders: list # item shape: {Id?: string, Right?: "read"|"write"}
-  --GroupIds: list
-  --IsAdmin: oneof<nothing, bool> # e.g. true
-  --Player: string@Player-completer # e.g. guest
-  --PlayerEnd: string # e.g. 20190601
+  --client-management: string@client-management-completer
+  --employee-access: oneof<nothing, bool> # e.g. true
+  --folders: list # item shape: {Id?: string, Right?: "read"|"write"}
+  --group-ids: list
+  --is-admin: oneof<nothing, bool> # e.g. true
+  --player: string@player-completer # e.g. guest
+  --player-end: string # e.g. 20190601
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/invitation")
-  let body = {ClientManagement: $ClientManagement, EmployeeAccess: $EmployeeAccess, Folders: $Folders, GroupIds: $GroupIds, IsAdmin: $IsAdmin, Player: $Player, PlayerEnd: $PlayerEnd} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/invitation"))
+  let body = {"ClientManagement": $client_management, "EmployeeAccess": $employee_access, "Folders": $folders, "GroupIds": $group_ids, "IsAdmin": $is_admin, "Player": $player, "PlayerEnd": $player_end} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7621,8 +7621,8 @@ export def "spaces-persons-invitation patch" [
 # POST /spaces/{spaceId}/persons/{id}/invitation
 # --Folders item shape: {Id?: string, Right?: "read"|"write"}
 export def "spaces-persons-invitation post" [
+  space_id: string
   id: string
-  spaceId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7631,19 +7631,19 @@ export def "spaces-persons-invitation post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ClientManagement: string@ClientManagement-completer
-  --EmployeeAccess: oneof<nothing, bool> # e.g. true
-  --Folders: list # item shape: {Id?: string, Right?: "read"|"write"}
-  --GroupIds: list
-  --IsAdmin: oneof<nothing, bool> # e.g. true
-  --Player: string@Player-completer # e.g. guest
-  --PlayerEnd: string # e.g. 20190601
+  --client-management: string@client-management-completer
+  --employee-access: oneof<nothing, bool> # e.g. true
+  --folders: list # item shape: {Id?: string, Right?: "read"|"write"}
+  --group-ids: list
+  --is-admin: oneof<nothing, bool> # e.g. true
+  --player: string@player-completer # e.g. guest
+  --player-end: string # e.g. 20190601
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/invitation")
-  let body = {ClientManagement: $ClientManagement, EmployeeAccess: $EmployeeAccess, Folders: $Folders, GroupIds: $GroupIds, IsAdmin: $IsAdmin, Player: $Player, PlayerEnd: $PlayerEnd} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id} | format pattern "/spaces/{space_id}/persons/{id}/invitation"))
+  let body = {"ClientManagement": $client_management, "EmployeeAccess": $employee_access, "Folders": $folders, "GroupIds": $group_ids, "IsAdmin": $is_admin, "Player": $player, "PlayerEnd": $player_end} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7654,9 +7654,9 @@ export def "spaces-persons-invitation post" [
 #
 # POST /spaces/{spaceId}/persons/{id}/invitation/{invitationId}/send
 export def "spaces-persons-invitation-send post" [
+  space_id: string
   id: string
-  invitationId: string
-  spaceId: string
+  invitation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7665,16 +7665,16 @@ export def "spaces-persons-invitation-send post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Contact: string # e.g. Dupond
-  --Message: string # e.g. <p> Bienvenue dans l'espace de l'envtreprise SOCIETE </p>
-  --Signature: string # e.g. cordialement
-  --Subject: string # e.g. invitation sur le coffre
+  --contact: string # e.g. Dupond
+  --message: string # e.g. <p> Bienvenue dans l'espace de l'envtreprise SOCIETE </p>
+  --signature: string # e.g. cordialement
+  --subject: string # e.g. invitation sur le coffre
 ]: any -> record<Id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($id)/invitation/($invitationId)/send")
-  let body = {Contact: $Contact, Message: $Message, Signature: $Signature, Subject: $Subject} | compact
+  let full_url = (build-url $base ({space_id: $space_id, id: $id, invitation_id: $invitation_id} | format pattern "/spaces/{space_id}/persons/{id}/invitation/{invitation_id}/send"))
+  let body = {"Contact": $contact, "Message": $message, "Signature": $signature, "Subject": $subject} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7685,9 +7685,9 @@ export def "spaces-persons-invitation-send post" [
 #
 # GET /spaces/{spaceId}/persons/{memberId}/folders/{id}
 export def "spaces-persons-folders get" [
+  space_id: string
+  member_id: string
   id: string
-  spaceId: string
-  memberId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7699,7 +7699,7 @@ export def "spaces-persons-folders get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($memberId)/folders/($id)")
+  let full_url = (build-url $base ({space_id: $space_id, member_id: $member_id, id: $id} | format pattern "/spaces/{space_id}/persons/{member_id}/folders/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7709,9 +7709,9 @@ export def "spaces-persons-folders get" [
 #
 # PATCH /spaces/{spaceId}/persons/{memberId}/folders/{id}
 export def "spaces-persons-folders patch" [
+  space_id: string
+  member_id: string
   id: string
-  spaceId: string
-  memberId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7720,17 +7720,17 @@ export def "spaces-persons-folders patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Right: string@Right-completer-1 # e.g. write
-  --About: string # e.g. <b> Mon premier dossier </b>
-  --Home: oneof<nothing, bool> # e.g. yes
-  --Keywords: list # e.g. [paris, comptabilité]
-  --Level: string@Level-completer # e.g. confidential
+  --right: string@right-completer-1 # e.g. write
+  --about: string # e.g. <b> Mon premier dossier </b>
+  --home: oneof<nothing, bool> # e.g. yes
+  --keywords: list # e.g. [paris, comptabilité]
+  --level: string@level-completer # e.g. confidential
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spaces/($spaceId)/persons/($memberId)/folders/($id)")
-  let body = {Right: $Right, About: $About, Home: $Home, Keywords: $Keywords, Level: $Level} | compact
+  let full_url = (build-url $base ({space_id: $space_id, member_id: $member_id, id: $id} | format pattern "/spaces/{space_id}/persons/{member_id}/folders/{id}"))
+  let body = {"Right": $right, "About": $about, "Home": $home, "Keywords": $keywords, "Level": $level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7741,7 +7741,7 @@ export def "spaces-persons-folders patch" [
 #
 # GET /spaces/{spaceId}/providers
 export def "spaces-providers get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7750,12 +7750,12 @@ export def "spaces-providers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --WithContractingPartner: string # if present returns infos of the ContractingPartner too
+  --with-contracting-partner: string # if present returns infos of the ContractingPartner too
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "WithContractingPartner" $WithContractingPartner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/providers" $qp)
+  let qp = [(serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/providers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7765,7 +7765,7 @@ export def "spaces-providers get" [
 #
 # GET /spaces/{spaceId}/providers/all
 export def "spaces-providers-all get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7774,12 +7774,12 @@ export def "spaces-providers-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --WithContractingPartner: string # if present returns infos of the ContractingPartner too
+  --with-contracting-partner: string # if present returns infos of the ContractingPartner too
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "WithContractingPartner" $WithContractingPartner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/providers/all" $qp)
+  let qp = [(serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/providers/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7789,7 +7789,7 @@ export def "spaces-providers-all get" [
 #
 # GET /spaces/{spaceId}/search
 export def "spaces-search get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7798,14 +7798,14 @@ export def "spaces-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Query: string # Text to find (e.g. durand)
-  --Range: string # index range of the results (e.g. 10-19)
-  --QueryContext: record # context of research
+  --query: string # Text to find (e.g. durand)
+  --range: string # index range of the results (e.g. 10-19)
+  --query-context: record # context of research
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Query" $Query "scalar") (serialize-qp "Range" $Range "scalar") (serialize-qp "QueryContext" $QueryContext "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/search" $qp)
+  let qp = [(serialize-qp "Query" $query "scalar") (serialize-qp "Range" $range "scalar") (serialize-qp "QueryContext" $query_context "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7815,7 +7815,7 @@ export def "spaces-search get" [
 #
 # GET /spaces/{spaceId}/social-regimes
 export def "spaces-social-regimes get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7824,12 +7824,12 @@ export def "spaces-social-regimes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --WithContractingPartner: string # if present returns infos of the ContractingPartner too
+  --with-contracting-partner: string # if present returns infos of the ContractingPartner too
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "WithContractingPartner" $WithContractingPartner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/social-regimes" $qp)
+  let qp = [(serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/social-regimes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7839,7 +7839,7 @@ export def "spaces-social-regimes get" [
 #
 # GET /spaces/{spaceId}/social-regimes/all
 export def "spaces-social-regimes-all get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7848,12 +7848,12 @@ export def "spaces-social-regimes-all get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --WithContractingPartner: string # if present returns infos of the ContractingPartner too
+  --with-contracting-partner: string # if present returns infos of the ContractingPartner too
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "WithContractingPartner" $WithContractingPartner "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/social-regimes/all" $qp)
+  let qp = [(serialize-qp "WithContractingPartner" $with_contracting_partner "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/social-regimes/all") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7863,7 +7863,7 @@ export def "spaces-social-regimes-all get" [
 #
 # GET /spaces/{spaceId}/spaces-invoicings
 export def "spaces-spaces-invoicings get" [
-  spaceId: string
+  space_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7872,12 +7872,12 @@ export def "spaces-spaces-invoicings get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Date: string # date range of the documents (e.g. 20160321,null)
+  --date: string # date range of the documents (e.g. 20160321,null)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Date" $Date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/spaces/($spaceId)/spaces-invoicings" $qp)
+  let qp = [(serialize-qp "Date" $date "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({space_id: $space_id} | format pattern "/spaces/{space_id}/spaces-invoicings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

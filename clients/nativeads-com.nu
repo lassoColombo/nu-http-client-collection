@@ -107,7 +107,7 @@ export def "auth-default-login post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/default/login")
-  let body = {username: $username, password: $password} | compact
+  let body = {"username": $username, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,14 +127,14 @@ export def "publisher-reports-daily get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Native Ads Publisher API authentication token
-  --startDate: string # start date in format YYYY-MM-DD (format: date)
-  --endDate: string # end date in format YYYY-MM-DD (format: date)
+  --start-date: string # start date in format YYYY-MM-DD (format: date)
+  --end-date: string # end date in format YYYY-MM-DD (format: date)
   --limit: int # maximum number of results per page (format: int32, default: 100)
   --page: int # page number (format: int32, default: 1)
 ]: nothing -> record<items: table<clicks: string, cpc: string, ctr: string, date: string, earnings: string, impressions: string, net_ecpm: string, rpm: string>, success: bool, total_count: int, totals: record<total_clicks: string, total_cpc: string, total_ctr: string, total_earnings: string, total_impressions: string, total_net_ecpm: string, total_rpm: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/publisher/reports/daily" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -154,14 +154,14 @@ export def "publisher-reports-website get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Native Ads Publisher API authentication token
-  --startDate: string # start date in format YYYY-MM-DD (format: date)
-  --endDate: string # end date in format YYYY-MM-DD (format: date)
+  --start-date: string # start date in format YYYY-MM-DD (format: date)
+  --end-date: string # end date in format YYYY-MM-DD (format: date)
   --limit: int # maximum number of results per page (format: int32, default: 100)
   --page: int # page number (format: int32, default: 1)
 ]: nothing -> record<items: table<clicks: string, cpc: string, ctr: string, date: string, earnings: string, impressions: string, net_ecpm: string, rpm: string>, success: bool, total_count: int, totals: record<total_clicks: string, total_cpc: string, total_ctr: string, total_earnings: string, total_impressions: string, total_net_ecpm: string, total_rpm: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/publisher/reports/website" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,14 +181,14 @@ export def "publisher-reports-widget get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # Native Ads Publisher API authentication token
-  --startDate: string # start date in format YYYY-MM-DD (format: date)
-  --endDate: string # end date in format YYYY-MM-DD (format: date)
+  --start-date: string # start date in format YYYY-MM-DD (format: date)
+  --end-date: string # end date in format YYYY-MM-DD (format: date)
   --limit: int # maximum number of results per page (format: int32, default: 100)
   --page: int # page number (format: int32, default: 1)
 ]: nothing -> record<items: table<campaign: string, campaign_id: string, clicks: string, cpc: string, ctr: string, earnings: string, impressions: string, net_ecpm: string, rpm: string>, success: bool, total_count: int, totals: record<total_clicks: string, total_cpc: string, total_ctr: string, total_earnings: string, total_impressions: string, total_net_ecpm: string, total_rpm: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "token" $qp_token "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/publisher/reports/widget" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

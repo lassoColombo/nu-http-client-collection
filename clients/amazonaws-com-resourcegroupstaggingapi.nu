@@ -66,19 +66,19 @@ def base-url-completer [] { ["http://tagging.us-east-1.amazonaws.com" "http://ta
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["ResourceGroupsTaggingAPI_20170126.DescribeReportCreation"] }
-def X-Amz-Target-completer-1 [] { ["ResourceGroupsTaggingAPI_20170126.GetComplianceSummary"] }
-def X-Amz-Target-completer-2 [] { ["ResourceGroupsTaggingAPI_20170126.GetResources"] }
-def X-Amz-Target-completer-3 [] { ["ResourceGroupsTaggingAPI_20170126.GetTagKeys"] }
-def X-Amz-Target-completer-4 [] { ["ResourceGroupsTaggingAPI_20170126.GetTagValues"] }
-def X-Amz-Target-completer-5 [] { ["ResourceGroupsTaggingAPI_20170126.StartReportCreation"] }
-def X-Amz-Target-completer-6 [] { ["ResourceGroupsTaggingAPI_20170126.TagResources"] }
-def X-Amz-Target-completer-7 [] { ["ResourceGroupsTaggingAPI_20170126.UntagResources"] }
+def x-amz-target-completer [] { ["ResourceGroupsTaggingAPI_20170126.DescribeReportCreation"] }
+def x-amz-target-completer-1 [] { ["ResourceGroupsTaggingAPI_20170126.GetComplianceSummary"] }
+def x-amz-target-completer-2 [] { ["ResourceGroupsTaggingAPI_20170126.GetResources"] }
+def x-amz-target-completer-3 [] { ["ResourceGroupsTaggingAPI_20170126.GetTagKeys"] }
+def x-amz-target-completer-4 [] { ["ResourceGroupsTaggingAPI_20170126.GetTagValues"] }
+def x-amz-target-completer-5 [] { ["ResourceGroupsTaggingAPI_20170126.StartReportCreation"] }
+def x-amz-target-completer-6 [] { ["ResourceGroupsTaggingAPI_20170126.TagResources"] }
+def x-amz-target-completer-7 [] { ["ResourceGroupsTaggingAPI_20170126.UntagResources"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-resource-groups-tagging-api-20170126describe-report-creation DescribeReportCreation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-resource-groups-tagging-api-20170126describe-report-creation post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -102,7 +102,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.DescribeReportCreation
 # operationId: DescribeReportCreation
-export def "x-amz-target-resource-groups-tagging-api-20170126describe-report-creation DescribeReportCreation" [
+export def "x-amz-target-resource-groups-tagging-api-20170126describe-report-creation post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -111,14 +111,14 @@ export def "x-amz-target-resource-groups-tagging-api-20170126describe-report-cre
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
   --body: record
 ]: any -> record<Status: record, S3Location: record, ErrorMessage: record> {
   let input = $in
@@ -126,7 +126,7 @@ export def "x-amz-target-resource-groups-tagging-api-20170126describe-report-cre
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.DescribeReportCreation")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -137,7 +137,7 @@ export def "x-amz-target-resource-groups-tagging-api-20170126describe-report-cre
 #
 # POST /#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.GetComplianceSummary
 # operationId: GetComplianceSummary
-export def "x-amz-target-resource-groups-tagging-api-20170126get-compliance-summary GetComplianceSummary" [
+export def "x-amz-target-resource-groups-tagging-api-20170126get-compliance-summary get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,32 +146,32 @@ export def "x-amz-target-resource-groups-tagging-api-20170126get-compliance-summ
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --PaginationToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  --TargetIdFilters: any
-  --RegionFilters: any
-  --ResourceTypeFilters: any
-  --TagKeyFilters: any
-  --GroupBy: any
-  --MaxResults: any
-  --PaginationToken: any
+  --max-results: string # Pagination limit
+  --pagination-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  --target-id-filters: any
+  --region-filters: any
+  --resource-type-filters: any
+  --tag-key-filters: any
+  --group-by: any
+  --max-results: any
+  --pagination-token: any
 ]: any -> record<SummaryList: record, PaginationToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "PaginationToken" $PaginationToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "PaginationToken" $pagination_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.GetComplianceSummary" $qp)
-  let body = {TargetIdFilters: $TargetIdFilters, RegionFilters: $RegionFilters, ResourceTypeFilters: $ResourceTypeFilters, TagKeyFilters: $TagKeyFilters, GroupBy: $GroupBy, MaxResults: $MaxResults, PaginationToken: $PaginationToken} | compact
+  let body = {"TargetIdFilters": $target_id_filters, "RegionFilters": $region_filters, "ResourceTypeFilters": $resource_type_filters, "TagKeyFilters": $tag_key_filters, "GroupBy": $group_by, "MaxResults": $max_results, "PaginationToken": $pagination_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -182,7 +182,7 @@ export def "x-amz-target-resource-groups-tagging-api-20170126get-compliance-summ
 #
 # POST /#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.GetResources
 # operationId: GetResources
-export def "x-amz-target-resource-groups-tagging-api-20170126get-resources GetResources" [
+export def "x-amz-target-resource-groups-tagging-api-20170126get-resources get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,33 +191,33 @@ export def "x-amz-target-resource-groups-tagging-api-20170126get-resources GetRe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ResourcesPerPage: string # Pagination limit
-  --PaginationToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  --PaginationToken: any
-  --TagFilters: any
-  --ResourcesPerPage: any
-  --TagsPerPage: any
-  --ResourceTypeFilters: any
-  --IncludeComplianceDetails: any
-  --ExcludeCompliantResources: any
-  --ResourceARNList: any
+  --resources-per-page: string # Pagination limit
+  --pagination-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  --pagination-token: any
+  --tag-filters: any
+  --resources-per-page: any
+  --tags-per-page: any
+  --resource-type-filters: any
+  --include-compliance-details: any
+  --exclude-compliant-resources: any
+  --resource-arn-list: any
 ]: any -> record<PaginationToken: record, ResourceTagMappingList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ResourcesPerPage" $ResourcesPerPage "scalar") (serialize-qp "PaginationToken" $PaginationToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ResourcesPerPage" $resources_per_page "scalar") (serialize-qp "PaginationToken" $pagination_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.GetResources" $qp)
-  let body = {PaginationToken: $PaginationToken, TagFilters: $TagFilters, ResourcesPerPage: $ResourcesPerPage, TagsPerPage: $TagsPerPage, ResourceTypeFilters: $ResourceTypeFilters, IncludeComplianceDetails: $IncludeComplianceDetails, ExcludeCompliantResources: $ExcludeCompliantResources, ResourceARNList: $ResourceARNList} | compact
+  let body = {"PaginationToken": $pagination_token, "TagFilters": $tag_filters, "ResourcesPerPage": $resources_per_page, "TagsPerPage": $tags_per_page, "ResourceTypeFilters": $resource_type_filters, "IncludeComplianceDetails": $include_compliance_details, "ExcludeCompliantResources": $exclude_compliant_resources, "ResourceARNList": $resource_arn_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -228,7 +228,7 @@ export def "x-amz-target-resource-groups-tagging-api-20170126get-resources GetRe
 #
 # POST /#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.GetTagKeys
 # operationId: GetTagKeys
-export def "x-amz-target-resource-groups-tagging-api-20170126get-tag-keys GetTagKeys" [
+export def "x-amz-target-resource-groups-tagging-api-20170126get-tag-keys get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,25 +237,25 @@ export def "x-amz-target-resource-groups-tagging-api-20170126get-tag-keys GetTag
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PaginationToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  --PaginationToken: any
+  --pagination-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  --pagination-token: any
 ]: any -> record<PaginationToken: record, TagKeys: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "PaginationToken" $PaginationToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PaginationToken" $pagination_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.GetTagKeys" $qp)
-  let body = {PaginationToken: $PaginationToken} | compact
+  let body = {"PaginationToken": $pagination_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -266,7 +266,7 @@ export def "x-amz-target-resource-groups-tagging-api-20170126get-tag-keys GetTag
 #
 # POST /#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.GetTagValues
 # operationId: GetTagValues
-export def "x-amz-target-resource-groups-tagging-api-20170126get-tag-values GetTagValues" [
+export def "x-amz-target-resource-groups-tagging-api-20170126get-tag-values get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,26 +275,26 @@ export def "x-amz-target-resource-groups-tagging-api-20170126get-tag-values GetT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PaginationToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  --PaginationToken: any
-  Key: any
+  --pagination-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  --pagination-token: any
+  key: any
 ]: any -> record<PaginationToken: record, TagValues: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "PaginationToken" $PaginationToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PaginationToken" $pagination_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.GetTagValues" $qp)
-  let body = {PaginationToken: $PaginationToken, Key: $Key} | compact
+  let body = {"PaginationToken": $pagination_token, "Key": $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -305,7 +305,7 @@ export def "x-amz-target-resource-groups-tagging-api-20170126get-tag-values GetT
 #
 # POST /#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.StartReportCreation
 # operationId: StartReportCreation
-export def "x-amz-target-resource-groups-tagging-api-20170126start-report-creation StartReportCreation" [
+export def "x-amz-target-resource-groups-tagging-api-20170126start-report-creation start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,23 +314,23 @@ export def "x-amz-target-resource-groups-tagging-api-20170126start-report-creati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  S3Bucket: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  s3_bucket: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.StartReportCreation")
-  let body = {S3Bucket: $S3Bucket} | compact
+  let body = {"S3Bucket": $s3_bucket} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -341,7 +341,7 @@ export def "x-amz-target-resource-groups-tagging-api-20170126start-report-creati
 #
 # POST /#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.TagResources
 # operationId: TagResources
-export def "x-amz-target-resource-groups-tagging-api-20170126tag-resources TagResources" [
+export def "x-amz-target-resource-groups-tagging-api-20170126tag-resources tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -350,24 +350,24 @@ export def "x-amz-target-resource-groups-tagging-api-20170126tag-resources TagRe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  ResourceARNList: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  resource_arn_list: any
+  tags: any
 ]: any -> record<FailedResourcesMap: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.TagResources")
-  let body = {ResourceARNList: $ResourceARNList, Tags: $Tags} | compact
+  let body = {"ResourceARNList": $resource_arn_list, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,7 +378,7 @@ export def "x-amz-target-resource-groups-tagging-api-20170126tag-resources TagRe
 #
 # POST /#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.UntagResources
 # operationId: UntagResources
-export def "x-amz-target-resource-groups-tagging-api-20170126untag-resources UntagResources" [
+export def "x-amz-target-resource-groups-tagging-api-20170126untag-resources untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,24 +387,24 @@ export def "x-amz-target-resource-groups-tagging-api-20170126untag-resources Unt
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  ResourceARNList: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  resource_arn_list: any
+  tag_keys: any
 ]: any -> record<FailedResourcesMap: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=ResourceGroupsTaggingAPI_20170126.UntagResources")
-  let body = {ResourceARNList: $ResourceARNList, TagKeys: $TagKeys} | compact
+  let body = {"ResourceARNList": $resource_arn_list, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

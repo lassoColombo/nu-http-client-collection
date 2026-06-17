@@ -72,7 +72,7 @@ def span-completer [] { ["D" "H" "M" "Wmo" "Wsu" "Y"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-change-password AccountchangePassword" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-change-password post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # POST /account/change-password
 # operationId: Account.changePassword
-export def "account-change-password AccountchangePassword" [
+export def "account-change-password post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,14 +105,14 @@ export def "account-change-password AccountchangePassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  newPassword: string # format: password
-  oldPassword: string # format: password
+  new_password: string # format: password
+  old_password: string # format: password
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/change-password")
-  let body = {newPassword: $newPassword, oldPassword: $oldPassword} | compact
+  let body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -123,7 +123,7 @@ export def "account-change-password AccountchangePassword" [
 #
 # GET /account/places
 # operationId: Account.places
-export def "account-places Accountplaces" [
+export def "account-places get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,7 +145,7 @@ export def "account-places Accountplaces" [
 #
 # POST /account/places
 # operationId: Account.newPlace
-export def "account-places AccountnewPlace" [
+export def "account-places post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,14 +157,14 @@ export def "account-places AccountnewPlace" [
   country: string # Country code (ISO 3166-1 alpha-2) (e.g. FR)
   --metadata: record # Keys are limited to the same format as tags (up to 21 characters, [a-z0-9], starting with [a-z]). Values can be any JSON value.
   name: string # e.g. ⌂ Home
-  timeZone: string # A time zone name from the Time Zone Database at https://www.iana.org/time-zones (e.g. Europe/Paris)
-  zipCode: string # Postal code
+  time_zone: string # A time zone name from the Time Zone Database at https://www.iana.org/time-zones (e.g. Europe/Paris)
+  zip_code: string # Postal code
 ]: any -> record<code: int, message: string, resource: record<entity: string, href: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/places")
-  let body = {country: $country, metadata: $metadata, name: $name, timeZone: $timeZone, zipCode: $zipCode} | compact
+  let body = {"country": $country, "metadata": $metadata, "name": $name, "timeZone": $time_zone, "zipCode": $zip_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,7 +175,7 @@ export def "account-places AccountnewPlace" [
 #
 # GET /account/tokens
 # operationId: Account.tokens
-export def "account-tokens Accounttokens" [
+export def "account-tokens get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,8 +197,8 @@ export def "account-tokens Accounttokens" [
 #
 # DELETE /account/tokens/{tokenId}
 # operationId: Account.revokeToken
-export def "account-tokens AccountrevokeToken" [
-  tokenId: string
+export def "account-tokens delete" [
+  token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "account-tokens AccountrevokeToken" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/tokens/($tokenId)")
+  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/account/tokens/{token_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -220,7 +220,7 @@ export def "account-tokens AccountrevokeToken" [
 #
 # GET /account/users
 # operationId: Account.users
-export def "account-users Accountusers" [
+export def "account-users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "account-users Accountusers" [
 #
 # POST /account/users
 # operationId: Account.newUser
-export def "account-users AccountnewUser" [
+export def "account-users post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,13 +257,13 @@ export def "account-users AccountnewUser" [
   locale: string # Locale identifier (language, region). See https://tools.ietf.org/html/rfc5646 and https://www.iana.org/assignments/lang-subtags-templates/lang-subtags-templates.xhtml .  (e.g. fr-FR)
   --metadata: record # Keys are limited to the same format as tags (up to 21 characters, [a-z0-9], starting with [a-z]). Values can be any JSON value.
   name: string
-  --phoneNumber: string # Phone number of the *User* in international format, for SMS notifications. (e.g. +33177494646)
+  --phone-number: string # Phone number of the *User* in international format, for SMS notifications. (e.g. +33177494646)
 ]: any -> record<code: int, message: string, resource: record<entity: string, href: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/users")
-  let body = {email: $email, locale: $locale, metadata: $metadata, name: $name, phoneNumber: $phoneNumber} | compact
+  let body = {"email": $email, "locale": $locale, "metadata": $metadata, "name": $name, "phoneNumber": $phone_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -274,8 +274,8 @@ export def "account-users AccountnewUser" [
 #
 # DELETE /account/users/{userId}
 # operationId: Account.deleteUser
-export def "account-users AccountdeleteUser" [
-  userId: string
+export def "account-users delete" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "account-users AccountdeleteUser" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/users/($userId)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/account/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,8 +297,8 @@ export def "account-users AccountdeleteUser" [
 #
 # GET /account/users/{userId}
 # operationId: Account.getUser
-export def "account-users AccountgetUser" [
-  userId: string
+export def "account-users get" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +310,7 @@ export def "account-users AccountgetUser" [
 ]: nothing -> record<account: string, canLogin: bool, email: string, locale: string, metadata: record, name: string, phoneNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/users/($userId)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/account/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,8 +320,8 @@ export def "account-users AccountgetUser" [
 #
 # PATCH /account/users/{userId}
 # operationId: Account.patchUser
-export def "account-users AccountpatchUser" [
-  userId: string
+export def "account-users patch" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,13 +333,13 @@ export def "account-users AccountpatchUser" [
   --email: string # format: email
   --locale: string # Locale identifier (language, region). See https://tools.ietf.org/html/rfc5646 and https://www.iana.org/assignments/lang-subtags-templates/lang-subtags-templates.xhtml .  (e.g. fr-FR)
   --name: string
-  --phoneNumber: string # Phone number of the *User* in international format, for SMS notifications. (e.g. +33177494646)
+  --phone-number: string # Phone number of the *User* in international format, for SMS notifications. (e.g. +33177494646)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/users/($userId)")
-  let body = {email: $email, locale: $locale, name: $name, phoneNumber: $phoneNumber} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/account/users/{user_id}"))
+  let body = {"email": $email, "locale": $locale, "name": $name, "phoneNumber": $phone_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -350,8 +350,8 @@ export def "account-users AccountpatchUser" [
 #
 # GET /account/users/{userId}/metadata
 # operationId: User.getMetadata
-export def "account-users-metadata UsergetMetadata" [
-  userId: string
+export def "account-users-metadata get" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "account-users-metadata UsergetMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/users/($userId)/metadata")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/account/users/{user_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -373,8 +373,8 @@ export def "account-users-metadata UsergetMetadata" [
 #
 # PATCH /account/users/{userId}/metadata
 # operationId: User.patchMetadata
-export def "account-users-metadata UserpatchMetadata" [
-  userId: any
+export def "account-users-metadata patch" [
+  user_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "account-users-metadata UserpatchMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/account/users/($userId)/metadata")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/account/users/{user_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -396,7 +396,7 @@ export def "account-users-metadata UserpatchMetadata" [
 #
 # POST /auth/login
 # operationId: AuthAccountLogin
-export def "auth-login AuthAccountLogin" [
+export def "auth-login post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "auth-login AuthAccountLogin" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  appId: string
+  app_id: string
   login: string
   password: string # format: password
   --ttl: int # Desired maximum life-time in seconds for the refresh token (e.g. 1800)
@@ -414,7 +414,7 @@ export def "auth-login AuthAccountLogin" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/login")
-  let body = {appId: $appId, login: $login, password: $password, ttl: $ttl} | compact
+  let body = {"appId": $app_id, "login": $login, "password": $password, "ttl": $ttl} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -425,7 +425,7 @@ export def "auth-login AuthAccountLogin" [
 #
 # POST /auth/refresh
 # operationId: AuthRefreshToken
-export def "auth-refresh AuthRefreshToken" [
+export def "auth-refresh post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,14 +434,14 @@ export def "auth-refresh AuthRefreshToken" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  appId: string
-  refreshToken: string
+  app_id: string
+  refresh_token: string
 ]: any -> record<accessToken: string, accessTokenExpires: string, refreshToken: string, refreshTokenExpires: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/refresh")
-  let body = {appId: $appId, refreshToken: $refreshToken} | compact
+  let body = {"appId": $app_id, "refreshToken": $refresh_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -452,7 +452,7 @@ export def "auth-refresh AuthRefreshToken" [
 #
 # POST /auth/reset-password
 # operationId: AuthResetPassword
-export def "auth-reset-password AuthResetPassword" [
+export def "auth-reset-password post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "auth-reset-password AuthResetPassword" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  appId: string
+  app_id: string
   --email: string # format: email
   --login: string
 ]: any -> any {
@@ -469,7 +469,7 @@ export def "auth-reset-password AuthResetPassword" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/reset-password")
-  let body = {appId: $appId, email: $email, login: $login} | compact
+  let body = {"appId": $app_id, "email": $email, "login": $login} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -480,7 +480,7 @@ export def "auth-reset-password AuthResetPassword" [
 #
 # POST /auth/revoke
 # operationId: AuthRevokeToken
-export def "auth-revoke AuthRevokeToken" [
+export def "auth-revoke post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -502,8 +502,8 @@ export def "auth-revoke AuthRevokeToken" [
 #
 # GET /devices/{deviceId}
 # operationId: Devices.get
-export def "devices Devicesget" [
-  deviceId: string
+export def "devices get" [
+  device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,7 +515,7 @@ export def "devices Devicesget" [
 ]: nothing -> record<address: string, attributes: record, class: string, functionalities: table<class: string, device: string, endpoint: int, id: string, metadata: record, name: string, tags: list>, isOnline: bool, manufacturer: string, metadata: record, model: string, name: string, place: string, protocol: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/devices/($deviceId)")
+  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/devices/{device_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -525,8 +525,8 @@ export def "devices Devicesget" [
 #
 # PATCH /devices/{deviceId}
 # operationId: Devices.patch
-export def "devices Devicespatch" [
-  deviceId: string
+export def "devices patch" [
+  device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,8 +540,8 @@ export def "devices Devicespatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/devices/($deviceId)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/devices/{device_id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -552,8 +552,8 @@ export def "devices Devicespatch" [
 #
 # POST /devices/{deviceId}/functionalities
 # operationId: Device.addFunctionality
-export def "devices-functionalities DeviceaddFunctionality" [
-  deviceId: string
+export def "devices-functionalities post" [
+  device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,8 +569,8 @@ export def "devices-functionalities DeviceaddFunctionality" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/devices/($deviceId)/functionalities")
-  let body = {metadata: $metadata, name: $name, tags: $tags} | compact
+  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/devices/{device_id}/functionalities"))
+  let body = {"metadata": $metadata, "name": $name, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -581,8 +581,8 @@ export def "devices-functionalities DeviceaddFunctionality" [
 #
 # GET /devices/{deviceId}/metadata
 # operationId: Device.getMetadata
-export def "devices-metadata DevicegetMetadata" [
-  deviceId: string
+export def "devices-metadata get" [
+  device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "devices-metadata DevicegetMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/devices/($deviceId)/metadata")
+  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/devices/{device_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -604,8 +604,8 @@ export def "devices-metadata DevicegetMetadata" [
 #
 # PATCH /devices/{deviceId}/metadata
 # operationId: Device.patchMetadata
-export def "devices-metadata DevicepatchMetadata" [
-  deviceId: any
+export def "devices-metadata patch" [
+  device_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "devices-metadata DevicepatchMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/devices/($deviceId)/metadata")
+  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/devices/{device_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,8 +627,8 @@ export def "devices-metadata DevicepatchMetadata" [
 #
 # POST /devices/{deviceId}/run/{action}
 # operationId: Device.run
-export def "devices-run Devicerun" [
-  deviceId: string
+export def "devices-run post" [
+  device_id: string
   action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -645,7 +645,7 @@ export def "devices-run Devicerun" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "functionalities" $functionalities "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/devices/($deviceId)/run/($action)" $qp)
+  let full_url = (build-url $base ({device_id: $device_id, action: $action} | format pattern "/devices/{device_id}/run/{action}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -656,8 +656,8 @@ export def "devices-run Devicerun" [
 #
 # GET /devices/{deviceId}/tags
 # operationId: Device.getTags
-export def "devices-tags DevicegetTags" [
-  deviceId: string
+export def "devices-tags get" [
+  device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -669,7 +669,7 @@ export def "devices-tags DevicegetTags" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/devices/($deviceId)/tags")
+  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/devices/{device_id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -679,8 +679,8 @@ export def "devices-tags DevicegetTags" [
 #
 # PATCH /devices/{deviceId}/tags
 # operationId: Device.patchTags
-export def "devices-tags DevicepatchTags" [
-  deviceId: any
+export def "devices-tags patch" [
+  device_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -692,7 +692,7 @@ export def "devices-tags DevicepatchTags" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/devices/($deviceId)/tags")
+  let full_url = (build-url $base ({device_id: $device_id} | format pattern "/devices/{device_id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,8 +702,8 @@ export def "devices-tags DevicepatchTags" [
 #
 # GET /functionalities/{functionalityId}
 # operationId: Functionalities.get
-export def "functionalities Functionalitiesget" [
-  functionalityId: string
+export def "functionalities get" [
+  functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,7 +715,7 @@ export def "functionalities Functionalitiesget" [
 ]: nothing -> record<actions: list<string>, attributes: list<string>, class: string, device: string, endpoint: int, metadata: record, name: string, tags: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/functionalities/($functionalityId)")
+  let full_url = (build-url $base ({functionality_id: $functionality_id} | format pattern "/functionalities/{functionality_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -725,8 +725,8 @@ export def "functionalities Functionalitiesget" [
 #
 # PATCH /functionalities/{functionalityId}
 # operationId: Functionality.patch
-export def "functionalities Functionalitypatch" [
-  functionalityId: string
+export def "functionalities patch" [
+  functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -740,8 +740,8 @@ export def "functionalities Functionalitypatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/functionalities/($functionalityId)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({functionality_id: $functionality_id} | format pattern "/functionalities/{functionality_id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -752,8 +752,8 @@ export def "functionalities Functionalitypatch" [
 #
 # GET /functionalities/{functionalityId}/attributes
 # operationId: Functionality.values
-export def "functionalities-attributes Functionalityvalues" [
-  functionalityId: any
+export def "functionalities-attributes list" [
+  functionality_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,7 +770,7 @@ export def "functionalities-attributes Functionalityvalues" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "names" $names "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "surround" $surround "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/functionalities/($functionalityId)/attributes" $qp)
+  let full_url = (build-url $base ({functionality_id: $functionality_id} | format pattern "/functionalities/{functionality_id}/attributes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -780,9 +780,9 @@ export def "functionalities-attributes Functionalityvalues" [
 #
 # GET /functionalities/{functionalityId}/attributes/{attributeName}
 # operationId: Functionality.value
-export def "functionalities-attributes Functionalityvalue" [
-  functionalityId: string
-  attributeName: string
+export def "functionalities-attributes get" [
+  functionality_id: string
+  attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,7 +794,7 @@ export def "functionalities-attributes Functionalityvalue" [
 ]: nothing -> record<value: any, when: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/functionalities/($functionalityId)/attributes/($attributeName)")
+  let full_url = (build-url $base ({functionality_id: $functionality_id, attribute_name: $attribute_name} | format pattern "/functionalities/{functionality_id}/attributes/{attribute_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -804,9 +804,9 @@ export def "functionalities-attributes Functionalityvalue" [
 #
 # PUT /functionalities/{functionalityId}/attributes/{attributeName}
 # operationId: Functionality.set
-export def "functionalities-attributes Functionalityset" [
-  functionalityId: string
-  attributeName: string
+export def "functionalities-attributes put" [
+  functionality_id: string
+  attribute_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -820,7 +820,7 @@ export def "functionalities-attributes Functionalityset" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/functionalities/($functionalityId)/attributes/($attributeName)")
+  let full_url = (build-url $base ({functionality_id: $functionality_id, attribute_name: $attribute_name} | format pattern "/functionalities/{functionality_id}/attributes/{attribute_name}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -831,8 +831,8 @@ export def "functionalities-attributes Functionalityset" [
 #
 # GET /functionalities/{functionalityId}/metadata
 # operationId: Functionality.getMetadata
-export def "functionalities-metadata FunctionalitygetMetadata" [
-  functionalityId: string
+export def "functionalities-metadata get" [
+  functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "functionalities-metadata FunctionalitygetMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/functionalities/($functionalityId)/metadata")
+  let full_url = (build-url $base ({functionality_id: $functionality_id} | format pattern "/functionalities/{functionality_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -854,8 +854,8 @@ export def "functionalities-metadata FunctionalitygetMetadata" [
 #
 # PATCH /functionalities/{functionalityId}/metadata
 # operationId: Functionality.patchMetadata
-export def "functionalities-metadata FunctionalitypatchMetadata" [
-  functionalityId: any
+export def "functionalities-metadata patch" [
+  functionality_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -867,7 +867,7 @@ export def "functionalities-metadata FunctionalitypatchMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/functionalities/($functionalityId)/metadata")
+  let full_url = (build-url $base ({functionality_id: $functionality_id} | format pattern "/functionalities/{functionality_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -877,8 +877,8 @@ export def "functionalities-metadata FunctionalitypatchMetadata" [
 #
 # POST /functionalities/{functionalityId}/run/{action}
 # operationId: Functionality.run
-export def "functionalities-run Functionalityrun" [
-  functionalityId: string
+export def "functionalities-run post" [
+  functionality_id: string
   action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -893,7 +893,7 @@ export def "functionalities-run Functionalityrun" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/functionalities/($functionalityId)/run/($action)")
+  let full_url = (build-url $base ({functionality_id: $functionality_id, action: $action} | format pattern "/functionalities/{functionality_id}/run/{action}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -904,8 +904,8 @@ export def "functionalities-run Functionalityrun" [
 #
 # GET /functionalities/{functionalityId}/tags
 # operationId: Functionality.getTags
-export def "functionalities-tags FunctionalitygetTags" [
-  functionalityId: string
+export def "functionalities-tags get" [
+  functionality_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,7 +917,7 @@ export def "functionalities-tags FunctionalitygetTags" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/functionalities/($functionalityId)/tags")
+  let full_url = (build-url $base ({functionality_id: $functionality_id} | format pattern "/functionalities/{functionality_id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -927,8 +927,8 @@ export def "functionalities-tags FunctionalitygetTags" [
 #
 # PATCH /functionalities/{functionalityId}/tags
 # operationId: Functionality.patchTags
-export def "functionalities-tags FunctionalitypatchTags" [
-  functionalityId: any
+export def "functionalities-tags patch" [
+  functionality_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "functionalities-tags FunctionalitypatchTags" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/functionalities/($functionalityId)/tags")
+  let full_url = (build-url $base ({functionality_id: $functionality_id} | format pattern "/functionalities/{functionality_id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -950,7 +950,7 @@ export def "functionalities-tags FunctionalitypatchTags" [
 #
 # GET /me
 # operationId: Me.get
-export def "me Meget" [
+export def "me get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,7 +972,7 @@ export def "me Meget" [
 #
 # PATCH /me
 # operationId: Me.patch
-export def "me Mepatch" [
+export def "me patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "me Mepatch" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me")
-  let body = {locale: $locale} | compact
+  let body = {"locale": $locale} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -998,8 +998,8 @@ export def "me Mepatch" [
 #
 # DELETE /notifications/{notificationId}
 # operationId: Notification.delete
-export def "notifications Notificationdelete" [
-  notificationId: string
+export def "notifications delete" [
+  notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,7 +1011,7 @@ export def "notifications Notificationdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notifications/($notificationId)")
+  let full_url = (build-url $base ({notification_id: $notification_id} | format pattern "/notifications/{notification_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1021,8 +1021,8 @@ export def "notifications Notificationdelete" [
 #
 # GET /notifications/{notificationId}
 # operationId: Notifications.get
-export def "notifications Notificationsget" [
-  notificationId: string
+export def "notifications get" [
+  notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1034,7 +1034,7 @@ export def "notifications Notificationsget" [
 ]: nothing -> record<data: record, metadata: record, name: string, place: string, routing: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notifications/($notificationId)")
+  let full_url = (build-url $base ({notification_id: $notification_id} | format pattern "/notifications/{notification_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1044,8 +1044,8 @@ export def "notifications Notificationsget" [
 #
 # PATCH /notifications/{notificationId}
 # operationId: Notification.patch
-export def "notifications Notificationpatch" [
-  notificationId: string
+export def "notifications patch" [
+  notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,8 +1061,8 @@ export def "notifications Notificationpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notifications/($notificationId)")
-  let body = {data: $data, name: $name, routing: $routing} | compact
+  let full_url = (build-url $base ({notification_id: $notification_id} | format pattern "/notifications/{notification_id}"))
+  let body = {"data": $data, "name": $name, "routing": $routing} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1073,8 +1073,8 @@ export def "notifications Notificationpatch" [
 #
 # GET /notifications/{notificationId}/metadata
 # operationId: Notification.getMetadata
-export def "notifications-metadata NotificationgetMetadata" [
-  notificationId: string
+export def "notifications-metadata get" [
+  notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,7 +1086,7 @@ export def "notifications-metadata NotificationgetMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notifications/($notificationId)/metadata")
+  let full_url = (build-url $base ({notification_id: $notification_id} | format pattern "/notifications/{notification_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1096,8 +1096,8 @@ export def "notifications-metadata NotificationgetMetadata" [
 #
 # PATCH /notifications/{notificationId}/metadata
 # operationId: Notification.patchMetadata
-export def "notifications-metadata NotificationpatchMetadata" [
-  notificationId: any
+export def "notifications-metadata patch" [
+  notification_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,7 +1109,7 @@ export def "notifications-metadata NotificationpatchMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/notifications/($notificationId)/metadata")
+  let full_url = (build-url $base ({notification_id: $notification_id} | format pattern "/notifications/{notification_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1119,7 +1119,7 @@ export def "notifications-metadata NotificationpatchMetadata" [
 #
 # GET /places
 # operationId: Me.places
-export def "places Meplaces" [
+export def "places list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1143,8 +1143,8 @@ export def "places Meplaces" [
 #
 # GET /places/{placeId}
 # operationId: Places.get
-export def "places Placesget" [
-  placeId: string
+export def "places get" [
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,7 +1156,7 @@ export def "places Placesget" [
 ]: nothing -> record<account: string, country: string, metadata: record, name: string, timeZone: string, zipCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/places/($placeId)")
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1166,8 +1166,8 @@ export def "places Placesget" [
 #
 # PATCH /places/{placeId}
 # operationId: Place.patch
-export def "places Placepatch" [
-  placeId: string
+export def "places patch" [
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1178,14 +1178,14 @@ export def "places Placepatch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # Country code (ISO 3166-1 alpha-2) (e.g. FR)
   --name: string # e.g. ⌂ Home
-  --timeZone: string # A time zone name from the Time Zone Database at https://www.iana.org/time-zones (e.g. Europe/Paris)
-  --zipCode: string # Postal code
+  --time-zone: string # A time zone name from the Time Zone Database at https://www.iana.org/time-zones (e.g. Europe/Paris)
+  --zip-code: string # Postal code
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/places/($placeId)")
-  let body = {country: $country, name: $name, timeZone: $timeZone, zipCode: $zipCode} | compact
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}"))
+  let body = {"country": $country, "name": $name, "timeZone": $time_zone, "zipCode": $zip_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1196,8 +1196,8 @@ export def "places Placepatch" [
 #
 # GET /places/{placeId}/buses
 # operationId: Place.buses
-export def "places-buses Placebuses" [
-  placeId: string
+export def "places-buses get" [
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1206,12 +1206,12 @@ export def "places-buses Placebuses" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --withPairing: oneof<nothing, bool> # Filter out buses that have no pairing window (default: false)
+  --with-pairing: oneof<nothing, bool> # Filter out buses that have no pairing window (default: false)
 ]: nothing -> table<functionality: string, id: string, protocol: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "withPairing" $withPairing "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($placeId)/buses" $qp)
+  let qp = [(serialize-qp "withPairing" $with_pairing "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/buses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1221,9 +1221,9 @@ export def "places-buses Placebuses" [
 #
 # GET /places/{placeId}/buses/{busId}/pairing
 # operationId: Place.pairing
-export def "places-buses-pairing Placepairing" [
-  placeId: string
-  busId: string
+export def "places-buses-pairing get" [
+  place_id: string
+  bus_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1235,7 +1235,7 @@ export def "places-buses-pairing Placepairing" [
 ]: nothing -> record<duration: int, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/places/($placeId)/buses/($busId)/pairing")
+  let full_url = (build-url $base ({place_id: $place_id, bus_id: $bus_id} | format pattern "/places/{place_id}/buses/{bus_id}/pairing"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1245,9 +1245,9 @@ export def "places-buses-pairing Placepairing" [
 #
 # PUT /places/{placeId}/buses/{busId}/pairing
 # operationId: Place.openPairing
-export def "places-buses-pairing PlaceopenPairing" [
-  placeId: string
-  busId: string
+export def "places-buses-pairing put" [
+  place_id: string
+  bus_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1262,8 +1262,8 @@ export def "places-buses-pairing PlaceopenPairing" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/places/($placeId)/buses/($busId)/pairing")
-  let body = {duration: $duration, enabled: $enabled} | compact
+  let full_url = (build-url $base ({place_id: $place_id, bus_id: $bus_id} | format pattern "/places/{place_id}/buses/{bus_id}/pairing"))
+  let body = {"duration": $duration, "enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1274,8 +1274,8 @@ export def "places-buses-pairing PlaceopenPairing" [
 #
 # GET /places/{placeId}/devices
 # operationId: Place.devices
-export def "places-devices Placedevices" [
-  placeId: any
+export def "places-devices get" [
+  place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1290,7 +1290,7 @@ export def "places-devices Placedevices" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "devices" $devices "scalar") (serialize-qp "embed-metadata" $embed_metadata "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($placeId)/devices" $qp)
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/devices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1300,8 +1300,8 @@ export def "places-devices Placedevices" [
 #
 # GET /places/{placeId}/electricity/autonomy
 # operationId: Place.Electricity.autonomy
-export def "places-electricity-autonomy PlaceElectricityautonomy" [
-  placeId: any
+export def "places-electricity-autonomy get" [
+  place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,7 +1316,7 @@ export def "places-electricity-autonomy PlaceElectricityautonomy" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "when" $when "scalar") (serialize-qp "span" $span "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($placeId)/electricity/autonomy" $qp)
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/electricity/autonomy") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1326,8 +1326,8 @@ export def "places-electricity-autonomy PlaceElectricityautonomy" [
 #
 # GET /places/{placeId}/electricity/flows
 # operationId: Place.Electricity.getFlows
-export def "places-electricity-flows PlaceElectricitygetFlows" [
-  placeId: string
+export def "places-electricity-flows get" [
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1341,7 +1341,7 @@ export def "places-electricity-flows PlaceElectricitygetFlows" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "flows" $flows "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($placeId)/electricity/flows" $qp)
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/electricity/flows") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1351,8 +1351,8 @@ export def "places-electricity-flows PlaceElectricitygetFlows" [
 #
 # GET /places/{placeId}/electricity/flows/setup
 # operationId: Place.Electricity.getFlowsSetup
-export def "places-electricity-flows-setup PlaceElectricitygetFlowsSetup" [
-  placeId: string
+export def "places-electricity-flows-setup get" [
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1364,7 +1364,7 @@ export def "places-electricity-flows-setup PlaceElectricitygetFlowsSetup" [
 ]: nothing -> record<battery_charge: table<class: string, id: string>, battery_discharge: table<class: string, id: string>, battery_grid: table<class: string, id: string>, elec_drawn: table<class: string, id: string>, elec_feed_in: table<class: string, id: string>, elec_from_household: table<class: string, id: string>, elec_local: table<class: string, id: string>, elec_to_pv: table<class: string, id: string>, elec_total_gen: table<class: string, id: string>, elec_total_usage: table<class: string, id: string>, elec_usage: table<class: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/places/($placeId)/electricity/flows/setup")
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/electricity/flows/setup"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1374,8 +1374,8 @@ export def "places-electricity-flows-setup PlaceElectricitygetFlowsSetup" [
 #
 # GET /places/{placeId}/electricity/self-consumption
 # operationId: Place.Electricity.selfConsumption
-export def "places-electricity-self-consumption PlaceElectricityselfConsumption" [
-  placeId: any
+export def "places-electricity-self-consumption get" [
+  place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1390,7 +1390,7 @@ export def "places-electricity-self-consumption PlaceElectricityselfConsumption"
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "when" $when "scalar") (serialize-qp "span" $span "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($placeId)/electricity/self-consumption" $qp)
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/electricity/self-consumption") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1400,8 +1400,8 @@ export def "places-electricity-self-consumption PlaceElectricityselfConsumption"
 #
 # GET /places/{placeId}/functionalities
 # operationId: Place.functionalities
-export def "places-functionalities Placefunctionalities" [
-  placeId: any
+export def "places-functionalities get" [
+  place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,7 +1415,7 @@ export def "places-functionalities Placefunctionalities" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed-metadata" $embed_metadata "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($placeId)/functionalities" $qp)
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/functionalities") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1425,8 +1425,8 @@ export def "places-functionalities Placefunctionalities" [
 #
 # GET /places/{placeId}/metadata
 # operationId: Place.getMetadata
-export def "places-metadata PlacegetMetadata" [
-  placeId: string
+export def "places-metadata get" [
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1438,7 +1438,7 @@ export def "places-metadata PlacegetMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/places/($placeId)/metadata")
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1448,8 +1448,8 @@ export def "places-metadata PlacegetMetadata" [
 #
 # PATCH /places/{placeId}/metadata
 # operationId: Place.patchMetadata
-export def "places-metadata PlacepatchMetadata" [
-  placeId: any
+export def "places-metadata patch" [
+  place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1461,7 +1461,7 @@ export def "places-metadata PlacepatchMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/places/($placeId)/metadata")
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1471,8 +1471,8 @@ export def "places-metadata PlacepatchMetadata" [
 #
 # GET /places/{placeId}/notifications
 # operationId: Place.notifications
-export def "places-notifications Placenotifications" [
-  placeId: any
+export def "places-notifications get" [
+  place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1486,7 +1486,7 @@ export def "places-notifications Placenotifications" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed-metadata" $embed_metadata "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($placeId)/notifications" $qp)
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/notifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1496,8 +1496,8 @@ export def "places-notifications Placenotifications" [
 #
 # POST /places/{placeId}/notifications
 # operationId: Place.newNotification
-export def "places-notifications PlacenewNotification" [
-  placeId: string
+export def "places-notifications post" [
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1514,8 +1514,8 @@ export def "places-notifications PlacenewNotification" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/places/($placeId)/notifications")
-  let body = {data: $data, metadata: $metadata, name: $name, routing: $routing} | compact
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/notifications"))
+  let body = {"data": $data, "metadata": $metadata, "name": $name, "routing": $routing} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1526,8 +1526,8 @@ export def "places-notifications PlacenewNotification" [
 #
 # GET /places/{placeId}/programs
 # operationId: Place.programs
-export def "places-programs Placeprograms" [
-  placeId: any
+export def "places-programs get" [
+  place_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1541,7 +1541,7 @@ export def "places-programs Placeprograms" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "embed-metadata" $embed_metadata "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($placeId)/programs" $qp)
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/programs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1551,8 +1551,8 @@ export def "places-programs Placeprograms" [
 #
 # POST /places/{placeId}/programs
 # operationId: Place.newProgram
-export def "places-programs PlacenewProgram" [
-  placeId: string
+export def "places-programs post" [
+  place_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1569,8 +1569,8 @@ export def "places-programs PlacenewProgram" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/places/($placeId)/programs")
-  let body = {code: $code, enabled: $enabled, metadata: $metadata, name: $name} | compact
+  let full_url = (build-url $base ({place_id: $place_id} | format pattern "/places/{place_id}/programs"))
+  let body = {"code": $code, "enabled": $enabled, "metadata": $metadata, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1581,8 +1581,8 @@ export def "places-programs PlacenewProgram" [
 #
 # POST /places/{placeId}/run/{action}
 # operationId: Place.run
-export def "places-run Placerun" [
-  placeId: string
+export def "places-run post" [
+  place_id: string
   action: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1600,7 +1600,7 @@ export def "places-run Placerun" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "devices" $devices "scalar") (serialize-qp "functionalities" $functionalities "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/places/($placeId)/run/($action)" $qp)
+  let full_url = (build-url $base ({place_id: $place_id, action: $action} | format pattern "/places/{place_id}/run/{action}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1611,8 +1611,8 @@ export def "places-run Placerun" [
 #
 # DELETE /programs/{programId}
 # operationId: Program.delete
-export def "programs Programdelete" [
-  programId: string
+export def "programs delete" [
+  program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1624,7 +1624,7 @@ export def "programs Programdelete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/programs/($programId)")
+  let full_url = (build-url $base ({program_id: $program_id} | format pattern "/programs/{program_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1634,8 +1634,8 @@ export def "programs Programdelete" [
 #
 # GET /programs/{programId}
 # operationId: Programs.get
-export def "programs Programsget" [
-  programId: string
+export def "programs get" [
+  program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1647,7 +1647,7 @@ export def "programs Programsget" [
 ]: nothing -> record<code: any, enabled: bool, metadata: record, name: string, place: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/programs/($programId)")
+  let full_url = (build-url $base ({program_id: $program_id} | format pattern "/programs/{program_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1657,8 +1657,8 @@ export def "programs Programsget" [
 #
 # PATCH /programs/{programId}
 # operationId: Program.patch
-export def "programs Programpatch" [
-  programId: string
+export def "programs patch" [
+  program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1674,8 +1674,8 @@ export def "programs Programpatch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/programs/($programId)")
-  let body = {code: $code, enabled: $enabled, name: $name} | compact
+  let full_url = (build-url $base ({program_id: $program_id} | format pattern "/programs/{program_id}"))
+  let body = {"code": $code, "enabled": $enabled, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1686,8 +1686,8 @@ export def "programs Programpatch" [
 #
 # GET /programs/{programId}/log
 # operationId: Program.log
-export def "programs-log Programlog" [
-  programId: any
+export def "programs-log get" [
+  program_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1702,7 +1702,7 @@ export def "programs-log Programlog" [
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/programs/($programId)/log" $qp)
+  let full_url = (build-url $base ({program_id: $program_id} | format pattern "/programs/{program_id}/log") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1712,8 +1712,8 @@ export def "programs-log Programlog" [
 #
 # GET /programs/{programId}/metadata
 # operationId: Program.getMetadata
-export def "programs-metadata ProgramgetMetadata" [
-  programId: string
+export def "programs-metadata get" [
+  program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1725,7 +1725,7 @@ export def "programs-metadata ProgramgetMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/programs/($programId)/metadata")
+  let full_url = (build-url $base ({program_id: $program_id} | format pattern "/programs/{program_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1735,8 +1735,8 @@ export def "programs-metadata ProgramgetMetadata" [
 #
 # PATCH /programs/{programId}/metadata
 # operationId: Program.patchMetadata
-export def "programs-metadata ProgrampatchMetadata" [
-  programId: any
+export def "programs-metadata patch" [
+  program_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1748,7 +1748,7 @@ export def "programs-metadata ProgrampatchMetadata" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/programs/($programId)/metadata")
+  let full_url = (build-url $base ({program_id: $program_id} | format pattern "/programs/{program_id}/metadata"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1758,8 +1758,8 @@ export def "programs-metadata ProgrampatchMetadata" [
 #
 # POST /programs/{programId}/run
 # operationId: Program.run
-export def "programs-run Programrun" [
-  programId: string
+export def "programs-run post" [
+  program_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1771,7 +1771,7 @@ export def "programs-run Programrun" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/programs/($programId)/run")
+  let full_url = (build-url $base ({program_id: $program_id} | format pattern "/programs/{program_id}/run"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

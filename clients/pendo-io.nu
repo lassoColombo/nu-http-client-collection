@@ -141,7 +141,7 @@ export def "accounts delete" [
 ]: nothing -> record<created_at: string, external_id: string, id: string, is_paying: bool, monthly_value: float, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -163,7 +163,7 @@ export def "accounts get" [
 ]: nothing -> record<created_at: string, external_id: string, id: string, is_paying: bool, monthly_value: float, name: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -189,8 +189,8 @@ export def "accounts put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($id)")
-  let body = {monthly_value: $monthly_value, name: $name, status: $status} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}"))
+  let body = {"monthly_value": $monthly_value, "name": $name, "status": $status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,7 +213,7 @@ export def "accounts-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($id)/tags")
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -235,7 +235,7 @@ export def "accounts-tags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($id)/tags")
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +259,7 @@ export def "accounts-tags post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/accounts/($id)/tags")
+  let full_url = (build-url $base ({id: $id} | format pattern "/accounts/{id}/tags"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -335,7 +335,7 @@ export def "features get" [
 ]: nothing -> record<app_url: string, created_at: string, created_by_user_id: int, declined_at: string, description: string, developing_at: string, effort: int, form_entry: string, id: float, is_private: bool, merged_to_feature_id: int, planned_at: string, products: list<string>, released_at: string, resolution: string, resolved_by_user_id: int, status: string, status_changed_at: string, tags: any, title: string, updated_at: string, updated_by_user_id: int, uploads: list<string>, vendor_id: int, view_count: int, waiting_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/features/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/features/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,7 +357,7 @@ export def "features-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/features/($id)/tags")
+  let full_url = (build-url $base ({id: $id} | format pattern "/features/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -379,7 +379,7 @@ export def "features-tags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/features/($id)/tags")
+  let full_url = (build-url $base ({id: $id} | format pattern "/features/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,7 +403,7 @@ export def "features-tags post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/features/($id)/tags")
+  let full_url = (build-url $base ({id: $id} | format pattern "/features/{id}/tags"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -450,7 +450,7 @@ export def "hooks post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hooks")
-  let body = {event: $event, target_url: $target_url} | compact
+  let body = {"event": $event, "target_url": $target_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -475,7 +475,7 @@ export def "hooks-unsubscribe post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hooks/unsubscribe")
-  let body = {target_url: $target_url} | compact
+  let body = {"target_url": $target_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -559,7 +559,7 @@ export def "users post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {account: $account, return_url: $return_url, user: $user} | compact
+  let body = {"account": $account, "return_url": $return_url, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -591,7 +591,7 @@ export def "users-invite-end-user post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/invite_end_user")
-  let body = {account_external_id: $account_external_id, account_name: $account_name, account_status: $account_status, email: $email, full_name: $full_name, monthly_value: $monthly_value, send_invite: $send_invite, user_external_id: $user_external_id} | compact
+  let body = {"account_external_id": $account_external_id, "account_name": $account_name, "account_status": $account_status, "email": $email, "full_name": $full_name, "monthly_value": $monthly_value, "send_invite": $send_invite, "user_external_id": $user_external_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -620,7 +620,7 @@ export def "users-invite-vendor-user post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/invite_vendor_user")
-  let body = {email: $email, external_id: $external_id, full_name: $full_name, permission_group_id: $permission_group_id, team: $team} | compact
+  let body = {"email": $email, "external_id": $external_id, "full_name": $full_name, "permission_group_id": $permission_group_id, "team": $team} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -668,7 +668,7 @@ export def "users delete" [
 ]: nothing -> record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -690,7 +690,7 @@ export def "users get" [
 ]: nothing -> record<account: record<id: string, monthly_value: float, name: string, status: string>, created_at: string, email: string, external_id: string, id: string, name: string, roles: string> {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -717,8 +717,8 @@ export def "users put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)")
-  let body = {email: $email, external_id: $external_id, name: $name, permission_group_id: $permission_group_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
+  let body = {"email": $email, "external_id": $external_id, "name": $name, "permission_group_id": $permission_group_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -741,7 +741,7 @@ export def "users-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/tags")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -763,7 +763,7 @@ export def "users-tags get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/tags")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/tags"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -787,7 +787,7 @@ export def "users-tags post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/tags")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/tags"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -816,7 +816,7 @@ export def "vendor-users post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vendor_users")
-  let body = {email: $email, external_id: $external_id, full_name: $full_name, permission_group_id: $permission_group_id, team: $team} | compact
+  let body = {"email": $email, "external_id": $external_id, "full_name": $full_name, "permission_group_id": $permission_group_id, "team": $team} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -869,7 +869,7 @@ export def "votes post" [
   let auth = (build-auth $token ($auth_scheme | default "auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/votes")
-  let body = {user_id: $user_id, votes: $votes} | compact
+  let body = {"user_id": $user_id, "votes": $votes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

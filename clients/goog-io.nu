@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api Get-the-status-of-the-API-service" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: Get the status of the API service
-export def "api Get-the-status-of-the-API-service" [
+export def "api get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +115,7 @@ export def "api Get-the-status-of-the-API-service" [
 #
 # GET /v1/crawl/{query}
 # operationId: Crawl
-export def "crawl Crawl" [
+export def "crawl get" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -128,7 +128,7 @@ export def "crawl Crawl" [
 ]: nothing -> record<answer: string, results: list<string>, total: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/crawl/($query)")
+  let full_url = (build-url $base ({query: $query} | format pattern "/v1/crawl/{query}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,7 +138,7 @@ export def "crawl Crawl" [
 #
 # GET /v1/images/{query}
 # operationId: Images
-export def "images Images" [
+export def "images get" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -151,7 +151,7 @@ export def "images Images" [
 ]: nothing -> record<answers: list<string>, image_results: table<image: record, link: record>, results: list<record>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/images/($query)")
+  let full_url = (build-url $base ({query: $query} | format pattern "/v1/images/{query}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -161,7 +161,7 @@ export def "images Images" [
 #
 # GET /v1/news/{query}
 # operationId: News
-export def "news News" [
+export def "news get" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +174,7 @@ export def "news News" [
 ]: nothing -> record<entries: table<guidislink: string, id: string, link: string, links: string, published: string, published_parsed: string, source: string, sub_articles: string, summary: string, summary_detail: string, title: string, title_detail: string>, feed: record<generator: string, generator_detail: string, language: string, link: string, links: string, publisher: string, publisher_detail: string, rights: string, rights_detail: string, subtitle: string, subtitle_detail: string, title: string, updated: string, updated_parsed: string>> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/news/($query)")
+  let full_url = (build-url $base ({query: $query} | format pattern "/v1/news/{query}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,7 +184,7 @@ export def "news News" [
 #
 # GET /v1/search/{query}
 # operationId: Search
-export def "search Search" [
+export def "search list" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -197,7 +197,7 @@ export def "search Search" [
 ]: nothing -> record<answer: string, results: table<description: string, link: string, title: string>, total: string> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/search/($query)")
+  let full_url = (build-url $base ({query: $query} | format pattern "/v1/search/{query}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +207,7 @@ export def "search Search" [
 #
 # POST /v1/serp/
 # operationId: serp
-export def "serp serp" [
+export def "serp post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "serp serp" [
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/serp/")
-  let body = {query: $query, website: $website} | compact
+  let body = {"query": $query, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

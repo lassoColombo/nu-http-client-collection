@@ -67,12 +67,12 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def api-version-completer [] { ["2019-05-01-preview"] }
-def keyType-completer [] { ["Primary" "Secondary"] }
+def key-type-completer [] { ["Primary" "Secondary"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-app-platform-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-app-platform-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.AppPlatform/operations
 # operationId: Operations_List
-export def "providers-microsoft-app-platform-operations List" [
+export def "providers-microsoft-app-platform-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,8 +120,8 @@ export def "providers-microsoft-app-platform-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AppPlatform/Spring
 # operationId: Services_ListBySubscription
-export def "subscriptions-providers-microsoft-app-platform-spring ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-app-platform-spring list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +135,7 @@ export def "subscriptions-providers-microsoft-app-platform-spring ListBySubscrip
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AppPlatform/Spring" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AppPlatform/Spring") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,9 +145,9 @@ export def "subscriptions-providers-microsoft-app-platform-spring ListBySubscrip
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.AppPlatform/locations/{location}/checkNameAvailability
 # operationId: Services_CheckNameAvailability
-export def "subscriptions-providers-microsoft-app-platform-locations-check-name-availability CheckNameAvailability" [
+export def "subscriptions-providers-microsoft-app-platform-locations-check-name-availability check" [
+  subscription_id: string
   location: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,8 +164,8 @@ export def "subscriptions-providers-microsoft-app-platform-locations-check-name-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AppPlatform/locations/($location)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.AppPlatform/locations/{location}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -176,9 +176,9 @@ export def "subscriptions-providers-microsoft-app-platform-locations-check-name-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring
 # operationId: Services_List
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring List" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,10 +202,10 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring delete" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,10 +229,10 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring get" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -257,10 +257,10 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}
 # operationId: Services_Update
 # --properties shape: {configServerProperties?: record, trace?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,8 +278,8 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -291,10 +291,10 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}
 # operationId: Services_CreateOrUpdate
 # --properties shape: {configServerProperties?: record, trace?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,8 +312,8 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)" $qp)
-  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,10 +324,10 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps
 # operationId: Apps_List
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps List" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps list" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -351,11 +351,11 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}
 # operationId: Apps_Delete
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps delete" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -379,11 +379,11 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}
 # operationId: Apps_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps get" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,13 +392,13 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --syncStatus: string # Indicates whether sync status
+  --sync-status: string # Indicates whether sync status
   --api-version: string@api-version-completer # Client Api Version.
 ]: nothing -> record<properties: record<activeDeploymentName: string, createdTime: string, persistentDisk: record<mountPath: string, sizeInGB: int, usedInGB: int>, provisioningState: string, public: bool, temporaryDisk: record<mountPath: string, sizeInGB: int>, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "syncStatus" $syncStatus "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)" $qp)
+  let qp = [(serialize-qp "syncStatus" $sync_status "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -409,11 +409,11 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}
 # operationId: Apps_Update
 # --properties shape: {activeDeploymentName?: string, persistentDisk?: record, public?: bool, temporaryDisk?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,8 +429,8 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -442,11 +442,11 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}
 # operationId: Apps_CreateOrUpdate
 # --properties shape: {activeDeploymentName?: string, persistentDisk?: record, public?: bool, temporaryDisk?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,8 +462,8 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -474,11 +474,11 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/bindings
 # operationId: Bindings_List
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings List" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings list" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +492,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/bindings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/bindings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -502,12 +502,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/bindings/{bindingName}
 # operationId: Bindings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  bindingName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings delete" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  binding_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/bindings/($bindingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, binding_name: $binding_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/bindings/{binding_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -531,12 +531,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/bindings/{bindingName}
 # operationId: Bindings_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  bindingName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings get" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  binding_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +550,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/bindings/($bindingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, binding_name: $binding_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/bindings/{binding_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -561,12 +561,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/bindings/{bindingName}
 # operationId: Bindings_Update
 # --properties shape: {bindingParameters?: record, key?: string, resourceId?: string, resourceName?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  bindingName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  binding_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,8 +582,8 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/bindings/($bindingName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, binding_name: $binding_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/bindings/{binding_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -595,12 +595,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/bindings/{bindingName}
 # operationId: Bindings_CreateOrUpdate
 # --properties shape: {bindingParameters?: record, key?: string, resourceId?: string, resourceName?: string, resourceType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  bindingName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-bindings create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  binding_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,8 +616,8 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/bindings/($bindingName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, binding_name: $binding_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/bindings/{binding_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -628,11 +628,11 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments
 # operationId: Deployments_List
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments List" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments list" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,7 +647,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "multi") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/deployments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -657,12 +657,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}
 # operationId: Deployments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  deploymentName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments delete" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,7 +676,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/deployments/($deploymentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -686,12 +686,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}
 # operationId: Deployments_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  deploymentName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments get" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/deployments/($deploymentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -716,12 +716,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}
 # operationId: Deployments_Update
 # --properties shape: {deploymentSettings?: record, source?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  deploymentName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,8 +737,8 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/deployments/($deploymentName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -750,12 +750,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}
 # operationId: Deployments_CreateOrUpdate
 # --properties shape: {deploymentSettings?: record, source?: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  deploymentName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,8 +771,8 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/deployments/($deploymentName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,12 +783,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}/getLogFileUrl
 # operationId: Deployments_GetLogFileUrl
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-get-log-file-url GetLogFileUrl" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  deploymentName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-get-log-file-url get" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/deployments/($deploymentName)/getLogFileUrl" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}/getLogFileUrl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -812,12 +812,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}/restart
 # operationId: Deployments_Restart
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-restart Restart" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  deploymentName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-restart restart" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -831,7 +831,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/deployments/($deploymentName)/restart" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}/restart") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -841,12 +841,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}/start
 # operationId: Deployments_Start
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-start Start" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  deploymentName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-start start" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,7 +860,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/deployments/($deploymentName)/start" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}/start") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,12 +870,12 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/deployments/{deploymentName}/stop
 # operationId: Deployments_Stop
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-stop Stop" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
-  deploymentName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-deployments-stop stop" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
+  deployment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -889,7 +889,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/deployments/($deploymentName)/stop" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name, deployment_name: $deployment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/deployments/{deployment_name}/stop") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -899,11 +899,11 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/apps/{appName}/getResourceUploadUrl
 # operationId: Apps_GetResourceUploadUrl
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-get-resource-upload-url GetResourceUploadUrl" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
-  appName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-apps-get-resource-upload-url get" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
+  app_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -917,7 +917,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/apps/($appName)/getResourceUploadUrl" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name, app_name: $app_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/apps/{app_name}/getResourceUploadUrl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -927,10 +927,10 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/deployments
 # operationId: Deployments_ListClusterAllDeployments
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-deployments ListClusterAllDeployments" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-deployments list-cluster-all" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -945,7 +945,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "multi") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/deployments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -954,10 +954,10 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/disableTestEndpoint
 #
 # operationId: Services_DisableTestEndpoint
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-disable-test-endpoint DisableTestEndpoint" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-disable-test-endpoint disable" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,7 +971,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/disableTestEndpoint" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/disableTestEndpoint") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -980,10 +980,10 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/enableTestEndpoint
 #
 # operationId: Services_EnableTestEndpoint
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-enable-test-endpoint EnableTestEndpoint" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-enable-test-endpoint enable" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,7 +997,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/enableTestEndpoint" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/enableTestEndpoint") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1007,10 +1007,10 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/listTestKeys
 # operationId: Services_ListTestKeys
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-list-test-keys ListTestKeys" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-list-test-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1024,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/listTestKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/listTestKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1034,10 +1034,10 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppPlatform/Spring/{serviceName}/regenerateTestKey
 # operationId: Services_RegenerateTestKey
-export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-regenerate-test-key RegenerateTestKey" [
-  subscriptionId: string
-  resourceGroupName: string
-  serviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-app-platform-spring-regenerate-test-key post" [
+  subscription_id: string
+  resource_group_name: string
+  service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,14 +1047,14 @@ export def "subscriptions-resource-groups-providers-microsoft-app-platform-sprin
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string@api-version-completer # Client Api Version.
-  keyType: string@keyType-completer # Type of the test key
+  key_type: string@key-type-completer # Type of the test key
 ]: any -> record<enabled: bool, primaryKey: string, primaryTestEndpoint: string, secondaryKey: string, secondaryTestEndpoint: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AppPlatform/Spring/($serviceName)/regenerateTestKey" $qp)
-  let body = {keyType: $keyType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, service_name: $service_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.AppPlatform/Spring/{service_name}/regenerateTestKey") $qp)
+  let body = {"keyType": $key_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -101,14 +101,14 @@ export def "par-paymentaccountreference-1-0-get-payment-account-reference post" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  encryptedPayload: any # shape: {encryptedData?: string, encryptedKey?: string, iv?: string, oaepHashingAlgorithm?: string, publicKeyFingerprint?: string}
-  requestId: string # The id of the request submitted. (e.g. 123456)
+  encrypted_payload: any # shape: {encryptedData?: string, encryptedKey?: string, iv?: string, oaepHashingAlgorithm?: string, publicKeyFingerprint?: string}
+  request_id: string # The id of the request submitted. (e.g. 123456)
 ]: any -> record<encryptedPayload: record<encryptedData: string, encryptedKey: string, iv: string, oaepHashingAlgorithm: string, publicKeyFingerprint: string>, responseId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/par/paymentaccountreference/1/0/getPaymentAccountReference")
-  let body = {encryptedPayload: $encryptedPayload, requestId: $requestId} | compact
+  let body = {"encryptedPayload": $encrypted_payload, "requestId": $request_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

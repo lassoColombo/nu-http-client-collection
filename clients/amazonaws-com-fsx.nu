@@ -66,52 +66,52 @@ def base-url-completer [] { ["http://fsx.us-east-1.amazonaws.com" "http://fsx.us
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSSimbaAPIService_v20180301.AssociateFileSystemAliases"] }
-def X-Amz-Target-completer-1 [] { ["AWSSimbaAPIService_v20180301.CancelDataRepositoryTask"] }
-def X-Amz-Target-completer-2 [] { ["AWSSimbaAPIService_v20180301.CopyBackup"] }
-def X-Amz-Target-completer-3 [] { ["AWSSimbaAPIService_v20180301.CreateBackup"] }
-def X-Amz-Target-completer-4 [] { ["AWSSimbaAPIService_v20180301.CreateDataRepositoryAssociation"] }
-def X-Amz-Target-completer-5 [] { ["AWSSimbaAPIService_v20180301.CreateDataRepositoryTask"] }
-def X-Amz-Target-completer-6 [] { ["AWSSimbaAPIService_v20180301.CreateFileCache"] }
-def X-Amz-Target-completer-7 [] { ["AWSSimbaAPIService_v20180301.CreateFileSystem"] }
-def X-Amz-Target-completer-8 [] { ["AWSSimbaAPIService_v20180301.CreateFileSystemFromBackup"] }
-def X-Amz-Target-completer-9 [] { ["AWSSimbaAPIService_v20180301.CreateSnapshot"] }
-def X-Amz-Target-completer-10 [] { ["AWSSimbaAPIService_v20180301.CreateStorageVirtualMachine"] }
-def X-Amz-Target-completer-11 [] { ["AWSSimbaAPIService_v20180301.CreateVolume"] }
-def X-Amz-Target-completer-12 [] { ["AWSSimbaAPIService_v20180301.CreateVolumeFromBackup"] }
-def X-Amz-Target-completer-13 [] { ["AWSSimbaAPIService_v20180301.DeleteBackup"] }
-def X-Amz-Target-completer-14 [] { ["AWSSimbaAPIService_v20180301.DeleteDataRepositoryAssociation"] }
-def X-Amz-Target-completer-15 [] { ["AWSSimbaAPIService_v20180301.DeleteFileCache"] }
-def X-Amz-Target-completer-16 [] { ["AWSSimbaAPIService_v20180301.DeleteFileSystem"] }
-def X-Amz-Target-completer-17 [] { ["AWSSimbaAPIService_v20180301.DeleteSnapshot"] }
-def X-Amz-Target-completer-18 [] { ["AWSSimbaAPIService_v20180301.DeleteStorageVirtualMachine"] }
-def X-Amz-Target-completer-19 [] { ["AWSSimbaAPIService_v20180301.DeleteVolume"] }
-def X-Amz-Target-completer-20 [] { ["AWSSimbaAPIService_v20180301.DescribeBackups"] }
-def X-Amz-Target-completer-21 [] { ["AWSSimbaAPIService_v20180301.DescribeDataRepositoryAssociations"] }
-def X-Amz-Target-completer-22 [] { ["AWSSimbaAPIService_v20180301.DescribeDataRepositoryTasks"] }
-def X-Amz-Target-completer-23 [] { ["AWSSimbaAPIService_v20180301.DescribeFileCaches"] }
-def X-Amz-Target-completer-24 [] { ["AWSSimbaAPIService_v20180301.DescribeFileSystemAliases"] }
-def X-Amz-Target-completer-25 [] { ["AWSSimbaAPIService_v20180301.DescribeFileSystems"] }
-def X-Amz-Target-completer-26 [] { ["AWSSimbaAPIService_v20180301.DescribeSnapshots"] }
-def X-Amz-Target-completer-27 [] { ["AWSSimbaAPIService_v20180301.DescribeStorageVirtualMachines"] }
-def X-Amz-Target-completer-28 [] { ["AWSSimbaAPIService_v20180301.DescribeVolumes"] }
-def X-Amz-Target-completer-29 [] { ["AWSSimbaAPIService_v20180301.DisassociateFileSystemAliases"] }
-def X-Amz-Target-completer-30 [] { ["AWSSimbaAPIService_v20180301.ListTagsForResource"] }
-def X-Amz-Target-completer-31 [] { ["AWSSimbaAPIService_v20180301.ReleaseFileSystemNfsV3Locks"] }
-def X-Amz-Target-completer-32 [] { ["AWSSimbaAPIService_v20180301.RestoreVolumeFromSnapshot"] }
-def X-Amz-Target-completer-33 [] { ["AWSSimbaAPIService_v20180301.TagResource"] }
-def X-Amz-Target-completer-34 [] { ["AWSSimbaAPIService_v20180301.UntagResource"] }
-def X-Amz-Target-completer-35 [] { ["AWSSimbaAPIService_v20180301.UpdateDataRepositoryAssociation"] }
-def X-Amz-Target-completer-36 [] { ["AWSSimbaAPIService_v20180301.UpdateFileCache"] }
-def X-Amz-Target-completer-37 [] { ["AWSSimbaAPIService_v20180301.UpdateFileSystem"] }
-def X-Amz-Target-completer-38 [] { ["AWSSimbaAPIService_v20180301.UpdateSnapshot"] }
-def X-Amz-Target-completer-39 [] { ["AWSSimbaAPIService_v20180301.UpdateStorageVirtualMachine"] }
-def X-Amz-Target-completer-40 [] { ["AWSSimbaAPIService_v20180301.UpdateVolume"] }
+def x-amz-target-completer [] { ["AWSSimbaAPIService_v20180301.AssociateFileSystemAliases"] }
+def x-amz-target-completer-1 [] { ["AWSSimbaAPIService_v20180301.CancelDataRepositoryTask"] }
+def x-amz-target-completer-2 [] { ["AWSSimbaAPIService_v20180301.CopyBackup"] }
+def x-amz-target-completer-3 [] { ["AWSSimbaAPIService_v20180301.CreateBackup"] }
+def x-amz-target-completer-4 [] { ["AWSSimbaAPIService_v20180301.CreateDataRepositoryAssociation"] }
+def x-amz-target-completer-5 [] { ["AWSSimbaAPIService_v20180301.CreateDataRepositoryTask"] }
+def x-amz-target-completer-6 [] { ["AWSSimbaAPIService_v20180301.CreateFileCache"] }
+def x-amz-target-completer-7 [] { ["AWSSimbaAPIService_v20180301.CreateFileSystem"] }
+def x-amz-target-completer-8 [] { ["AWSSimbaAPIService_v20180301.CreateFileSystemFromBackup"] }
+def x-amz-target-completer-9 [] { ["AWSSimbaAPIService_v20180301.CreateSnapshot"] }
+def x-amz-target-completer-10 [] { ["AWSSimbaAPIService_v20180301.CreateStorageVirtualMachine"] }
+def x-amz-target-completer-11 [] { ["AWSSimbaAPIService_v20180301.CreateVolume"] }
+def x-amz-target-completer-12 [] { ["AWSSimbaAPIService_v20180301.CreateVolumeFromBackup"] }
+def x-amz-target-completer-13 [] { ["AWSSimbaAPIService_v20180301.DeleteBackup"] }
+def x-amz-target-completer-14 [] { ["AWSSimbaAPIService_v20180301.DeleteDataRepositoryAssociation"] }
+def x-amz-target-completer-15 [] { ["AWSSimbaAPIService_v20180301.DeleteFileCache"] }
+def x-amz-target-completer-16 [] { ["AWSSimbaAPIService_v20180301.DeleteFileSystem"] }
+def x-amz-target-completer-17 [] { ["AWSSimbaAPIService_v20180301.DeleteSnapshot"] }
+def x-amz-target-completer-18 [] { ["AWSSimbaAPIService_v20180301.DeleteStorageVirtualMachine"] }
+def x-amz-target-completer-19 [] { ["AWSSimbaAPIService_v20180301.DeleteVolume"] }
+def x-amz-target-completer-20 [] { ["AWSSimbaAPIService_v20180301.DescribeBackups"] }
+def x-amz-target-completer-21 [] { ["AWSSimbaAPIService_v20180301.DescribeDataRepositoryAssociations"] }
+def x-amz-target-completer-22 [] { ["AWSSimbaAPIService_v20180301.DescribeDataRepositoryTasks"] }
+def x-amz-target-completer-23 [] { ["AWSSimbaAPIService_v20180301.DescribeFileCaches"] }
+def x-amz-target-completer-24 [] { ["AWSSimbaAPIService_v20180301.DescribeFileSystemAliases"] }
+def x-amz-target-completer-25 [] { ["AWSSimbaAPIService_v20180301.DescribeFileSystems"] }
+def x-amz-target-completer-26 [] { ["AWSSimbaAPIService_v20180301.DescribeSnapshots"] }
+def x-amz-target-completer-27 [] { ["AWSSimbaAPIService_v20180301.DescribeStorageVirtualMachines"] }
+def x-amz-target-completer-28 [] { ["AWSSimbaAPIService_v20180301.DescribeVolumes"] }
+def x-amz-target-completer-29 [] { ["AWSSimbaAPIService_v20180301.DisassociateFileSystemAliases"] }
+def x-amz-target-completer-30 [] { ["AWSSimbaAPIService_v20180301.ListTagsForResource"] }
+def x-amz-target-completer-31 [] { ["AWSSimbaAPIService_v20180301.ReleaseFileSystemNfsV3Locks"] }
+def x-amz-target-completer-32 [] { ["AWSSimbaAPIService_v20180301.RestoreVolumeFromSnapshot"] }
+def x-amz-target-completer-33 [] { ["AWSSimbaAPIService_v20180301.TagResource"] }
+def x-amz-target-completer-34 [] { ["AWSSimbaAPIService_v20180301.UntagResource"] }
+def x-amz-target-completer-35 [] { ["AWSSimbaAPIService_v20180301.UpdateDataRepositoryAssociation"] }
+def x-amz-target-completer-36 [] { ["AWSSimbaAPIService_v20180301.UpdateFileCache"] }
+def x-amz-target-completer-37 [] { ["AWSSimbaAPIService_v20180301.UpdateFileSystem"] }
+def x-amz-target-completer-38 [] { ["AWSSimbaAPIService_v20180301.UpdateSnapshot"] }
+def x-amz-target-completer-39 [] { ["AWSSimbaAPIService_v20180301.UpdateStorageVirtualMachine"] }
+def x-amz-target-completer-40 [] { ["AWSSimbaAPIService_v20180301.UpdateVolume"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-simba-api-service-v20180301-associate-file-system-aliases AssociateFileSystemAliases" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-simba-api-service-v20180301-associate-file-system-aliases post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.AssociateFileSystemAliases
 # operationId: AssociateFileSystemAliases
-export def "x-amz-target-aws-simba-api-service-v20180301-associate-file-system-aliases AssociateFileSystemAliases" [
+export def "x-amz-target-aws-simba-api-service-v20180301-associate-file-system-aliases post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -144,25 +144,25 @@ export def "x-amz-target-aws-simba-api-service-v20180301-associate-file-system-a
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  FileSystemId: any
-  Aliases: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  file_system_id: any
+  aliases: any
 ]: any -> record<Aliases: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.AssociateFileSystemAliases")
-  let body = {ClientRequestToken: $ClientRequestToken, FileSystemId: $FileSystemId, Aliases: $Aliases} | compact
+  let body = {"ClientRequestToken": $client_request_token, "FileSystemId": $file_system_id, "Aliases": $aliases} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -173,7 +173,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-associate-file-system-a
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CancelDataRepositoryTask
 # operationId: CancelDataRepositoryTask
-export def "x-amz-target-aws-simba-api-service-v20180301-cancel-data-repository-task CancelDataRepositoryTask" [
+export def "x-amz-target-aws-simba-api-service-v20180301-cancel-data-repository-task cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,23 +182,23 @@ export def "x-amz-target-aws-simba-api-service-v20180301-cancel-data-repository-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  TaskId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  task_id: any
 ]: any -> record<Lifecycle: record, TaskId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CancelDataRepositoryTask")
-  let body = {TaskId: $TaskId} | compact
+  let body = {"TaskId": $task_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -210,7 +210,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-cancel-data-repository-
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CopyBackup
 # operationId: CopyBackup
 # --Tags item shape: {Key: any, Value: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-copy-backup CopyBackup" [
+export def "x-amz-target-aws-simba-api-service-v20180301-copy-backup copy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,28 +219,28 @@ export def "x-amz-target-aws-simba-api-service-v20180301-copy-backup CopyBackup"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  SourceBackupId: any
-  --SourceRegion: any
-  --KmsKeyId: string # <p>Specifies the ID of the Key Management Service (KMS) key to use for encrypting data on Amazon FSx file systems, as follows:</p> <ul> <li> <p>Amazon FSx for Lustre <code>PERSISTENT_1</code> and <code>PERSISTENT_2</code> deployment types only.</p> <p> <code>SCRATCH_1</code> and <code>SCRATCH_2</code> types are encrypted using the Amazon FSx service KMS key for your account.</p> </li> <li> <p>Amazon FSx for NetApp ONTAP</p> </li> <li> <p>Amazon FSx for OpenZFS</p> </li> <li> <p>Amazon FSx for Windows File Server</p> </li> </ul> <p>If a <code>KmsKeyId</code> isn't specified, the Amazon FSx-managed KMS key for your account is used. For more information, see <a href="https://docs.aws.amazon.com/kms/latest/APIReference/API_Encrypt.html">Encrypt</a> in the <i>Key Management Service API Reference</i>.</p>
-  --CopyTags: any
-  --Tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  source_backup_id: any
+  --source-region: any
+  --kms-key-id: string # <p>Specifies the ID of the Key Management Service (KMS) key to use for encrypting data on Amazon FSx file systems, as follows:</p> <ul> <li> <p>Amazon FSx for Lustre <code>PERSISTENT_1</code> and <code>PERSISTENT_2</code> deployment types only.</p> <p> <code>SCRATCH_1</code> and <code>SCRATCH_2</code> types are encrypted using the Amazon FSx service KMS key for your account.</p> </li> <li> <p>Amazon FSx for NetApp ONTAP</p> </li> <li> <p>Amazon FSx for OpenZFS</p> </li> <li> <p>Amazon FSx for Windows File Server</p> </li> </ul> <p>If a <code>KmsKeyId</code> isn't specified, the Amazon FSx-managed KMS key for your account is used. For more information, see <a href="https://docs.aws.amazon.com/kms/latest/APIReference/API_Encrypt.html">Encrypt</a> in the <i>Key Management Service API Reference</i>.</p>
+  --copy-tags: any
+  --tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
 ]: any -> record<Backup: record<BackupId: record, Lifecycle: record, FailureDetails: record<Message: record>, Type: record, ProgressPercent: int, CreationTime: record, KmsKeyId: record, ResourceARN: record, Tags: record, FileSystem: record<OwnerId: record, CreationTime: record, FileSystemId: record, FileSystemType: record, Lifecycle: record, FailureDetails: record, StorageCapacity: record, StorageType: record, VpcId: record, SubnetIds: record, NetworkInterfaceIds: record, DNSName: record, KmsKeyId: record, ResourceARN: record, Tags: record, WindowsConfiguration: record, LustreConfiguration: record, AdministrativeActions: record, OntapConfiguration: record, FileSystemTypeVersion: record, OpenZFSConfiguration: record>, DirectoryInformation: record<DomainName: record, ActiveDirectoryId: record, ResourceARN: string>, OwnerId: string, SourceBackupId: string, SourceBackupRegion: record, ResourceType: record, Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: record, Name: record, OntapConfiguration: record, ResourceARN: string, Tags: list, VolumeId: record, VolumeType: record, LifecycleTransitionReason: record, AdministrativeActions: record, OpenZFSConfiguration: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CopyBackup")
-  let body = {ClientRequestToken: $ClientRequestToken, SourceBackupId: $SourceBackupId, SourceRegion: $SourceRegion, KmsKeyId: $KmsKeyId, CopyTags: $CopyTags, Tags: $Tags} | compact
+  let body = {"ClientRequestToken": $client_request_token, "SourceBackupId": $source_backup_id, "SourceRegion": $source_region, "KmsKeyId": $kms_key_id, "CopyTags": $copy_tags, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -251,7 +251,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-copy-backup CopyBackup"
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateBackup
 # operationId: CreateBackup
-export def "x-amz-target-aws-simba-api-service-v20180301-create-backup CreateBackup" [
+export def "x-amz-target-aws-simba-api-service-v20180301-create-backup create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,26 +260,26 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-backup CreateBac
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  --FileSystemId: any
-  --ClientRequestToken: any
-  --Tags: any
-  --VolumeId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  --file-system-id: any
+  --client-request-token: any
+  --tags: any
+  --volume-id: any
 ]: any -> record<Backup: record<BackupId: record, Lifecycle: record, FailureDetails: record<Message: record>, Type: record, ProgressPercent: int, CreationTime: record, KmsKeyId: record, ResourceARN: record, Tags: record, FileSystem: record<OwnerId: record, CreationTime: record, FileSystemId: record, FileSystemType: record, Lifecycle: record, FailureDetails: record, StorageCapacity: record, StorageType: record, VpcId: record, SubnetIds: record, NetworkInterfaceIds: record, DNSName: record, KmsKeyId: record, ResourceARN: record, Tags: record, WindowsConfiguration: record, LustreConfiguration: record, AdministrativeActions: record, OntapConfiguration: record, FileSystemTypeVersion: record, OpenZFSConfiguration: record>, DirectoryInformation: record<DomainName: record, ActiveDirectoryId: record, ResourceARN: string>, OwnerId: string, SourceBackupId: string, SourceBackupRegion: record, ResourceType: record, Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: record, Name: record, OntapConfiguration: record, ResourceARN: string, Tags: list, VolumeId: record, VolumeType: record, LifecycleTransitionReason: record, AdministrativeActions: record, OpenZFSConfiguration: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateBackup")
-  let body = {FileSystemId: $FileSystemId, ClientRequestToken: $ClientRequestToken, Tags: $Tags, VolumeId: $VolumeId} | compact
+  let body = {"FileSystemId": $file_system_id, "ClientRequestToken": $client_request_token, "Tags": $tags, "VolumeId": $volume_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -291,7 +291,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-backup CreateBac
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateDataRepositoryAssociation
 # operationId: CreateDataRepositoryAssociation
 # --Tags item shape: {Key: any, Value: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-create-data-repository-association CreateDataRepositoryAssociation" [
+export def "x-amz-target-aws-simba-api-service-v20180301-create-data-repository-association create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,30 +300,30 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-data-repository-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  FileSystemId: string # The globally unique ID of the file system, assigned by Amazon FSx.
-  --FileSystemPath: any
-  DataRepositoryPath: any
-  --BatchImportMetaDataOnCreate: any
-  --ImportedFileChunkSize: any
-  --S3: any
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  --Tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  file_system_id: string # The globally unique ID of the file system, assigned by Amazon FSx.
+  --file-system-path: any
+  data_repository_path: any
+  --batch-import-meta-data-on-create: any
+  --imported-file-chunk-size: any
+  --s3: any
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  --tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
 ]: any -> record<Association: record<AssociationId: record, ResourceARN: string, FileSystemId: string, Lifecycle: record, FailureDetails: record<Message: string>, FileSystemPath: record, DataRepositoryPath: record, BatchImportMetaDataOnCreate: record, ImportedFileChunkSize: record, S3: record<AutoImportPolicy: record, AutoExportPolicy: record>, Tags: list<record>, CreationTime: string, FileCacheId: record, FileCachePath: record, DataRepositorySubdirectories: record, NFS: record<Version: record, DnsIps: record, AutoExportPolicy: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateDataRepositoryAssociation")
-  let body = {FileSystemId: $FileSystemId, FileSystemPath: $FileSystemPath, DataRepositoryPath: $DataRepositoryPath, BatchImportMetaDataOnCreate: $BatchImportMetaDataOnCreate, ImportedFileChunkSize: $ImportedFileChunkSize, S3: $S3, ClientRequestToken: $ClientRequestToken, Tags: $Tags} | compact
+  let body = {"FileSystemId": $file_system_id, "FileSystemPath": $file_system_path, "DataRepositoryPath": $data_repository_path, "BatchImportMetaDataOnCreate": $batch_import_meta_data_on_create, "ImportedFileChunkSize": $imported_file_chunk_size, "S3": $s3, "ClientRequestToken": $client_request_token, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -335,7 +335,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-data-repository-
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateDataRepositoryTask
 # operationId: CreateDataRepositoryTask
 # --Tags item shape: {Key: any, Value: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-create-data-repository-task CreateDataRepositoryTask" [
+export def "x-amz-target-aws-simba-api-service-v20180301-create-data-repository-task create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,29 +344,29 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-data-repository-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  Type: any
-  --Paths: any
-  FileSystemId: string # The globally unique ID of the file system, assigned by Amazon FSx.
-  Report: any
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  --Tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
-  --CapacityToRelease: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  type: any
+  --paths: any
+  file_system_id: string # The globally unique ID of the file system, assigned by Amazon FSx.
+  report: any
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  --tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
+  --capacity-to-release: any
 ]: any -> record<DataRepositoryTask: record<TaskId: record, Lifecycle: record, Type: record, CreationTime: string, StartTime: record, EndTime: record, ResourceARN: string, Tags: list<record>, FileSystemId: record, Paths: record, FailureDetails: record<Message: string>, Status: record<TotalCount: record, SucceededCount: record, FailedCount: record, LastUpdatedTime: record, ReleasedCapacity: record>, Report: record<Enabled: record, Path: record, Format: record, Scope: record>, CapacityToRelease: record, FileCacheId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateDataRepositoryTask")
-  let body = {Type: $Type, Paths: $Paths, FileSystemId: $FileSystemId, Report: $Report, ClientRequestToken: $ClientRequestToken, Tags: $Tags, CapacityToRelease: $CapacityToRelease} | compact
+  let body = {"Type": $type, "Paths": $paths, "FileSystemId": $file_system_id, "Report": $report, "ClientRequestToken": $client_request_token, "Tags": $tags, "CapacityToRelease": $capacity_to_release} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,7 +378,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-data-repository-
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateFileCache
 # operationId: CreateFileCache
 # --Tags item shape: {Key: any, Value: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-create-file-cache CreateFileCache" [
+export def "x-amz-target-aws-simba-api-service-v20180301-create-file-cache create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,33 +387,33 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-file-cache Creat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --ClientRequestToken: any
-  FileCacheType: any
-  FileCacheTypeVersion: any
-  StorageCapacity: any
-  SubnetIds: list # A list of subnet IDs that the cache will be accessible from. You can specify only one subnet ID in a call to the <code>CreateFileCache</code> operation.
-  --SecurityGroupIds: any
-  --Tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
-  --CopyTagsToDataRepositoryAssociations: any
-  --KmsKeyId: any
-  --LustreConfiguration: any
-  --DataRepositoryAssociations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --client-request-token: any
+  file_cache_type: any
+  file_cache_type_version: any
+  storage_capacity: any
+  subnet_ids: list # A list of subnet IDs that the cache will be accessible from. You can specify only one subnet ID in a call to the <code>CreateFileCache</code> operation.
+  --security-group-ids: any
+  --tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
+  --copy-tags-to-data-repository-associations: any
+  --kms-key-id: any
+  --lustre-configuration: any
+  --data-repository-associations: any
 ]: any -> record<FileCache: record<OwnerId: string, CreationTime: string, FileCacheId: record, FileCacheType: record, FileCacheTypeVersion: record, Lifecycle: record, FailureDetails: record<Message: record>, StorageCapacity: record, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: record, KmsKeyId: record, ResourceARN: string, Tags: list<record>, CopyTagsToDataRepositoryAssociations: record, LustreConfiguration: record<PerUnitStorageThroughput: record, DeploymentType: record, MountName: record, WeeklyMaintenanceStartTime: string, MetadataConfiguration: record, LogConfiguration: record>, DataRepositoryAssociationIds: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateFileCache")
-  let body = {ClientRequestToken: $ClientRequestToken, FileCacheType: $FileCacheType, FileCacheTypeVersion: $FileCacheTypeVersion, StorageCapacity: $StorageCapacity, SubnetIds: $SubnetIds, SecurityGroupIds: $SecurityGroupIds, Tags: $Tags, CopyTagsToDataRepositoryAssociations: $CopyTagsToDataRepositoryAssociations, KmsKeyId: $KmsKeyId, LustreConfiguration: $LustreConfiguration, DataRepositoryAssociations: $DataRepositoryAssociations} | compact
+  let body = {"ClientRequestToken": $client_request_token, "FileCacheType": $file_cache_type, "FileCacheTypeVersion": $file_cache_type_version, "StorageCapacity": $storage_capacity, "SubnetIds": $subnet_ids, "SecurityGroupIds": $security_group_ids, "Tags": $tags, "CopyTagsToDataRepositoryAssociations": $copy_tags_to_data_repository_associations, "KmsKeyId": $kms_key_id, "LustreConfiguration": $lustre_configuration, "DataRepositoryAssociations": $data_repository_associations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -426,7 +426,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-file-cache Creat
 # operationId: CreateFileSystem
 # --LustreConfiguration shape: {WeeklyMaintenanceStartTime?: any, ImportPath?: any, ExportPath?: any, ImportedFileChunkSize?: any, DeploymentType?: any, AutoImportPolicy?: any, PerUnitStorageThroughput?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: any, DriveCacheType?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
 # --OntapConfiguration shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, DeploymentType: any, EndpointIpAddressRange?: any, FsxAdminPassword?: any, DiskIopsConfiguration?: any, PreferredSubnetId?: any, RouteTableIds?: any, ThroughputCapacity: any, WeeklyMaintenanceStartTime?: string}
-export def "x-amz-target-aws-simba-api-service-v20180301-create-file-system CreateFileSystem" [
+export def "x-amz-target-aws-simba-api-service-v20180301-create-file-system create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,35 +435,35 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-file-system Crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  --ClientRequestToken: any
-  FileSystemType: any
-  StorageCapacity: any
-  --StorageType: any
-  SubnetIds: any
-  --SecurityGroupIds: any
-  --Tags: any
-  --KmsKeyId: string # <p>Specifies the ID of the Key Management Service (KMS) key to use for encrypting data on Amazon FSx file systems, as follows:</p> <ul> <li> <p>Amazon FSx for Lustre <code>PERSISTENT_1</code> and <code>PERSISTENT_2</code> deployment types only.</p> <p> <code>SCRATCH_1</code> and <code>SCRATCH_2</code> types are encrypted using the Amazon FSx service KMS key for your account.</p> </li> <li> <p>Amazon FSx for NetApp ONTAP</p> </li> <li> <p>Amazon FSx for OpenZFS</p> </li> <li> <p>Amazon FSx for Windows File Server</p> </li> </ul> <p>If a <code>KmsKeyId</code> isn't specified, the Amazon FSx-managed KMS key for your account is used. For more information, see <a href="https://docs.aws.amazon.com/kms/latest/APIReference/API_Encrypt.html">Encrypt</a> in the <i>Key Management Service API Reference</i>.</p>
-  --WindowsConfiguration: any
-  --LustreConfiguration: record # <p>The Lustre configuration for the file system being created.</p> <note> <p>The following parameters are not supported for file systems with a data repository association created with .</p> <ul> <li> <p> <code>AutoImportPolicy</code> </p> </li> <li> <p> <code>ExportPath</code> </p> </li> <li> <p> <code>ImportedChunkSize</code> </p> </li> <li> <p> <code>ImportPath</code> </p> </li> </ul> </note> — shape: {WeeklyMaintenanceStartTime?: any, ImportPath?: any, ExportPath?: any, ImportedFileChunkSize?: any, DeploymentType?: any, AutoImportPolicy?: any, PerUnitStorageThroughput?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: any, DriveCacheType?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
-  --OntapConfiguration: record # The ONTAP configuration properties of the FSx for ONTAP file system that you are creating. — shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, DeploymentType: any, EndpointIpAddressRange?: any, FsxAdminPassword?: any, DiskIopsConfiguration?: any, PreferredSubnetId?: any, RouteTableIds?: any, ThroughputCapacity: any, WeeklyMaintenanceStartTime?: string}
-  --FileSystemTypeVersion: any
-  --OpenZFSConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  --client-request-token: any
+  file_system_type: any
+  storage_capacity: any
+  --storage-type: any
+  subnet_ids: any
+  --security-group-ids: any
+  --tags: any
+  --kms-key-id: string # <p>Specifies the ID of the Key Management Service (KMS) key to use for encrypting data on Amazon FSx file systems, as follows:</p> <ul> <li> <p>Amazon FSx for Lustre <code>PERSISTENT_1</code> and <code>PERSISTENT_2</code> deployment types only.</p> <p> <code>SCRATCH_1</code> and <code>SCRATCH_2</code> types are encrypted using the Amazon FSx service KMS key for your account.</p> </li> <li> <p>Amazon FSx for NetApp ONTAP</p> </li> <li> <p>Amazon FSx for OpenZFS</p> </li> <li> <p>Amazon FSx for Windows File Server</p> </li> </ul> <p>If a <code>KmsKeyId</code> isn't specified, the Amazon FSx-managed KMS key for your account is used. For more information, see <a href="https://docs.aws.amazon.com/kms/latest/APIReference/API_Encrypt.html">Encrypt</a> in the <i>Key Management Service API Reference</i>.</p>
+  --windows-configuration: any
+  --lustre-configuration: record # <p>The Lustre configuration for the file system being created.</p> <note> <p>The following parameters are not supported for file systems with a data repository association created with .</p> <ul> <li> <p> <code>AutoImportPolicy</code> </p> </li> <li> <p> <code>ExportPath</code> </p> </li> <li> <p> <code>ImportedChunkSize</code> </p> </li> <li> <p> <code>ImportPath</code> </p> </li> </ul> </note> — shape: {WeeklyMaintenanceStartTime?: any, ImportPath?: any, ExportPath?: any, ImportedFileChunkSize?: any, DeploymentType?: any, AutoImportPolicy?: any, PerUnitStorageThroughput?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: any, DriveCacheType?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
+  --ontap-configuration: record # The ONTAP configuration properties of the FSx for ONTAP file system that you are creating. — shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, DeploymentType: any, EndpointIpAddressRange?: any, FsxAdminPassword?: any, DiskIopsConfiguration?: any, PreferredSubnetId?: any, RouteTableIds?: any, ThroughputCapacity: any, WeeklyMaintenanceStartTime?: string}
+  --file-system-type-version: any
+  --open-zfs-configuration: any
 ]: any -> record<FileSystem: record<OwnerId: record, CreationTime: record, FileSystemId: record, FileSystemType: record, Lifecycle: record, FailureDetails: record<Message: record>, StorageCapacity: record, StorageType: record, VpcId: record, SubnetIds: record, NetworkInterfaceIds: record, DNSName: record, KmsKeyId: record, ResourceARN: record, Tags: record, WindowsConfiguration: record<ActiveDirectoryId: record, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: record, RemoteAdministrationEndpoint: record, PreferredSubnetId: record, PreferredFileServerIp: record, ThroughputCapacity: record, MaintenanceOperationsInProgress: record, WeeklyMaintenanceStartTime: record, DailyAutomaticBackupStartTime: record, AutomaticBackupRetentionDays: record, CopyTagsToBackups: record, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: record, DataRepositoryConfiguration: record, DeploymentType: record, PerUnitStorageThroughput: record, MountName: record, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: record, DriveCacheType: record, DataCompressionType: record, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: record, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: record, EndpointIpAddressRange: record, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: record, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: record, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: record, CopyTagsToVolumes: record, DailyAutomaticBackupStartTime: string, DeploymentType: record, ThroughputCapacity: record, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateFileSystem")
-  let body = {ClientRequestToken: $ClientRequestToken, FileSystemType: $FileSystemType, StorageCapacity: $StorageCapacity, StorageType: $StorageType, SubnetIds: $SubnetIds, SecurityGroupIds: $SecurityGroupIds, Tags: $Tags, KmsKeyId: $KmsKeyId, WindowsConfiguration: $WindowsConfiguration, LustreConfiguration: $LustreConfiguration, OntapConfiguration: $OntapConfiguration, FileSystemTypeVersion: $FileSystemTypeVersion, OpenZFSConfiguration: $OpenZFSConfiguration} | compact
+  let body = {"ClientRequestToken": $client_request_token, "FileSystemType": $file_system_type, "StorageCapacity": $storage_capacity, "StorageType": $storage_type, "SubnetIds": $subnet_ids, "SecurityGroupIds": $security_group_ids, "Tags": $tags, "KmsKeyId": $kms_key_id, "WindowsConfiguration": $windows_configuration, "LustreConfiguration": $lustre_configuration, "OntapConfiguration": $ontap_configuration, "FileSystemTypeVersion": $file_system_type_version, "OpenZFSConfiguration": $open_zfs_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -475,7 +475,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-file-system Crea
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateFileSystemFromBackup
 # operationId: CreateFileSystemFromBackup
 # --LustreConfiguration shape: {WeeklyMaintenanceStartTime?: any, ImportPath?: any, ExportPath?: any, ImportedFileChunkSize?: any, DeploymentType?: any, AutoImportPolicy?: any, PerUnitStorageThroughput?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: any, DriveCacheType?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-create-file-system-from-backup CreateFileSystemFromBackup" [
+export def "x-amz-target-aws-simba-api-service-v20180301-create-file-system-from-backup create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,34 +484,34 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-file-system-from
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  BackupId: string # The ID of the source backup. Specifies the backup that you are copying.
-  --ClientRequestToken: any
-  SubnetIds: any
-  --SecurityGroupIds: any
-  --Tags: any
-  --WindowsConfiguration: any
-  --LustreConfiguration: record # <p>The Lustre configuration for the file system being created.</p> <note> <p>The following parameters are not supported for file systems with a data repository association created with .</p> <ul> <li> <p> <code>AutoImportPolicy</code> </p> </li> <li> <p> <code>ExportPath</code> </p> </li> <li> <p> <code>ImportedChunkSize</code> </p> </li> <li> <p> <code>ImportPath</code> </p> </li> </ul> </note> — shape: {WeeklyMaintenanceStartTime?: any, ImportPath?: any, ExportPath?: any, ImportedFileChunkSize?: any, DeploymentType?: any, AutoImportPolicy?: any, PerUnitStorageThroughput?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: any, DriveCacheType?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
-  --StorageType: any
-  --KmsKeyId: string # <p>Specifies the ID of the Key Management Service (KMS) key to use for encrypting data on Amazon FSx file systems, as follows:</p> <ul> <li> <p>Amazon FSx for Lustre <code>PERSISTENT_1</code> and <code>PERSISTENT_2</code> deployment types only.</p> <p> <code>SCRATCH_1</code> and <code>SCRATCH_2</code> types are encrypted using the Amazon FSx service KMS key for your account.</p> </li> <li> <p>Amazon FSx for NetApp ONTAP</p> </li> <li> <p>Amazon FSx for OpenZFS</p> </li> <li> <p>Amazon FSx for Windows File Server</p> </li> </ul> <p>If a <code>KmsKeyId</code> isn't specified, the Amazon FSx-managed KMS key for your account is used. For more information, see <a href="https://docs.aws.amazon.com/kms/latest/APIReference/API_Encrypt.html">Encrypt</a> in the <i>Key Management Service API Reference</i>.</p>
-  --FileSystemTypeVersion: any
-  --OpenZFSConfiguration: any
-  --StorageCapacity: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  backup_id: string # The ID of the source backup. Specifies the backup that you are copying.
+  --client-request-token: any
+  subnet_ids: any
+  --security-group-ids: any
+  --tags: any
+  --windows-configuration: any
+  --lustre-configuration: record # <p>The Lustre configuration for the file system being created.</p> <note> <p>The following parameters are not supported for file systems with a data repository association created with .</p> <ul> <li> <p> <code>AutoImportPolicy</code> </p> </li> <li> <p> <code>ExportPath</code> </p> </li> <li> <p> <code>ImportedChunkSize</code> </p> </li> <li> <p> <code>ImportPath</code> </p> </li> </ul> </note> — shape: {WeeklyMaintenanceStartTime?: any, ImportPath?: any, ExportPath?: any, ImportedFileChunkSize?: any, DeploymentType?: any, AutoImportPolicy?: any, PerUnitStorageThroughput?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, CopyTagsToBackups?: any, DriveCacheType?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
+  --storage-type: any
+  --kms-key-id: string # <p>Specifies the ID of the Key Management Service (KMS) key to use for encrypting data on Amazon FSx file systems, as follows:</p> <ul> <li> <p>Amazon FSx for Lustre <code>PERSISTENT_1</code> and <code>PERSISTENT_2</code> deployment types only.</p> <p> <code>SCRATCH_1</code> and <code>SCRATCH_2</code> types are encrypted using the Amazon FSx service KMS key for your account.</p> </li> <li> <p>Amazon FSx for NetApp ONTAP</p> </li> <li> <p>Amazon FSx for OpenZFS</p> </li> <li> <p>Amazon FSx for Windows File Server</p> </li> </ul> <p>If a <code>KmsKeyId</code> isn't specified, the Amazon FSx-managed KMS key for your account is used. For more information, see <a href="https://docs.aws.amazon.com/kms/latest/APIReference/API_Encrypt.html">Encrypt</a> in the <i>Key Management Service API Reference</i>.</p>
+  --file-system-type-version: any
+  --open-zfs-configuration: any
+  --storage-capacity: any
 ]: any -> record<FileSystem: record<OwnerId: record, CreationTime: record, FileSystemId: record, FileSystemType: record, Lifecycle: record, FailureDetails: record<Message: record>, StorageCapacity: record, StorageType: record, VpcId: record, SubnetIds: record, NetworkInterfaceIds: record, DNSName: record, KmsKeyId: record, ResourceARN: record, Tags: record, WindowsConfiguration: record<ActiveDirectoryId: record, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: record, RemoteAdministrationEndpoint: record, PreferredSubnetId: record, PreferredFileServerIp: record, ThroughputCapacity: record, MaintenanceOperationsInProgress: record, WeeklyMaintenanceStartTime: record, DailyAutomaticBackupStartTime: record, AutomaticBackupRetentionDays: record, CopyTagsToBackups: record, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: record, DataRepositoryConfiguration: record, DeploymentType: record, PerUnitStorageThroughput: record, MountName: record, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: record, DriveCacheType: record, DataCompressionType: record, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: record, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: record, EndpointIpAddressRange: record, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: record, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: record, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: record, CopyTagsToVolumes: record, DailyAutomaticBackupStartTime: string, DeploymentType: record, ThroughputCapacity: record, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateFileSystemFromBackup")
-  let body = {BackupId: $BackupId, ClientRequestToken: $ClientRequestToken, SubnetIds: $SubnetIds, SecurityGroupIds: $SecurityGroupIds, Tags: $Tags, WindowsConfiguration: $WindowsConfiguration, LustreConfiguration: $LustreConfiguration, StorageType: $StorageType, KmsKeyId: $KmsKeyId, FileSystemTypeVersion: $FileSystemTypeVersion, OpenZFSConfiguration: $OpenZFSConfiguration, StorageCapacity: $StorageCapacity} | compact
+  let body = {"BackupId": $backup_id, "ClientRequestToken": $client_request_token, "SubnetIds": $subnet_ids, "SecurityGroupIds": $security_group_ids, "Tags": $tags, "WindowsConfiguration": $windows_configuration, "LustreConfiguration": $lustre_configuration, "StorageType": $storage_type, "KmsKeyId": $kms_key_id, "FileSystemTypeVersion": $file_system_type_version, "OpenZFSConfiguration": $open_zfs_configuration, "StorageCapacity": $storage_capacity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -523,7 +523,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-file-system-from
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateSnapshot
 # operationId: CreateSnapshot
 # --Tags item shape: {Key: any, Value: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-create-snapshot CreateSnapshot" [
+export def "x-amz-target-aws-simba-api-service-v20180301-create-snapshot create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -532,26 +532,26 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-snapshot CreateS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  Name: any
-  VolumeId: any
-  --Tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  name: any
+  volume_id: any
+  --tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
 ]: any -> record<Snapshot: record<ResourceARN: string, SnapshotId: record, Name: record, VolumeId: record, CreationTime: string, Lifecycle: record, LifecycleTransitionReason: record<Message: string>, Tags: list<record>, AdministrativeActions: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateSnapshot")
-  let body = {ClientRequestToken: $ClientRequestToken, Name: $Name, VolumeId: $VolumeId, Tags: $Tags} | compact
+  let body = {"ClientRequestToken": $client_request_token, "Name": $name, "VolumeId": $volume_id, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -563,7 +563,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-snapshot CreateS
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateStorageVirtualMachine
 # operationId: CreateStorageVirtualMachine
 # --Tags item shape: {Key: any, Value: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-create-storage-virtual-machine CreateStorageVirtualMachine" [
+export def "x-amz-target-aws-simba-api-service-v20180301-create-storage-virtual-machine create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,29 +572,29 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-storage-virtual-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  --ActiveDirectoryConfiguration: any
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  FileSystemId: string # The globally unique ID of the file system, assigned by Amazon FSx.
-  Name: any
-  --SvmAdminPassword: any
-  --Tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
-  --RootVolumeSecurityStyle: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  --active-directory-configuration: any
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  file_system_id: string # The globally unique ID of the file system, assigned by Amazon FSx.
+  name: any
+  --svm-admin-password: any
+  --tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
+  --root-volume-security-style: any
 ]: any -> record<StorageVirtualMachine: record<ActiveDirectoryConfiguration: record<NetBiosName: record, SelfManagedActiveDirectoryConfiguration: record>, CreationTime: string, Endpoints: record<Iscsi: record, Management: record, Nfs: record, Smb: record>, FileSystemId: string, Lifecycle: record, Name: record, ResourceARN: string, StorageVirtualMachineId: record, Subtype: record, UUID: record, Tags: list<record>, LifecycleTransitionReason: record<Message: string>, RootVolumeSecurityStyle: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateStorageVirtualMachine")
-  let body = {ActiveDirectoryConfiguration: $ActiveDirectoryConfiguration, ClientRequestToken: $ClientRequestToken, FileSystemId: $FileSystemId, Name: $Name, SvmAdminPassword: $SvmAdminPassword, Tags: $Tags, RootVolumeSecurityStyle: $RootVolumeSecurityStyle} | compact
+  let body = {"ActiveDirectoryConfiguration": $active_directory_configuration, "ClientRequestToken": $client_request_token, "FileSystemId": $file_system_id, "Name": $name, "SvmAdminPassword": $svm_admin_password, "Tags": $tags, "RootVolumeSecurityStyle": $root_volume_security_style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -606,7 +606,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-storage-virtual-
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateVolume
 # operationId: CreateVolume
 # --Tags item shape: {Key: any, Value: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-create-volume CreateVolume" [
+export def "x-amz-target-aws-simba-api-service-v20180301-create-volume create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -615,28 +615,28 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-volume CreateVol
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  VolumeType: any
-  Name: any
-  --OntapConfiguration: any
-  --Tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
-  --OpenZFSConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  volume_type: any
+  name: any
+  --ontap-configuration: any
+  --tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
+  --open-zfs-configuration: any
 ]: any -> record<Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: record, Name: record, OntapConfiguration: record<FlexCacheEndpointType: record, JunctionPath: record, SecurityStyle: record, SizeInMegabytes: record, StorageEfficiencyEnabled: record, StorageVirtualMachineId: record, StorageVirtualMachineRoot: record, TieringPolicy: record, UUID: record, OntapVolumeType: record, SnapshotPolicy: record, CopyTagsToBackups: record>, ResourceARN: string, Tags: list<record>, VolumeId: record, VolumeType: record, LifecycleTransitionReason: record<Message: string>, AdministrativeActions: record, OpenZFSConfiguration: record<ParentVolumeId: record, VolumePath: record, StorageCapacityReservationGiB: record, StorageCapacityQuotaGiB: record, RecordSizeKiB: record, DataCompressionType: record, CopyTagsToSnapshots: record, OriginSnapshot: record, ReadOnly: record, NfsExports: record, UserAndGroupQuotas: record, RestoreToSnapshot: record, DeleteIntermediateSnaphots: record, DeleteClonedVolumes: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateVolume")
-  let body = {ClientRequestToken: $ClientRequestToken, VolumeType: $VolumeType, Name: $Name, OntapConfiguration: $OntapConfiguration, Tags: $Tags, OpenZFSConfiguration: $OpenZFSConfiguration} | compact
+  let body = {"ClientRequestToken": $client_request_token, "VolumeType": $volume_type, "Name": $name, "OntapConfiguration": $ontap_configuration, "Tags": $tags, "OpenZFSConfiguration": $open_zfs_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -648,7 +648,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-volume CreateVol
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateVolumeFromBackup
 # operationId: CreateVolumeFromBackup
 # --Tags item shape: {Key: any, Value: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-create-volume-from-backup CreateVolumeFromBackup" [
+export def "x-amz-target-aws-simba-api-service-v20180301-create-volume-from-backup create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,27 +657,27 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-volume-from-back
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  BackupId: string # The ID of the source backup. Specifies the backup that you are copying.
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  Name: any
-  --OntapConfiguration: any
-  --Tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  backup_id: string # The ID of the source backup. Specifies the backup that you are copying.
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  name: any
+  --ontap-configuration: any
+  --tags: list # A list of <code>Tag</code> values, with a maximum of 50 elements. — item shape: {Key: any, Value: any}
 ]: any -> record<Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: record, Name: record, OntapConfiguration: record<FlexCacheEndpointType: record, JunctionPath: record, SecurityStyle: record, SizeInMegabytes: record, StorageEfficiencyEnabled: record, StorageVirtualMachineId: record, StorageVirtualMachineRoot: record, TieringPolicy: record, UUID: record, OntapVolumeType: record, SnapshotPolicy: record, CopyTagsToBackups: record>, ResourceARN: string, Tags: list<record>, VolumeId: record, VolumeType: record, LifecycleTransitionReason: record<Message: string>, AdministrativeActions: record, OpenZFSConfiguration: record<ParentVolumeId: record, VolumePath: record, StorageCapacityReservationGiB: record, StorageCapacityQuotaGiB: record, RecordSizeKiB: record, DataCompressionType: record, CopyTagsToSnapshots: record, OriginSnapshot: record, ReadOnly: record, NfsExports: record, UserAndGroupQuotas: record, RestoreToSnapshot: record, DeleteIntermediateSnaphots: record, DeleteClonedVolumes: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.CreateVolumeFromBackup")
-  let body = {BackupId: $BackupId, ClientRequestToken: $ClientRequestToken, Name: $Name, OntapConfiguration: $OntapConfiguration, Tags: $Tags} | compact
+  let body = {"BackupId": $backup_id, "ClientRequestToken": $client_request_token, "Name": $name, "OntapConfiguration": $ontap_configuration, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -688,7 +688,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-create-volume-from-back
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteBackup
 # operationId: DeleteBackup
-export def "x-amz-target-aws-simba-api-service-v20180301-delete-backup DeleteBackup" [
+export def "x-amz-target-aws-simba-api-service-v20180301-delete-backup delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,24 +697,24 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-backup DeleteBac
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  BackupId: any
-  --ClientRequestToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  backup_id: any
+  --client-request-token: any
 ]: any -> record<BackupId: record, Lifecycle: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteBackup")
-  let body = {BackupId: $BackupId, ClientRequestToken: $ClientRequestToken} | compact
+  let body = {"BackupId": $backup_id, "ClientRequestToken": $client_request_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -725,7 +725,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-backup DeleteBac
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteDataRepositoryAssociation
 # operationId: DeleteDataRepositoryAssociation
-export def "x-amz-target-aws-simba-api-service-v20180301-delete-data-repository-association DeleteDataRepositoryAssociation" [
+export def "x-amz-target-aws-simba-api-service-v20180301-delete-data-repository-association delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,25 +734,25 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-data-repository-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  AssociationId: any
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  --DeleteDataInFileSystem: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  association_id: any
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  --delete-data-in-file-system: any
 ]: any -> record<AssociationId: record, Lifecycle: record, DeleteDataInFileSystem: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteDataRepositoryAssociation")
-  let body = {AssociationId: $AssociationId, ClientRequestToken: $ClientRequestToken, DeleteDataInFileSystem: $DeleteDataInFileSystem} | compact
+  let body = {"AssociationId": $association_id, "ClientRequestToken": $client_request_token, "DeleteDataInFileSystem": $delete_data_in_file_system} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -763,7 +763,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-data-repository-
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteFileCache
 # operationId: DeleteFileCache
-export def "x-amz-target-aws-simba-api-service-v20180301-delete-file-cache DeleteFileCache" [
+export def "x-amz-target-aws-simba-api-service-v20180301-delete-file-cache delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,24 +772,24 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-file-cache Delet
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  FileCacheId: any
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  file_cache_id: any
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
 ]: any -> record<FileCacheId: record, Lifecycle: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteFileCache")
-  let body = {FileCacheId: $FileCacheId, ClientRequestToken: $ClientRequestToken} | compact
+  let body = {"FileCacheId": $file_cache_id, "ClientRequestToken": $client_request_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -802,7 +802,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-file-cache Delet
 # operationId: DeleteFileSystem
 # --WindowsConfiguration shape: {SkipFinalBackup?: any, FinalBackupTags?: any}
 # --LustreConfiguration shape: {SkipFinalBackup?: any, FinalBackupTags?: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-delete-file-system DeleteFileSystem" [
+export def "x-amz-target-aws-simba-api-service-v20180301-delete-file-system delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,27 +811,27 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-file-system Dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  FileSystemId: any
-  --ClientRequestToken: any
-  --WindowsConfiguration: record # The configuration object for the Microsoft Windows file system used in the <code>DeleteFileSystem</code> operation. — shape: {SkipFinalBackup?: any, FinalBackupTags?: any}
-  --LustreConfiguration: record # The configuration object for the Amazon FSx for Lustre file system being deleted in the <code>DeleteFileSystem</code> operation. — shape: {SkipFinalBackup?: any, FinalBackupTags?: any}
-  --OpenZFSConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  file_system_id: any
+  --client-request-token: any
+  --windows-configuration: record # The configuration object for the Microsoft Windows file system used in the <code>DeleteFileSystem</code> operation. — shape: {SkipFinalBackup?: any, FinalBackupTags?: any}
+  --lustre-configuration: record # The configuration object for the Amazon FSx for Lustre file system being deleted in the <code>DeleteFileSystem</code> operation. — shape: {SkipFinalBackup?: any, FinalBackupTags?: any}
+  --open-zfs-configuration: any
 ]: any -> record<FileSystemId: record, Lifecycle: record, WindowsResponse: record<FinalBackupId: record, FinalBackupTags: record>, LustreResponse: record<FinalBackupId: record, FinalBackupTags: record>, OpenZFSResponse: record<FinalBackupId: string, FinalBackupTags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteFileSystem")
-  let body = {FileSystemId: $FileSystemId, ClientRequestToken: $ClientRequestToken, WindowsConfiguration: $WindowsConfiguration, LustreConfiguration: $LustreConfiguration, OpenZFSConfiguration: $OpenZFSConfiguration} | compact
+  let body = {"FileSystemId": $file_system_id, "ClientRequestToken": $client_request_token, "WindowsConfiguration": $windows_configuration, "LustreConfiguration": $lustre_configuration, "OpenZFSConfiguration": $open_zfs_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -842,7 +842,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-file-system Dele
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteSnapshot
 # operationId: DeleteSnapshot
-export def "x-amz-target-aws-simba-api-service-v20180301-delete-snapshot DeleteSnapshot" [
+export def "x-amz-target-aws-simba-api-service-v20180301-delete-snapshot delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -851,24 +851,24 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-snapshot DeleteS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  SnapshotId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  snapshot_id: any
 ]: any -> record<SnapshotId: record, Lifecycle: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteSnapshot")
-  let body = {ClientRequestToken: $ClientRequestToken, SnapshotId: $SnapshotId} | compact
+  let body = {"ClientRequestToken": $client_request_token, "SnapshotId": $snapshot_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -879,7 +879,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-snapshot DeleteS
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteStorageVirtualMachine
 # operationId: DeleteStorageVirtualMachine
-export def "x-amz-target-aws-simba-api-service-v20180301-delete-storage-virtual-machine DeleteStorageVirtualMachine" [
+export def "x-amz-target-aws-simba-api-service-v20180301-delete-storage-virtual-machine delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,24 +888,24 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-storage-virtual-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  StorageVirtualMachineId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  storage_virtual_machine_id: any
 ]: any -> record<StorageVirtualMachineId: record, Lifecycle: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteStorageVirtualMachine")
-  let body = {ClientRequestToken: $ClientRequestToken, StorageVirtualMachineId: $StorageVirtualMachineId} | compact
+  let body = {"ClientRequestToken": $client_request_token, "StorageVirtualMachineId": $storage_virtual_machine_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -916,7 +916,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-storage-virtual-
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteVolume
 # operationId: DeleteVolume
-export def "x-amz-target-aws-simba-api-service-v20180301-delete-volume DeleteVolume" [
+export def "x-amz-target-aws-simba-api-service-v20180301-delete-volume delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,26 +925,26 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-volume DeleteVol
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  VolumeId: any
-  --OntapConfiguration: any
-  --OpenZFSConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  volume_id: any
+  --ontap-configuration: any
+  --open-zfs-configuration: any
 ]: any -> record<VolumeId: record, Lifecycle: record, OntapResponse: record<FinalBackupId: string, FinalBackupTags: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DeleteVolume")
-  let body = {ClientRequestToken: $ClientRequestToken, VolumeId: $VolumeId, OntapConfiguration: $OntapConfiguration, OpenZFSConfiguration: $OpenZFSConfiguration} | compact
+  let body = {"ClientRequestToken": $client_request_token, "VolumeId": $volume_id, "OntapConfiguration": $ontap_configuration, "OpenZFSConfiguration": $open_zfs_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -955,7 +955,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-delete-volume DeleteVol
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeBackups
 # operationId: DescribeBackups
-export def "x-amz-target-aws-simba-api-service-v20180301-describe-backups DescribeBackups" [
+export def "x-amz-target-aws-simba-api-service-v20180301-describe-backups post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,29 +964,29 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-backups Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --BackupIds: any
-  --Filters: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --backup-ids: any
+  --filters: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Backups: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeBackups" $qp)
-  let body = {BackupIds: $BackupIds, Filters: $Filters, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"BackupIds": $backup_ids, "Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -998,7 +998,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-backups Descri
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeDataRepositoryAssociations
 # operationId: DescribeDataRepositoryAssociations
 # --Filters item shape: {Name?: any, Values?: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-describe-data-repository-associations DescribeDataRepositoryAssociations" [
+export def "x-amz-target-aws-simba-api-service-v20180301-describe-data-repository-associations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,29 +1007,29 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-data-repositor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  --AssociationIds: any
-  --Filters: list # A list of <code>Filter</code> elements. — item shape: {Name?: any, Values?: any}
-  --MaxResults: any
-  --NextToken: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  --association-ids: any
+  --filters: list # A list of <code>Filter</code> elements. — item shape: {Name?: any, Values?: any}
+  --max-results: any
+  --next-token: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
 ]: any -> record<Associations: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeDataRepositoryAssociations" $qp)
-  let body = {AssociationIds: $AssociationIds, Filters: $Filters, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AssociationIds": $association_ids, "Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1040,7 +1040,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-data-repositor
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeDataRepositoryTasks
 # operationId: DescribeDataRepositoryTasks
-export def "x-amz-target-aws-simba-api-service-v20180301-describe-data-repository-tasks DescribeDataRepositoryTasks" [
+export def "x-amz-target-aws-simba-api-service-v20180301-describe-data-repository-tasks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,29 +1049,29 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-data-repositor
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  --TaskIds: any
-  --Filters: any
-  --MaxResults: int # The maximum number of resources to return in the response. This value must be an integer greater than zero.
-  --NextToken: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  --task-ids: any
+  --filters: any
+  --max-results: int # The maximum number of resources to return in the response. This value must be an integer greater than zero.
+  --next-token: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
 ]: any -> record<DataRepositoryTasks: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeDataRepositoryTasks" $qp)
-  let body = {TaskIds: $TaskIds, Filters: $Filters, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"TaskIds": $task_ids, "Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1082,7 +1082,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-data-repositor
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeFileCaches
 # operationId: DescribeFileCaches
-export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-caches DescribeFileCaches" [
+export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-caches post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,28 +1091,28 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-caches De
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --FileCacheIds: any
-  --MaxResults: int # The maximum number of resources to return in the response. This value must be an integer greater than zero.
-  --NextToken: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --file-cache-ids: any
+  --max-results: int # The maximum number of resources to return in the response. This value must be an integer greater than zero.
+  --next-token: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
 ]: any -> record<FileCaches: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeFileCaches" $qp)
-  let body = {FileCacheIds: $FileCacheIds, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"FileCacheIds": $file_cache_ids, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1123,7 +1123,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-caches De
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeFileSystemAliases
 # operationId: DescribeFileSystemAliases
-export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-system-aliases DescribeFileSystemAliases" [
+export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-system-aliases post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1132,29 +1132,29 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-system-al
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  FileSystemId: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  file_system_id: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Aliases: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeFileSystemAliases" $qp)
-  let body = {ClientRequestToken: $ClientRequestToken, FileSystemId: $FileSystemId, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ClientRequestToken": $client_request_token, "FileSystemId": $file_system_id, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1165,7 +1165,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-system-al
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeFileSystems
 # operationId: DescribeFileSystems
-export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-systems DescribeFileSystems" [
+export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-systems post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,28 +1174,28 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-systems D
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  --FileSystemIds: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  --file-system-ids: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<FileSystems: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeFileSystems" $qp)
-  let body = {FileSystemIds: $FileSystemIds, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"FileSystemIds": $file_system_ids, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1206,7 +1206,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-file-systems D
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeSnapshots
 # operationId: DescribeSnapshots
-export def "x-amz-target-aws-simba-api-service-v20180301-describe-snapshots DescribeSnapshots" [
+export def "x-amz-target-aws-simba-api-service-v20180301-describe-snapshots post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1215,29 +1215,29 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-snapshots Desc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  --SnapshotIds: any
-  --Filters: any
-  --MaxResults: int # The maximum number of resources to return in the response. This value must be an integer greater than zero.
-  --NextToken: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  --snapshot-ids: any
+  --filters: any
+  --max-results: int # The maximum number of resources to return in the response. This value must be an integer greater than zero.
+  --next-token: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
 ]: any -> record<Snapshots: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeSnapshots" $qp)
-  let body = {SnapshotIds: $SnapshotIds, Filters: $Filters, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"SnapshotIds": $snapshot_ids, "Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1248,7 +1248,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-snapshots Desc
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeStorageVirtualMachines
 # operationId: DescribeStorageVirtualMachines
-export def "x-amz-target-aws-simba-api-service-v20180301-describe-storage-virtual-machines DescribeStorageVirtualMachines" [
+export def "x-amz-target-aws-simba-api-service-v20180301-describe-storage-virtual-machines post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,29 +1257,29 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-storage-virtua
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  --StorageVirtualMachineIds: any
-  --Filters: any
-  --MaxResults: int # The maximum number of resources to return in the response. This value must be an integer greater than zero.
-  --NextToken: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  --storage-virtual-machine-ids: any
+  --filters: any
+  --max-results: int # The maximum number of resources to return in the response. This value must be an integer greater than zero.
+  --next-token: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
 ]: any -> record<StorageVirtualMachines: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeStorageVirtualMachines" $qp)
-  let body = {StorageVirtualMachineIds: $StorageVirtualMachineIds, Filters: $Filters, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"StorageVirtualMachineIds": $storage_virtual_machine_ids, "Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1290,7 +1290,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-storage-virtua
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeVolumes
 # operationId: DescribeVolumes
-export def "x-amz-target-aws-simba-api-service-v20180301-describe-volumes DescribeVolumes" [
+export def "x-amz-target-aws-simba-api-service-v20180301-describe-volumes post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1299,29 +1299,29 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-volumes Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --VolumeIds: any
-  --Filters: any
-  --MaxResults: int # The maximum number of resources to return in the response. This value must be an integer greater than zero.
-  --NextToken: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --volume-ids: any
+  --filters: any
+  --max-results: int # The maximum number of resources to return in the response. This value must be an integer greater than zero.
+  --next-token: string # (Optional) Opaque pagination token returned from a previous operation (String). If present, this token indicates from what point you can continue processing the request, where the previous <code>NextToken</code> value left off.
 ]: any -> record<Volumes: record, NextToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DescribeVolumes" $qp)
-  let body = {VolumeIds: $VolumeIds, Filters: $Filters, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"VolumeIds": $volume_ids, "Filters": $filters, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1332,7 +1332,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-describe-volumes Descri
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.DisassociateFileSystemAliases
 # operationId: DisassociateFileSystemAliases
-export def "x-amz-target-aws-simba-api-service-v20180301-disassociate-file-system-aliases DisassociateFileSystemAliases" [
+export def "x-amz-target-aws-simba-api-service-v20180301-disassociate-file-system-aliases post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1341,25 +1341,25 @@ export def "x-amz-target-aws-simba-api-service-v20180301-disassociate-file-syste
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  FileSystemId: any
-  Aliases: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  file_system_id: any
+  aliases: any
 ]: any -> record<Aliases: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.DisassociateFileSystemAliases")
-  let body = {ClientRequestToken: $ClientRequestToken, FileSystemId: $FileSystemId, Aliases: $Aliases} | compact
+  let body = {"ClientRequestToken": $client_request_token, "FileSystemId": $file_system_id, "Aliases": $aliases} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1370,7 +1370,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-disassociate-file-syste
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-aws-simba-api-service-v20180301-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-aws-simba-api-service-v20180301-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1379,28 +1379,28 @@ export def "x-amz-target-aws-simba-api-service-v20180301-list-tags-for-resource 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  ResourceARN: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  resource_arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Tags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.ListTagsForResource" $qp)
-  let body = {ResourceARN: $ResourceARN, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ResourceARN": $resource_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1411,7 +1411,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-list-tags-for-resource 
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.ReleaseFileSystemNfsV3Locks
 # operationId: ReleaseFileSystemNfsV3Locks
-export def "x-amz-target-aws-simba-api-service-v20180301-release-file-system-nfs-v3-locks ReleaseFileSystemNfsV3Locks" [
+export def "x-amz-target-aws-simba-api-service-v20180301-release-file-system-nfs-v3-locks post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1420,24 +1420,24 @@ export def "x-amz-target-aws-simba-api-service-v20180301-release-file-system-nfs
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  FileSystemId: string # The globally unique ID of the file system, assigned by Amazon FSx.
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  file_system_id: string # The globally unique ID of the file system, assigned by Amazon FSx.
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
 ]: any -> record<FileSystem: record<OwnerId: record, CreationTime: record, FileSystemId: record, FileSystemType: record, Lifecycle: record, FailureDetails: record<Message: record>, StorageCapacity: record, StorageType: record, VpcId: record, SubnetIds: record, NetworkInterfaceIds: record, DNSName: record, KmsKeyId: record, ResourceARN: record, Tags: record, WindowsConfiguration: record<ActiveDirectoryId: record, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: record, RemoteAdministrationEndpoint: record, PreferredSubnetId: record, PreferredFileServerIp: record, ThroughputCapacity: record, MaintenanceOperationsInProgress: record, WeeklyMaintenanceStartTime: record, DailyAutomaticBackupStartTime: record, AutomaticBackupRetentionDays: record, CopyTagsToBackups: record, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: record, DataRepositoryConfiguration: record, DeploymentType: record, PerUnitStorageThroughput: record, MountName: record, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: record, DriveCacheType: record, DataCompressionType: record, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: record, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: record, EndpointIpAddressRange: record, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: record, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: record, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: record, CopyTagsToVolumes: record, DailyAutomaticBackupStartTime: string, DeploymentType: record, ThroughputCapacity: record, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.ReleaseFileSystemNfsV3Locks")
-  let body = {FileSystemId: $FileSystemId, ClientRequestToken: $ClientRequestToken} | compact
+  let body = {"FileSystemId": $file_system_id, "ClientRequestToken": $client_request_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1448,7 +1448,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-release-file-system-nfs
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.RestoreVolumeFromSnapshot
 # operationId: RestoreVolumeFromSnapshot
-export def "x-amz-target-aws-simba-api-service-v20180301-restore-volume-from-snapshot RestoreVolumeFromSnapshot" [
+export def "x-amz-target-aws-simba-api-service-v20180301-restore-volume-from-snapshot post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1457,26 +1457,26 @@ export def "x-amz-target-aws-simba-api-service-v20180301-restore-volume-from-sna
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  VolumeId: any
-  SnapshotId: any
-  --Options: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  volume_id: any
+  snapshot_id: any
+  --options: any
 ]: any -> record<VolumeId: record, Lifecycle: record, AdministrativeActions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.RestoreVolumeFromSnapshot")
-  let body = {ClientRequestToken: $ClientRequestToken, VolumeId: $VolumeId, SnapshotId: $SnapshotId, Options: $Options} | compact
+  let body = {"ClientRequestToken": $client_request_token, "VolumeId": $volume_id, "SnapshotId": $snapshot_id, "Options": $options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1487,7 +1487,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-restore-volume-from-sna
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.TagResource
 # operationId: TagResource
-export def "x-amz-target-aws-simba-api-service-v20180301-tag-resource TagResource" [
+export def "x-amz-target-aws-simba-api-service-v20180301-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1496,24 +1496,24 @@ export def "x-amz-target-aws-simba-api-service-v20180301-tag-resource TagResourc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  ResourceARN: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.TagResource")
-  let body = {ResourceARN: $ResourceARN, Tags: $Tags} | compact
+  let body = {"ResourceARN": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1524,7 +1524,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-tag-resource TagResourc
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-aws-simba-api-service-v20180301-untag-resource UntagResource" [
+export def "x-amz-target-aws-simba-api-service-v20180301-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1533,24 +1533,24 @@ export def "x-amz-target-aws-simba-api-service-v20180301-untag-resource UntagRes
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  ResourceARN: any
-  TagKeys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  resource_arn: any
+  tag_keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.UntagResource")
-  let body = {ResourceARN: $ResourceARN, TagKeys: $TagKeys} | compact
+  let body = {"ResourceARN": $resource_arn, "TagKeys": $tag_keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1561,7 +1561,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-untag-resource UntagRes
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateDataRepositoryAssociation
 # operationId: UpdateDataRepositoryAssociation
-export def "x-amz-target-aws-simba-api-service-v20180301-update-data-repository-association UpdateDataRepositoryAssociation" [
+export def "x-amz-target-aws-simba-api-service-v20180301-update-data-repository-association update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1570,26 +1570,26 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-data-repository-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  AssociationId: any
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  --ImportedFileChunkSize: any
-  --S3: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  association_id: any
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  --imported-file-chunk-size: any
+  --s3: any
 ]: any -> record<Association: record<AssociationId: record, ResourceARN: string, FileSystemId: string, Lifecycle: record, FailureDetails: record<Message: string>, FileSystemPath: record, DataRepositoryPath: record, BatchImportMetaDataOnCreate: record, ImportedFileChunkSize: record, S3: record<AutoImportPolicy: record, AutoExportPolicy: record>, Tags: list<record>, CreationTime: string, FileCacheId: record, FileCachePath: record, DataRepositorySubdirectories: record, NFS: record<Version: record, DnsIps: record, AutoExportPolicy: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateDataRepositoryAssociation")
-  let body = {AssociationId: $AssociationId, ClientRequestToken: $ClientRequestToken, ImportedFileChunkSize: $ImportedFileChunkSize, S3: $S3} | compact
+  let body = {"AssociationId": $association_id, "ClientRequestToken": $client_request_token, "ImportedFileChunkSize": $imported_file_chunk_size, "S3": $s3} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1600,7 +1600,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-data-repository-
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateFileCache
 # operationId: UpdateFileCache
-export def "x-amz-target-aws-simba-api-service-v20180301-update-file-cache UpdateFileCache" [
+export def "x-amz-target-aws-simba-api-service-v20180301-update-file-cache update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1609,25 +1609,25 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-file-cache Updat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  FileCacheId: any
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  --LustreConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  file_cache_id: any
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  --lustre-configuration: any
 ]: any -> record<FileCache: record<OwnerId: string, CreationTime: string, FileCacheId: record, FileCacheType: record, FileCacheTypeVersion: record, Lifecycle: record, FailureDetails: record<Message: record>, StorageCapacity: record, VpcId: string, SubnetIds: list<string>, NetworkInterfaceIds: list<string>, DNSName: record, KmsKeyId: record, ResourceARN: string, LustreConfiguration: record<PerUnitStorageThroughput: record, DeploymentType: record, MountName: record, WeeklyMaintenanceStartTime: string, MetadataConfiguration: record, LogConfiguration: record>, DataRepositoryAssociationIds: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateFileCache")
-  let body = {FileCacheId: $FileCacheId, ClientRequestToken: $ClientRequestToken, LustreConfiguration: $LustreConfiguration} | compact
+  let body = {"FileCacheId": $file_cache_id, "ClientRequestToken": $client_request_token, "LustreConfiguration": $lustre_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1640,7 +1640,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-file-cache Updat
 # operationId: UpdateFileSystem
 # --LustreConfiguration shape: {WeeklyMaintenanceStartTime?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, AutoImportPolicy?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
 # --OntapConfiguration shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, FsxAdminPassword?: any, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: any, ThroughputCapacity?: any, AddRouteTableIds?: any, RemoveRouteTableIds?: any}
-export def "x-amz-target-aws-simba-api-service-v20180301-update-file-system UpdateFileSystem" [
+export def "x-amz-target-aws-simba-api-service-v20180301-update-file-system update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1649,29 +1649,29 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-file-system Upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  FileSystemId: any
-  --ClientRequestToken: any
-  --StorageCapacity: any
-  --WindowsConfiguration: any
-  --LustreConfiguration: record # The configuration object for Amazon FSx for Lustre file systems used in the <code>UpdateFileSystem</code> operation. — shape: {WeeklyMaintenanceStartTime?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, AutoImportPolicy?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
-  --OntapConfiguration: record # The configuration updates for an Amazon FSx for NetApp ONTAP file system. — shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, FsxAdminPassword?: any, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: any, ThroughputCapacity?: any, AddRouteTableIds?: any, RemoveRouteTableIds?: any}
-  --OpenZFSConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  file_system_id: any
+  --client-request-token: any
+  --storage-capacity: any
+  --windows-configuration: any
+  --lustre-configuration: record # The configuration object for Amazon FSx for Lustre file systems used in the <code>UpdateFileSystem</code> operation. — shape: {WeeklyMaintenanceStartTime?: any, DailyAutomaticBackupStartTime?: string, AutomaticBackupRetentionDays?: int, AutoImportPolicy?: any, DataCompressionType?: any, LogConfiguration?: any, RootSquashConfiguration?: any}
+  --ontap-configuration: record # The configuration updates for an Amazon FSx for NetApp ONTAP file system. — shape: {AutomaticBackupRetentionDays?: int, DailyAutomaticBackupStartTime?: string, FsxAdminPassword?: any, WeeklyMaintenanceStartTime?: string, DiskIopsConfiguration?: any, ThroughputCapacity?: any, AddRouteTableIds?: any, RemoveRouteTableIds?: any}
+  --open-zfs-configuration: any
 ]: any -> record<FileSystem: record<OwnerId: record, CreationTime: record, FileSystemId: record, FileSystemType: record, Lifecycle: record, FailureDetails: record<Message: record>, StorageCapacity: record, StorageType: record, VpcId: record, SubnetIds: record, NetworkInterfaceIds: record, DNSName: record, KmsKeyId: record, ResourceARN: record, Tags: record, WindowsConfiguration: record<ActiveDirectoryId: record, SelfManagedActiveDirectoryConfiguration: record, DeploymentType: record, RemoteAdministrationEndpoint: record, PreferredSubnetId: record, PreferredFileServerIp: record, ThroughputCapacity: record, MaintenanceOperationsInProgress: record, WeeklyMaintenanceStartTime: record, DailyAutomaticBackupStartTime: record, AutomaticBackupRetentionDays: record, CopyTagsToBackups: record, Aliases: list, AuditLogConfiguration: record>, LustreConfiguration: record<WeeklyMaintenanceStartTime: record, DataRepositoryConfiguration: record, DeploymentType: record, PerUnitStorageThroughput: record, MountName: record, DailyAutomaticBackupStartTime: string, AutomaticBackupRetentionDays: int, CopyTagsToBackups: record, DriveCacheType: record, DataCompressionType: record, LogConfiguration: record, RootSquashConfiguration: record>, AdministrativeActions: record, OntapConfiguration: record<AutomaticBackupRetentionDays: int, DailyAutomaticBackupStartTime: string, DeploymentType: record, EndpointIpAddressRange: record, Endpoints: record, DiskIopsConfiguration: record, PreferredSubnetId: string, RouteTableIds: record, ThroughputCapacity: int, WeeklyMaintenanceStartTime: string>, FileSystemTypeVersion: record, OpenZFSConfiguration: record<AutomaticBackupRetentionDays: int, CopyTagsToBackups: record, CopyTagsToVolumes: record, DailyAutomaticBackupStartTime: string, DeploymentType: record, ThroughputCapacity: record, WeeklyMaintenanceStartTime: string, DiskIopsConfiguration: record, RootVolumeId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateFileSystem")
-  let body = {FileSystemId: $FileSystemId, ClientRequestToken: $ClientRequestToken, StorageCapacity: $StorageCapacity, WindowsConfiguration: $WindowsConfiguration, LustreConfiguration: $LustreConfiguration, OntapConfiguration: $OntapConfiguration, OpenZFSConfiguration: $OpenZFSConfiguration} | compact
+  let body = {"FileSystemId": $file_system_id, "ClientRequestToken": $client_request_token, "StorageCapacity": $storage_capacity, "WindowsConfiguration": $windows_configuration, "LustreConfiguration": $lustre_configuration, "OntapConfiguration": $ontap_configuration, "OpenZFSConfiguration": $open_zfs_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1682,7 +1682,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-file-system Upda
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateSnapshot
 # operationId: UpdateSnapshot
-export def "x-amz-target-aws-simba-api-service-v20180301-update-snapshot UpdateSnapshot" [
+export def "x-amz-target-aws-simba-api-service-v20180301-update-snapshot update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1691,25 +1691,25 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-snapshot UpdateS
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  Name: any
-  SnapshotId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  name: any
+  snapshot_id: any
 ]: any -> record<Snapshot: record<ResourceARN: string, SnapshotId: record, Name: record, VolumeId: record, CreationTime: string, Lifecycle: record, LifecycleTransitionReason: record<Message: string>, Tags: list<record>, AdministrativeActions: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateSnapshot")
-  let body = {ClientRequestToken: $ClientRequestToken, Name: $Name, SnapshotId: $SnapshotId} | compact
+  let body = {"ClientRequestToken": $client_request_token, "Name": $name, "SnapshotId": $snapshot_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1720,7 +1720,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-snapshot UpdateS
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateStorageVirtualMachine
 # operationId: UpdateStorageVirtualMachine
-export def "x-amz-target-aws-simba-api-service-v20180301-update-storage-virtual-machine UpdateStorageVirtualMachine" [
+export def "x-amz-target-aws-simba-api-service-v20180301-update-storage-virtual-machine update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1729,26 +1729,26 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-storage-virtual-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  --ActiveDirectoryConfiguration: any
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  StorageVirtualMachineId: any
-  --SvmAdminPassword: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  --active-directory-configuration: any
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  storage_virtual_machine_id: any
+  --svm-admin-password: any
 ]: any -> record<StorageVirtualMachine: record<ActiveDirectoryConfiguration: record<NetBiosName: record, SelfManagedActiveDirectoryConfiguration: record>, CreationTime: string, Endpoints: record<Iscsi: record, Management: record, Nfs: record, Smb: record>, FileSystemId: string, Lifecycle: record, Name: record, ResourceARN: string, StorageVirtualMachineId: record, Subtype: record, UUID: record, Tags: list<record>, LifecycleTransitionReason: record<Message: string>, RootVolumeSecurityStyle: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateStorageVirtualMachine")
-  let body = {ActiveDirectoryConfiguration: $ActiveDirectoryConfiguration, ClientRequestToken: $ClientRequestToken, StorageVirtualMachineId: $StorageVirtualMachineId, SvmAdminPassword: $SvmAdminPassword} | compact
+  let body = {"ActiveDirectoryConfiguration": $active_directory_configuration, "ClientRequestToken": $client_request_token, "StorageVirtualMachineId": $storage_virtual_machine_id, "SvmAdminPassword": $svm_admin_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1759,7 +1759,7 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-storage-virtual-
 #
 # POST /#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateVolume
 # operationId: UpdateVolume
-export def "x-amz-target-aws-simba-api-service-v20180301-update-volume UpdateVolume" [
+export def "x-amz-target-aws-simba-api-service-v20180301-update-volume update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1768,27 +1768,27 @@ export def "x-amz-target-aws-simba-api-service-v20180301-update-volume UpdateVol
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  --ClientRequestToken: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
-  VolumeId: any
-  --OntapConfiguration: any
-  --Name: any
-  --OpenZFSConfiguration: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  --client-request-token: string # (Optional) An idempotency token for resource creation, in a string of up to 63 ASCII characters. This token is automatically filled on your behalf when you use the Command Line Interface (CLI) or an Amazon Web Services SDK.
+  volume_id: any
+  --ontap-configuration: any
+  --name: any
+  --open-zfs-configuration: any
 ]: any -> record<Volume: record<CreationTime: string, FileSystemId: string, Lifecycle: record, Name: record, OntapConfiguration: record<FlexCacheEndpointType: record, JunctionPath: record, SecurityStyle: record, SizeInMegabytes: record, StorageEfficiencyEnabled: record, StorageVirtualMachineId: record, StorageVirtualMachineRoot: record, TieringPolicy: record, UUID: record, OntapVolumeType: record, SnapshotPolicy: record, CopyTagsToBackups: record>, ResourceARN: string, Tags: list<record>, VolumeId: record, VolumeType: record, LifecycleTransitionReason: record<Message: string>, AdministrativeActions: record, OpenZFSConfiguration: record<ParentVolumeId: record, VolumePath: record, StorageCapacityReservationGiB: record, StorageCapacityQuotaGiB: record, RecordSizeKiB: record, DataCompressionType: record, CopyTagsToSnapshots: record, OriginSnapshot: record, ReadOnly: record, NfsExports: record, UserAndGroupQuotas: record, RestoreToSnapshot: record, DeleteIntermediateSnaphots: record, DeleteClonedVolumes: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSSimbaAPIService_v20180301.UpdateVolume")
-  let body = {ClientRequestToken: $ClientRequestToken, VolumeId: $VolumeId, OntapConfiguration: $OntapConfiguration, Name: $Name, OpenZFSConfiguration: $OpenZFSConfiguration} | compact
+  let body = {"ClientRequestToken": $client_request_token, "VolumeId": $volume_id, "OntapConfiguration": $ontap_configuration, "Name": $name, "OpenZFSConfiguration": $open_zfs_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

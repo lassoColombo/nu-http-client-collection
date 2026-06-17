@@ -105,20 +105,20 @@ export def "get-onboarding-url post-getOnboardingUrl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The account holder code you provided when you created the account holder.
-  --collectInformation: record # shape: {bankDetails?: bool, businessDetails?: bool, individualDetails?: bool, legalArrangementDetails?: bool, pciQuestionnaire?: bool, shareholderDetails?: bool}
-  --editMode: oneof<nothing, bool> # Indicates if editing checks is allowed even if all the checks have passed.
-  --mobileOAuthCallbackUrl: string # The URL to which the account holder is redirected after completing an OAuth authentication with a bank through Trustly/PayMyBank.
-  --platformName: string # The platform name which will show up in the welcome page.
-  --returnUrl: string # The URL where the account holder will be redirected back to after they complete the onboarding, or if their session times out. Maximum length of 500 characters. If you don't provide this, the account holder will be redirected back to the default return URL configured in your platform account.
-  --shopperLocale: string # The language to be used in the page, specified by a combination of a language and country code. For example, **pt-BR**.   If not specified in the request or if the language is not supported, the page uses the browser language. If the browser language is not supported, the page uses **en-US** by default.  For a list of supported languages, refer to [Change the page language](https://docs.adyen.com/marketplaces-and-platforms/classic/hosted-onboarding-page/customize-experience#change-page-language).
-  --showPages: record # shape: {bankDetailsSummaryPage?: bool, bankVerificationPage?: bool, businessDetailsSummaryPage?: bool, checksOverviewPage?: bool, individualDetailsSummaryPage?: bool, legalArrangementsDetailsSummaryPage?: bool, manualBankAccountPage?: bool, shareholderDetailsSummaryPage?: bool, welcomePage?: bool}
+  account_holder_code: string # The account holder code you provided when you created the account holder.
+  --collect-information: record # shape: {bankDetails?: bool, businessDetails?: bool, individualDetails?: bool, legalArrangementDetails?: bool, pciQuestionnaire?: bool, shareholderDetails?: bool}
+  --edit-mode: oneof<nothing, bool> # Indicates if editing checks is allowed even if all the checks have passed.
+  --mobile-o-auth-callback-url: string # The URL to which the account holder is redirected after completing an OAuth authentication with a bank through Trustly/PayMyBank.
+  --platform-name: string # The platform name which will show up in the welcome page.
+  --return-url: string # The URL where the account holder will be redirected back to after they complete the onboarding, or if their session times out. Maximum length of 500 characters. If you don't provide this, the account holder will be redirected back to the default return URL configured in your platform account.
+  --shopper-locale: string # The language to be used in the page, specified by a combination of a language and country code. For example, **pt-BR**.   If not specified in the request or if the language is not supported, the page uses the browser language. If the browser language is not supported, the page uses **en-US** by default.  For a list of supported languages, refer to [Change the page language](https://docs.adyen.com/marketplaces-and-platforms/classic/hosted-onboarding-page/customize-experience#change-page-language).
+  --show-pages: record # shape: {bankDetailsSummaryPage?: bool, bankVerificationPage?: bool, businessDetailsSummaryPage?: bool, checksOverviewPage?: bool, individualDetailsSummaryPage?: bool, legalArrangementsDetailsSummaryPage?: bool, manualBankAccountPage?: bool, shareholderDetailsSummaryPage?: bool, welcomePage?: bool}
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, redirectUrl: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getOnboardingUrl")
-  let body = {accountHolderCode: $accountHolderCode, collectInformation: $collectInformation, editMode: $editMode, mobileOAuthCallbackUrl: $mobileOAuthCallbackUrl, platformName: $platformName, returnUrl: $returnUrl, shopperLocale: $shopperLocale, showPages: $showPages} | compact
+  let body = {"accountHolderCode": $account_holder_code, "collectInformation": $collect_information, "editMode": $edit_mode, "mobileOAuthCallbackUrl": $mobile_o_auth_callback_url, "platformName": $platform_name, "returnUrl": $return_url, "shopperLocale": $shopper_locale, "showPages": $show_pages} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -138,14 +138,14 @@ export def "get-pci-questionnaire-url post-getPciQuestionnaireUrl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountHolderCode: string # The account holder code you provided when you created the account holder.
-  --returnUrl: string # The URL where the account holder will be redirected back to after they fill out the questionnaire, or if their session times out. Maximum length of 500 characters.
+  account_holder_code: string # The account holder code you provided when you created the account holder.
+  --return-url: string # The URL where the account holder will be redirected back to after they fill out the questionnaire, or if their session times out. Maximum length of 500 characters.
 ]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, redirectUrl: string, resultCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getPciQuestionnaireUrl")
-  let body = {accountHolderCode: $accountHolderCode, returnUrl: $returnUrl} | compact
+  let body = {"accountHolderCode": $account_holder_code, "returnUrl": $return_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

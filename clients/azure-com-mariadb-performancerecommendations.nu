@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-d-bfor-maria-db-locations-recommended-action-sessions-azure-async-operation Get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-d-bfor-maria-db-locations-recommended-action-sessions-azure-async-operation get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DBforMariaDB/locations/{locationName}/recommendedActionSessionsAzureAsyncOperation/{operationId}
 # operationId: LocationBasedRecommendedActionSessionsOperationStatus_Get
-export def "subscriptions-providers-microsoft-d-bfor-maria-db-locations-recommended-action-sessions-azure-async-operation Get" [
-  subscriptionId: string
-  locationName: string
-  operationId: string
+export def "subscriptions-providers-microsoft-d-bfor-maria-db-locations-recommended-action-sessions-azure-async-operation get" [
+  subscription_id: string
+  location_name: string
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-providers-microsoft-d-bfor-maria-db-locations-recommen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DBforMariaDB/locations/($locationName)/recommendedActionSessionsAzureAsyncOperation/($operationId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DBforMariaDB/locations/{location_name}/recommendedActionSessionsAzureAsyncOperation/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,10 +120,10 @@ export def "subscriptions-providers-microsoft-d-bfor-maria-db-locations-recommen
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DBforMariaDB/locations/{locationName}/recommendedActionSessionsOperationResults/{operationId}
 # operationId: LocationBasedRecommendedActionSessionsResult_List
-export def "subscriptions-providers-microsoft-d-bfor-maria-db-locations-recommended-action-sessions-operation-results List" [
-  subscriptionId: string
-  locationName: string
-  operationId: string
+export def "subscriptions-providers-microsoft-d-bfor-maria-db-locations-recommended-action-sessions-operation-results list" [
+  subscription_id: string
+  location_name: string
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "subscriptions-providers-microsoft-d-bfor-maria-db-locations-recommen
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DBforMariaDB/locations/($locationName)/recommendedActionSessionsOperationResults/($operationId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location_name: $location_name, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DBforMariaDB/locations/{location_name}/recommendedActionSessionsOperationResults/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,10 +147,10 @@ export def "subscriptions-providers-microsoft-d-bfor-maria-db-locations-recommen
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/advisors
 # operationId: Advisors_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-advisors ListByServer" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-advisors list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMariaDB/servers/($serverName)/advisors" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMariaDB/servers/{server_name}/advisors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -174,11 +174,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/advisors/{advisorName}
 # operationId: Advisors_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-advisors Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  advisorName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-advisors get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  advisor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMariaDB/servers/($serverName)/advisors/($advisorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, advisor_name: $advisor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMariaDB/servers/{server_name}/advisors/{advisor_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,11 +202,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/advisors/{advisorName}/createRecommendedActionSession
 # operationId: CreateRecommendedActionSession
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-advisors-create-recommended-action-session CreateRecommendedActionSession" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  advisorName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-advisors-create-recommended-action-session create" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  advisor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,12 +216,12 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --databaseName: string # The name of the database.
+  --database-name: string # The name of the database.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "databaseName" $databaseName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMariaDB/servers/($serverName)/advisors/($advisorName)/createRecommendedActionSession" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "databaseName" $database_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, advisor_name: $advisor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMariaDB/servers/{server_name}/advisors/{advisor_name}/createRecommendedActionSession") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,11 +231,11 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/advisors/{advisorName}/recommendedActions
 # operationId: RecommendedActions_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-advisors-recommended-actions ListByServer" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  advisorName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-advisors-recommended-actions list-by" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  advisor_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,12 +245,12 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --sessionId: string # The recommendation action session identifier.
+  --session-id: string # The recommendation action session identifier.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "sessionId" $sessionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMariaDB/servers/($serverName)/advisors/($advisorName)/recommendedActions" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "sessionId" $session_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, advisor_name: $advisor_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMariaDB/servers/{server_name}/advisors/{advisor_name}/recommendedActions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -260,12 +260,12 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforMariaDB/servers/{serverName}/advisors/{advisorName}/recommendedActions/{recommendedActionName}
 # operationId: RecommendedActions_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-advisors-recommended-actions Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  serverName: string
-  advisorName: string
-  recommendedActionName: string
+export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-servers-advisors-recommended-actions get" [
+  subscription_id: string
+  resource_group_name: string
+  server_name: string
+  advisor_name: string
+  recommended_action_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-maria-db-se
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DBforMariaDB/servers/($serverName)/advisors/($advisorName)/recommendedActions/($recommendedActionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, server_name: $server_name, advisor_name: $advisor_name, recommended_action_name: $recommended_action_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DBforMariaDB/servers/{server_name}/advisors/{advisor_name}/recommendedActions/{recommended_action_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "correlation correlation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "correlation get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/correlation
 # operationId: correlation
-export def "correlation correlation" [
+export def "correlation get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +117,7 @@ export def "correlation correlation" [
 #
 # GET /v1/indices
 # operationId: indices
-export def "indices indices" [
+export def "indices get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -127,15 +127,15 @@ export def "indices indices" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --exchanges: string # e.g. binance
-  --timeHorizon: string # e.g. daily
-  --lowCap: string # e.g. true
-  --startDate: string # e.g. 2023-01-10
-  --endDate: string # e.g. 2023-01-11
+  --time-horizon: string # e.g. daily
+  --low-cap: string # e.g. true
+  --start-date: string # e.g. 2023-01-10
+  --end-date: string # e.g. 2023-01-11
   --limit: string # e.g. 1000
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "exchanges" $exchanges "scalar") (serialize-qp "timeHorizon" $timeHorizon "scalar") (serialize-qp "lowCap" $lowCap "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "exchanges" $exchanges "scalar") (serialize-qp "timeHorizon" $time_horizon "scalar") (serialize-qp "lowCap" $low_cap "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/indices" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -156,13 +156,13 @@ export def "investor-grades investorGrades" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --tokens: string # e.g. 3375, 3306
-  --startDate: string # e.g. 2023-01-10
-  --endDate: string # e.g. 2023-01-11
+  --start-date: string # e.g. 2023-01-10
+  --end-date: string # e.g. 2023-01-11
   --limit: string # e.g. 1000
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/investor-grades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -182,13 +182,13 @@ export def "market-indicator marketIndicator" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startDate: string # e.g. 2023-01-10
-  --endDate: string # e.g. 2023-01-11
+  --start-date: string # e.g. 2023-01-10
+  --end-date: string # e.g. 2023-01-11
   --limit: string # e.g. 1000
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/market-indicator" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -199,7 +199,7 @@ export def "market-indicator marketIndicator" [
 #
 # GET /v1/price
 # operationId: price
-export def "price price" [
+export def "price get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,14 +209,14 @@ export def "price price" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --tokens: string # e.g. 3375, 3306
-  --startDate: string # e.g. 2023-01-10
-  --endDate: string # e.g. 2023-01-11
+  --start-date: string # e.g. 2023-01-10
+  --end-date: string # e.g. 2023-01-11
   --limit: string # e.g. 1000
   --page: string # e.g. 1
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/price" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,13 +315,13 @@ export def "resistance-support resistanceSupport" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --tokens: string # e.g. 3375, 3306
-  --startDate: string # e.g. 2023-01-10
-  --endDate: string # e.g. 2023-01-11
+  --start-date: string # e.g. 2023-01-10
+  --end-date: string # e.g. 2023-01-11
   --limit: string # e.g. 1000
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/resistance-support" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -357,7 +357,7 @@ export def "scenario-analysis scenarioAnalysis" [
 #
 # GET /v1/sentiments
 # operationId: sentiments
-export def "sentiments sentiments" [
+export def "sentiments get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,13 +367,13 @@ export def "sentiments sentiments" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --tokens: string # e.g. 3375, 3306
-  --startDate: string # e.g. 2023-01-10
-  --endDate: string # e.g. 2023-01-11
+  --start-date: string # e.g. 2023-01-10
+  --end-date: string # e.g. 2023-01-11
   --limit: string # e.g. 1000
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/sentiments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,7 +384,7 @@ export def "sentiments sentiments" [
 #
 # GET /v1/tokens
 # operationId: tokens
-export def "tokens tokens" [
+export def "tokens get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,13 +420,13 @@ export def "trader-grades traderGrades" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --tokens: string # e.g. 3375, 3306
-  --startDate: string # e.g. 2023-01-10
-  --endDate: string # e.g. 2023-01-11
+  --start-date: string # e.g. 2023-01-10
+  --end-date: string # e.g. 2023-01-11
   --limit: string # e.g. 1000
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "tokens" $tokens "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/trader-grades" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

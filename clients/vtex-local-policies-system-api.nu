@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policy-engine-evaluate Evaluate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policy-engine-evaluate post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/policy-engine/evaluate
 # operationId: Policy_Evaluate
-export def "policy-engine-evaluate Evaluate" [
+export def "policy-engine-evaluate post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,8 +101,8 @@ export def "policy-engine-evaluate Evaluate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   context: record # Conditions that the Policy needs to satisfy (default: {brandId: 2000001, discountPercentage: 91.00})
   resource: string # Scope on which this policy must be evaluated (default: vrn:vtex.promotions-alert:aws-us-east-1:kamila:master:/_v/promotions_alert)
 ]: any -> table<id: string, metadata: record> {
@@ -110,9 +110,9 @@ export def "policy-engine-evaluate Evaluate" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/policy-engine/evaluate")
-  let body = {context: $context, resource: $resource} | compact
+  let body = {"context": $context, "resource": $resource} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -123,7 +123,7 @@ export def "policy-engine-evaluate Evaluate" [
 #
 # GET /api/policy-engine/policies
 # operationId: Policy_List
-export def "policy-engine-policies List" [
+export def "policy-engine-policies list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,13 +132,13 @@ export def "policy-engine-policies List" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> table<description: string, id: string, name: string, statements: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/policy-engine/policies")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -149,7 +149,7 @@ export def "policy-engine-policies List" [
 #
 # DELETE /api/policy-engine/policies/{id}
 # operationId: Policy_Delete
-export def "policy-engine-policies Delete" [
+export def "policy-engine-policies delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,13 +159,13 @@ export def "policy-engine-policies Delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/policy-engine/policies/($id)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/policy-engine/policies/{id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -176,7 +176,7 @@ export def "policy-engine-policies Delete" [
 #
 # GET /api/policy-engine/policies/{id}
 # operationId: Policy_Get
-export def "policy-engine-policies Get" [
+export def "policy-engine-policies get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,13 +186,13 @@ export def "policy-engine-policies Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
 ]: nothing -> table<description: string, id: string, name: string, statements: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/policy-engine/policies/($id)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/policy-engine/policies/{id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -204,7 +204,7 @@ export def "policy-engine-policies Get" [
 # POST /api/policy-engine/policies/{id}
 # operationId: Policy_CreateOrUpdate
 # --statements item shape: {actions?: list, condition?: record, effect: string, operation?: string, resource?: string}
-export def "policy-engine-policies CreateOrUpdate" [
+export def "policy-engine-policies create-or-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,8 +214,8 @@ export def "policy-engine-policies CreateOrUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   description: string # Policy description. This description is only for internal use of identification
   name: string # Policy Name
   statements: list # Requirements to the Policy be applied — item shape: {actions?: list, condition?: record, effect: string, operation?: string, resource?: string}
@@ -223,10 +223,10 @@ export def "policy-engine-policies CreateOrUpdate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/policy-engine/policies/($id)")
-  let body = {description: $description, name: $name, statements: $statements} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/policy-engine/policies/{id}"))
+  let body = {"description": $description, "name": $name, "statements": $statements} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -247,8 +247,8 @@ export def "policy-engine-policies put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Describes the type of the content being sent
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
+  --content-type: string # Describes the type of the content being sent
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand 
   description: string # Policy description. This description is only for internal use of identification
   name: string # Policy Name
   statements: list # Requirements to the Policy be applied — item shape: {actions?: list, condition?: record, effect: string, operation?: string, resource?: string}
@@ -256,10 +256,10 @@ export def "policy-engine-policies put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/policy-engine/policies/($id)")
-  let body = {description: $description, name: $name, statements: $statements} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/policy-engine/policies/{id}"))
+  let body = {"description": $description, "name": $name, "statements": $statements} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

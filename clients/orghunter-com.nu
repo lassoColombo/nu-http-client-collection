@@ -217,10 +217,10 @@ export def "charitysearch get-summary" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --ein: string # Employer Identification Number (EIN)
-  --searchTerm: string # Charity Name or Keyword. Example: humane society or cancer
+  --search-term: string # Charity Name or Keyword. Example: humane society or cancer
   --city: string # City Name. Example: Miami
   --state: string # State Name - Two letter state abbreviation
-  --zipCode: string # Zipcode Value - 5 digit zipcode value
+  --zip-code: string # Zipcode Value - 5 digit zipcode value
   --category: string # Category Value Selected from Categories API
   --eligible: string # eligible=1 will return only organizations that are tax deductible and in good standing with the IRS
   --start: string # Record Set Start Position
@@ -228,7 +228,7 @@ export def "charitysearch get-summary" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ein" $ein "scalar") (serialize-qp "searchTerm" $searchTerm "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipCode" $zipCode "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "eligible" $eligible "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "rows" $rows "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ein" $ein "scalar") (serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "eligible" $eligible "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "rows" $rows "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/charitysearch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

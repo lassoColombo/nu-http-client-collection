@@ -66,13 +66,13 @@ def base-url-completer [] { ["https://localhost/api/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def documentType-completer [] { ["CN22" "CN23" "despatchNote" "postageLabel"] }
+def document-type-completer [] { ["CN22" "CN23" "despatchNote" "postageLabel"] }
 def accept-completer [] { ["application/json" "application/pdf"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "manifests CreateManifestsAsync" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "manifests create-manifests-async" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # POST /manifests
 # operationId: CreateManifestsAsync
-export def "manifests CreateManifestsAsync" [
+export def "manifests create-manifests-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,18 +105,18 @@ export def "manifests CreateManifestsAsync" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountBatchNumbers: list # Cannot be mixed with other parameter types. (e.g. [B1111, B12345])
-  --allOrders: oneof<nothing, bool> # Set to <code>true</code> and leave all the other parameters empty to manifest all orders in an eligible state  up to and including the current day (orders with a future despatch date will not be included). Do not specify this parameter or alternatively set to <code>false</code> if specifying any other parameter options.  (e.g. false)
-  --endDateTime: string # Date and time in UTC. Used together with <b>startDateTime</b> to manifest all orders in an eligible state in a date/time range.  If a <b>startDateTime</b> is specified without this parameter the end of the date/time range will be the latest  possible order. Cannot be mixed with other parameter types.  (format: date-time)
-  --orderIdentifiers: list # Can be specified together with <b>orderReferences</b>  in the same call, but cannot be mixed with other parameter types
-  --orderReferences: list # Can be specified together with <b>orderIdentifiers</b> in the same call, but cannot be mixed with other parameter types
-  --startDateTime: string # Date and time in UTC. Used together with <b>endDateTime</b> to manifest all orders in an eligible state in a date/time range.  If an <b>endDateTime</b> is specified without this parameter the start of the date/time range will be the earliest  possible order. Cannot be mixed with other parameter types.  (format: date-time)
+  --account-batch-numbers: list # Cannot be mixed with other parameter types. (e.g. [B1111, B12345])
+  --all-orders: oneof<nothing, bool> # Set to <code>true</code> and leave all the other parameters empty to manifest all orders in an eligible state  up to and including the current day (orders with a future despatch date will not be included). Do not specify this parameter or alternatively set to <code>false</code> if specifying any other parameter options.  (e.g. false)
+  --end-date-time: string # Date and time in UTC. Used together with <b>startDateTime</b> to manifest all orders in an eligible state in a date/time range.  If a <b>startDateTime</b> is specified without this parameter the end of the date/time range will be the latest  possible order. Cannot be mixed with other parameter types.  (format: date-time)
+  --order-identifiers: list # Can be specified together with <b>orderReferences</b>  in the same call, but cannot be mixed with other parameter types
+  --order-references: list # Can be specified together with <b>orderIdentifiers</b> in the same call, but cannot be mixed with other parameter types
+  --start-date-time: string # Date and time in UTC. Used together with <b>endDateTime</b> to manifest all orders in an eligible state in a date/time range.  If an <b>endDateTime</b> is specified without this parameter the start of the date/time range will be the earliest  possible order. Cannot be mixed with other parameter types.  (format: date-time)
 ]: any -> record<manifests: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/manifests")
-  let body = {accountBatchNumbers: $accountBatchNumbers, allOrders: $allOrders, endDateTime: $endDateTime, orderIdentifiers: $orderIdentifiers, orderReferences: $orderReferences, startDateTime: $startDateTime} | compact
+  let body = {"accountBatchNumbers": $account_batch_numbers, "allOrders": $all_orders, "endDateTime": $end_date_time, "orderIdentifiers": $order_identifiers, "orderReferences": $order_references, "startDateTime": $start_date_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,8 +127,8 @@ export def "manifests CreateManifestsAsync" [
 #
 # GET /manifests/{manifestGuid}
 # operationId: GetManifestAsync
-export def "manifests GetManifestAsync" [
-  manifestGuid: string
+export def "manifests get-manifest-async" [
+  manifest_guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,7 +140,7 @@ export def "manifests GetManifestAsync" [
 ]: nothing -> record<documentStatus: string, errorReference: string, manifestStatus: string, orders: table<orderIdentifier: int, orderReference: string>, pdf: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/manifests/($manifestGuid)")
+  let full_url = (build-url $base ({manifest_guid: $manifest_guid} | format pattern "/manifests/{manifest_guid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,8 +150,8 @@ export def "manifests GetManifestAsync" [
 #
 # POST /manifests/{manifestGuid}/retry
 # operationId: RetryManifestAsync
-export def "manifests-retry RetryManifestAsync" [
-  manifestGuid: string
+export def "manifests-retry post" [
+  manifest_guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "manifests-retry RetryManifestAsync" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/manifests/($manifestGuid)/retry")
+  let full_url = (build-url $base ({manifest_guid: $manifest_guid} | format pattern "/manifests/{manifest_guid}/retry"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +173,7 @@ export def "manifests-retry RetryManifestAsync" [
 #
 # GET /orders
 # operationId: GetOrdersAsync
-export def "orders GetOrdersAsync" [
+export def "orders get-orders-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,14 +182,14 @@ export def "orders GetOrdersAsync" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: int # The number of items to return (default: 25)
-  --startDateTime: string # Date and time lower bound for items filtering (format: date-time)
-  --endDateTime: string # Date and time upper bound for items filtering (format: date-time)
-  --continuationToken: string # The token for retrieving the next page of items
+  --page-size: int # The number of items to return (default: 25)
+  --start-date-time: string # Date and time lower bound for items filtering (format: date-time)
+  --end-date-time: string # Date and time upper bound for items filtering (format: date-time)
+  --continuation-token: string # The token for retrieving the next page of items
 ]: nothing -> record<continuationToken: string, orders: table<createdOn: string, manifestedOn: string, orderDate: string, orderIdentifier: int, orderReference: string, printedOn: string, shippedOn: string, trackingNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "startDateTime" $startDateTime "scalar") (serialize-qp "endDateTime" $endDateTime "scalar") (serialize-qp "continuationToken" $continuationToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -201,7 +201,7 @@ export def "orders GetOrdersAsync" [
 # POST /orders
 # operationId: CreateOrdersAsync
 # --items item shape: {billing?: record, currencyCode?: string, customsDutyCosts?: float, label?: record, orderDate: string, orderReference?: string, otherCosts?: float, packages?: list, plannedDespatchDate?: string, postageDetails?: record, recipient: record, sender?: record, shippingCostCharged: float, specialInstructions?: string, subtotal: float, tags?: list, total: float}
-export def "orders CreateOrdersAsync" [
+export def "orders create-orders-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "orders CreateOrdersAsync" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders")
-  let body = {items: $items} | compact
+  let body = {"items": $items} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,7 +227,7 @@ export def "orders CreateOrdersAsync" [
 #
 # GET /orders/full
 # operationId: GetOrdersWithDetailsAsync
-export def "orders-full GetOrdersWithDetailsAsync" [
+export def "orders-full get-orders-with-details-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,14 +236,14 @@ export def "orders-full GetOrdersWithDetailsAsync" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --pageSize: int # The number of items to return (default: 25)
-  --startDateTime: string # Date and time lower bound for items filtering (format: date-time)
-  --endDateTime: string # Date and time upper bound for items filtering (format: date-time)
-  --continuationToken: string # The token for retrieving the next page of items
+  --page-size: int # The number of items to return (default: 25)
+  --start-date-time: string # Date and time lower bound for items filtering (format: date-time)
+  --end-date-time: string # Date and time upper bound for items filtering (format: date-time)
+  --continuation-token: string # The token for retrieving the next page of items
 ]: nothing -> record<continuationToken: string, orders: table<AIRNumber: string, accountBatchNumber: string, billingInfo: record, channel: string, channelShippingMethod: string, commercialInvoiceDate: string, commercialInvoiceNumber: string, createdOn: string, currencyCode: string, department: string, despatchedByOtherCourierOn: string, manifestedOn: string, marketplaceTypeName: string, orderDate: string, orderDiscount: float, orderIdentifier: int, orderLines: list, orderReference: string, orderStatus: string, packageSize: string, pickerSpecialInstructions: string, postageAppliedOn: string, printedOn: string, requiresExportLicense: bool, shippedOn: string, shippingCostCharged: float, shippingDetails: record, shippingInfo: record, specialInstructions: string, subtotal: float, tags: list, total: float, tradingName: string, weightInGrams: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "startDateTime" $startDateTime "scalar") (serialize-qp "endDateTime" $endDateTime "scalar") (serialize-qp "continuationToken" $continuationToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "continuationToken" $continuation_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/full" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -255,7 +255,7 @@ export def "orders-full GetOrdersWithDetailsAsync" [
 # PUT /orders/status
 # operationId: UpdateOrdersStatusAsync
 # --items item shape: {despatchDate?: string, orderIdentifier?: int, orderReference?: string, shippingCarrier?: string, shippingService?: string, status?: "new"|"despatchedByOtherCourier"|"despatched", trackingNumber?: string}
-export def "orders-status UpdateOrdersStatusAsync" [
+export def "orders-status update-orders-status-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "orders-status UpdateOrdersStatusAsync" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders/status")
-  let body = {items: $items} | compact
+  let body = {"items": $items} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,8 +281,8 @@ export def "orders-status UpdateOrdersStatusAsync" [
 #
 # DELETE /orders/{orderIdentifiers}
 # operationId: DeleteOrdersAsync
-export def "orders DeleteOrdersAsync" [
-  orderIdentifiers: string
+export def "orders delete-orders-async" [
+  order_identifiers: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "orders DeleteOrdersAsync" [
 ]: nothing -> record<deletedOrders: table<orderIdentifier: int, orderInfo: string, orderReference: string>, errors: table<code: string, message: string, orderIdentifier: int, orderReference: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($orderIdentifiers)")
+  let full_url = (build-url $base ({order_identifiers: $order_identifiers} | format pattern "/orders/{order_identifiers}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -304,8 +304,8 @@ export def "orders DeleteOrdersAsync" [
 #
 # GET /orders/{orderIdentifiers}
 # operationId: GetSpecificOrdersAsync
-export def "orders GetSpecificOrdersAsync" [
-  orderIdentifiers: string
+export def "orders get-specific-orders-async" [
+  order_identifiers: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "orders GetSpecificOrdersAsync" [
 ]: nothing -> table<createdOn: string, manifestedOn: string, orderDate: string, orderIdentifier: int, orderReference: string, printedOn: string, shippedOn: string, trackingNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($orderIdentifiers)")
+  let full_url = (build-url $base ({order_identifiers: $order_identifiers} | format pattern "/orders/{order_identifiers}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,8 +327,8 @@ export def "orders GetSpecificOrdersAsync" [
 #
 # GET /orders/{orderIdentifiers}/full
 # operationId: GetSpecificOrdersWithDetailsAsync
-export def "orders-full GetSpecificOrdersWithDetailsAsync" [
-  orderIdentifiers: string
+export def "orders-full get-specific-orders-with-details-async" [
+  order_identifiers: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "orders-full GetSpecificOrdersWithDetailsAsync" [
 ]: nothing -> table<AIRNumber: string, accountBatchNumber: string, billingInfo: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, countryCode: string, county: string, emailAddress: string, firstName: string, lastName: string, phoneNumber: string, postcode: string, title: string>, channel: string, channelShippingMethod: string, commercialInvoiceDate: string, commercialInvoiceNumber: string, createdOn: string, currencyCode: string, department: string, despatchedByOtherCourierOn: string, manifestedOn: string, marketplaceTypeName: string, orderDate: string, orderDiscount: float, orderIdentifier: int, orderLines: list<record>, orderReference: string, orderStatus: string, packageSize: string, pickerSpecialInstructions: string, postageAppliedOn: string, printedOn: string, requiresExportLicense: bool, shippedOn: string, shippingCostCharged: float, shippingDetails: record<guaranteedSaturdayDelivery: bool, isLocalCollect: bool, receiveEmailNotification: bool, receiveSmsNotification: bool, requestSignatureUponDelivery: bool, serviceCode: string, shippingCarrier: string, shippingCost: float, shippingService: string, shippingTrackingStatus: string, trackingNumber: string>, shippingInfo: record<addressLine1: string, addressLine2: string, addressLine3: string, city: string, companyName: string, countryCode: string, county: string, emailAddress: string, firstName: string, lastName: string, phoneNumber: string, postcode: string, title: string>, specialInstructions: string, subtotal: float, tags: list<record>, total: float, tradingName: string, weightInGrams: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($orderIdentifiers)/full")
+  let full_url = (build-url $base ({order_identifiers: $order_identifiers} | format pattern "/orders/{order_identifiers}/full"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,8 +350,8 @@ export def "orders-full GetSpecificOrdersWithDetailsAsync" [
 #
 # GET /orders/{orderIdentifiers}/label
 # operationId: GetOrdersLabelAsync
-export def "orders-label GetOrdersLabelAsync" [
-  orderIdentifiers: string
+export def "orders-label get-orders-label-async" [
+  order_identifiers: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,14 +361,14 @@ export def "orders-label GetOrdersLabelAsync" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --documentType: string@documentType-completer # Document generation mode. When documentType is set to "postageLabel" the additional parameters below must be used. These additional parameters will be ignored when documentType is not set to "postageLabel"
-  --includeReturnsLabel: oneof<nothing, bool> # Include returns label. Required when documentType is set to 'postageLabel'
-  --includeCN: oneof<nothing, bool> # Include CN22/CN23 with label. Optional parameter. If this parameter is used the setting will override the default account behaviour specified in the "Label format" setting "Generate customs declarations with orders"
+  --document-type: string@document-type-completer # Document generation mode. When documentType is set to "postageLabel" the additional parameters below must be used. These additional parameters will be ignored when documentType is not set to "postageLabel"
+  --include-returns-label: oneof<nothing, bool> # Include returns label. Required when documentType is set to 'postageLabel'
+  --include-cn: oneof<nothing, bool> # Include CN22/CN23 with label. Optional parameter. If this parameter is used the setting will override the default account behaviour specified in the "Label format" setting "Generate customs declarations with orders"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "documentType" $documentType "scalar") (serialize-qp "includeReturnsLabel" $includeReturnsLabel "scalar") (serialize-qp "includeCN" $includeCN "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/orders/($orderIdentifiers)/label" $qp)
+  let qp = [(serialize-qp "documentType" $document_type "scalar") (serialize-qp "includeReturnsLabel" $include_returns_label "scalar") (serialize-qp "includeCN" $include_cn "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({order_identifiers: $order_identifiers} | format pattern "/orders/{order_identifiers}/label") $qp)
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -378,7 +378,7 @@ export def "orders-label GetOrdersLabelAsync" [
 #
 # GET /version
 # operationId: GetVersionAsync
-export def "version GetVersionAsync" [
+export def "version get-version-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

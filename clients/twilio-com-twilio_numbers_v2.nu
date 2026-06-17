@@ -66,16 +66,16 @@ def base-url-completer [] { ["https://numbers.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
-def Status-completer [] { ["draft" "in-review" "pending-review" "provisionally-approved" "twilio-approved" "twilio-rejected"] }
-def SortBy-completer [] { ["date-updated" "valid-until"] }
-def SortDirection-completer [] { ["ASC" "DESC"] }
-def EndUserType-completer [] { ["business" "individual"] }
-def Type-completer [] { ["business" "individual"] }
+def status-completer [] { ["draft" "in-review" "pending-review" "provisionally-approved" "twilio-approved" "twilio-rejected"] }
+def sort-by-completer [] { ["date-updated" "valid-until"] }
+def sort-direction-completer [] { ["ASC" "DESC"] }
+def end-user-type-completer [] { ["business" "individual"] }
+def type-completer [] { ["business" "individual"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "regulatory-compliance-bundles ListBundle" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "regulatory-compliance-bundles list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +99,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/RegulatoryCompliance/Bundles
 # operationId: ListBundle
-export def "regulatory-compliance-bundles ListBundle" [
+export def "regulatory-compliance-bundles list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,24 +108,24 @@ export def "regulatory-compliance-bundles ListBundle" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Status: string@Status-completer # The verification status of the Bundle resource. Please refer to [Bundle Statuses](https://www.twilio.com/docs/phone-numbers/regulatory/api/bundles#bundle-statuses) for more details.
-  --FriendlyName: string # The string that you assigned to describe the resource. The column can contain 255 variable characters.
-  --RegulationSid: string # The unique string of a [Regulation resource](https://www.twilio.com/docs/phone-numbers/regulatory/api/regulations) that is associated to the Bundle resource.
-  --IsoCountry: string # The 2-digit [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) of the Bundle's phone number country ownership request.
-  --NumberType: string # The type of phone number of the Bundle's ownership request. Can be `local`, `mobile`, `national`, or `tollfree`.
-  --HasValidUntilDate: oneof<nothing, bool> # Indicates that the Bundle is a valid Bundle until a specified expiration date.
-  --SortBy: string@SortBy-completer # Can be `valid-until` or `date-updated`. Defaults to `date-created`.
-  --SortDirection: string@SortDirection-completer # Default is `DESC`. Can be `ASC` or `DESC`.
-  --ValidUntilDate: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time)
-  --ValidUntilDate<: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time)
-  --ValidUntilDate>: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time)
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --status: string@status-completer # The verification status of the Bundle resource. Please refer to [Bundle Statuses](https://www.twilio.com/docs/phone-numbers/regulatory/api/bundles#bundle-statuses) for more details.
+  --friendly-name: string # The string that you assigned to describe the resource. The column can contain 255 variable characters.
+  --regulation-sid: string # The unique string of a [Regulation resource](https://www.twilio.com/docs/phone-numbers/regulatory/api/regulations) that is associated to the Bundle resource.
+  --iso-country: string # The 2-digit [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) of the Bundle's phone number country ownership request.
+  --number-type: string # The type of phone number of the Bundle's ownership request. Can be `local`, `mobile`, `national`, or `tollfree`.
+  --has-valid-until-date: oneof<nothing, bool> # Indicates that the Bundle is a valid Bundle until a specified expiration date.
+  --sort-by: string@sort-by-completer # Can be `valid-until` or `date-updated`. Defaults to `date-created`.
+  --sort-direction: string@sort-direction-completer # Default is `DESC`. Can be `ASC` or `DESC`.
+  --valid-until-date: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time)
+  --valid-until-date: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time)
+  --valid-until-date: string # Date to filter Bundles having their `valid_until_date` before or after the specified date. Can be `ValidUntilDate>=` or `ValidUntilDate<=`. Both can be used in conjunction as well. [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) is the acceptable date format. (format: date-time)
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, regulation_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let qp = [(serialize-qp "Status" $Status "scalar") (serialize-qp "FriendlyName" $FriendlyName "scalar") (serialize-qp "RegulationSid" $RegulationSid "scalar") (serialize-qp "IsoCountry" $IsoCountry "scalar") (serialize-qp "NumberType" $NumberType "scalar") (serialize-qp "HasValidUntilDate" $HasValidUntilDate "scalar") (serialize-qp "SortBy" $SortBy "scalar") (serialize-qp "SortDirection" $SortDirection "scalar") (serialize-qp "ValidUntilDate" $ValidUntilDate "scalar") (serialize-qp "ValidUntilDate<" $ValidUntilDate< "scalar") (serialize-qp "ValidUntilDate>" $ValidUntilDate> "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Status" $status "scalar") (serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "RegulationSid" $regulation_sid "scalar") (serialize-qp "IsoCountry" $iso_country "scalar") (serialize-qp "NumberType" $number_type "scalar") (serialize-qp "HasValidUntilDate" $has_valid_until_date "scalar") (serialize-qp "SortBy" $sort_by "scalar") (serialize-qp "SortDirection" $sort_direction "scalar") (serialize-qp "ValidUntilDate" $valid_until_date "scalar") (serialize-qp "ValidUntilDate<" $valid_until_date "scalar") (serialize-qp "ValidUntilDate>" $valid_until_date "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/Bundles" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -136,7 +136,7 @@ export def "regulatory-compliance-bundles ListBundle" [
 #
 # POST /v2/RegulatoryCompliance/Bundles
 # operationId: CreateBundle
-export def "regulatory-compliance-bundles CreateBundle" [
+export def "regulatory-compliance-bundles create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -145,19 +145,19 @@ export def "regulatory-compliance-bundles CreateBundle" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Email: string # The email address that will receive updates when the Bundle resource changes status.
-  --EndUserType: string@EndUserType-completer
-  FriendlyName: string # The string that you assigned to describe the resource.
-  --IsoCountry: string # The [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) of the Bundle's phone number country ownership request.
-  --NumberType: string # The type of phone number of the Bundle's ownership request. Can be `local`, `mobile`, `national`, or `toll free`.
-  --RegulationSid: string # The unique string of a regulation that is associated to the Bundle resource.
-  --StatusCallback: string # The URL we call to inform your application of status changes. (format: uri)
+  email: string # The email address that will receive updates when the Bundle resource changes status.
+  --end-user-type: string@end-user-type-completer
+  friendly_name: string # The string that you assigned to describe the resource.
+  --iso-country: string # The [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) of the Bundle's phone number country ownership request.
+  --number-type: string # The type of phone number of the Bundle's ownership request. Can be `local`, `mobile`, `national`, or `toll free`.
+  --regulation-sid: string # The unique string of a regulation that is associated to the Bundle resource.
+  --status-callback: string # The URL we call to inform your application of status changes. (format: uri)
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, regulation_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
   let full_url = (build-url $base "/v2/RegulatoryCompliance/Bundles")
-  let body = {Email: $Email, EndUserType: $EndUserType, FriendlyName: $FriendlyName, IsoCountry: $IsoCountry, NumberType: $NumberType, RegulationSid: $RegulationSid, StatusCallback: $StatusCallback} | compact
+  let body = {"Email": $email, "EndUserType": $end_user_type, "FriendlyName": $friendly_name, "IsoCountry": $iso_country, "NumberType": $number_type, "RegulationSid": $regulation_sid, "StatusCallback": $status_callback} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -168,8 +168,8 @@ export def "regulatory-compliance-bundles CreateBundle" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/Copies
 # operationId: ListBundleCopy
-export def "regulatory-compliance-bundles-copies ListBundleCopy" [
-  BundleSid: string
+export def "regulatory-compliance-bundles-copies list-bundle-copy" [
+  bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,14 +178,14 @@ export def "regulatory-compliance-bundles-copies ListBundleCopy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, regulation_sid: string, sid: string, status: string, status_callback: string, valid_until: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($BundleSid)/Copies" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Copies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,8 +195,8 @@ export def "regulatory-compliance-bundles-copies ListBundleCopy" [
 #
 # POST /v2/RegulatoryCompliance/Bundles/{BundleSid}/Copies
 # operationId: CreateBundleCopy
-export def "regulatory-compliance-bundles-copies CreateBundleCopy" [
-  BundleSid: string
+export def "regulatory-compliance-bundles-copies create-bundle-copy" [
+  bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,13 +205,13 @@ export def "regulatory-compliance-bundles-copies CreateBundleCopy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FriendlyName: string # The string that you assigned to describe the copied bundle.
+  --friendly-name: string # The string that you assigned to describe the copied bundle.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, regulation_sid: string, sid: string, status: string, status_callback: string, valid_until: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($BundleSid)/Copies")
-  let body = {FriendlyName: $FriendlyName} | compact
+  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Copies"))
+  let body = {"FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -222,8 +222,8 @@ export def "regulatory-compliance-bundles-copies CreateBundleCopy" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/Evaluations
 # operationId: ListEvaluation
-export def "regulatory-compliance-bundles-evaluations ListEvaluation" [
-  BundleSid: string
+export def "regulatory-compliance-bundles-evaluations list" [
+  bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,14 +232,14 @@ export def "regulatory-compliance-bundles-evaluations ListEvaluation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, bundle_sid: string, date_created: string, regulation_sid: string, results: list, sid: string, status: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($BundleSid)/Evaluations" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -249,8 +249,8 @@ export def "regulatory-compliance-bundles-evaluations ListEvaluation" [
 #
 # POST /v2/RegulatoryCompliance/Bundles/{BundleSid}/Evaluations
 # operationId: CreateEvaluation
-export def "regulatory-compliance-bundles-evaluations CreateEvaluation" [
-  BundleSid: string
+export def "regulatory-compliance-bundles-evaluations create" [
+  bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "regulatory-compliance-bundles-evaluations CreateEvaluation" [
 ]: nothing -> record<account_sid: string, bundle_sid: string, date_created: string, regulation_sid: string, results: list<any>, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($BundleSid)/Evaluations")
+  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -272,9 +272,9 @@ export def "regulatory-compliance-bundles-evaluations CreateEvaluation" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/Evaluations/{Sid}
 # operationId: FetchEvaluation
-export def "regulatory-compliance-bundles-evaluations FetchEvaluation" [
-  BundleSid: string
-  Sid: string
+export def "regulatory-compliance-bundles-evaluations get" [
+  bundle_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "regulatory-compliance-bundles-evaluations FetchEvaluation" [
 ]: nothing -> record<account_sid: string, bundle_sid: string, date_created: string, regulation_sid: string, results: list<any>, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($BundleSid)/Evaluations/($Sid)")
+  let full_url = (build-url $base ({bundle_sid: $bundle_sid, sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/Evaluations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,8 +296,8 @@ export def "regulatory-compliance-bundles-evaluations FetchEvaluation" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/ItemAssignments
 # operationId: ListItemAssignment
-export def "regulatory-compliance-bundles-item-assignments ListItemAssignment" [
-  BundleSid: string
+export def "regulatory-compliance-bundles-item-assignments list" [
+  bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,14 +306,14 @@ export def "regulatory-compliance-bundles-item-assignments ListItemAssignment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, bundle_sid: string, date_created: string, object_sid: string, sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($BundleSid)/ItemAssignments" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,8 +323,8 @@ export def "regulatory-compliance-bundles-item-assignments ListItemAssignment" [
 #
 # POST /v2/RegulatoryCompliance/Bundles/{BundleSid}/ItemAssignments
 # operationId: CreateItemAssignment
-export def "regulatory-compliance-bundles-item-assignments CreateItemAssignment" [
-  BundleSid: string
+export def "regulatory-compliance-bundles-item-assignments create" [
+  bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,13 +333,13 @@ export def "regulatory-compliance-bundles-item-assignments CreateItemAssignment"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  ObjectSid: string # The SID of an object bag that holds information of the different items.
+  object_sid: string # The SID of an object bag that holds information of the different items.
 ]: any -> record<account_sid: string, bundle_sid: string, date_created: string, object_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($BundleSid)/ItemAssignments")
-  let body = {ObjectSid: $ObjectSid} | compact
+  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments"))
+  let body = {"ObjectSid": $object_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -350,9 +350,9 @@ export def "regulatory-compliance-bundles-item-assignments CreateItemAssignment"
 #
 # DELETE /v2/RegulatoryCompliance/Bundles/{BundleSid}/ItemAssignments/{Sid}
 # operationId: DeleteItemAssignment
-export def "regulatory-compliance-bundles-item-assignments DeleteItemAssignment" [
-  BundleSid: string
-  Sid: string
+export def "regulatory-compliance-bundles-item-assignments delete" [
+  bundle_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -364,7 +364,7 @@ export def "regulatory-compliance-bundles-item-assignments DeleteItemAssignment"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($BundleSid)/ItemAssignments/($Sid)")
+  let full_url = (build-url $base ({bundle_sid: $bundle_sid, sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -374,9 +374,9 @@ export def "regulatory-compliance-bundles-item-assignments DeleteItemAssignment"
 #
 # GET /v2/RegulatoryCompliance/Bundles/{BundleSid}/ItemAssignments/{Sid}
 # operationId: FetchItemAssignment
-export def "regulatory-compliance-bundles-item-assignments FetchItemAssignment" [
-  BundleSid: string
-  Sid: string
+export def "regulatory-compliance-bundles-item-assignments get" [
+  bundle_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -388,7 +388,7 @@ export def "regulatory-compliance-bundles-item-assignments FetchItemAssignment" 
 ]: nothing -> record<account_sid: string, bundle_sid: string, date_created: string, object_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($BundleSid)/ItemAssignments/($Sid)")
+  let full_url = (build-url $base ({bundle_sid: $bundle_sid, sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ItemAssignments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -398,8 +398,8 @@ export def "regulatory-compliance-bundles-item-assignments FetchItemAssignment" 
 #
 # POST /v2/RegulatoryCompliance/Bundles/{BundleSid}/ReplaceItems
 # operationId: CreateReplaceItems
-export def "regulatory-compliance-bundles-replace-items CreateReplaceItems" [
-  BundleSid: string
+export def "regulatory-compliance-bundles-replace-items create" [
+  bundle_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,13 +408,13 @@ export def "regulatory-compliance-bundles-replace-items CreateReplaceItems" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  FromBundleSid: string # The source bundle sid to copy the item assignments from.
+  from_bundle_sid: string # The source bundle sid to copy the item assignments from.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, regulation_sid: string, sid: string, status: string, status_callback: string, valid_until: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($BundleSid)/ReplaceItems")
-  let body = {FromBundleSid: $FromBundleSid} | compact
+  let full_url = (build-url $base ({bundle_sid: $bundle_sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{bundle_sid}/ReplaceItems"))
+  let body = {"FromBundleSid": $from_bundle_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -425,8 +425,8 @@ export def "regulatory-compliance-bundles-replace-items CreateReplaceItems" [
 #
 # DELETE /v2/RegulatoryCompliance/Bundles/{Sid}
 # operationId: DeleteBundle
-export def "regulatory-compliance-bundles DeleteBundle" [
-  Sid: string
+export def "regulatory-compliance-bundles delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "regulatory-compliance-bundles DeleteBundle" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -448,8 +448,8 @@ export def "regulatory-compliance-bundles DeleteBundle" [
 #
 # GET /v2/RegulatoryCompliance/Bundles/{Sid}
 # operationId: FetchBundle
-export def "regulatory-compliance-bundles FetchBundle" [
-  Sid: string
+export def "regulatory-compliance-bundles get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "regulatory-compliance-bundles FetchBundle" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, regulation_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -471,8 +471,8 @@ export def "regulatory-compliance-bundles FetchBundle" [
 #
 # POST /v2/RegulatoryCompliance/Bundles/{Sid}
 # operationId: UpdateBundle
-export def "regulatory-compliance-bundles UpdateBundle" [
-  Sid: string
+export def "regulatory-compliance-bundles update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,16 +481,16 @@ export def "regulatory-compliance-bundles UpdateBundle" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Email: string # The email address that will receive updates when the Bundle resource changes status.
-  --FriendlyName: string # The string that you assigned to describe the resource.
-  --Status: string@Status-completer
-  --StatusCallback: string # The URL we call to inform your application of status changes. (format: uri)
+  --email: string # The email address that will receive updates when the Bundle resource changes status.
+  --friendly-name: string # The string that you assigned to describe the resource.
+  --status: string@status-completer
+  --status-callback: string # The URL we call to inform your application of status changes. (format: uri)
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, email: string, friendly_name: string, links: record, regulation_sid: string, sid: string, status: string, status_callback: string, url: string, valid_until: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Bundles/($Sid)")
-  let body = {Email: $Email, FriendlyName: $FriendlyName, Status: $Status, StatusCallback: $StatusCallback} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/Bundles/{sid}"))
+  let body = {"Email": $email, "FriendlyName": $friendly_name, "Status": $status, "StatusCallback": $status_callback} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -501,7 +501,7 @@ export def "regulatory-compliance-bundles UpdateBundle" [
 #
 # GET /v2/RegulatoryCompliance/EndUserTypes
 # operationId: ListEndUserType
-export def "regulatory-compliance-end-user-types ListEndUserType" [
+export def "regulatory-compliance-end-user-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,13 +510,13 @@ export def "regulatory-compliance-end-user-types ListEndUserType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<end_user_types: table<fields: list, friendly_name: string, machine_name: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/EndUserTypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -527,8 +527,8 @@ export def "regulatory-compliance-end-user-types ListEndUserType" [
 #
 # GET /v2/RegulatoryCompliance/EndUserTypes/{Sid}
 # operationId: FetchEndUserType
-export def "regulatory-compliance-end-user-types FetchEndUserType" [
-  Sid: string
+export def "regulatory-compliance-end-user-types get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "regulatory-compliance-end-user-types FetchEndUserType" [
 ]: nothing -> record<fields: list<any>, friendly_name: string, machine_name: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/EndUserTypes/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/EndUserTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -550,7 +550,7 @@ export def "regulatory-compliance-end-user-types FetchEndUserType" [
 #
 # GET /v2/RegulatoryCompliance/EndUsers
 # operationId: ListEndUser
-export def "regulatory-compliance-end-users ListEndUser" [
+export def "regulatory-compliance-end-users list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -559,13 +559,13 @@ export def "regulatory-compliance-end-users ListEndUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/EndUsers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -576,7 +576,7 @@ export def "regulatory-compliance-end-users ListEndUser" [
 #
 # POST /v2/RegulatoryCompliance/EndUsers
 # operationId: CreateEndUser
-export def "regulatory-compliance-end-users CreateEndUser" [
+export def "regulatory-compliance-end-users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,15 +585,15 @@ export def "regulatory-compliance-end-users CreateEndUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Attributes: any # The set of parameters that are the attributes of the End User resource which are derived End User Types.
-  FriendlyName: string # The string that you assigned to describe the resource.
-  Type: string@Type-completer
+  --attributes: any # The set of parameters that are the attributes of the End User resource which are derived End User Types.
+  friendly_name: string # The string that you assigned to describe the resource.
+  type: string@type-completer
 ]: any -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
   let full_url = (build-url $base "/v2/RegulatoryCompliance/EndUsers")
-  let body = {Attributes: $Attributes, FriendlyName: $FriendlyName, Type: $Type} | compact
+  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -604,8 +604,8 @@ export def "regulatory-compliance-end-users CreateEndUser" [
 #
 # DELETE /v2/RegulatoryCompliance/EndUsers/{Sid}
 # operationId: DeleteEndUser
-export def "regulatory-compliance-end-users DeleteEndUser" [
-  Sid: string
+export def "regulatory-compliance-end-users delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "regulatory-compliance-end-users DeleteEndUser" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/EndUsers/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,8 +627,8 @@ export def "regulatory-compliance-end-users DeleteEndUser" [
 #
 # GET /v2/RegulatoryCompliance/EndUsers/{Sid}
 # operationId: FetchEndUser
-export def "regulatory-compliance-end-users FetchEndUser" [
-  Sid: string
+export def "regulatory-compliance-end-users get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "regulatory-compliance-end-users FetchEndUser" [
 ]: nothing -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/EndUsers/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -650,8 +650,8 @@ export def "regulatory-compliance-end-users FetchEndUser" [
 #
 # POST /v2/RegulatoryCompliance/EndUsers/{Sid}
 # operationId: UpdateEndUser
-export def "regulatory-compliance-end-users UpdateEndUser" [
-  Sid: string
+export def "regulatory-compliance-end-users update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,14 +660,14 @@ export def "regulatory-compliance-end-users UpdateEndUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Attributes: any # The set of parameters that are the attributes of the End User resource which are derived End User Types.
-  --FriendlyName: string # The string that you assigned to describe the resource.
+  --attributes: any # The set of parameters that are the attributes of the End User resource which are derived End User Types.
+  --friendly-name: string # The string that you assigned to describe the resource.
 ]: any -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/EndUsers/($Sid)")
-  let body = {Attributes: $Attributes, FriendlyName: $FriendlyName} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/EndUsers/{sid}"))
+  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -678,7 +678,7 @@ export def "regulatory-compliance-end-users UpdateEndUser" [
 #
 # GET /v2/RegulatoryCompliance/Regulations
 # operationId: ListRegulation
-export def "regulatory-compliance-regulations ListRegulation" [
+export def "regulatory-compliance-regulations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,16 +687,16 @@ export def "regulatory-compliance-regulations ListRegulation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --EndUserType: string@EndUserType-completer # The type of End User the regulation requires - can be `individual` or `business`.
-  --IsoCountry: string # The ISO country code of the phone number's country.
-  --NumberType: string # The type of phone number that the regulatory requiremnt is restricting.
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --end-user-type: string@end-user-type-completer # The type of End User the regulation requires - can be `individual` or `business`.
+  --iso-country: string # The ISO country code of the phone number's country.
+  --number-type: string # The type of phone number that the regulatory requiremnt is restricting.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<end_user_type: string, friendly_name: string, iso_country: string, number_type: string, requirements: any, sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let qp = [(serialize-qp "EndUserType" $EndUserType "scalar") (serialize-qp "IsoCountry" $IsoCountry "scalar") (serialize-qp "NumberType" $NumberType "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "EndUserType" $end_user_type "scalar") (serialize-qp "IsoCountry" $iso_country "scalar") (serialize-qp "NumberType" $number_type "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/Regulations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -707,8 +707,8 @@ export def "regulatory-compliance-regulations ListRegulation" [
 #
 # GET /v2/RegulatoryCompliance/Regulations/{Sid}
 # operationId: FetchRegulation
-export def "regulatory-compliance-regulations FetchRegulation" [
-  Sid: string
+export def "regulatory-compliance-regulations get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,7 +720,7 @@ export def "regulatory-compliance-regulations FetchRegulation" [
 ]: nothing -> record<end_user_type: string, friendly_name: string, iso_country: string, number_type: string, requirements: any, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/Regulations/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/Regulations/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -730,7 +730,7 @@ export def "regulatory-compliance-regulations FetchRegulation" [
 #
 # GET /v2/RegulatoryCompliance/SupportingDocumentTypes
 # operationId: ListSupportingDocumentType
-export def "regulatory-compliance-supporting-document-types ListSupportingDocumentType" [
+export def "regulatory-compliance-supporting-document-types list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,13 +739,13 @@ export def "regulatory-compliance-supporting-document-types ListSupportingDocume
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, supporting_document_types: table<fields: list, friendly_name: string, machine_name: string, sid: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/SupportingDocumentTypes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -756,8 +756,8 @@ export def "regulatory-compliance-supporting-document-types ListSupportingDocume
 #
 # GET /v2/RegulatoryCompliance/SupportingDocumentTypes/{Sid}
 # operationId: FetchSupportingDocumentType
-export def "regulatory-compliance-supporting-document-types FetchSupportingDocumentType" [
-  Sid: string
+export def "regulatory-compliance-supporting-document-types get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "regulatory-compliance-supporting-document-types FetchSupportingDocum
 ]: nothing -> record<fields: list<any>, friendly_name: string, machine_name: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/SupportingDocumentTypes/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/SupportingDocumentTypes/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -779,7 +779,7 @@ export def "regulatory-compliance-supporting-document-types FetchSupportingDocum
 #
 # GET /v2/RegulatoryCompliance/SupportingDocuments
 # operationId: ListSupportingDocument
-export def "regulatory-compliance-supporting-documents ListSupportingDocument" [
+export def "regulatory-compliance-supporting-documents list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,13 +788,13 @@ export def "regulatory-compliance-supporting-documents ListSupportingDocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, results: table<account_sid: string, attributes: any, date_created: string, date_updated: string, failure_reason: string, friendly_name: string, mime_type: string, sid: string, status: string, type: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/RegulatoryCompliance/SupportingDocuments" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -805,7 +805,7 @@ export def "regulatory-compliance-supporting-documents ListSupportingDocument" [
 #
 # POST /v2/RegulatoryCompliance/SupportingDocuments
 # operationId: CreateSupportingDocument
-export def "regulatory-compliance-supporting-documents CreateSupportingDocument" [
+export def "regulatory-compliance-supporting-documents create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -814,15 +814,15 @@ export def "regulatory-compliance-supporting-documents CreateSupportingDocument"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Attributes: any # The set of parameters that are the attributes of the Supporting Documents resource which are derived Supporting Document Types.
-  FriendlyName: string # The string that you assigned to describe the resource.
-  Type: string # The type of the Supporting Document.
+  --attributes: any # The set of parameters that are the attributes of the Supporting Documents resource which are derived Supporting Document Types.
+  friendly_name: string # The string that you assigned to describe the resource.
+  type: string # The type of the Supporting Document.
 ]: any -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, failure_reason: string, friendly_name: string, mime_type: string, sid: string, status: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
   let full_url = (build-url $base "/v2/RegulatoryCompliance/SupportingDocuments")
-  let body = {Attributes: $Attributes, FriendlyName: $FriendlyName, Type: $Type} | compact
+  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -833,8 +833,8 @@ export def "regulatory-compliance-supporting-documents CreateSupportingDocument"
 #
 # DELETE /v2/RegulatoryCompliance/SupportingDocuments/{Sid}
 # operationId: DeleteSupportingDocument
-export def "regulatory-compliance-supporting-documents DeleteSupportingDocument" [
-  Sid: string
+export def "regulatory-compliance-supporting-documents delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,7 +846,7 @@ export def "regulatory-compliance-supporting-documents DeleteSupportingDocument"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/SupportingDocuments/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -856,8 +856,8 @@ export def "regulatory-compliance-supporting-documents DeleteSupportingDocument"
 #
 # GET /v2/RegulatoryCompliance/SupportingDocuments/{Sid}
 # operationId: FetchSupportingDocument
-export def "regulatory-compliance-supporting-documents FetchSupportingDocument" [
-  Sid: string
+export def "regulatory-compliance-supporting-documents get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "regulatory-compliance-supporting-documents FetchSupportingDocument" 
 ]: nothing -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, failure_reason: string, friendly_name: string, mime_type: string, sid: string, status: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/SupportingDocuments/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -879,8 +879,8 @@ export def "regulatory-compliance-supporting-documents FetchSupportingDocument" 
 #
 # POST /v2/RegulatoryCompliance/SupportingDocuments/{Sid}
 # operationId: UpdateSupportingDocument
-export def "regulatory-compliance-supporting-documents UpdateSupportingDocument" [
-  Sid: string
+export def "regulatory-compliance-supporting-documents update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -889,14 +889,14 @@ export def "regulatory-compliance-supporting-documents UpdateSupportingDocument"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Attributes: any # The set of parameters that are the attributes of the Supporting Document resource which are derived Supporting Document Types.
-  --FriendlyName: string # The string that you assigned to describe the resource.
+  --attributes: any # The set of parameters that are the attributes of the Supporting Document resource which are derived Supporting Document Types.
+  --friendly-name: string # The string that you assigned to describe the resource.
 ]: any -> record<account_sid: string, attributes: any, date_created: string, date_updated: string, failure_reason: string, friendly_name: string, mime_type: string, sid: string, status: string, type: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://numbers.twilio.com")
-  let full_url = (build-url $base $"/v2/RegulatoryCompliance/SupportingDocuments/($Sid)")
-  let body = {Attributes: $Attributes, FriendlyName: $FriendlyName} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v2/RegulatoryCompliance/SupportingDocuments/{sid}"))
+  let body = {"Attributes": $attributes, "FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

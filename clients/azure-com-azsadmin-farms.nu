@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,9 +93,9 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms
 # operationId: Farms_List
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms List" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Storage.Admin/farms" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,10 +119,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}
 # operationId: Farms_Get
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  farmId: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms get" [
+  subscription_id: string
+  resource_group_name: string
+  farm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +136,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Storage.Admin/farms/($farmId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, farm_id: $farm_id} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,10 +147,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}
 # operationId: Farms_Update
 # --properties shape: {farmId?: string, settings?: record, settingsStore?: string, version?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  farmId: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms update" [
+  subscription_id: string
+  resource_group_name: string
+  farm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,8 +171,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Storage.Admin/farms/($farmId)" $qp)
-  let body = {properties: $properties, id: $id, location: $location, name: $name, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, farm_id: $farm_id} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}") $qp)
+  let body = {"properties": $properties, "id": $id, "location": $location, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,10 +184,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}
 # operationId: Farms_Create
 # --properties shape: {settingAccessString?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms Create" [
-  subscriptionId: string
-  resourceGroupName: string
-  farmId: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms create" [
+  subscription_id: string
+  resource_group_name: string
+  farm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,8 +208,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Storage.Admin/farms/($farmId)" $qp)
-  let body = {properties: $properties, id: $id, location: $location, name: $name, tags: $tags, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, farm_id: $farm_id} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}") $qp)
+  let body = {"properties": $properties, "id": $id, "location": $location, "name": $name, "tags": $tags, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -220,10 +220,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/metricdefinitions
 # operationId: Farms_ListMetricDefinitions
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-metricdefinitions ListMetricDefinitions" [
-  subscriptionId: string
-  resourceGroupName: string
-  farmId: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-metricdefinitions list" [
+  subscription_id: string
+  resource_group_name: string
+  farm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Storage.Admin/farms/($farmId)/metricdefinitions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, farm_id: $farm_id} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/metricdefinitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -247,10 +247,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/metrics
 # operationId: Farms_ListMetrics
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-metrics ListMetrics" [
-  subscriptionId: string
-  resourceGroupName: string
-  farmId: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-metrics list" [
+  subscription_id: string
+  resource_group_name: string
+  farm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Storage.Admin/farms/($farmId)/metrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, farm_id: $farm_id} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,10 +274,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/ondemandgc
 # operationId: Farms_StartGarbageCollection
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-ondemandgc StartGarbageCollection" [
-  subscriptionId: string
-  resourceGroupName: string
-  farmId: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-ondemandgc start-garbage-collection" [
+  subscription_id: string
+  resource_group_name: string
+  farm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Storage.Admin/farms/($farmId)/ondemandgc" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, farm_id: $farm_id} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/ondemandgc") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -301,11 +301,11 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Storage.Admin/farms/{farmId}/operationresults/{operationId}
 # operationId: Farms_GetGarbageCollectionState
-export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-operationresults GetGarbageCollectionState" [
-  subscriptionId: string
-  resourceGroupName: string
-  farmId: string
-  operationId: string
+export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms-operationresults get-garbage-collection-state" [
+  subscription_id: string
+  resource_group_name: string
+  farm_id: string
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-storage-admin-farms
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Storage.Admin/farms/($farmId)/operationresults/($operationId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, farm_id: $farm_id, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Storage.Admin/farms/{farm_id}/operationresults/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

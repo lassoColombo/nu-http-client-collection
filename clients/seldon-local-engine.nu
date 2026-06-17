@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "seldon-v10-feedback SendFeedback" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "seldon-v10-feedback send" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 # --request shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
 # --response shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
 # --truth shape: {binData?: string, data?: record, meta?: record, status?: record, strData?: string}
-export def "seldon-v10-feedback SendFeedback" [
+export def "seldon-v10-feedback send" [
   namespace: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -114,8 +114,8 @@ export def "seldon-v10-feedback SendFeedback" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/seldon/($namespace)/($deployment)/api/v1.0/feedback")
-  let body = {request: $request, response: $response, reward: $reward, truth: $truth} | compact
+  let full_url = (build-url $base ({namespace: $namespace, deployment: $deployment} | format pattern "/seldon/{namespace}/{deployment}/api/v1.0/feedback"))
+  let body = {"request": $request, "response": $response, "reward": $reward, "truth": $truth} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,7 +128,7 @@ export def "seldon-v10-feedback SendFeedback" [
 # --data shape: {names?: list, ndarray?: list, tensor?: record, tftensor?: record}
 # --meta shape: {metrics?: list, puid?: string, requestPath?: record, routing?: record, tags?: record}
 # --status shape: {code?: int, info?: string, reason?: string, status?: "SUCCESS"|"FAILURE"}
-export def "seldon-v10-predictions Predict" [
+export def "seldon-v10-predictions post" [
   namespace: string
   deployment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -139,17 +139,17 @@ export def "seldon-v10-predictions Predict" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --binData: string # format: byte
+  --bin-data: string # format: byte
   --data: record # shape: {names?: list, ndarray?: list, tensor?: record, tftensor?: record}
   --meta: record # shape: {metrics?: list, puid?: string, requestPath?: record, routing?: record, tags?: record}
   --status: record # shape: {code?: int, info?: string, reason?: string, status?: "SUCCESS"|"FAILURE"}
-  --strData: string
+  --str-data: string
 ]: any -> record<binData: string, data: record<names: list<string>, ndarray: list<any>, tensor: record<shape: list, values: list>, tftensor: record<bool_val: list, dcomplex_val: list, double_val: list, dtype: string, float_val: list, half_val: list, int64_val: list, int_val: list, resource_handle_val: list, scomplex_val: list, string_val: list, tensor_content: string, tensor_shape: record, uint32_val: list, uint64_val: list, variant_val: list, version_number: int>>, meta: record<metrics: list<record>, puid: string, requestPath: record, routing: record, tags: record>, status: record<code: int, info: string, reason: string, status: string>, strData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/seldon/($namespace)/($deployment)/api/v1.0/predictions")
-  let body = {binData: $binData, data: $data, meta: $meta, status: $status, strData: $strData} | compact
+  let full_url = (build-url $base ({namespace: $namespace, deployment: $deployment} | format pattern "/seldon/{namespace}/{deployment}/api/v1.0/predictions"))
+  let body = {"binData": $bin_data, "data": $data, "meta": $meta, "status": $status, "strData": $str_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

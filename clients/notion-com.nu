@@ -102,12 +102,12 @@ export def "blocks delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
 ]: nothing -> record<archived: bool, created_by: record<id: string, object: string>, created_time: string, has_children: bool, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, paragraph: record<text: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/blocks/($id)")
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/blocks/{id}"))
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -118,7 +118,7 @@ export def "blocks delete" [
 #
 # GET /v1/blocks/{id}
 # operationId: retrieveABlock
-export def "blocks retrieveABlock" [
+export def "blocks retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -128,12 +128,12 @@ export def "blocks retrieveABlock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
 ]: nothing -> record<created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, paragraph: record<text: list<record>>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/blocks/($id)")
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/blocks/{id}"))
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -145,7 +145,7 @@ export def "blocks retrieveABlock" [
 # PATCH /v1/blocks/{id}
 # operationId: updateABlock
 # --paragraph shape: {rich_text?: list}
-export def "blocks updateABlock" [
+export def "blocks update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -155,16 +155,16 @@ export def "blocks updateABlock" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
   --paragraph: record # shape: {rich_text?: list}
 ]: any -> record<created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, paragraph: record<text: list<record>>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/blocks/($id)")
-  let body = {paragraph: $paragraph} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/blocks/{id}"))
+  let body = {"paragraph": $paragraph} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,7 +175,7 @@ export def "blocks updateABlock" [
 #
 # GET /v1/blocks/{id}/children
 # operationId: retrieveBlockChildren
-export def "blocks-children retrieveBlockChildren" [
+export def "blocks-children retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,13 +186,13 @@ export def "blocks-children retrieveBlockChildren" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # e.g. 100
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
 ]: nothing -> record<has_more: bool, next_cursor: any, object: string, results: table<created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, paragraph: record, type: string, unsupported: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/blocks/($id)/children" $qp)
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/blocks/{id}/children") $qp)
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -204,7 +204,7 @@ export def "blocks-children retrieveBlockChildren" [
 # PATCH /v1/blocks/{id}/children
 # operationId: appendBlockChildren
 # --children item shape: {heading_2?: record, object?: string, paragraph?: record, type?: string}
-export def "blocks-children appendBlockChildren" [
+export def "blocks-children create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,16 +214,16 @@ export def "blocks-children appendBlockChildren" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
   --children: list # e.g. [{heading_2: {text: [{text: {content: Lacinato kale}, type: text}]}, object: block, type: heading_2}, {object: block, paragraph: {rich_text: [{text: {content: Lacinato kale is a variety of kale with a long tradition in Italian cuisine, especially that of Tuscany. It is also known as Tuscan kale, Italian kale, dinosaur kale, kale, flat back kale, palm tree kale, or black Tuscan palm., link: {url: https://en.wikipedia.org/wiki/Lacinato_kale}}, type: text}]}, type: paragraph}] — item shape: {heading_2?: record, object?: string, paragraph?: record, type?: string}
 ]: any -> record<child_page: record<title: string>, created_time: string, has_children: bool, id: string, last_edited_time: string, object: string, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/blocks/($id)/children")
-  let body = {children: $children} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/blocks/{id}/children"))
+  let body = {"children": $children} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -234,7 +234,7 @@ export def "blocks-children appendBlockChildren" [
 #
 # GET /v1/comments
 # operationId: retrieveComments
-export def "comments retrieveComments" [
+export def "comments retrieve" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "comments retrieveComments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --block-id: string # e.g. {{BLOCK_ID}}
   --page-size: string # e.g. 100
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
   --body: record
 ]: any -> record<comment: record, has_more: bool, next_cursor: any, object: string, results: table<created_by: record, created_time: string, discussion_id: string, id: string, last_edited_time: string, object: string, parent: record, rich_text: list>, type: string> {
   let input = $in
@@ -254,7 +254,7 @@ export def "comments retrieveComments" [
   let qp = [(serialize-qp "block_id" $block_id "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/comments" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -265,7 +265,7 @@ export def "comments retrieveComments" [
 #
 # GET /v1/databases/{id}
 # operationId: retrieveADatabase
-export def "databases retrieveADatabase" [
+export def "databases retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,12 +275,12 @@ export def "databases retrieveADatabase" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
 ]: nothing -> record<archived: bool, cover: any, created_by: record<id: string, object: string>, created_time: string, icon: any, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, parent: record<page_id: string, type: string>, properties: record<Author: record<id: string, multi_select: record, name: string, type: string>, Link: record<id: string, name: string, type: string, url: record>, Name: record<id: string, name: string, title: record, type: string>, Publisher: record<id: string, name: string, select: record, type: string>, Publishing_Release_Date: record<date: record, id: string, name: string, type: string>, Read: record<checkbox: record, id: string, name: string, type: string>, Score__5: record<id: string, name: string, select: record, type: string>, Status: record<id: string, name: string, select: record, type: string>, Summary: record<id: string, name: string, rich_text: record, type: string>, Type: record<id: string, name: string, select: record, type: string>>, title: table<annotations: record, href: any, plain_text: string, text: record, type: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/databases/($id)")
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/databases/{id}"))
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,7 +293,7 @@ export def "databases retrieveADatabase" [
 # operationId: updateADatabase
 # --properties shape: {Wine Pairing?: record}
 # --title item shape: {text?: record}
-export def "databases updateADatabase" [
+export def "databases update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,17 +303,17 @@ export def "databases updateADatabase" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
   --properties: record # shape: {Wine Pairing?: record}
   --title: list # e.g. [{text: {content: Ever Better Reading List Title}}] — item shape: {text?: record}
 ]: any -> record<archived: bool, cover: any, created_by: record<id: string, object: string>, created_time: string, icon: any, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, parent: record<page_id: string, type: string>, properties: record<Author: record<id: string, multi_select: record, name: string, type: string>, Link: record<id: string, name: string, type: string, url: record>, Name: record<id: string, name: string, title: record, type: string>, Publisher: record<id: string, name: string, select: record, type: string>, Publishing_Release_Date: record<date: record, id: string, name: string, type: string>, Read: record<checkbox: record, id: string, name: string, type: string>, Score__5: record<id: string, name: string, select: record, type: string>, Status: record<id: string, name: string, select: record, type: string>, Summary: record<id: string, name: string, rich_text: record, type: string>, Type: record<id: string, name: string, select: record, type: string>, Wine_Pairing: record<id: string, name: string, rich_text: record, type: string>>, title: table<annotations: record, href: any, plain_text: string, text: record, type: string>, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/databases/($id)")
-  let body = {properties: $properties, title: $title} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/databases/{id}"))
+  let body = {"properties": $properties, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -325,7 +325,7 @@ export def "databases updateADatabase" [
 # POST /v1/databases/{id}/query
 # operationId: queryADatabase
 # --filter shape: {property?: string, select?: record}
-export def "databases-query queryADatabase" [
+export def "databases-query list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,16 +335,16 @@ export def "databases-query queryADatabase" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
   --filter: record # shape: {property?: string, select?: record}
 ]: any -> record<has_more: bool, next_cursor: any, object: string, results: table<archived: bool, cover: any, created_by: record, created_time: string, icon: any, id: string, last_edited_by: record, last_edited_time: string, object: string, parent: record, properties: record, url: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/databases/($id)/query")
-  let body = {filter: $filter} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/databases/{id}/query"))
+  let body = {"filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -355,7 +355,7 @@ export def "databases-query queryADatabase" [
 #
 # GET /v1/pages/{id}
 # operationId: retrieveAPage
-export def "pages retrieveAPage" [
+export def "pages retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,13 +365,13 @@ export def "pages retrieveAPage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
   --param: string # e.g. 
 ]: nothing -> record<archived: bool, cover: any, created_by: record<id: string, object: string>, created_time: string, icon: record<emoji: string, type: string>, id: string, last_edited_by: record<id: string, object: string>, last_edited_time: string, object: string, parent: record<page_id: string, type: string>, properties: record<title: record<id: string, title: list, type: string>>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/pages/($id)")
-  let extra_headers = {"Notion-Version": $Notion_Version, "": $param} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/pages/{id}"))
+  let extra_headers = {"Notion-Version": $notion_version, "": $param} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -383,7 +383,7 @@ export def "pages retrieveAPage" [
 # PATCH /v1/pages/{id}
 # operationId: updatePageProperties
 # --properties shape: {Status?: record}
-export def "pages updatePageProperties" [
+export def "pages update-page-properties" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -393,16 +393,16 @@ export def "pages updatePageProperties" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
   --properties: record # shape: {Status?: record}
 ]: any -> record<archived: bool, created_time: string, id: string, last_edited_time: string, object: string, parent: record<database_id: string, type: string>, properties: record<Author: record<id: string, multi_select: list, type: string>, Link: record<id: string, type: string, url: string>, Name: record<id: string, title: list, type: string>, Publisher: record<id: string, select: record, type: string>, Publishing_Release_Date: record<date: record, id: string, type: string>, Read: record<checkbox: bool, id: string, type: string>, Score__5: record<id: string, select: record, type: string>, Status: record<id: string, select: record, type: string>, Summary: record<id: string, rich_text: list, type: string>, Type: record<id: string, select: record, type: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/pages/($id)")
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/pages/{id}"))
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -413,7 +413,7 @@ export def "pages updatePageProperties" [
 #
 # GET /v1/pages/{page_id}/properties/{property_id}
 # operationId: retrieveAPagePropertyItem
-export def "pages-properties retrieveAPagePropertyItem" [
+export def "pages-properties retrieve-page-property-item" [
   page_id: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -427,7 +427,7 @@ export def "pages-properties retrieveAPagePropertyItem" [
 ]: nothing -> record<object: string, select: record<color: string, id: string, name: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/pages/($page_id)/properties/($property_id)")
+  let full_url = (build-url $base ({page_id: $page_id, property_id: $property_id} | format pattern "/v1/pages/{page_id}/properties/{property_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,7 +437,7 @@ export def "pages-properties retrieveAPagePropertyItem" [
 #
 # GET /v1/users/{id}
 # operationId: retrieveAUser
-export def "users retrieveAUser" [
+export def "users retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,15 +447,15 @@ export def "users retrieveAUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Notion-Version: string # e.g. {{NOTION_VERSION}}
+  --notion-version: string # e.g. {{NOTION_VERSION}}
   --body: record
 ]: any -> record<avatar_url: any, id: string, name: string, object: string, person: record<email: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/users/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/v1/users/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Notion-Version": $Notion_Version} | compact
+  let extra_headers = {"Notion-Version": $notion_version} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

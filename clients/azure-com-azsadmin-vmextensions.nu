@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension
 # operationId: VMExtensions_List
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension list" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -109,7 +109,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Compute.Admin/locations/($location)/artifactTypes/VMExtension" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,8 +119,8 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension/publishers/{publisher}/types/{type}/versions/{version}
 # operationId: VMExtensions_Delete
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension-publishers-types-versions Delete" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension-publishers-types-versions delete" [
+  subscription_id: string
   location: string
   publisher: string
   type: string
@@ -138,7 +138,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Compute.Admin/locations/($location)/artifactTypes/VMExtension/publishers/($publisher)/types/($type)/versions/($version)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, publisher: $publisher, type: $type, version: $version} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension/publishers/{publisher}/types/{type}/versions/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,8 +148,8 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension/publishers/{publisher}/types/{type}/versions/{version}
 # operationId: VMExtensions_Get
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension-publishers-types-versions Get" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension-publishers-types-versions get" [
+  subscription_id: string
   location: string
   publisher: string
   type: string
@@ -167,7 +167,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Compute.Admin/locations/($location)/artifactTypes/VMExtension/publishers/($publisher)/types/($type)/versions/($version)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, publisher: $publisher, type: $type, version: $version} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension/publishers/{publisher}/types/{type}/versions/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,8 +177,8 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
 #
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension/publishers/{publisher}/types/{type}/versions/{version}
 # operationId: VMExtensions_Create
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension-publishers-types-versions Create" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-vm-extension-publishers-types-versions create" [
+  subscription_id: string
   location: string
   publisher: string
   type: string
@@ -196,7 +196,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Compute.Admin/locations/($location)/artifactTypes/VMExtension/publishers/($publisher)/types/($type)/versions/($version)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location, publisher: $publisher, type: $type, version: $version} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/VMExtension/publishers/{publisher}/types/{type}/versions/{version}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

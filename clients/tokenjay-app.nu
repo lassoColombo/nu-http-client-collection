@@ -114,7 +114,7 @@ export def "ageusd-info get" [
 #
 # operationId: ergoPayCreateBabelBox_1
 export def "cancelbabel ergoPayCreateBabelBox-by-boxId" [
-  boxId: string
+  box_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -126,7 +126,7 @@ export def "cancelbabel ergoPayCreateBabelBox-by-boxId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/cancelbabel/($boxId)")
+  let full_url = (build-url $base ({box_id: $box_id} | format pattern "/cancelbabel/{box_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,14 +145,14 @@ export def "createbabel ergoPayCreateBabelBox" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tokenId: string
-  --ergAmount: int # format: int64
-  --tokenAmount: int # format: int64
+  --token-id: string
+  --erg-amount: int # format: int64
+  --token-amount: int # format: int64
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tokenId" $tokenId "scalar") (serialize-qp "ergAmount" $ergAmount "scalar") (serialize-qp "tokenAmount" $tokenAmount "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/createbabel/($address)" $qp)
+  let qp = [(serialize-qp "tokenId" $token_id "scalar") (serialize-qp "ergAmount" $erg_amount "scalar") (serialize-qp "tokenAmount" $token_amount "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({address: $address} | format pattern "/createbabel/{address}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -161,7 +161,7 @@ export def "createbabel ergoPayCreateBabelBox" [
 # GET /mosaik/babelfee/
 #
 # operationId: getBabelFeeOverview
-export def "mosaik-babelfee get" [
+export def "mosaik-babelfee get-babel-fee-overview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "mosaik-babelfee-newoffer-doit doCreateBabelBox" [
 # POST /mosaik/babelfee/newoffer/new-input
 #
 # operationId: replaceTokenAmountInputFields
-export def "mosaik-babelfee-newoffer-new-input replaceTokenAmountInputFields" [
+export def "mosaik-babelfee-newoffer-new-input update-token-amount-input-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "mosaik-babelfee-newoffer-new-input replaceTokenAmountInputFields" [
 # GET /mosaik/babelfee/notificationcheck
 #
 # operationId: checkForNotifications
-export def "mosaik-babelfee-notificationcheck checkForNotifications" [
+export def "mosaik-babelfee-notificationcheck check-for-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "mosaik-boxconsolidation-consolidate epConsolidate" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mosaik/boxconsolidation/consolidate/($p2pkaddress)")
+  let full_url = (build-url $base ({p2pkaddress: $p2pkaddress} | format pattern "/mosaik/boxconsolidation/consolidate/{p2pkaddress}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -336,7 +336,7 @@ export def "mosaik-tokenburn mainApp" [
 # GET /mosaik/tokenburn/get/{uuid}
 #
 # operationId: getBurningTransaction
-export def "mosaik-tokenburn-get get" [
+export def "mosaik-tokenburn-get get-burning-transaction" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +349,7 @@ export def "mosaik-tokenburn-get get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/mosaik/tokenburn/get/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/mosaik/tokenburn/get/{uuid}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -383,7 +383,7 @@ export def "mosaik-tokenburn-prepare prepareTransaction" [
 #
 # POST /payment/addrequest
 # operationId: addPaymentRequest
-export def "payment-addrequest addPaymentRequest" [
+export def "payment-addrequest create-payment-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,17 +393,17 @@ export def "payment-addrequest addPaymentRequest" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --message: string
-  nanoErg: int # format: int64
-  receiverAddress: string
-  --senderAddress: string
-  --tokenId: string
-  --tokenRawAmount: int # format: int64
+  nano_erg: int # format: int64
+  receiver_address: string
+  --sender-address: string
+  --token-id: string
+  --token-raw-amount: int # format: int64
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment/addrequest")
-  let body = {message: $message, nanoErg: $nanoErg, receiverAddress: $receiverAddress, senderAddress: $senderAddress, tokenId: $tokenId, tokenRawAmount: $tokenRawAmount} | compact
+  let body = {"message": $message, "nanoErg": $nano_erg, "receiverAddress": $receiver_address, "senderAddress": $sender_address, "tokenId": $token_id, "tokenRawAmount": $token_raw_amount} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -415,7 +415,7 @@ export def "payment-addrequest addPaymentRequest" [
 # GET /payment/state/{requestId}
 # operationId: getPaymentState
 export def "payment-state get" [
-  requestId: string
+  request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "payment-state get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/payment/state/($requestId)")
+  let full_url = (build-url $base ({request_id: $request_id} | format pattern "/payment/state/{request_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -447,12 +447,12 @@ export def "peers-list get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --unreachable: oneof<nothing, bool> # Set to true to show unreachable peers in the list (default: false)
-  --closedApi: oneof<nothing, bool> # Set to true to show peers not open to be connected (default: false)
+  --closed-api: oneof<nothing, bool> # Set to true to show peers not open to be connected (default: false)
   --limit: int # format: int32, default: 50
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "unreachable" $unreachable "scalar") (serialize-qp "closedApi" $closedApi "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "unreachable" $unreachable "scalar") (serialize-qp "closedApi" $closed_api "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/peers/list" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -474,12 +474,12 @@ export def "sigrsv-exchange doSigmaRsvExchange" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # format: int64
   --address: string
-  --checkRate: int # format: int64, default: 0
-  --executionFee: int # format: int64, default: 0
+  --check-rate: int # format: int64, default: 0
+  --execution-fee: int # format: int64, default: 0
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "checkRate" $checkRate "scalar") (serialize-qp "executionFee" $executionFee "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "checkRate" $check_rate "scalar") (serialize-qp "executionFee" $execution_fee "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sigrsv/exchange/" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,7 +503,7 @@ export def "sigrsv-exchange-info calcSigmaRsvExchange" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sigrsv/exchange/($amount)/info")
+  let full_url = (build-url $base ({amount: $amount} | format pattern "/sigrsv/exchange/{amount}/info"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -513,7 +513,7 @@ export def "sigrsv-exchange-info calcSigmaRsvExchange" [
 #
 # GET /sigrsv/price
 # operationId: getSigmaRsvPrice
-export def "sigrsv-price get" [
+export def "sigrsv-price get-sigma-rsv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,12 +546,12 @@ export def "sigusd-exchange doSigmaUsdExchange" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --amount: int # format: int64
   --address: string
-  --checkRate: int # format: int64, default: 0
-  --executionFee: int # format: int64, default: 0
+  --check-rate: int # format: int64, default: 0
+  --execution-fee: int # format: int64, default: 0
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "checkRate" $checkRate "scalar") (serialize-qp "executionFee" $executionFee "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "address" $address "scalar") (serialize-qp "checkRate" $check_rate "scalar") (serialize-qp "executionFee" $execution_fee "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sigusd/exchange/" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -575,7 +575,7 @@ export def "sigusd-exchange-info calcSigmaUsdExchange" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sigusd/exchange/($amount)/info")
+  let full_url = (build-url $base ({amount: $amount} | format pattern "/sigusd/exchange/{amount}/info"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -585,7 +585,7 @@ export def "sigusd-exchange-info calcSigmaUsdExchange" [
 #
 # GET /sigusd/price
 # operationId: getSigmaUsdPrice
-export def "sigusd-price get" [
+export def "sigusd-price get-sigma-usd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,9 +607,9 @@ export def "sigusd-price get" [
 #
 # GET /tokens/check/{tokenId}/{tokenName}
 # operationId: checkToken
-export def "tokens-check checkToken" [
-  tokenId: string
-  tokenName: string
+export def "tokens-check check" [
+  token_id: string
+  token_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,7 +621,7 @@ export def "tokens-check checkToken" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tokens/check/($tokenId)/($tokenName)")
+  let full_url = (build-url $base ({token_id: $token_id, token_name: $token_name} | format pattern "/tokens/check/{token_id}/{token_name}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -631,7 +631,7 @@ export def "tokens-check checkToken" [
 #
 # GET /tokens/listBlocked
 # operationId: listBlocked
-export def "tokens-list-blocked listBlocked" [
+export def "tokens-list-blocked list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "tokens-list-blocked listBlocked" [
 #
 # GET /tokens/listGenuine
 # operationId: listGenuine
-export def "tokens-list-genuine listGenuine" [
+export def "tokens-list-genuine list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,7 +698,7 @@ export def "tokens-prices-all get" [
 # GET /tokens/prices/{tokenId}
 # operationId: getTokenPrice
 export def "tokens-prices get" [
-  tokenId: string
+  token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,7 +710,7 @@ export def "tokens-prices get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tokens/prices/($tokenId)")
+  let full_url = (build-url $base ({token_id: $token_id} | format pattern "/tokens/prices/{token_id}"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

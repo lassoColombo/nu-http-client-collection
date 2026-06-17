@@ -72,7 +72,7 @@ def accept-completer [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "airport-autocomplete AirportNameSearch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "airport-autocomplete list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/airport/autocomplete/{airport_name}
 # operationId: AutoCompleteAirportName_AirportNameSearch
-export def "airport-autocomplete AirportNameSearch" [
+export def "airport-autocomplete list" [
   airport_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -113,7 +113,7 @@ export def "airport-autocomplete AirportNameSearch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "airport_service_type" $airport_service_type "scalar") (serialize-qp "optional_country_code" $optional_country_code "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/airport/autocomplete/($airport_name)" $qp)
+  let full_url = (build-url $base ({airport_name: $airport_name} | format pattern "/v1/airport/autocomplete/{airport_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -123,7 +123,7 @@ export def "airport-autocomplete AirportNameSearch" [
 #
 # GET /v1/airport/iata/{airport_iata}
 # operationId: AirportIATA_AirportIATASearch
-export def "airport-iata AirportIATASearch" [
+export def "airport-iata list" [
   airport_iata: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -137,7 +137,7 @@ export def "airport-iata AirportIATASearch" [
 ]: nothing -> record<airport_list: table<Country: record, Frequency: list, Region: record, Runway: list, airport_name: string, airport_type: string, elevation_ft: string, gps_code: string, iata_code: string, latitude: string, local_code: string, location: string, logo_url: string, longitude: string, scheduled_service: bool, website: string, wikipedia: string>, disclaimer: string, message: string, status_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/airport/iata/($airport_iata)")
+  let full_url = (build-url $base ({airport_iata: $airport_iata} | format pattern "/v1/airport/iata/{airport_iata}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +147,7 @@ export def "airport-iata AirportIATASearch" [
 #
 # GET /v1/airport/name/{airport_name}
 # operationId: AirportDetails_AirportNameSearch
-export def "airport-name AirportNameSearch" [
+export def "airport-name list" [
   airport_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +161,7 @@ export def "airport-name AirportNameSearch" [
 ]: nothing -> record<airport_list: table<Country: record, Frequency: list, Region: record, Runway: list, airport_name: string, airport_type: string, elevation_ft: string, gps_code: string, iata_code: string, latitude: string, local_code: string, location: string, logo_url: string, longitude: string, scheduled_service: bool, website: string, wikipedia: string>, disclaimer: string, message: string, status_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/airport/name/($airport_name)")
+  let full_url = (build-url $base ({airport_name: $airport_name} | format pattern "/v1/airport/name/{airport_name}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,7 +171,7 @@ export def "airport-name AirportNameSearch" [
 #
 # GET /v1/airport/nearest/{result_count}/{latitude}/{longitude}
 # operationId: NearestAirports_NearestAirportList
-export def "airport-nearest NearestAirportList" [
+export def "airport-nearest list" [
   result_count: int
   latitude: float
   longitude: float
@@ -187,7 +187,7 @@ export def "airport-nearest NearestAirportList" [
 ]: nothing -> record<airport_list: table<Country: record, Frequency: list, Region: record, Runway: list, airport_name: string, airport_type: string, elevation_ft: string, gps_code: string, iata_code: string, latitude: string, local_code: string, location: string, logo_url: string, longitude: string, scheduled_service: bool, website: string, wikipedia: string>, disclaimer: string, message: string, status_code: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/airport/nearest/($result_count)/($latitude)/($longitude)")
+  let full_url = (build-url $base ({result_count: $result_count, latitude: $latitude, longitude: $longitude} | format pattern "/v1/airport/nearest/{result_count}/{latitude}/{longitude}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,7 +197,7 @@ export def "airport-nearest NearestAirportList" [
 #
 # GET /v1/country/code/{country_code}
 # operationId: CountryAirportList_CountryAirportList
-export def "country-code CountryAirportList" [
+export def "country-code list" [
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -213,7 +213,7 @@ export def "country-code CountryAirportList" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "airport_service_type" $airport_service_type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/country/code/($country_code)" $qp)
+  let full_url = (build-url $base ({country_code: $country_code} | format pattern "/v1/country/code/{country_code}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,7 +223,7 @@ export def "country-code CountryAirportList" [
 #
 # GET /v1/country_list
 # operationId: CountryList_CountryAirportList
-export def "country-list CountryAirportList" [
+export def "country-list list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

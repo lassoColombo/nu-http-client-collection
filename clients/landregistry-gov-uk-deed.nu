@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deed addDeed" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deed create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 # POST /deed/
 # operationId: addDeed
 # --borrowers item shape: {address: string, dob: string, forename: string, gender?: "Male"|"Female"|"Not Specified", middle_name?: string, phone_number: string, surname: string}
-export def "deed addDeed" [
+export def "deed create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,7 +112,7 @@ export def "deed addDeed" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deed/")
-  let body = {borrowers: $borrowers, identity_checked: $identity_checked, md_ref: $md_ref, property_address: $property_address, title_number: $title_number} | compact
+  let body = {"borrowers": $borrowers, "identity_checked": $identity_checked, "md_ref": $md_ref, "property_address": $property_address, "title_number": $title_number} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "text/plain"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -135,7 +135,7 @@ export def "deed get" [
 ]: nothing -> record<deed: record<additional_provisions: list<record>, borrowers: list<record>, charge_clause: record<cre_code: string, description: string>, deed_status: string, effective_clause: string, lender: record<address: string, description: string, name: string>, md_ref: string, property_address: string, title_number: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/deed/($deed_reference)")
+  let full_url = (build-url $base ({deed_reference: $deed_reference} | format pattern "/deed/{deed_reference}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -70,7 +70,7 @@ def datasource-completer [] { ["singularity" "tranquility"] }
 def response-completer [] { ["accepted" "declined" "tentative"] }
 def color-completer [] { ["#0000fe" "#006634" "#0099ff" "#00ff33" "#01ffff" "#349800" "#660066" "#666666" "#999999" "#99ffff" "#9a0000" "#ccff9a" "#e6e6e6" "#fe0000" "#ff6600" "#ffff01" "#ffffcd" "#ffffff"] }
 def language-completer [] { ["de" "en-us" "fr" "ja" "ru" "zh"] }
-def Accept-Language-completer [] { ["de" "en-us" "fr" "ja" "ru" "zh"] }
+def accept-language-completer [] { ["de" "en-us" "fr" "ja" "ru" "zh"] }
 def role-completer [] { ["fleet_commander" "squad_commander" "squad_member" "wing_commander"] }
 def order-type-completer [] { ["all" "buy" "sell"] }
 def flag-completer [] { ["insecure" "secure" "shortest"] }
@@ -79,7 +79,7 @@ def filter-completer [] { ["manufacturing_basic" "market"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alliances alliances" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alliances get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /alliances/
 # operationId: get_alliances
-export def "alliances alliances" [
+export def "alliances get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,13 +113,13 @@ export def "alliances alliances" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/alliances/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -141,13 +141,13 @@ export def "alliances id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<creator_corporation_id: int, creator_id: int, date_founded: string, executor_corporation_id: int, faction_id: int, name: string, ticker: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/alliances/($alliance_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({alliance_id: $alliance_id} | format pattern "/alliances/{alliance_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -171,13 +171,13 @@ export def "alliances-contacts contacts" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<contact_id: int, contact_type: string, label_ids: list<int>, standing: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/alliances/($alliance_id)/contacts/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({alliance_id: $alliance_id} | format pattern "/alliances/{alliance_id}/contacts/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,13 +200,13 @@ export def "alliances-contacts-labels labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<label_id: int, label_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/alliances/($alliance_id)/contacts/labels/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({alliance_id: $alliance_id} | format pattern "/alliances/{alliance_id}/contacts/labels/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -228,13 +228,13 @@ export def "alliances-corporations corporations" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/alliances/($alliance_id)/corporations/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({alliance_id: $alliance_id} | format pattern "/alliances/{alliance_id}/corporations/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -256,13 +256,13 @@ export def "alliances-icons icons" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<px128x128: string, px64x64: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/alliances/($alliance_id)/icons/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({alliance_id: $alliance_id} | format pattern "/alliances/{alliance_id}/icons/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -311,13 +311,13 @@ export def "characters id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<alliance_id: int, ancestry_id: int, birthday: string, bloodline_id: int, corporation_id: int, description: string, faction_id: int, gender: string, name: string, race_id: int, security_status: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -340,13 +340,13 @@ export def "characters-agents-research research" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<agent_id: int, points_per_day: float, remainder_points: float, skill_type_id: int, started_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/agents_research/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/agents_research/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -370,13 +370,13 @@ export def "characters-assets assets" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<is_blueprint_copy: bool, is_singleton: bool, item_id: int, location_flag: string, location_id: int, location_type: string, quantity: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/assets/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/assets/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -405,7 +405,7 @@ export def "characters-assets-locations locations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/assets/locations/" $qp)
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/assets/locations/") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -434,7 +434,7 @@ export def "characters-assets-names names" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/assets/names/" $qp)
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/assets/names/") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -457,13 +457,13 @@ export def "characters-attributes attributes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<accrued_remap_cooldown_date: string, bonus_remaps: int, charisma: int, intelligence: int, last_remap_date: string, memory: int, perception: int, willpower: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/attributes/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/attributes/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,13 +487,13 @@ export def "characters-blueprints blueprints" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<item_id: int, location_flag: string, location_id: int, material_efficiency: int, quantity: int, runs: int, time_efficiency: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/blueprints/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/blueprints/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -517,13 +517,13 @@ export def "characters-bookmarks bookmarks" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<bookmark_id: int, coordinates: record<x: float, y: float, z: float>, created: string, creator_id: int, folder_id: int, item: record<item_id: int, type_id: int>, label: string, location_id: int, notes: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/bookmarks/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/bookmarks/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -547,13 +547,13 @@ export def "characters-bookmarks-folders folders" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<folder_id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/bookmarks/folders/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/bookmarks/folders/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -577,13 +577,13 @@ export def "characters-calendar calendar" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --from-event: int # The event ID to retrieve events from (format: int32)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<event_date: string, event_id: int, event_response: string, importance: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_event" $from_event "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/calendar/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/calendar/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -607,13 +607,13 @@ export def "characters-calendar id-by-character_id-event_id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<date: string, duration: int, event_id: int, importance: int, owner_id: int, owner_name: string, owner_type: string, response: string, text: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/calendar/($event_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id, event_id: $event_id} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -643,8 +643,8 @@ export def "characters-calendar id-by-character_id-event_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/calendar/($event_id)/" $qp)
-  let body = {response: $response} | compact
+  let full_url = (build-url $base ({character_id: $character_id, event_id: $event_id} | format pattern "/characters/{character_id}/calendar/{event_id}/") $qp)
+  let body = {"response": $response} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -668,13 +668,13 @@ export def "characters-calendar-attendees attendees" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<character_id: int, event_response: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/calendar/($event_id)/attendees/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id, event_id: $event_id} | format pattern "/characters/{character_id}/calendar/{event_id}/attendees/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,7 +685,7 @@ export def "characters-calendar-attendees attendees" [
 #
 # GET /characters/{character_id}/clones/
 # operationId: get_characters_character_id_clones
-export def "characters-clones clones" [
+export def "characters-clones clone-s" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,13 +697,13 @@ export def "characters-clones clones" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<home_location: record<location_id: int, location_type: string>, jump_clones: table<implants: list, jump_clone_id: int, location_id: int, location_type: string, name: string>, last_clone_jump_date: string, last_station_change_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/clones/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/clones/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -731,7 +731,7 @@ export def "characters-contacts contacts-by-character_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_ids" $contact_ids "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/contacts/" $qp)
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contacts/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -754,13 +754,13 @@ export def "characters-contacts contacts-by-character_id-1" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<contact_id: int, contact_type: string, is_blocked: bool, is_watched: bool, label_ids: list<int>, standing: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/contacts/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contacts/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -792,7 +792,7 @@ export def "characters-contacts contacts-by-character_id-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "label_ids" $label_ids "csv") (serialize-qp "standing" $standing "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "watched" $watched "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/contacts/" $qp)
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contacts/") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -824,7 +824,7 @@ export def "characters-contacts contacts-by-character_id-3" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "label_ids" $label_ids "csv") (serialize-qp "standing" $standing "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "watched" $watched "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/contacts/" $qp)
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contacts/") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -847,13 +847,13 @@ export def "characters-contacts-labels labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<label_id: int, label_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/contacts/labels/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contacts/labels/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -877,13 +877,13 @@ export def "characters-contracts contracts" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<acceptor_id: int, assignee_id: int, availability: string, buyout: float, collateral: float, contract_id: int, date_accepted: string, date_completed: string, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, status: string, title: string, type: string, volume: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/contracts/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/contracts/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -907,13 +907,13 @@ export def "characters-contracts-bids bids" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<amount: float, bid_id: int, bidder_id: int, date_bid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/contracts/($contract_id)/bids/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id, contract_id: $contract_id} | format pattern "/characters/{character_id}/contracts/{contract_id}/bids/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -937,13 +937,13 @@ export def "characters-contracts-items items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<is_included: bool, is_singleton: bool, quantity: int, raw_quantity: int, record_id: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/contracts/($contract_id)/items/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id, contract_id: $contract_id} | format pattern "/characters/{character_id}/contracts/{contract_id}/items/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -965,13 +965,13 @@ export def "characters-corporationhistory corporationhistory" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<corporation_id: int, is_deleted: bool, record_id: int, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/corporationhistory/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/corporationhistory/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1000,7 +1000,7 @@ export def "characters-cspa cspa" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/cspa/" $qp)
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/cspa/") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1023,13 +1023,13 @@ export def "characters-fatigue fatigue" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<jump_fatigue_expire_date: string, last_jump_date: string, last_update_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/fatigue/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/fatigue/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1052,13 +1052,13 @@ export def "characters-fittings fittings-by-character_id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<description: string, fitting_id: int, items: list<record>, name: string, ship_type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/fittings/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/fittings/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1091,8 +1091,8 @@ export def "characters-fittings fittings-by-character_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/fittings/" $qp)
-  let body = {description: $description, items: $items, name: $name, ship_type_id: $ship_type_id} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/fittings/") $qp)
+  let body = {"description": $description, "items": $items, "name": $name, "ship_type_id": $ship_type_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1120,7 +1120,7 @@ export def "characters-fittings id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/fittings/($fitting_id)/" $qp)
+  let full_url = (build-url $base ({character_id: $character_id, fitting_id: $fitting_id} | format pattern "/characters/{character_id}/fittings/{fitting_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1142,13 +1142,13 @@ export def "characters-fleet fleet" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<fleet_id: int, role: string, squad_id: int, wing_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/fleet/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/fleet/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1171,13 +1171,13 @@ export def "characters-fw-stats stats" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<current_rank: int, enlisted_on: string, faction_id: int, highest_rank: int, kills: record<last_week: int, total: int, yesterday: int>, victory_points: record<last_week: int, total: int, yesterday: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/fw/stats/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/fw/stats/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1200,13 +1200,13 @@ export def "characters-implants implants" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/implants/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/implants/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1230,13 +1230,13 @@ export def "characters-industry-jobs jobs" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --include-completed: oneof<nothing, bool> # Whether to retrieve completed character industry jobs. Only includes jobs from the past 90 days
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<activity_id: int, blueprint_id: int, blueprint_location_id: int, blueprint_type_id: int, completed_character_id: int, completed_date: string, cost: float, duration: int, end_date: string, facility_id: int, installer_id: int, job_id: int, licensed_runs: int, output_location_id: int, pause_date: string, probability: float, product_type_id: int, runs: int, start_date: string, station_id: int, status: string, successful_runs: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "include_completed" $include_completed "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/industry/jobs/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/industry/jobs/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1260,13 +1260,13 @@ export def "characters-killmails-recent recent" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<killmail_hash: string, killmail_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/killmails/recent/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/killmails/recent/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1289,13 +1289,13 @@ export def "characters-location location" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<solar_system_id: int, station_id: int, structure_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/location/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/location/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1318,13 +1318,13 @@ export def "characters-loyalty-points points" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<corporation_id: int, loyalty_points: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/loyalty/points/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/loyalty/points/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1349,13 +1349,13 @@ export def "characters-mail mail-by-character_id" [
   --labels: list # Fetch only mails that match one or more of the given labels
   --last-mail-id: int # List only mail with an ID lower than the given ID, if present (format: int32)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<from: int, is_read: bool, labels: list<int>, mail_id: int, recipients: list<record>, subject: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "labels" $labels "csv") (serialize-qp "last_mail_id" $last_mail_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/mail/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mail/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1388,8 +1388,8 @@ export def "characters-mail mail-by-character_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/mail/" $qp)
-  let body = {approved_cost: $approved_cost, body: $body_body, recipients: $recipients, subject: $subject} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mail/") $qp)
+  let body = {"approved_cost": $approved_cost, "body": $body_body, "recipients": $recipients, "subject": $subject} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1412,13 +1412,13 @@ export def "characters-mail-labels labels-by-character_id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<labels: table<color: string, label_id: int, name: string, unread_count: int>, total_unread_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/mail/labels/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mail/labels/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1448,8 +1448,8 @@ export def "characters-mail-labels labels-by-character_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/mail/labels/" $qp)
-  let body = {color: $color, name: $name} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mail/labels/") $qp)
+  let body = {"color": $color, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1477,7 +1477,7 @@ export def "characters-mail-labels id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/mail/labels/($label_id)/" $qp)
+  let full_url = (build-url $base ({character_id: $character_id, label_id: $label_id} | format pattern "/characters/{character_id}/mail/labels/{label_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1487,7 +1487,7 @@ export def "characters-mail-labels id" [
 #
 # GET /characters/{character_id}/mail/lists/
 # operationId: get_characters_character_id_mail_lists
-export def "characters-mail-lists lists" [
+export def "characters-mail-lists list-s" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1499,13 +1499,13 @@ export def "characters-mail-lists lists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<mailing_list_id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/mail/lists/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mail/lists/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1533,7 +1533,7 @@ export def "characters-mail id-by-character_id-mail_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/mail/($mail_id)/" $qp)
+  let full_url = (build-url $base ({character_id: $character_id, mail_id: $mail_id} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1556,13 +1556,13 @@ export def "characters-mail id-by-character_id-mail_id-1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<body: string, from: int, labels: list<int>, read: bool, recipients: table<recipient_id: int, recipient_type: string>, subject: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/mail/($mail_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id, mail_id: $mail_id} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1593,8 +1593,8 @@ export def "characters-mail id-by-character_id-mail_id-2" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/mail/($mail_id)/" $qp)
-  let body = {labels: $labels, read: $read} | compact
+  let full_url = (build-url $base ({character_id: $character_id, mail_id: $mail_id} | format pattern "/characters/{character_id}/mail/{mail_id}/") $qp)
+  let body = {"labels": $labels, "read": $read} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1617,13 +1617,13 @@ export def "characters-medals medals" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<corporation_id: int, date: string, description: string, graphics: list<record>, issuer_id: int, medal_id: int, reason: string, status: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/medals/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/medals/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1647,13 +1647,13 @@ export def "characters-mining mining" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<date: string, quantity: int, solar_system_id: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/mining/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/mining/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1676,13 +1676,13 @@ export def "characters-notifications notifications" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<is_read: bool, notification_id: int, sender_id: int, sender_type: string, text: string, timestamp: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/notifications/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/notifications/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1705,13 +1705,13 @@ export def "characters-notifications-contacts contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<message: string, notification_id: int, send_date: string, sender_character_id: int, standing_level: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/notifications/contacts/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/notifications/contacts/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1734,13 +1734,13 @@ export def "characters-online online" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<last_login: string, last_logout: string, logins: int, online: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/online/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/online/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1763,13 +1763,13 @@ export def "characters-opportunities opportunities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<completed_at: string, task_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/opportunities/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/opportunities/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1792,13 +1792,13 @@ export def "characters-orders orders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<duration: int, escrow: float, is_buy_order: bool, is_corporation: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, type_id: int, volume_remain: int, volume_total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/orders/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/orders/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1822,13 +1822,13 @@ export def "characters-orders-history history" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<duration: int, escrow: float, is_buy_order: bool, is_corporation: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, state: string, type_id: int, volume_remain: int, volume_total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/orders/history/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/orders/history/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1851,13 +1851,13 @@ export def "characters-planets planets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<last_update: string, num_pins: int, owner_id: int, planet_id: int, planet_type: string, solar_system_id: int, upgrade_level: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/planets/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/planets/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1881,13 +1881,13 @@ export def "characters-planets id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<links: table<destination_pin_id: int, link_level: int, source_pin_id: int>, pins: table<contents: list, expiry_time: string, extractor_details: record, factory_details: record, install_time: string, last_cycle_start: string, latitude: float, longitude: float, pin_id: int, schematic_id: int, type_id: int>, routes: table<content_type_id: int, destination_pin_id: int, quantity: float, route_id: int, source_pin_id: int, waypoints: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/planets/($planet_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id, planet_id: $planet_id} | format pattern "/characters/{character_id}/planets/{planet_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1909,13 +1909,13 @@ export def "characters-portrait portrait" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<px128x128: string, px256x256: string, px512x512: string, px64x64: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/portrait/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/portrait/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1938,13 +1938,13 @@ export def "characters-roles roles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/roles/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/roles/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1971,14 +1971,14 @@ export def "characters-search search" [
   --search: string # The string to search on
   --strict: oneof<nothing, bool> # Whether the search should be a strict match (default: false)
   --qp-token: string # Access token to use if unable to set a header
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<agent: list<int>, alliance: list<int>, character: list<int>, constellation: list<int>, corporation: list<int>, faction: list<int>, inventory_type: list<int>, region: list<int>, solar_system: list<int>, station: list<int>, structure: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categories" $categories "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "strict" $strict "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/search/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/search/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2001,13 +2001,13 @@ export def "characters-ship ship" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<ship_item_id: int, ship_name: string, ship_type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/ship/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/ship/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2030,13 +2030,13 @@ export def "characters-skillqueue skillqueue" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<finish_date: string, finished_level: int, level_end_sp: int, level_start_sp: int, queue_position: int, skill_id: int, start_date: string, training_start_sp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/skillqueue/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/skillqueue/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2059,13 +2059,13 @@ export def "characters-skills skills" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<skills: table<active_skill_level: int, skill_id: int, skillpoints_in_skill: int, trained_skill_level: int>, total_sp: int, unallocated_sp: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/skills/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/skills/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2088,13 +2088,13 @@ export def "characters-standings standings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<from_id: int, from_type: string, standing: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/standings/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/standings/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2117,13 +2117,13 @@ export def "characters-stats stats" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<character: record<days_of_activity: int, minutes: int, sessions_started: int>, combat: record<cap_drainedby_npc: int, cap_drainedby_pc: int, cap_draining_pc: int, criminal_flag_set: int, damage_from_np_cs_amount: int, damage_from_np_cs_num_shots: int, damage_from_players_bomb_amount: int, damage_from_players_bomb_num_shots: int, damage_from_players_combat_drone_amount: int, damage_from_players_combat_drone_num_shots: int, damage_from_players_energy_amount: int, damage_from_players_energy_num_shots: int, damage_from_players_fighter_bomber_amount: int, damage_from_players_fighter_bomber_num_shots: int, damage_from_players_fighter_drone_amount: int, damage_from_players_fighter_drone_num_shots: int, damage_from_players_hybrid_amount: int, damage_from_players_hybrid_num_shots: int, damage_from_players_missile_amount: int, damage_from_players_missile_num_shots: int, damage_from_players_projectile_amount: int, damage_from_players_projectile_num_shots: int, damage_from_players_smart_bomb_amount: int, damage_from_players_smart_bomb_num_shots: int, damage_from_players_super_amount: int, damage_from_players_super_num_shots: int, damage_from_structures_total_amount: int, damage_from_structures_total_num_shots: int, damage_to_players_bomb_amount: int, damage_to_players_bomb_num_shots: int, damage_to_players_combat_drone_amount: int, damage_to_players_combat_drone_num_shots: int, damage_to_players_energy_amount: int, damage_to_players_energy_num_shots: int, damage_to_players_fighter_bomber_amount: int, damage_to_players_fighter_bomber_num_shots: int, damage_to_players_fighter_drone_amount: int, damage_to_players_fighter_drone_num_shots: int, damage_to_players_hybrid_amount: int, damage_to_players_hybrid_num_shots: int, damage_to_players_missile_amount: int, damage_to_players_missile_num_shots: int, damage_to_players_projectile_amount: int, damage_to_players_projectile_num_shots: int, damage_to_players_smart_bomb_amount: int, damage_to_players_smart_bomb_num_shots: int, damage_to_players_super_amount: int, damage_to_players_super_num_shots: int, damage_to_structures_total_amount: int, damage_to_structures_total_num_shots: int, deaths_high_sec: int, deaths_low_sec: int, deaths_null_sec: int, deaths_pod_high_sec: int, deaths_pod_low_sec: int, deaths_pod_null_sec: int, deaths_pod_wormhole: int, deaths_wormhole: int, drone_engage: int, dscans: int, duel_requested: int, engagement_register: int, kills_assists: int, kills_high_sec: int, kills_low_sec: int, kills_null_sec: int, kills_pod_high_sec: int, kills_pod_low_sec: int, kills_pod_null_sec: int, kills_pod_wormhole: int, kills_wormhole: int, npc_flag_set: int, probe_scans: int, pvp_flag_set: int, repair_armor_by_remote_amount: int, repair_armor_remote_amount: int, repair_armor_self_amount: int, repair_capacitor_by_remote_amount: int, repair_capacitor_remote_amount: int, repair_capacitor_self_amount: int, repair_hull_by_remote_amount: int, repair_hull_remote_amount: int, repair_hull_self_amount: int, repair_shield_by_remote_amount: int, repair_shield_remote_amount: int, repair_shield_self_amount: int, self_destructs: int, warp_scramble_pc: int, warp_scrambledby_npc: int, warp_scrambledby_pc: int, weapon_flag_set: int, webifiedby_npc: int, webifiedby_pc: int, webifying_pc: int>, industry: record<hacking_successes: int, jobs_cancelled: int, jobs_completed_copy_blueprint: int, jobs_completed_invention: int, jobs_completed_manufacture: int, jobs_completed_manufacture_asteroid: int, jobs_completed_manufacture_asteroid_quantity: int, jobs_completed_manufacture_charge: int, jobs_completed_manufacture_charge_quantity: int, jobs_completed_manufacture_commodity: int, jobs_completed_manufacture_commodity_quantity: int, jobs_completed_manufacture_deployable: int, jobs_completed_manufacture_deployable_quantity: int, jobs_completed_manufacture_drone: int, jobs_completed_manufacture_drone_quantity: int, jobs_completed_manufacture_implant: int, jobs_completed_manufacture_implant_quantity: int, jobs_completed_manufacture_module: int, jobs_completed_manufacture_module_quantity: int, jobs_completed_manufacture_other: int, jobs_completed_manufacture_other_quantity: int, jobs_completed_manufacture_ship: int, jobs_completed_manufacture_ship_quantity: int, jobs_completed_manufacture_structure: int, jobs_completed_manufacture_structure_quantity: int, jobs_completed_manufacture_subsystem: int, jobs_completed_manufacture_subsystem_quantity: int, jobs_completed_material_productivity: int, jobs_completed_time_productivity: int, jobs_started_copy_blueprint: int, jobs_started_invention: int, jobs_started_manufacture: int, jobs_started_material_productivity: int, jobs_started_time_productivity: int, reprocess_item: int, reprocess_item_quantity: int>, inventory: record<abandon_loot_quantity: int, trash_item_quantity: int>, isk: record<in: int, out: int>, market: record<accept_contracts_courier: int, accept_contracts_item_exchange: int, buy_orders_placed: int, cancel_market_order: int, create_contracts_auction: int, create_contracts_courier: int, create_contracts_item_exchange: int, deliver_courier_contract: int, isk_gained: int, isk_spent: int, modify_market_order: int, search_contracts: int, sell_orders_placed: int>, mining: record<drone_mine: int, ore_arkonor: int, ore_bistot: int, ore_crokite: int, ore_dark_ochre: int, ore_gneiss: int, ore_harvestable_cloud: int, ore_hedbergite: int, ore_hemorphite: int, ore_ice: int, ore_jaspet: int, ore_kernite: int, ore_mercoxit: int, ore_omber: int, ore_plagioclase: int, ore_pyroxeres: int, ore_scordite: int, ore_spodumain: int, ore_veldspar: int>, module: record<activations_armor_hardener: int, activations_armor_repair_unit: int, activations_armor_resistance_shift_hardener: int, activations_automated_targeting_system: int, activations_bastion: int, activations_bomb_launcher: int, activations_capacitor_booster: int, activations_cargo_scanner: int, activations_cloaking_device: int, activations_clone_vat_bay: int, activations_cynosural_field: int, activations_damage_control: int, activations_data_miners: int, activations_drone_control_unit: int, activations_drone_tracking_modules: int, activations_eccm: int, activations_ecm: int, activations_ecm_burst: int, activations_energy_destabilizer: int, activations_energy_vampire: int, activations_energy_weapon: int, activations_festival_launcher: int, activations_frequency_mining_laser: int, activations_fueled_armor_repairer: int, activations_fueled_shield_booster: int, activations_gang_coordinator: int, activations_gas_cloud_harvester: int, activations_hull_repair_unit: int, activations_hybrid_weapon: int, activations_industrial_core: int, activations_interdiction_sphere_launcher: int, activations_micro_jump_drive: int, activations_mining_laser: int, activations_missile_launcher: int, activations_passive_targeting_system: int, activations_probe_launcher: int, activations_projected_eccm: int, activations_projectile_weapon: int, activations_propulsion_module: int, activations_remote_armor_repairer: int, activations_remote_capacitor_transmitter: int, activations_remote_ecm_burst: int, activations_remote_hull_repairer: int, activations_remote_sensor_booster: int, activations_remote_sensor_damper: int, activations_remote_shield_booster: int, activations_remote_tracking_computer: int, activations_salvager: int, activations_sensor_booster: int, activations_shield_booster: int, activations_shield_hardener: int, activations_ship_scanner: int, activations_siege: int, activations_smart_bomb: int, activations_stasis_web: int, activations_strip_miner: int, activations_super_weapon: int, activations_survey_scanner: int, activations_target_breaker: int, activations_target_painter: int, activations_tracking_computer: int, activations_tracking_disruptor: int, activations_tractor_beam: int, activations_triage: int, activations_warp_disrupt_field_generator: int, activations_warp_scrambler: int, link_weapons: int, overload: int, repairs: int>, orbital: record<strike_characters_killed: int, strike_damage_to_players_armor_amount: int, strike_damage_to_players_shield_amount: int>, pve: record<dungeons_completed_agent: int, dungeons_completed_distribution: int, missions_succeeded: int, missions_succeeded_epic_arc: int>, social: record<add_contact_bad: int, add_contact_good: int, add_contact_high: int, add_contact_horrible: int, add_contact_neutral: int, add_note: int, added_as_contact_bad: int, added_as_contact_good: int, added_as_contact_high: int, added_as_contact_horrible: int, added_as_contact_neutral: int, calendar_event_created: int, chat_messages_alliance: int, chat_messages_constellation: int, chat_messages_corporation: int, chat_messages_fleet: int, chat_messages_region: int, chat_messages_solarsystem: int, chat_messages_warfaction: int, chat_total_message_length: int, direct_trades: int, fleet_broadcasts: int, fleet_joins: int, mails_received: int, mails_sent: int>, travel: record<acceleration_gate_activations: int, align_to: int, distance_warped_high_sec: int, distance_warped_low_sec: int, distance_warped_null_sec: int, distance_warped_wormhole: int, docks_high_sec: int, docks_low_sec: int, docks_null_sec: int, jumps_stargate_high_sec: int, jumps_stargate_low_sec: int, jumps_stargate_null_sec: int, jumps_wormhole: int, warps_high_sec: int, warps_low_sec: int, warps_null_sec: int, warps_to_bookmark: int, warps_to_celestial: int, warps_to_fleet_member: int, warps_to_scan_result: int, warps_wormhole: int>, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/stats/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/stats/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2146,13 +2146,13 @@ export def "characters-titles titles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<name: string, title_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/titles/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/titles/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2175,13 +2175,13 @@ export def "characters-wallet wallet" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> float {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/wallet/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/wallet/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2205,13 +2205,13 @@ export def "characters-wallet-journal journal" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<amount: float, balance: float, context_id: int, context_id_type: string, date: string, description: string, first_party_id: int, id: int, reason: string, ref_type: string, second_party_id: int, tax: float, tax_receiver_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/wallet/journal/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/wallet/journal/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2235,13 +2235,13 @@ export def "characters-wallet-transactions transactions" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --from-id: int # Only show transactions happened before the one referenced by this id (format: int64)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<client_id: int, date: string, is_buy: bool, is_personal: bool, journal_ref_id: int, location_id: int, quantity: int, transaction_id: int, type_id: int, unit_price: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/characters/($character_id)/wallet/transactions/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({character_id: $character_id} | format pattern "/characters/{character_id}/wallet/transactions/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2264,13 +2264,13 @@ export def "contracts-public-bids id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<amount: float, bid_id: int, date_bid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contracts/public/bids/($contract_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({contract_id: $contract_id} | format pattern "/contracts/public/bids/{contract_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2293,13 +2293,13 @@ export def "contracts-public-items id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<is_blueprint_copy: bool, is_included: bool, item_id: int, material_efficiency: int, quantity: int, record_id: int, runs: int, time_efficiency: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contracts/public/items/($contract_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({contract_id: $contract_id} | format pattern "/contracts/public/items/{contract_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2322,13 +2322,13 @@ export def "contracts-public id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<buyout: float, collateral: float, contract_id: int, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, title: string, type: string, volume: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/contracts/public/($region_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/contracts/public/{region_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2352,13 +2352,13 @@ export def "corporation-mining-extractions extractions" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<chunk_arrival_time: string, extraction_start_time: string, moon_id: int, natural_decay_time: string, structure_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporation/($corporation_id)/mining/extractions/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporation/{corporation_id}/mining/extractions/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2382,13 +2382,13 @@ export def "corporation-mining-observers observers" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<last_updated: string, observer_id: int, observer_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporation/($corporation_id)/mining/observers/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporation/{corporation_id}/mining/observers/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2413,13 +2413,13 @@ export def "corporation-mining-observers id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<character_id: int, last_updated: string, quantity: int, recorded_corporation_id: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporation/($corporation_id)/mining/observers/($observer_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id, observer_id: $observer_id} | format pattern "/corporation/{corporation_id}/mining/observers/{observer_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2440,13 +2440,13 @@ export def "corporations-npccorps npccorps" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/corporations/npccorps/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2468,13 +2468,13 @@ export def "corporations id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<alliance_id: int, ceo_id: int, creator_id: int, date_founded: string, description: string, faction_id: int, home_station_id: int, member_count: int, name: string, shares: int, tax_rate: float, ticker: string, url: string, war_eligible: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2496,13 +2496,13 @@ export def "corporations-alliancehistory alliancehistory" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<alliance_id: int, is_deleted: bool, record_id: int, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/alliancehistory/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/alliancehistory/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2526,13 +2526,13 @@ export def "corporations-assets assets" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<is_blueprint_copy: bool, is_singleton: bool, item_id: int, location_flag: string, location_id: int, location_type: string, quantity: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/assets/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/assets/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2561,7 +2561,7 @@ export def "corporations-assets-locations locations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/assets/locations/" $qp)
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/assets/locations/") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2590,7 +2590,7 @@ export def "corporations-assets-names names" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/assets/names/" $qp)
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/assets/names/") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2614,13 +2614,13 @@ export def "corporations-blueprints blueprints" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<item_id: int, location_flag: string, location_id: int, material_efficiency: int, quantity: int, runs: int, time_efficiency: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/blueprints/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/blueprints/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2644,13 +2644,13 @@ export def "corporations-bookmarks bookmarks" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<bookmark_id: int, coordinates: record<x: float, y: float, z: float>, created: string, creator_id: int, folder_id: int, item: record<item_id: int, type_id: int>, label: string, location_id: int, notes: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/bookmarks/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/bookmarks/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2674,13 +2674,13 @@ export def "corporations-bookmarks-folders folders" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<creator_id: int, folder_id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/bookmarks/folders/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/bookmarks/folders/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2704,13 +2704,13 @@ export def "corporations-contacts contacts" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<contact_id: int, contact_type: string, is_watched: bool, label_ids: list<int>, standing: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/contacts/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/contacts/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2733,13 +2733,13 @@ export def "corporations-contacts-labels labels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<label_id: int, label_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/contacts/labels/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/contacts/labels/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2763,13 +2763,13 @@ export def "corporations-containers-logs logs" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<action: string, character_id: int, container_id: int, container_type_id: int, location_flag: string, location_id: int, logged_at: string, new_config_bitmask: int, old_config_bitmask: int, password_type: string, quantity: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/containers/logs/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/containers/logs/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2793,13 +2793,13 @@ export def "corporations-contracts contracts" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<acceptor_id: int, assignee_id: int, availability: string, buyout: float, collateral: float, contract_id: int, date_accepted: string, date_completed: string, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, status: string, title: string, type: string, volume: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/contracts/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/contracts/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2811,8 +2811,8 @@ export def "corporations-contracts contracts" [
 # GET /corporations/{corporation_id}/contracts/{contract_id}/bids/
 # operationId: get_corporations_corporation_id_contracts_contract_id_bids
 export def "corporations-contracts-bids bids" [
-  contract_id: int
   corporation_id: int
+  contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2824,13 +2824,13 @@ export def "corporations-contracts-bids bids" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<amount: float, bid_id: int, bidder_id: int, date_bid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/contracts/($contract_id)/bids/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id, contract_id: $contract_id} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/bids/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2842,8 +2842,8 @@ export def "corporations-contracts-bids bids" [
 # GET /corporations/{corporation_id}/contracts/{contract_id}/items/
 # operationId: get_corporations_corporation_id_contracts_contract_id_items
 export def "corporations-contracts-items items" [
-  contract_id: int
   corporation_id: int
+  contract_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2854,13 +2854,13 @@ export def "corporations-contracts-items items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<is_included: bool, is_singleton: bool, quantity: int, raw_quantity: int, record_id: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/contracts/($contract_id)/items/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id, contract_id: $contract_id} | format pattern "/corporations/{corporation_id}/contracts/{contract_id}/items/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2884,13 +2884,13 @@ export def "corporations-customs-offices offices" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<alliance_tax_rate: float, allow_access_with_standings: bool, allow_alliance_access: bool, bad_standing_tax_rate: float, corporation_tax_rate: float, excellent_standing_tax_rate: float, good_standing_tax_rate: float, neutral_standing_tax_rate: float, office_id: int, reinforce_exit_end: int, reinforce_exit_start: int, standing_level: string, system_id: int, terrible_standing_tax_rate: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/customs_offices/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/customs_offices/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2913,13 +2913,13 @@ export def "corporations-divisions divisions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<hangar: table<division: int, name: string>, wallet: table<division: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/divisions/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/divisions/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2942,13 +2942,13 @@ export def "corporations-facilities facilities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<facility_id: int, system_id: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/facilities/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/facilities/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2971,13 +2971,13 @@ export def "corporations-fw-stats stats" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<enlisted_on: string, faction_id: int, kills: record<last_week: int, total: int, yesterday: int>, pilots: int, victory_points: record<last_week: int, total: int, yesterday: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/fw/stats/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/fw/stats/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2999,13 +2999,13 @@ export def "corporations-icons icons" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<px128x128: string, px256x256: string, px64x64: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/icons/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/icons/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3030,13 +3030,13 @@ export def "corporations-industry-jobs jobs" [
   --include-completed: oneof<nothing, bool> # Whether to retrieve completed corporation industry jobs. Only includes jobs from the past 90 days (default: false)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<activity_id: int, blueprint_id: int, blueprint_location_id: int, blueprint_type_id: int, completed_character_id: int, completed_date: string, cost: float, duration: int, end_date: string, facility_id: int, installer_id: int, job_id: int, licensed_runs: int, location_id: int, output_location_id: int, pause_date: string, probability: float, product_type_id: int, runs: int, start_date: string, status: string, successful_runs: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "include_completed" $include_completed "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/industry/jobs/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/industry/jobs/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3060,13 +3060,13 @@ export def "corporations-killmails-recent recent" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<killmail_hash: string, killmail_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/killmails/recent/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/killmails/recent/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3090,13 +3090,13 @@ export def "corporations-medals medals" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<created_at: string, creator_id: int, description: string, medal_id: int, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/medals/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/medals/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3120,13 +3120,13 @@ export def "corporations-medals-issued issued" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<character_id: int, issued_at: string, issuer_id: int, medal_id: int, reason: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/medals/issued/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/medals/issued/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3149,13 +3149,13 @@ export def "corporations-members members" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/members/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/members/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3178,13 +3178,13 @@ export def "corporations-members-limit limit" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/members/limit/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/members/limit/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3207,13 +3207,13 @@ export def "corporations-members-titles titles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<character_id: int, titles: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/members/titles/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/members/titles/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3236,13 +3236,13 @@ export def "corporations-membertracking membertracking" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<base_id: int, character_id: int, location_id: int, logoff_date: string, logon_date: string, ship_type_id: int, start_date: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/membertracking/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/membertracking/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3266,13 +3266,13 @@ export def "corporations-orders orders" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<duration: int, escrow: float, is_buy_order: bool, issued: string, issued_by: int, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, type_id: int, volume_remain: int, volume_total: int, wallet_division: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/orders/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/orders/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3296,13 +3296,13 @@ export def "corporations-orders-history history" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<duration: int, escrow: float, is_buy_order: bool, issued: string, issued_by: int, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, state: string, type_id: int, volume_remain: int, volume_total: int, wallet_division: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/orders/history/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/orders/history/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3325,13 +3325,13 @@ export def "corporations-roles roles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<character_id: int, grantable_roles: list<string>, grantable_roles_at_base: list<string>, grantable_roles_at_hq: list<string>, grantable_roles_at_other: list<string>, roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/roles/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/roles/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3355,13 +3355,13 @@ export def "corporations-roles-history history" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<changed_at: string, character_id: int, issuer_id: int, new_roles: list<string>, old_roles: list<string>, role_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/roles/history/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/roles/history/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3385,13 +3385,13 @@ export def "corporations-shareholders shareholders" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<share_count: int, shareholder_id: int, shareholder_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/shareholders/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/shareholders/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3415,13 +3415,13 @@ export def "corporations-standings standings" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<from_id: int, from_type: string, standing: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/standings/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/standings/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3445,13 +3445,13 @@ export def "corporations-starbases starbases" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<moon_id: int, onlined_since: string, reinforced_until: string, starbase_id: int, state: string, system_id: int, type_id: int, unanchor_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/starbases/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/starbases/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3476,13 +3476,13 @@ export def "corporations-starbases id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --system-id: int # The solar system this starbase (POS) is located in, (format: int32)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<allow_alliance_members: bool, allow_corporation_members: bool, anchor: string, attack_if_at_war: bool, attack_if_other_security_status_dropping: bool, attack_security_status_threshold: float, attack_standing_threshold: float, fuel_bay_take: string, fuel_bay_view: string, fuels: table<quantity: int, type_id: int>, offline: string, online: string, unanchor: string, use_alliance_standings: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "system_id" $system_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/starbases/($starbase_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id, starbase_id: $starbase_id} | format pattern "/corporations/{corporation_id}/starbases/{starbase_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3507,14 +3507,14 @@ export def "corporations-structures structures" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<corporation_id: int, fuel_expires: string, next_reinforce_apply: string, next_reinforce_hour: int, next_reinforce_weekday: int, profile_id: int, reinforce_hour: int, reinforce_weekday: int, services: list<record>, state: string, state_timer_end: string, state_timer_start: string, structure_id: int, system_id: int, type_id: int, unanchors_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/structures/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/structures/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3537,13 +3537,13 @@ export def "corporations-titles titles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<grantable_roles: list<string>, grantable_roles_at_base: list<string>, grantable_roles_at_hq: list<string>, grantable_roles_at_other: list<string>, name: string, roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>, title_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/titles/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/titles/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3566,13 +3566,13 @@ export def "corporations-wallets wallets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<balance: float, division: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/wallets/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/corporations/{corporation_id}/wallets/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3597,13 +3597,13 @@ export def "corporations-wallets-journal journal" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<amount: float, balance: float, context_id: int, context_id_type: string, date: string, description: string, first_party_id: int, id: int, reason: string, ref_type: string, second_party_id: int, tax: float, tax_receiver_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/wallets/($division)/journal/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id, division: $division} | format pattern "/corporations/{corporation_id}/wallets/{division}/journal/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3628,13 +3628,13 @@ export def "corporations-wallets-transactions transactions" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --from-id: int # Only show journal entries happened before the transaction referenced by this id (format: int64)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<client_id: int, date: string, is_buy: bool, journal_ref_id: int, location_id: int, quantity: int, transaction_id: int, type_id: int, unit_price: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/corporations/($corporation_id)/wallets/($division)/transactions/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id, division: $division} | format pattern "/corporations/{corporation_id}/wallets/{division}/transactions/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3655,13 +3655,13 @@ export def "dogma-attributes attributes" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dogma/attributes/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3683,13 +3683,13 @@ export def "dogma-attributes id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<attribute_id: int, default_value: float, description: string, display_name: string, high_is_good: bool, icon_id: int, name: string, published: bool, stackable: bool, unit_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dogma/attributes/($attribute_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({attribute_id: $attribute_id} | format pattern "/dogma/attributes/{attribute_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3701,8 +3701,8 @@ export def "dogma-attributes id" [
 # GET /dogma/dynamic/items/{type_id}/{item_id}/
 # operationId: get_dogma_dynamic_items_type_id_item_id
 export def "dogma-dynamic-items id" [
-  item_id: int
   type_id: int
+  item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3712,13 +3712,13 @@ export def "dogma-dynamic-items id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<created_by: int, dogma_attributes: table<attribute_id: int, value: float>, dogma_effects: table<effect_id: int, is_default: bool>, mutator_type_id: int, source_type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dogma/dynamic/items/($type_id)/($item_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({type_id: $type_id, item_id: $item_id} | format pattern "/dogma/dynamic/items/{type_id}/{item_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3739,13 +3739,13 @@ export def "dogma-effects effects" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dogma/effects/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3767,13 +3767,13 @@ export def "dogma-effects id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<description: string, disallow_auto_repeat: bool, discharge_attribute_id: int, display_name: string, duration_attribute_id: int, effect_category: int, effect_id: int, electronic_chance: bool, falloff_attribute_id: int, icon_id: int, is_assistance: bool, is_offensive: bool, is_warp_safe: bool, modifiers: table<domain: string, effect_id: int, func: string, modified_attribute_id: int, modifying_attribute_id: int, operator: int>, name: string, post_expression: int, pre_expression: int, published: bool, range_attribute_id: int, range_chance: bool, tracking_speed_attribute_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dogma/effects/($effect_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({effect_id: $effect_id} | format pattern "/dogma/effects/{effect_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3796,13 +3796,13 @@ export def "fleets id-by-fleet_id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<is_free_move: bool, is_registered: bool, is_voice_enabled: bool, motd: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3832,8 +3832,8 @@ export def "fleets id-by-fleet_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/" $qp)
-  let body = {is_free_move: $is_free_move, motd: $motd} | compact
+  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/") $qp)
+  let body = {"is_free_move": $is_free_move, "motd": $motd} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3857,14 +3857,14 @@ export def "fleets-members members-by-fleet_id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --qp-token: string # Access token to use if unable to set a header
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<character_id: int, join_time: string, role: string, role_name: string, ship_type_id: int, solar_system_id: int, squad_id: int, station_id: int, takes_fleet_warp: bool, wing_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/members/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/members/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3896,8 +3896,8 @@ export def "fleets-members members-by-fleet_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/members/" $qp)
-  let body = {character_id: $character_id, role: $role, squad_id: $squad_id, wing_id: $wing_id} | compact
+  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/members/") $qp)
+  let body = {"character_id": $character_id, "role": $role, "squad_id": $squad_id, "wing_id": $wing_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3925,7 +3925,7 @@ export def "fleets-members id-by-fleet_id-member_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/members/($member_id)/" $qp)
+  let full_url = (build-url $base ({fleet_id: $fleet_id, member_id: $member_id} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3956,8 +3956,8 @@ export def "fleets-members id-by-fleet_id-member_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/members/($member_id)/" $qp)
-  let body = {role: $role, squad_id: $squad_id, wing_id: $wing_id} | compact
+  let full_url = (build-url $base ({fleet_id: $fleet_id, member_id: $member_id} | format pattern "/fleets/{fleet_id}/members/{member_id}/") $qp)
+  let body = {"role": $role, "squad_id": $squad_id, "wing_id": $wing_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3985,7 +3985,7 @@ export def "fleets-squads id-by-fleet_id-squad_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/squads/($squad_id)/" $qp)
+  let full_url = (build-url $base ({fleet_id: $fleet_id, squad_id: $squad_id} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4014,8 +4014,8 @@ export def "fleets-squads id-by-fleet_id-squad_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/squads/($squad_id)/" $qp)
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({fleet_id: $fleet_id, squad_id: $squad_id} | format pattern "/fleets/{fleet_id}/squads/{squad_id}/") $qp)
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4039,14 +4039,14 @@ export def "fleets-wings wings-by-fleet_id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --qp-token: string # Access token to use if unable to set a header
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<id: int, name: string, squads: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/wings/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/wings/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4073,7 +4073,7 @@ export def "fleets-wings wings-by-fleet_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/wings/" $qp)
+  let full_url = (build-url $base ({fleet_id: $fleet_id} | format pattern "/fleets/{fleet_id}/wings/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4100,7 +4100,7 @@ export def "fleets-wings id-by-fleet_id-wing_id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/wings/($wing_id)/" $qp)
+  let full_url = (build-url $base ({fleet_id: $fleet_id, wing_id: $wing_id} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4129,8 +4129,8 @@ export def "fleets-wings id-by-fleet_id-wing_id-1" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/wings/($wing_id)/" $qp)
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({fleet_id: $fleet_id, wing_id: $wing_id} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/") $qp)
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4158,7 +4158,7 @@ export def "fleets-wings-squads squads" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/fleets/($fleet_id)/wings/($wing_id)/squads/" $qp)
+  let full_url = (build-url $base ({fleet_id: $fleet_id, wing_id: $wing_id} | format pattern "/fleets/{fleet_id}/wings/{wing_id}/squads/") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4178,13 +4178,13 @@ export def "fw-leaderboards leaderboards" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<kills: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>, victory_points: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/leaderboards/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4205,13 +4205,13 @@ export def "fw-leaderboards-characters characters" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<kills: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>, victory_points: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/leaderboards/characters/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4232,13 +4232,13 @@ export def "fw-leaderboards-corporations corporations" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<kills: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>, victory_points: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/leaderboards/corporations/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4259,13 +4259,13 @@ export def "fw-stats stats" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<faction_id: int, kills: record<last_week: int, total: int, yesterday: int>, pilots: int, systems_controlled: int, victory_points: record<last_week: int, total: int, yesterday: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/stats/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4286,13 +4286,13 @@ export def "fw-systems systems" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<contested: string, occupier_faction_id: int, owner_faction_id: int, solar_system_id: int, victory_points: int, victory_points_threshold: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/systems/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4313,13 +4313,13 @@ export def "fw-wars wars" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<against_id: int, faction_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/fw/wars/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4330,7 +4330,7 @@ export def "fw-wars wars" [
 #
 # GET /incursions/
 # operationId: get_incursions
-export def "incursions incursions" [
+export def "incursions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4340,13 +4340,13 @@ export def "incursions incursions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<constellation_id: int, faction_id: int, has_boss: bool, infested_solar_systems: list<int>, influence: float, staging_solar_system_id: int, state: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/incursions/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4367,13 +4367,13 @@ export def "industry-facilities facilities" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<facility_id: int, owner_id: int, region_id: int, solar_system_id: int, tax: float, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/industry/facilities/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4394,13 +4394,13 @@ export def "industry-systems systems" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<cost_indices: list<record>, solar_system_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/industry/systems/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4422,14 +4422,14 @@ export def "insurance-prices prices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<levels: list<record>, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/insurance/prices/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4441,8 +4441,8 @@ export def "insurance-prices prices" [
 # GET /killmails/{killmail_id}/{killmail_hash}/
 # operationId: get_killmails_killmail_id_killmail_hash
 export def "killmails hash" [
-  killmail_hash: string
   killmail_id: int
+  killmail_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4452,13 +4452,13 @@ export def "killmails hash" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<attackers: table<alliance_id: int, character_id: int, corporation_id: int, damage_done: int, faction_id: int, final_blow: bool, security_status: float, ship_type_id: int, weapon_type_id: int>, killmail_id: int, killmail_time: string, moon_id: int, solar_system_id: int, victim: record<alliance_id: int, character_id: int, corporation_id: int, damage_taken: int, faction_id: int, items: list<record>, position: record<x: float, y: float, z: float>, ship_type_id: int>, war_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/killmails/($killmail_id)/($killmail_hash)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({killmail_id: $killmail_id, killmail_hash: $killmail_hash} | format pattern "/killmails/{killmail_id}/{killmail_hash}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4480,13 +4480,13 @@ export def "loyalty-stores-offers offers" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<ak_cost: int, isk_cost: int, lp_cost: int, offer_id: int, quantity: int, required_items: list<record>, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/loyalty/stores/($corporation_id)/offers/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({corporation_id: $corporation_id} | format pattern "/loyalty/stores/{corporation_id}/offers/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4507,13 +4507,13 @@ export def "markets-groups groups" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/markets/groups/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4536,14 +4536,14 @@ export def "markets-groups id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<description: string, market_group_id: int, name: string, parent_group_id: int, types: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/groups/($market_group_id)/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({market_group_id: $market_group_id} | format pattern "/markets/groups/{market_group_id}/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4564,13 +4564,13 @@ export def "markets-prices prices" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<adjusted_price: float, average_price: float, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/markets/prices/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4594,13 +4594,13 @@ export def "markets-structures id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<duration: int, is_buy_order: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, type_id: int, volume_remain: int, volume_total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/structures/($structure_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({structure_id: $structure_id} | format pattern "/markets/structures/{structure_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4623,13 +4623,13 @@ export def "markets-history history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --type-id: int # Return statistics for this type (format: int32)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<average: float, date: string, highest: float, lowest: float, order_count: int, volume: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($region_id)/history/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/markets/{region_id}/history/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4654,13 +4654,13 @@ export def "markets-orders orders" [
   --order-type: string@order-type-completer # Filter buy/sell orders, return all orders by default. If you query without type_id, we always return both buy and sell orders (default: all)
   --page: int # Which page of results to return (format: int32, default: 1)
   --type-id: int # Return orders only for this type (format: int32)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<duration: int, is_buy_order: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, system_id: int, type_id: int, volume_remain: int, volume_total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "order_type" $order_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "type_id" $type_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($region_id)/orders/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/markets/{region_id}/orders/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4683,13 +4683,13 @@ export def "markets-types types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/markets/($region_id)/types/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/markets/{region_id}/types/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4710,13 +4710,13 @@ export def "opportunities-groups groups" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/opportunities/groups/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4739,14 +4739,14 @@ export def "opportunities-groups id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<connected_groups: list<int>, description: string, group_id: int, name: string, notification: string, required_tasks: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/opportunities/groups/($group_id)/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/opportunities/groups/{group_id}/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4767,13 +4767,13 @@ export def "opportunities-tasks tasks" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/opportunities/tasks/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4795,13 +4795,13 @@ export def "opportunities-tasks id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<description: string, name: string, notification: string, task_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/opportunities/tasks/($task_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/opportunities/tasks/{task_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4813,8 +4813,8 @@ export def "opportunities-tasks id" [
 # GET /route/{origin}/{destination}/
 # operationId: get_route_origin_destination
 export def "route destination" [
-  destination: int
   origin: int
+  destination: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4827,13 +4827,13 @@ export def "route destination" [
   --connections: list # connected solar system pairs
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --flag: string@flag-completer # route security preference (default: shortest)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "avoid" $avoid "csv") (serialize-qp "connections" $connections "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "flag" $flag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/route/($origin)/($destination)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({origin: $origin, destination: $destination} | format pattern "/route/{origin}/{destination}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4844,7 +4844,7 @@ export def "route destination" [
 #
 # GET /search/
 # operationId: get_search
-export def "search search" [
+export def "search get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4858,14 +4858,14 @@ export def "search search" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --search: string # The string to search on
   --strict: oneof<nothing, bool> # Whether the search should be a strict match (default: false)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<agent: list<int>, alliance: list<int>, character: list<int>, constellation: list<int>, corporation: list<int>, faction: list<int>, inventory_type: list<int>, region: list<int>, solar_system: list<int>, station: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categories" $categories "csv") (serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "strict" $strict "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4886,13 +4886,13 @@ export def "sovereignty-campaigns campaigns" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<attackers_score: float, campaign_id: int, constellation_id: int, defender_id: int, defender_score: float, event_type: string, participants: list<record>, solar_system_id: int, start_time: string, structure_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sovereignty/campaigns/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4913,13 +4913,13 @@ export def "sovereignty-map map" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<alliance_id: int, corporation_id: int, faction_id: int, system_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sovereignty/map/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4940,13 +4940,13 @@ export def "sovereignty-structures structures" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<alliance_id: int, solar_system_id: int, structure_id: int, structure_type_id: int, vulnerability_occupancy_level: float, vulnerable_end_time: string, vulnerable_start_time: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sovereignty/structures/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4957,7 +4957,7 @@ export def "sovereignty-structures structures" [
 #
 # GET /status/
 # operationId: get_status
-export def "status status" [
+export def "status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4967,13 +4967,13 @@ export def "status status" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<players: int, server_version: string, start_time: string, vip: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/status/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5038,7 +5038,7 @@ export def "ui-openwindow-contract contract" [
 #
 # POST /ui/openwindow/information/
 # operationId: post_ui_openwindow_information
-export def "ui-openwindow-information information" [
+export def "ui-openwindow-information get-rmation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5112,7 +5112,7 @@ export def "ui-openwindow-newmail newmail" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ui/openwindow/newmail/" $qp)
-  let body = {body: $body_body, recipients: $recipients, subject: $subject, to_corp_or_alliance_id: $to_corp_or_alliance_id, to_mailing_list_id: $to_mailing_list_id} | compact
+  let body = {"body": $body_body, "recipients": $recipients, "subject": $subject, "to_corp_or_alliance_id": $to_corp_or_alliance_id, "to_mailing_list_id": $to_mailing_list_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5134,14 +5134,14 @@ export def "universe-ancestries ancestries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<bloodline_id: int, description: string, icon_id: int, id: int, name: string, short_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/ancestries/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5163,13 +5163,13 @@ export def "universe-asteroid-belts id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<name: string, position: record<x: float, y: float, z: float>, system_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/asteroid_belts/($asteroid_belt_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({asteroid_belt_id: $asteroid_belt_id} | format pattern "/universe/asteroid_belts/{asteroid_belt_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5191,14 +5191,14 @@ export def "universe-bloodlines bloodlines" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<bloodline_id: int, charisma: int, corporation_id: int, description: string, intelligence: int, memory: int, name: string, perception: int, race_id: int, ship_type_id: int, willpower: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/bloodlines/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5219,13 +5219,13 @@ export def "universe-categories categories" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/categories/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5248,14 +5248,14 @@ export def "universe-categories id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<category_id: int, groups: list<int>, name: string, published: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/categories/($category_id)/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/universe/categories/{category_id}/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5276,13 +5276,13 @@ export def "universe-constellations constellations" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/constellations/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5305,14 +5305,14 @@ export def "universe-constellations id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<constellation_id: int, name: string, position: record<x: float, y: float, z: float>, region_id: int, systems: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/constellations/($constellation_id)/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({constellation_id: $constellation_id} | format pattern "/universe/constellations/{constellation_id}/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5334,14 +5334,14 @@ export def "universe-factions factions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<corporation_id: int, description: string, faction_id: int, is_unique: bool, militia_corporation_id: int, name: string, size_factor: float, solar_system_id: int, station_count: int, station_system_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/factions/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5362,13 +5362,13 @@ export def "universe-graphics graphics" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/graphics/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5390,13 +5390,13 @@ export def "universe-graphics id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<collision_file: string, graphic_file: string, graphic_id: int, icon_folder: string, sof_dna: string, sof_fation_name: string, sof_hull_name: string, sof_race_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/graphics/($graphic_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({graphic_id: $graphic_id} | format pattern "/universe/graphics/{graphic_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5418,13 +5418,13 @@ export def "universe-groups groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/groups/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5447,14 +5447,14 @@ export def "universe-groups id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<category_id: int, group_id: int, name: string, published: bool, types: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/groups/($group_id)/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({group_id: $group_id} | format pattern "/universe/groups/{group_id}/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5476,7 +5476,7 @@ export def "universe-ids ids" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
+  --accept-language: string@accept-language-completer # Language to use in the response
   --body: record
 ]: any -> record<agents: table<id: int, name: string>, alliances: table<id: int, name: string>, characters: table<id: int, name: string>, constellations: table<id: int, name: string>, corporations: table<id: int, name: string>, factions: table<id: int, name: string>, inventory_types: table<id: int, name: string>, regions: table<id: int, name: string>, stations: table<id: int, name: string>, systems: table<id: int, name: string>> {
   let input = $in
@@ -5485,7 +5485,7 @@ export def "universe-ids ids" [
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/ids/" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5507,13 +5507,13 @@ export def "universe-moons id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<moon_id: int, name: string, position: record<x: float, y: float, z: float>, system_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/moons/($moon_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({moon_id: $moon_id} | format pattern "/universe/moons/{moon_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5562,13 +5562,13 @@ export def "universe-planets id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<name: string, planet_id: int, position: record<x: float, y: float, z: float>, system_id: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/planets/($planet_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({planet_id: $planet_id} | format pattern "/universe/planets/{planet_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5590,14 +5590,14 @@ export def "universe-races races" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<alliance_id: int, description: string, name: string, race_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/races/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5618,13 +5618,13 @@ export def "universe-regions regions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/regions/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5647,14 +5647,14 @@ export def "universe-regions id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<constellations: list<int>, description: string, name: string, region_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/regions/($region_id)/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({region_id: $region_id} | format pattern "/universe/regions/{region_id}/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5676,13 +5676,13 @@ export def "universe-schematics id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<cycle_time: int, schematic_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/schematics/($schematic_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({schematic_id: $schematic_id} | format pattern "/universe/schematics/{schematic_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5704,13 +5704,13 @@ export def "universe-stargates id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<destination: record<stargate_id: int, system_id: int>, name: string, position: record<x: float, y: float, z: float>, stargate_id: int, system_id: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/stargates/($stargate_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({stargate_id: $stargate_id} | format pattern "/universe/stargates/{stargate_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5732,13 +5732,13 @@ export def "universe-stars id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<age: int, luminosity: float, name: string, radius: int, solar_system_id: int, spectral_class: string, temperature: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/stars/($star_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({star_id: $star_id} | format pattern "/universe/stars/{star_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5760,13 +5760,13 @@ export def "universe-stations id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<max_dockable_ship_volume: float, name: string, office_rental_cost: float, owner: int, position: record<x: float, y: float, z: float>, race_id: int, reprocessing_efficiency: float, reprocessing_stations_take: float, services: list<string>, station_id: int, system_id: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/stations/($station_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({station_id: $station_id} | format pattern "/universe/stations/{station_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5788,13 +5788,13 @@ export def "universe-structures structures" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --filter: string@filter-completer # Only list public structures that have this service online
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/structures/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5817,13 +5817,13 @@ export def "universe-structures id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<name: string, owner_id: int, position: record<x: float, y: float, z: float>, solar_system_id: int, type_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/structures/($structure_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({structure_id: $structure_id} | format pattern "/universe/structures/{structure_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5844,13 +5844,13 @@ export def "universe-system-jumps jumps" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<ship_jumps: int, system_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/system_jumps/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5861,7 +5861,7 @@ export def "universe-system-jumps jumps" [
 #
 # GET /universe/system_kills/
 # operationId: get_universe_system_kills
-export def "universe-system-kills kills" [
+export def "universe-system-kills kill-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5871,13 +5871,13 @@ export def "universe-system-kills kills" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<npc_kills: int, pod_kills: int, ship_kills: int, system_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/system_kills/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5898,13 +5898,13 @@ export def "universe-systems systems" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/systems/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5927,14 +5927,14 @@ export def "universe-systems id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<constellation_id: int, name: string, planets: table<asteroid_belts: list, moons: list, planet_id: int>, position: record<x: float, y: float, z: float>, security_class: string, security_status: float, star_id: int, stargates: list<int>, stations: list<int>, system_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/systems/($system_id)/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({system_id: $system_id} | format pattern "/universe/systems/{system_id}/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5956,13 +5956,13 @@ export def "universe-types types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/universe/types/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5985,14 +5985,14 @@ export def "universe-types id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
-  --Accept-Language: string@Accept-Language-completer # Language to use in the response
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --accept-language: string@accept-language-completer # Language to use in the response
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<capacity: float, description: string, dogma_attributes: table<attribute_id: int, value: float>, dogma_effects: table<effect_id: int, is_default: bool>, graphic_id: int, group_id: int, icon_id: int, market_group_id: int, mass: float, name: string, packaged_volume: float, portion_size: int, published: bool, radius: float, type_id: int, volume: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/universe/types/($type_id)/" $qp)
-  let extra_headers = {"Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({type_id: $type_id} | format pattern "/universe/types/{type_id}/") $qp)
+  let extra_headers = {"Accept-Language": $accept_language, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6003,7 +6003,7 @@ export def "universe-types id" [
 #
 # GET /wars/
 # operationId: get_wars
-export def "wars wars" [
+export def "wars get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6014,13 +6014,13 @@ export def "wars wars" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --max-war-id: int # Only return wars with ID smaller than this (format: int32)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "max_war_id" $max_war_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/wars/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6042,13 +6042,13 @@ export def "wars id" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> record<aggressor: record<alliance_id: int, corporation_id: int, isk_destroyed: float, ships_killed: int>, allies: table<alliance_id: int, corporation_id: int>, declared: string, defender: record<alliance_id: int, corporation_id: int, isk_destroyed: float, ships_killed: int>, finished: string, id: int, mutual: bool, open_for_allies: bool, retracted: string, started: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/wars/($war_id)/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({war_id: $war_id} | format pattern "/wars/{war_id}/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6059,7 +6059,7 @@ export def "wars id" [
 #
 # GET /wars/{war_id}/killmails/
 # operationId: get_wars_war_id_killmails
-export def "wars-killmails killmails" [
+export def "wars-killmails kill-mails" [
   war_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6071,13 +6071,13 @@ export def "wars-killmails killmails" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
-  --If-None-Match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
+  --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
 ]: nothing -> table<killmail_hash: string, killmail_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/wars/($war_id)/killmails/" $qp)
-  let extra_headers = {"If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({war_id: $war_id} | format pattern "/wars/{war_id}/killmails/") $qp)
+  let extra_headers = {"If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

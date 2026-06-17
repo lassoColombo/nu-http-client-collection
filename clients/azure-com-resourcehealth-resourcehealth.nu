@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-resource-health-emerging-issues List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-resource-health-emerging-issues list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ResourceHealth/emergingIssues
 # operationId: EmergingIssues_List
-export def "providers-microsoft-resource-health-emerging-issues List" [
+export def "providers-microsoft-resource-health-emerging-issues list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-resource-health-emerging-issues List" [
 #
 # GET /providers/Microsoft.ResourceHealth/emergingIssues/{issueName}
 # operationId: EmergingIssues_Get
-export def "providers-microsoft-resource-health-emerging-issues Get" [
-  issueName: string
+export def "providers-microsoft-resource-health-emerging-issues get" [
+  issue_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "providers-microsoft-resource-health-emerging-issues Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.ResourceHealth/emergingIssues/($issueName)" $qp)
+  let full_url = (build-url $base ({issue_name: $issue_name} | format pattern "/providers/Microsoft.ResourceHealth/emergingIssues/{issue_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +142,7 @@ export def "providers-microsoft-resource-health-emerging-issues Get" [
 #
 # GET /providers/Microsoft.ResourceHealth/metadata
 # operationId: Metadata_List
-export def "providers-microsoft-resource-health-metadata List" [
+export def "providers-microsoft-resource-health-metadata list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "providers-microsoft-resource-health-metadata List" [
 #
 # GET /providers/Microsoft.ResourceHealth/metadata/{name}
 # operationId: Metadata_Get
-export def "providers-microsoft-resource-health-metadata Get" [
+export def "providers-microsoft-resource-health-metadata get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -181,7 +181,7 @@ export def "providers-microsoft-resource-health-metadata Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.ResourceHealth/metadata/($name)" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/providers/Microsoft.ResourceHealth/metadata/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,7 +191,7 @@ export def "providers-microsoft-resource-health-metadata Get" [
 #
 # GET /providers/Microsoft.ResourceHealth/operations
 # operationId: Operations_List
-export def "providers-microsoft-resource-health-operations List" [
+export def "providers-microsoft-resource-health-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,8 +215,8 @@ export def "providers-microsoft-resource-health-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ResourceHealth/availabilityStatuses
 # operationId: AvailabilityStatuses_ListBySubscriptionId
-export def "subscriptions-providers-microsoft-resource-health-availability-statuses ListBySubscriptionId" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-resource-health-availability-statuses list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "subscriptions-providers-microsoft-resource-health-availability-statu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ResourceHealth/availabilityStatuses" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ResourceHealth/availabilityStatuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -242,8 +242,8 @@ export def "subscriptions-providers-microsoft-resource-health-availability-statu
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ResourceHealth/events
 # operationId: Events_ListBySubscriptionId
-export def "subscriptions-providers-microsoft-resource-health-events ListBySubscriptionId" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-resource-health-events list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "subscriptions-providers-microsoft-resource-health-events ListBySubsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ResourceHealth/events" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ResourceHealth/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,8 +268,8 @@ export def "subscriptions-providers-microsoft-resource-health-events ListBySubsc
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ResourceHealth/impactedResources
 # operationId: ImpactedResources_ListBySubscriptionId
-export def "subscriptions-providers-microsoft-resource-health-impacted-resources ListBySubscriptionId" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-resource-health-impacted-resources list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +284,7 @@ export def "subscriptions-providers-microsoft-resource-health-impacted-resources
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.ResourceHealth/impactedResources" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.ResourceHealth/impactedResources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -294,9 +294,9 @@ export def "subscriptions-providers-microsoft-resource-health-impacted-resources
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ResourceHealth/availabilityStatuses
 # operationId: AvailabilityStatuses_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-resource-health-availability-statuses ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-resource-health-availability-statuses list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-health-av
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.ResourceHealth/availabilityStatuses" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ResourceHealth/availabilityStatuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,8 +322,8 @@ export def "subscriptions-resource-groups-providers-microsoft-resource-health-av
 #
 # GET /{resourceUri}/providers/Microsoft.ResourceHealth/availabilityStatuses
 # operationId: AvailabilityStatuses_List
-export def "providers-microsoft-resource-health-availability-statuses List" [
-  resourceUri: string
+export def "providers-microsoft-resource-health-availability-statuses list" [
+  resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "providers-microsoft-resource-health-availability-statuses List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/Microsoft.ResourceHealth/availabilityStatuses" $qp)
+  let full_url = (build-url $base ({resource_uri: $resource_uri} | format pattern "/{resource_uri}/providers/Microsoft.ResourceHealth/availabilityStatuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,8 +349,8 @@ export def "providers-microsoft-resource-health-availability-statuses List" [
 #
 # GET /{resourceUri}/providers/Microsoft.ResourceHealth/availabilityStatuses/current
 # operationId: AvailabilityStatuses_GetByResource
-export def "providers-microsoft-resource-health-availability-statuses-current GetByResource" [
-  resourceUri: string
+export def "providers-microsoft-resource-health-availability-statuses-current get-by" [
+  resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "providers-microsoft-resource-health-availability-statuses-current Ge
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/Microsoft.ResourceHealth/availabilityStatuses/current" $qp)
+  let full_url = (build-url $base ({resource_uri: $resource_uri} | format pattern "/{resource_uri}/providers/Microsoft.ResourceHealth/availabilityStatuses/current") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -376,8 +376,8 @@ export def "providers-microsoft-resource-health-availability-statuses-current Ge
 #
 # GET /{resourceUri}/providers/Microsoft.ResourceHealth/events
 # operationId: Events_ListBySingleResource
-export def "providers-microsoft-resource-health-events ListBySingleResource" [
-  resourceUri: string
+export def "providers-microsoft-resource-health-events list-by-single" [
+  resource_uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "providers-microsoft-resource-health-events ListBySingleResource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/Microsoft.ResourceHealth/events" $qp)
+  let full_url = (build-url $base ({resource_uri: $resource_uri} | format pattern "/{resource_uri}/providers/Microsoft.ResourceHealth/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

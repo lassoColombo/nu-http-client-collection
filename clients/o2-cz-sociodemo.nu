@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "age age" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "age get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /age/{location}
 # operationId: age
-export def "age age" [
+export def "age get" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -102,14 +102,14 @@ export def "age age" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ageGroup: string # age-group specification (1: 8-18, 2: 19-25, 3: 26-35, 4: 36-55, 5: 56+) (e.g. 2)
-  --occurenceType: string # occurence type in the basic residential unit (1 - transit, 2 - visit) (e.g. 1)
+  --age-group: string # age-group specification (1: 8-18, 2: 19-25, 3: 26-35, 4: 36-55, 5: 56+) (e.g. 2)
+  --occurence-type: string # occurence type in the basic residential unit (1 - transit, 2 - visit) (e.g. 1)
   --hour: string # time interval for the count aggregation (from 0 to 23) (e.g. 10)
 ]: nothing -> record<count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ageGroup" $ageGroup "scalar") (serialize-qp "occurenceType" $occurenceType "scalar") (serialize-qp "hour" $hour "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/age/($location)" $qp)
+  let qp = [(serialize-qp "ageGroup" $age_group "scalar") (serialize-qp "occurenceType" $occurence_type "scalar") (serialize-qp "hour" $hour "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location: $location} | format pattern "/age/{location}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,7 +119,7 @@ export def "age age" [
 #
 # GET /gender/{location}
 # operationId: gender
-export def "gender gender" [
+export def "gender get" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -130,13 +130,13 @@ export def "gender gender" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --g: string # gender specification (1 - male, 2 - female) (e.g. 1)
-  --occurenceType: string # occurence type in the basic residential unit (1 - transit, 2 - visit) (e.g. 1)
+  --occurence-type: string # occurence type in the basic residential unit (1 - transit, 2 - visit) (e.g. 1)
   --hour: string # time interval for the count aggregation (from 0 to 23) (e.g. 10)
 ]: nothing -> record<count: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "g" $g "scalar") (serialize-qp "occurenceType" $occurenceType "scalar") (serialize-qp "hour" $hour "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/gender/($location)" $qp)
+  let qp = [(serialize-qp "g" $g "scalar") (serialize-qp "occurenceType" $occurence_type "scalar") (serialize-qp "hour" $hour "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({location: $location} | format pattern "/gender/{location}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

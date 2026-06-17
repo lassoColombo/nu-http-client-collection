@@ -123,7 +123,7 @@ export def "chargers list" [
 # GET /chargers/{chargerId}
 # operationId: getCharger
 export def "chargers get" [
-  chargerId: string
+  charger_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +135,7 @@ export def "chargers get" [
 ]: nothing -> record<chargeState: record<chargeRate: float, isCharging: bool, isPluggedIn: bool>, id: string, information: record<brand: string, id: string, model: string, year: int>, isReachable: bool, lastSeen: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/chargers/($chargerId)")
+  let full_url = (build-url $base ({charger_id: $charger_id} | format pattern "/chargers/{charger_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,7 +146,7 @@ export def "chargers get" [
 # POST /chargers/{chargerId}/charging
 # operationId: controlChargerCharging
 export def "chargers-charging controlChargerCharging" [
-  chargerId: string
+  charger_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,8 +160,8 @@ export def "chargers-charging controlChargerCharging" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/chargers/($chargerId)/charging")
-  let body = {action: $action} | compact
+  let full_url = (build-url $base ({charger_id: $charger_id} | format pattern "/chargers/{charger_id}/charging"))
+  let body = {"action": $action} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -194,7 +194,7 @@ export def "charging-locations list" [
 #
 # POST /charging-locations
 # operationId: postCharginglocations
-export def "charging-locations post" [
+export def "charging-locations create-charginglocations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "charging-locations post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/charging-locations")
-  let body = {latitude: $latitude, longitude: $longitude, name: $name} | compact
+  let body = {"latitude": $latitude, "longitude": $longitude, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -222,8 +222,8 @@ export def "charging-locations post" [
 #
 # DELETE /charging-locations/{chargingLocationId}
 # operationId: deleteCharginglocationsCharginglocationid
-export def "charging-locations delete" [
-  chargingLocationId: string
+export def "charging-locations delete-charginglocations" [
+  charging_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "charging-locations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/charging-locations/($chargingLocationId)")
+  let full_url = (build-url $base ({charging_location_id: $charging_location_id} | format pattern "/charging-locations/{charging_location_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,8 +245,8 @@ export def "charging-locations delete" [
 #
 # GET /charging-locations/{chargingLocationId}
 # operationId: getCharginglocationsCharginglocationid
-export def "charging-locations get" [
-  chargingLocationId: string
+export def "charging-locations get-charginglocations" [
+  charging_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "charging-locations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/charging-locations/($chargingLocationId)")
+  let full_url = (build-url $base ({charging_location_id: $charging_location_id} | format pattern "/charging-locations/{charging_location_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -268,8 +268,8 @@ export def "charging-locations get" [
 #
 # PUT /charging-locations/{chargingLocationId}
 # operationId: putCharginglocationsCharginglocationid
-export def "charging-locations put" [
-  chargingLocationId: string
+export def "charging-locations update-charginglocations" [
+  charging_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "charging-locations put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/charging-locations/($chargingLocationId)")
+  let full_url = (build-url $base ({charging_location_id: $charging_location_id} | format pattern "/charging-locations/{charging_location_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,7 +373,7 @@ export def "me-vendors disconnectVendor" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/me/vendors/($vendor)")
+  let full_url = (build-url $base ({vendor: $vendor} | format pattern "/me/vendors/{vendor}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -393,14 +393,14 @@ export def "statistics-charging get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --resolution: string@resolution-completer # The unit of time the data will be cut into before aggregate statistics are applied. For instance if you choose DAY, then each item in the returned array will cover 1 day. (default: DAY)
-  --startDate: string # Earliest date to include in the response (format: date)
-  --endDate: string # Latest date to include in the response (defaults to current date/time) (format: date)
-  --vehicleId: string # Filter statistics to only include this vehicle
-  --chargingLocationId: string # Filter statistics to only include this charging location
+  --start-date: string # Earliest date to include in the response (format: date)
+  --end-date: string # Latest date to include in the response (defaults to current date/time) (format: date)
+  --vehicle-id: string # Filter statistics to only include this vehicle
+  --charging-location-id: string # Filter statistics to only include this charging location
 ]: nothing -> table<costSum: float, date: string, kw: record<max: float, mean: float, min: float>, kwhSum: float, price: record<max: float, mean: float, min: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resolution" $resolution "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "vehicleId" $vehicleId "scalar") (serialize-qp "chargingLocationId" $chargingLocationId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "resolution" $resolution "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "vehicleId" $vehicle_id "scalar") (serialize-qp "chargingLocationId" $charging_location_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/statistics/charging" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -412,7 +412,7 @@ export def "statistics-charging get" [
 # DELETE /users/{userId}
 # operationId: deleteUsersUserid
 export def "users delete" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userId)")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -435,7 +435,7 @@ export def "users delete" [
 # DELETE /users/{userId}/authorization
 # operationId: deleteUsersUseridAuthorization
 export def "users-authorization delete" [
-  userId: string
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "users-authorization delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userId)/authorization")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/authorization"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -457,8 +457,8 @@ export def "users-authorization delete" [
 #
 # POST /users/{userId}/link
 # operationId: postUsersUseridLink
-export def "users-link post" [
-  userId: string
+export def "users-link create" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,17 +467,17 @@ export def "users-link post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --forceLanguage: string # BCP47 language code - Force the Link UI to prefer the specified language. If omitted, the UI will default to the user's browser default language. (e.g. nb-NO)
-  --linkMultiple: oneof<nothing, bool> # Allow multiple car vendors to be linked during a single Link session. Automatically disabled if `vendor` is set. (default: false)
-  --userImage: string # Full URL to an image that the user would recognize as being their own. This URL is only stored for the duration of the Link session, and is displayed to the user to reduce the effectiveness of phishing attacks. (e.g. https://cdn.website.example/user/x/profile.jpg)
-  --userName: string # The User's first name, full name, or other identifier that the user would recognize as being their own. This name is only stored for the duration of the Link session, and is displayed to the user to reduce the effectiveness of phishing attacks. (e.g. Ola)
+  --force-language: string # BCP47 language code - Force the Link UI to prefer the specified language. If omitted, the UI will default to the user's browser default language. (e.g. nb-NO)
+  --link-multiple: oneof<nothing, bool> # Allow multiple car vendors to be linked during a single Link session. Automatically disabled if `vendor` is set. (default: false)
+  --user-image: string # Full URL to an image that the user would recognize as being their own. This URL is only stored for the duration of the Link session, and is displayed to the user to reduce the effectiveness of phishing attacks. (e.g. https://cdn.website.example/user/x/profile.jpg)
+  --user-name: string # The User's first name, full name, or other identifier that the user would recognize as being their own. This name is only stored for the duration of the Link session, and is displayed to the user to reduce the effectiveness of phishing attacks. (e.g. Ola)
   --vendor: string@vendor-completer # Automatically skip to the credential input screen for this vendor, skipping the Vendor selection menu. (e.g. TESLA)
 ]: any -> record<linkState: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($userId)/link")
-  let body = {forceLanguage: $forceLanguage, linkMultiple: $linkMultiple, userImage: $userImage, userName: $userName, vendor: $vendor} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/link"))
+  let body = {"forceLanguage": $force_language, "linkMultiple": $link_multiple, "userImage": $user_image, "userName": $user_name, "vendor": $vendor} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -513,7 +513,7 @@ export def "vehicles list" [
 # GET /vehicles/{vehicleId}
 # operationId: getVehiclesVehicleid
 export def "vehicles get" [
-  vehicleId: string
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,7 +527,7 @@ export def "vehicles get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "field[]" $field "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/vehicles/($vehicleId)" $qp)
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -537,8 +537,8 @@ export def "vehicles get" [
 #
 # GET /vehicles/{vehicleId}/charge-state
 # operationId: getVehicleChargestate
-export def "vehicles-charge-state get" [
-  vehicleId: any
+export def "vehicles-charge-state get-vehicle-chargestate" [
+  vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -550,7 +550,7 @@ export def "vehicles-charge-state get" [
 ]: nothing -> record<batteryCapacity: float, batteryLevel: float, chargeLimit: float, chargeRate: float, chargeTimeRemaining: float, isCharging: bool, isChargingReasons: list<string>, isPluggedIn: bool, range: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/charge-state")
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/charge-state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -560,8 +560,8 @@ export def "vehicles-charge-state get" [
 #
 # POST /vehicles/{vehicleId}/charging
 # operationId: postVehiclesVehicleidCharging
-export def "vehicles-charging post" [
-  vehicleId: any
+export def "vehicles-charging create" [
+  vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -573,7 +573,7 @@ export def "vehicles-charging post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/charging")
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/charging"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -584,7 +584,7 @@ export def "vehicles-charging post" [
 # GET /vehicles/{vehicleId}/information
 # operationId: getVehiclesVehicleidInformation
 export def "vehicles-information get" [
-  vehicleId: any
+  vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -596,7 +596,7 @@ export def "vehicles-information get" [
 ]: nothing -> record<brand: string, id: string, model: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/information")
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/information"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -607,7 +607,7 @@ export def "vehicles-information get" [
 # GET /vehicles/{vehicleId}/location
 # operationId: getVehiclesVehicleidLocation
 export def "vehicles-location get" [
-  vehicleId: any
+  vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,7 +619,7 @@ export def "vehicles-location get" [
 ]: nothing -> record<lastUpdated: string, latitude: float, longitude: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/location")
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/location"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -630,7 +630,7 @@ export def "vehicles-location get" [
 # GET /vehicles/{vehicleId}/odometer
 # operationId: getVehiclesVehicleidOdometer
 export def "vehicles-odometer get" [
-  vehicleId: any
+  vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,7 +642,7 @@ export def "vehicles-odometer get" [
 ]: nothing -> record<distance: float, lastUpdated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/odometer")
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/odometer"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -652,8 +652,8 @@ export def "vehicles-odometer get" [
 #
 # GET /vehicles/{vehicleId}/smart-charging-policy
 # operationId: getVehiclesVehicleidSmartchargingpolicy
-export def "vehicles-smart-charging-policy get" [
-  vehicleId: any
+export def "vehicles-smart-charging-policy get-vehicles-smartchargingpolicy" [
+  vehicle_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +665,7 @@ export def "vehicles-smart-charging-policy get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/smart-charging-policy")
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/smart-charging-policy"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -675,8 +675,8 @@ export def "vehicles-smart-charging-policy get" [
 #
 # PUT /vehicles/{vehicleId}/smart-charging-policy
 # operationId: putVehiclesVehicleidSmartchargingpolicy
-export def "vehicles-smart-charging-policy put" [
-  vehicleId: string
+export def "vehicles-smart-charging-policy update-vehicles-smartchargingpolicy" [
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -686,13 +686,13 @@ export def "vehicles-smart-charging-policy put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --deadline: string # The deadline for fully charging the vehicle. Smart charging does not work without setting a deadline. The deadline is expressed as a time on a 24h clock in UTC (e.g. 08:00)
-  --isEnabled: oneof<nothing, bool> # When enabled, this vehicle's charging status may be controlled by Smart Charging. (e.g. true)
+  --is-enabled: oneof<nothing, bool> # When enabled, this vehicle's charging status may be controlled by Smart Charging. (e.g. true)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/smart-charging-policy")
-  let body = {deadline: $deadline, isEnabled: $isEnabled} | compact
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/smart-charging-policy"))
+  let body = {"deadline": $deadline, "isEnabled": $is_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -703,8 +703,8 @@ export def "vehicles-smart-charging-policy put" [
 #
 # POST /vehicles/{vehicleId}/watch
 # operationId: postVehiclesVehicleidWatch
-export def "vehicles-watch post" [
-  vehicleId: string
+export def "vehicles-watch create" [
+  vehicle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,8 +718,8 @@ export def "vehicles-watch post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vehicles/($vehicleId)/watch")
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({vehicle_id: $vehicle_id} | format pattern "/vehicles/{vehicle_id}/watch"))
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -730,7 +730,7 @@ export def "vehicles-watch post" [
 #
 # PUT /webhooks/firehose
 # operationId: putWebhooksFirehose
-export def "webhooks-firehose put" [
+export def "webhooks-firehose update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "webhooks-firehose put" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/firehose")
-  let body = {secret: $secret, url: $body_url} | compact
+  let body = {"secret": $secret, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -757,7 +757,7 @@ export def "webhooks-firehose put" [
 #
 # POST /webhooks/firehose/test
 # operationId: postWebhooksFirehoseTest
-export def "webhooks-firehose-test post" [
+export def "webhooks-firehose-test create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

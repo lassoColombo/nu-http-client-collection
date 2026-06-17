@@ -169,7 +169,7 @@ export def "auth-token create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/token")
-  let body = {domain: $domain, password: $password, username: $username} | compact
+  let body = {"domain": $domain, "password": $password, "username": $username} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,7 +180,7 @@ export def "auth-token create" [
 #
 # GET /data-sources/arista-switches
 # operationId: listAristaSwitches
-export def "data-sources-arista-switches listAristaSwitches" [
+export def "data-sources-arista-switches list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "data-sources-arista-switches listAristaSwitches" [
 #
 # POST /data-sources/arista-switches
 # operationId: addAristaSwitch
-export def "data-sources-arista-switches addAristaSwitch" [
+export def "data-sources-arista-switches create-arista-switch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "data-sources-arista-switches addAristaSwitch" [
 #
 # DELETE /data-sources/arista-switches/{id}
 # operationId: deleteAristaSwitch
-export def "data-sources-arista-switches delete" [
+export def "data-sources-arista-switches delete-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "data-sources-arista-switches delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/arista-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/arista-switches/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,7 +250,7 @@ export def "data-sources-arista-switches delete" [
 #
 # GET /data-sources/arista-switches/{id}
 # operationId: getAristaSwitch
-export def "data-sources-arista-switches get" [
+export def "data-sources-arista-switches get-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "data-sources-arista-switches get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/arista-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/arista-switches/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -273,7 +273,7 @@ export def "data-sources-arista-switches get" [
 #
 # PUT /data-sources/arista-switches/{id}
 # operationId: updateAristaSwitch
-export def "data-sources-arista-switches updateAristaSwitch" [
+export def "data-sources-arista-switches update-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +288,7 @@ export def "data-sources-arista-switches updateAristaSwitch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/arista-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/arista-switches/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -299,7 +299,7 @@ export def "data-sources-arista-switches updateAristaSwitch" [
 #
 # POST /data-sources/arista-switches/{id}/disable
 # operationId: disableAristaSwitch
-export def "data-sources-arista-switches-disable disableAristaSwitch" [
+export def "data-sources-arista-switches-disable disable-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -312,7 +312,7 @@ export def "data-sources-arista-switches-disable disableAristaSwitch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/arista-switches/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/arista-switches/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,7 +322,7 @@ export def "data-sources-arista-switches-disable disableAristaSwitch" [
 #
 # POST /data-sources/arista-switches/{id}/enable
 # operationId: enableAristaSwitch
-export def "data-sources-arista-switches-enable enableAristaSwitch" [
+export def "data-sources-arista-switches-enable enable-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "data-sources-arista-switches-enable enableAristaSwitch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/arista-switches/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/arista-switches/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,7 +345,7 @@ export def "data-sources-arista-switches-enable enableAristaSwitch" [
 #
 # GET /data-sources/arista-switches/{id}/snmp-config
 # operationId: getAristaSwitchSnmpConfig
-export def "data-sources-arista-switches-snmp-config get" [
+export def "data-sources-arista-switches-snmp-config get-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,7 +358,7 @@ export def "data-sources-arista-switches-snmp-config get" [
 ]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/arista-switches/($id)/snmp-config")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/arista-switches/{id}/snmp-config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -370,7 +370,7 @@ export def "data-sources-arista-switches-snmp-config get" [
 # operationId: updateAristaSwitchSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-arista-switches-snmp-config updateAristaSwitchSnmpConfig" [
+export def "data-sources-arista-switches-snmp-config update-arista-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,8 +388,8 @@ export def "data-sources-arista-switches-snmp-config updateAristaSwitchSnmpConfi
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/arista-switches/($id)/snmp-config")
-  let body = {config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/arista-switches/{id}/snmp-config"))
+  let body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -400,7 +400,7 @@ export def "data-sources-arista-switches-snmp-config updateAristaSwitchSnmpConfi
 #
 # GET /data-sources/brocade-switches
 # operationId: listBrocadeSwitches
-export def "data-sources-brocade-switches listBrocadeSwitches" [
+export def "data-sources-brocade-switches list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "data-sources-brocade-switches listBrocadeSwitches" [
 #
 # POST /data-sources/brocade-switches
 # operationId: addBrocadeSwitch
-export def "data-sources-brocade-switches addBrocadeSwitch" [
+export def "data-sources-brocade-switches create-brocade-switch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -447,7 +447,7 @@ export def "data-sources-brocade-switches addBrocadeSwitch" [
 #
 # DELETE /data-sources/brocade-switches/{id}
 # operationId: deleteBrocadeSwitch
-export def "data-sources-brocade-switches delete" [
+export def "data-sources-brocade-switches delete-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +460,7 @@ export def "data-sources-brocade-switches delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/brocade-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/brocade-switches/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,7 +470,7 @@ export def "data-sources-brocade-switches delete" [
 #
 # GET /data-sources/brocade-switches/{id}
 # operationId: getBrocadeSwitch
-export def "data-sources-brocade-switches get" [
+export def "data-sources-brocade-switches get-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +483,7 @@ export def "data-sources-brocade-switches get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/brocade-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/brocade-switches/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -493,7 +493,7 @@ export def "data-sources-brocade-switches get" [
 #
 # PUT /data-sources/brocade-switches/{id}
 # operationId: updateBrocadeSwitch
-export def "data-sources-brocade-switches updateBrocadeSwitch" [
+export def "data-sources-brocade-switches update-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -508,7 +508,7 @@ export def "data-sources-brocade-switches updateBrocadeSwitch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/brocade-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/brocade-switches/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -519,7 +519,7 @@ export def "data-sources-brocade-switches updateBrocadeSwitch" [
 #
 # POST /data-sources/brocade-switches/{id}/disable
 # operationId: disableBrocadeSwitch
-export def "data-sources-brocade-switches-disable disableBrocadeSwitch" [
+export def "data-sources-brocade-switches-disable disable-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +532,7 @@ export def "data-sources-brocade-switches-disable disableBrocadeSwitch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/brocade-switches/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/brocade-switches/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -542,7 +542,7 @@ export def "data-sources-brocade-switches-disable disableBrocadeSwitch" [
 #
 # POST /data-sources/brocade-switches/{id}/enable
 # operationId: enableBrocadeSwitch
-export def "data-sources-brocade-switches-enable enableBrocadeSwitch" [
+export def "data-sources-brocade-switches-enable enable-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -555,7 +555,7 @@ export def "data-sources-brocade-switches-enable enableBrocadeSwitch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/brocade-switches/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/brocade-switches/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -565,7 +565,7 @@ export def "data-sources-brocade-switches-enable enableBrocadeSwitch" [
 #
 # GET /data-sources/brocade-switches/{id}/snmp-config
 # operationId: getBrocadeSwitchSnmpConfig
-export def "data-sources-brocade-switches-snmp-config get" [
+export def "data-sources-brocade-switches-snmp-config get-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +578,7 @@ export def "data-sources-brocade-switches-snmp-config get" [
 ]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/brocade-switches/($id)/snmp-config")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/brocade-switches/{id}/snmp-config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -590,7 +590,7 @@ export def "data-sources-brocade-switches-snmp-config get" [
 # operationId: updateBrocadeSwitchSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-brocade-switches-snmp-config updateBrocadeSwitchSnmpConfig" [
+export def "data-sources-brocade-switches-snmp-config update-brocade-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,8 +608,8 @@ export def "data-sources-brocade-switches-snmp-config updateBrocadeSwitchSnmpCon
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/brocade-switches/($id)/snmp-config")
-  let body = {config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/brocade-switches/{id}/snmp-config"))
+  let body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -620,7 +620,7 @@ export def "data-sources-brocade-switches-snmp-config updateBrocadeSwitchSnmpCon
 #
 # GET /data-sources/checkpoint-firewalls
 # operationId: listCheckpointFirewalls
-export def "data-sources-checkpoint-firewalls listCheckpointFirewalls" [
+export def "data-sources-checkpoint-firewalls list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,7 +642,7 @@ export def "data-sources-checkpoint-firewalls listCheckpointFirewalls" [
 #
 # POST /data-sources/checkpoint-firewalls
 # operationId: addCheckpointFirewall
-export def "data-sources-checkpoint-firewalls addCheckpointFirewall" [
+export def "data-sources-checkpoint-firewalls create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "data-sources-checkpoint-firewalls delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/checkpoint-firewalls/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/checkpoint-firewalls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -703,7 +703,7 @@ export def "data-sources-checkpoint-firewalls get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/checkpoint-firewalls/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/checkpoint-firewalls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -713,7 +713,7 @@ export def "data-sources-checkpoint-firewalls get" [
 #
 # PUT /data-sources/checkpoint-firewalls/{id}
 # operationId: updateCheckpointFirewall
-export def "data-sources-checkpoint-firewalls updateCheckpointFirewall" [
+export def "data-sources-checkpoint-firewalls update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -728,7 +728,7 @@ export def "data-sources-checkpoint-firewalls updateCheckpointFirewall" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/checkpoint-firewalls/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/checkpoint-firewalls/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -739,7 +739,7 @@ export def "data-sources-checkpoint-firewalls updateCheckpointFirewall" [
 #
 # POST /data-sources/checkpoint-firewalls/{id}/disable
 # operationId: disableCheckpointFirewall
-export def "data-sources-checkpoint-firewalls-disable disableCheckpointFirewall" [
+export def "data-sources-checkpoint-firewalls-disable disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,7 +752,7 @@ export def "data-sources-checkpoint-firewalls-disable disableCheckpointFirewall"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/checkpoint-firewalls/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/checkpoint-firewalls/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -762,7 +762,7 @@ export def "data-sources-checkpoint-firewalls-disable disableCheckpointFirewall"
 #
 # POST /data-sources/checkpoint-firewalls/{id}/enable
 # operationId: enableCheckpointFirewall
-export def "data-sources-checkpoint-firewalls-enable enableCheckpointFirewall" [
+export def "data-sources-checkpoint-firewalls-enable enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -775,7 +775,7 @@ export def "data-sources-checkpoint-firewalls-enable enableCheckpointFirewall" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/checkpoint-firewalls/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/checkpoint-firewalls/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -785,7 +785,7 @@ export def "data-sources-checkpoint-firewalls-enable enableCheckpointFirewall" [
 #
 # GET /data-sources/cisco-switches
 # operationId: listCiscoSwitches
-export def "data-sources-cisco-switches listCiscoSwitches" [
+export def "data-sources-cisco-switches list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "data-sources-cisco-switches listCiscoSwitches" [
 #
 # POST /data-sources/cisco-switches
 # operationId: addCiscoSwitch
-export def "data-sources-cisco-switches addCiscoSwitch" [
+export def "data-sources-cisco-switches create-cisco-switch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "data-sources-cisco-switches addCiscoSwitch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/cisco-switches")
-  let body = {switch_type: $switch_type} | compact
+  let body = {"switch_type": $switch_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -833,7 +833,7 @@ export def "data-sources-cisco-switches addCiscoSwitch" [
 #
 # DELETE /data-sources/cisco-switches/{id}
 # operationId: deleteCiscoSwitch
-export def "data-sources-cisco-switches delete" [
+export def "data-sources-cisco-switches delete-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -846,7 +846,7 @@ export def "data-sources-cisco-switches delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/cisco-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/cisco-switches/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -856,7 +856,7 @@ export def "data-sources-cisco-switches delete" [
 #
 # GET /data-sources/cisco-switches/{id}
 # operationId: getCiscoSwitch
-export def "data-sources-cisco-switches get" [
+export def "data-sources-cisco-switches get-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -869,7 +869,7 @@ export def "data-sources-cisco-switches get" [
 ]: nothing -> record<switch_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/cisco-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/cisco-switches/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -879,7 +879,7 @@ export def "data-sources-cisco-switches get" [
 #
 # PUT /data-sources/cisco-switches/{id}
 # operationId: updateCiscoSwitch
-export def "data-sources-cisco-switches updateCiscoSwitch" [
+export def "data-sources-cisco-switches update-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,8 +894,8 @@ export def "data-sources-cisco-switches updateCiscoSwitch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/cisco-switches/($id)")
-  let body = {switch_type: $switch_type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/cisco-switches/{id}"))
+  let body = {"switch_type": $switch_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -906,7 +906,7 @@ export def "data-sources-cisco-switches updateCiscoSwitch" [
 #
 # POST /data-sources/cisco-switches/{id}/disable
 # operationId: disableCiscoSwitch
-export def "data-sources-cisco-switches-disable disableCiscoSwitch" [
+export def "data-sources-cisco-switches-disable disable-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +919,7 @@ export def "data-sources-cisco-switches-disable disableCiscoSwitch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/cisco-switches/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/cisco-switches/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -929,7 +929,7 @@ export def "data-sources-cisco-switches-disable disableCiscoSwitch" [
 #
 # POST /data-sources/cisco-switches/{id}/enable
 # operationId: enableCiscoSwitch
-export def "data-sources-cisco-switches-enable enableCiscoSwitch" [
+export def "data-sources-cisco-switches-enable enable-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,7 +942,7 @@ export def "data-sources-cisco-switches-enable enableCiscoSwitch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/cisco-switches/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/cisco-switches/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -952,7 +952,7 @@ export def "data-sources-cisco-switches-enable enableCiscoSwitch" [
 #
 # GET /data-sources/cisco-switches/{id}/snmp-config
 # operationId: getCiscoSwitchSnmpConfig
-export def "data-sources-cisco-switches-snmp-config get" [
+export def "data-sources-cisco-switches-snmp-config get-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -965,7 +965,7 @@ export def "data-sources-cisco-switches-snmp-config get" [
 ]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/cisco-switches/($id)/snmp-config")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/cisco-switches/{id}/snmp-config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -977,7 +977,7 @@ export def "data-sources-cisco-switches-snmp-config get" [
 # operationId: updateCiscoSwitchSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-cisco-switches-snmp-config updateCiscoSwitchSnmpConfig" [
+export def "data-sources-cisco-switches-snmp-config update-cisco-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,8 +995,8 @@ export def "data-sources-cisco-switches-snmp-config updateCiscoSwitchSnmpConfig"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/cisco-switches/($id)/snmp-config")
-  let body = {config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/cisco-switches/{id}/snmp-config"))
+  let body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1007,7 +1007,7 @@ export def "data-sources-cisco-switches-snmp-config updateCiscoSwitchSnmpConfig"
 #
 # GET /data-sources/dell-switches
 # operationId: listDellSwitches
-export def "data-sources-dell-switches listDellSwitches" [
+export def "data-sources-dell-switches list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "data-sources-dell-switches listDellSwitches" [
 #
 # POST /data-sources/dell-switches
 # operationId: addDellSwitch
-export def "data-sources-dell-switches addDellSwitch" [
+export def "data-sources-dell-switches create-dell-switch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,7 +1044,7 @@ export def "data-sources-dell-switches addDellSwitch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/dell-switches")
-  let body = {switch_type: $switch_type} | compact
+  let body = {"switch_type": $switch_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1055,7 +1055,7 @@ export def "data-sources-dell-switches addDellSwitch" [
 #
 # DELETE /data-sources/dell-switches/{id}
 # operationId: deleteDellSwitch
-export def "data-sources-dell-switches delete" [
+export def "data-sources-dell-switches delete-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1068,7 +1068,7 @@ export def "data-sources-dell-switches delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/dell-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/dell-switches/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1078,7 +1078,7 @@ export def "data-sources-dell-switches delete" [
 #
 # GET /data-sources/dell-switches/{id}
 # operationId: getDellSwitch
-export def "data-sources-dell-switches get" [
+export def "data-sources-dell-switches get-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1091,7 +1091,7 @@ export def "data-sources-dell-switches get" [
 ]: nothing -> record<switch_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/dell-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/dell-switches/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1101,7 +1101,7 @@ export def "data-sources-dell-switches get" [
 #
 # PUT /data-sources/dell-switches/{id}
 # operationId: updateDellSwitch
-export def "data-sources-dell-switches updateDellSwitch" [
+export def "data-sources-dell-switches update-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1116,8 +1116,8 @@ export def "data-sources-dell-switches updateDellSwitch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/dell-switches/($id)")
-  let body = {switch_type: $switch_type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/dell-switches/{id}"))
+  let body = {"switch_type": $switch_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1128,7 +1128,7 @@ export def "data-sources-dell-switches updateDellSwitch" [
 #
 # POST /data-sources/dell-switches/{id}/disable
 # operationId: disableDellSwitch
-export def "data-sources-dell-switches-disable disableDellSwitch" [
+export def "data-sources-dell-switches-disable disable-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1141,7 +1141,7 @@ export def "data-sources-dell-switches-disable disableDellSwitch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/dell-switches/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/dell-switches/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1151,7 +1151,7 @@ export def "data-sources-dell-switches-disable disableDellSwitch" [
 #
 # POST /data-sources/dell-switches/{id}/enable
 # operationId: enableDellSwitch
-export def "data-sources-dell-switches-enable enableDellSwitch" [
+export def "data-sources-dell-switches-enable enable-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1164,7 +1164,7 @@ export def "data-sources-dell-switches-enable enableDellSwitch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/dell-switches/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/dell-switches/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1174,7 +1174,7 @@ export def "data-sources-dell-switches-enable enableDellSwitch" [
 #
 # GET /data-sources/dell-switches/{id}/snmp-config
 # operationId: getDellSwitchSnmpConfig
-export def "data-sources-dell-switches-snmp-config get" [
+export def "data-sources-dell-switches-snmp-config get-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1187,7 +1187,7 @@ export def "data-sources-dell-switches-snmp-config get" [
 ]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/dell-switches/($id)/snmp-config")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/dell-switches/{id}/snmp-config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1199,7 +1199,7 @@ export def "data-sources-dell-switches-snmp-config get" [
 # operationId: updateDellSwitchSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-dell-switches-snmp-config updateDellSwitchSnmpConfig" [
+export def "data-sources-dell-switches-snmp-config update-dell-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1217,8 +1217,8 @@ export def "data-sources-dell-switches-snmp-config updateDellSwitchSnmpConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/dell-switches/($id)/snmp-config")
-  let body = {config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/dell-switches/{id}/snmp-config"))
+  let body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1229,7 +1229,7 @@ export def "data-sources-dell-switches-snmp-config updateDellSwitchSnmpConfig" [
 #
 # GET /data-sources/hpov-managers
 # operationId: listHpovManagers
-export def "data-sources-hpov-managers listHpovManagers" [
+export def "data-sources-hpov-managers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1251,7 +1251,7 @@ export def "data-sources-hpov-managers listHpovManagers" [
 #
 # POST /data-sources/hpov-managers
 # operationId: addHpovManager
-export def "data-sources-hpov-managers addHpovManager" [
+export def "data-sources-hpov-managers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1289,7 +1289,7 @@ export def "data-sources-hpov-managers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/hpov-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/hpov-managers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1312,7 +1312,7 @@ export def "data-sources-hpov-managers get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/hpov-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/hpov-managers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1322,7 +1322,7 @@ export def "data-sources-hpov-managers get" [
 #
 # PUT /data-sources/hpov-managers/{id}
 # operationId: updateHpovManager
-export def "data-sources-hpov-managers updateHpovManager" [
+export def "data-sources-hpov-managers update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1337,7 +1337,7 @@ export def "data-sources-hpov-managers updateHpovManager" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/hpov-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/hpov-managers/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1348,7 +1348,7 @@ export def "data-sources-hpov-managers updateHpovManager" [
 #
 # POST /data-sources/hpov-managers/{id}/disable
 # operationId: disableHpovManager
-export def "data-sources-hpov-managers-disable disableHpovManager" [
+export def "data-sources-hpov-managers-disable disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1361,7 +1361,7 @@ export def "data-sources-hpov-managers-disable disableHpovManager" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/hpov-managers/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/hpov-managers/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1371,7 +1371,7 @@ export def "data-sources-hpov-managers-disable disableHpovManager" [
 #
 # POST /data-sources/hpov-managers/{id}/enable
 # operationId: enableHpovManager
-export def "data-sources-hpov-managers-enable enableHpovManager" [
+export def "data-sources-hpov-managers-enable enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1384,7 +1384,7 @@ export def "data-sources-hpov-managers-enable enableHpovManager" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/hpov-managers/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/hpov-managers/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1394,7 +1394,7 @@ export def "data-sources-hpov-managers-enable enableHpovManager" [
 #
 # GET /data-sources/hpvc-managers
 # operationId: listHpvcManagers
-export def "data-sources-hpvc-managers listHpvcManagers" [
+export def "data-sources-hpvc-managers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1416,7 +1416,7 @@ export def "data-sources-hpvc-managers listHpvcManagers" [
 #
 # POST /data-sources/hpvc-managers
 # operationId: addHpvcManager
-export def "data-sources-hpvc-managers addHpvcManager" [
+export def "data-sources-hpvc-managers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1454,7 +1454,7 @@ export def "data-sources-hpvc-managers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/hpvc-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/hpvc-managers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1477,7 +1477,7 @@ export def "data-sources-hpvc-managers get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/hpvc-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/hpvc-managers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1487,7 +1487,7 @@ export def "data-sources-hpvc-managers get" [
 #
 # PUT /data-sources/hpvc-managers/{id}
 # operationId: updateHpvcManager
-export def "data-sources-hpvc-managers updateHpvcManager" [
+export def "data-sources-hpvc-managers update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1502,7 +1502,7 @@ export def "data-sources-hpvc-managers updateHpvcManager" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/hpvc-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/hpvc-managers/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1513,7 +1513,7 @@ export def "data-sources-hpvc-managers updateHpvcManager" [
 #
 # POST /data-sources/hpvc-managers/{id}/disable
 # operationId: disableHpvcManager
-export def "data-sources-hpvc-managers-disable disableHpvcManager" [
+export def "data-sources-hpvc-managers-disable disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1526,7 +1526,7 @@ export def "data-sources-hpvc-managers-disable disableHpvcManager" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/hpvc-managers/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/hpvc-managers/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1536,7 +1536,7 @@ export def "data-sources-hpvc-managers-disable disableHpvcManager" [
 #
 # POST /data-sources/hpvc-managers/{id}/enable
 # operationId: enableHpvcManager
-export def "data-sources-hpvc-managers-enable enableHpvcManager" [
+export def "data-sources-hpvc-managers-enable enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1549,7 +1549,7 @@ export def "data-sources-hpvc-managers-enable enableHpvcManager" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/hpvc-managers/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/hpvc-managers/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1559,7 +1559,7 @@ export def "data-sources-hpvc-managers-enable enableHpvcManager" [
 #
 # GET /data-sources/juniper-switches
 # operationId: listJuniperSwitches
-export def "data-sources-juniper-switches listJuniperSwitches" [
+export def "data-sources-juniper-switches list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1581,7 +1581,7 @@ export def "data-sources-juniper-switches listJuniperSwitches" [
 #
 # POST /data-sources/juniper-switches
 # operationId: addJuniperSwitch
-export def "data-sources-juniper-switches addJuniperSwitch" [
+export def "data-sources-juniper-switches create-juniper-switch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1606,7 +1606,7 @@ export def "data-sources-juniper-switches addJuniperSwitch" [
 #
 # DELETE /data-sources/juniper-switches/{id}
 # operationId: deleteJuniperSwitch
-export def "data-sources-juniper-switches delete" [
+export def "data-sources-juniper-switches delete-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1619,7 +1619,7 @@ export def "data-sources-juniper-switches delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/juniper-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/juniper-switches/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1629,7 +1629,7 @@ export def "data-sources-juniper-switches delete" [
 #
 # GET /data-sources/juniper-switches/{id}
 # operationId: getJuniperSwitch
-export def "data-sources-juniper-switches get" [
+export def "data-sources-juniper-switches get-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1642,7 +1642,7 @@ export def "data-sources-juniper-switches get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/juniper-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/juniper-switches/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1652,7 +1652,7 @@ export def "data-sources-juniper-switches get" [
 #
 # PUT /data-sources/juniper-switches/{id}
 # operationId: updateJuniperSwitch
-export def "data-sources-juniper-switches updateJuniperSwitch" [
+export def "data-sources-juniper-switches update-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1667,7 +1667,7 @@ export def "data-sources-juniper-switches updateJuniperSwitch" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/juniper-switches/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/juniper-switches/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1678,7 +1678,7 @@ export def "data-sources-juniper-switches updateJuniperSwitch" [
 #
 # POST /data-sources/juniper-switches/{id}/disable
 # operationId: disableJuniperSwitch
-export def "data-sources-juniper-switches-disable disableJuniperSwitch" [
+export def "data-sources-juniper-switches-disable disable-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1691,7 +1691,7 @@ export def "data-sources-juniper-switches-disable disableJuniperSwitch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/juniper-switches/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/juniper-switches/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1701,7 +1701,7 @@ export def "data-sources-juniper-switches-disable disableJuniperSwitch" [
 #
 # POST /data-sources/juniper-switches/{id}/enable
 # operationId: enableJuniperSwitch
-export def "data-sources-juniper-switches-enable enableJuniperSwitch" [
+export def "data-sources-juniper-switches-enable enable-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1714,7 +1714,7 @@ export def "data-sources-juniper-switches-enable enableJuniperSwitch" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/juniper-switches/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/juniper-switches/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1724,7 +1724,7 @@ export def "data-sources-juniper-switches-enable enableJuniperSwitch" [
 #
 # GET /data-sources/juniper-switches/{id}/snmp-config
 # operationId: getJuniperSwitchSnmpConfig
-export def "data-sources-juniper-switches-snmp-config get" [
+export def "data-sources-juniper-switches-snmp-config get-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1737,7 +1737,7 @@ export def "data-sources-juniper-switches-snmp-config get" [
 ]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/juniper-switches/($id)/snmp-config")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/juniper-switches/{id}/snmp-config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1749,7 +1749,7 @@ export def "data-sources-juniper-switches-snmp-config get" [
 # operationId: updateJuniperSwitchSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-juniper-switches-snmp-config updateJuniperSwitchSnmpConfig" [
+export def "data-sources-juniper-switches-snmp-config update-juniper-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1767,8 +1767,8 @@ export def "data-sources-juniper-switches-snmp-config updateJuniperSwitchSnmpCon
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/juniper-switches/($id)/snmp-config")
-  let body = {config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/juniper-switches/{id}/snmp-config"))
+  let body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1779,7 +1779,7 @@ export def "data-sources-juniper-switches-snmp-config updateJuniperSwitchSnmpCon
 #
 # GET /data-sources/nsxv-managers
 # operationId: listNsxvManagers
-export def "data-sources-nsxv-managers listNsxvManagers" [
+export def "data-sources-nsxv-managers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1802,7 +1802,7 @@ export def "data-sources-nsxv-managers listNsxvManagers" [
 # POST /data-sources/nsxv-managers
 # operationId: addNsxvManagerDatasource
 # --credentials shape: {password: string, username: string}
-export def "data-sources-nsxv-managers addNsxvManagerDatasource" [
+export def "data-sources-nsxv-managers create-nsxv-manager-datasource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,7 +1826,7 @@ export def "data-sources-nsxv-managers addNsxvManagerDatasource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/nsxv-managers")
-  let body = {enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, central_cli_enabled: $central_cli_enabled, credentials: $credentials, ipfix_enabled: $ipfix_enabled, vcenter_id: $vcenter_id} | compact
+  let body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "central_cli_enabled": $central_cli_enabled, "credentials": $credentials, "ipfix_enabled": $ipfix_enabled, "vcenter_id": $vcenter_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1850,7 +1850,7 @@ export def "data-sources-nsxv-managers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/nsxv-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/nsxv-managers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1873,7 +1873,7 @@ export def "data-sources-nsxv-managers get" [
 ]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, central_cli_enabled: bool, credentials: record<password: string, username: string>, ipfix_enabled: bool, vcenter_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/nsxv-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/nsxv-managers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1884,7 +1884,7 @@ export def "data-sources-nsxv-managers get" [
 # PUT /data-sources/nsxv-managers/{id}
 # operationId: updateNsxvManager
 # --credentials shape: {password: string, username: string}
-export def "data-sources-nsxv-managers updateNsxvManager" [
+export def "data-sources-nsxv-managers update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1910,8 +1910,8 @@ export def "data-sources-nsxv-managers updateNsxvManager" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/nsxv-managers/($id)")
-  let body = {enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, central_cli_enabled: $central_cli_enabled, credentials: $credentials, ipfix_enabled: $ipfix_enabled, vcenter_id: $vcenter_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/nsxv-managers/{id}"))
+  let body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "central_cli_enabled": $central_cli_enabled, "credentials": $credentials, "ipfix_enabled": $ipfix_enabled, "vcenter_id": $vcenter_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1935,7 +1935,7 @@ export def "data-sources-nsxv-managers-controller-cluster get" [
 ]: nothing -> record<controller_password: string, enabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/nsxv-managers/($id)/controller-cluster")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/nsxv-managers/{id}/controller-cluster"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1945,7 +1945,7 @@ export def "data-sources-nsxv-managers-controller-cluster get" [
 #
 # PUT /data-sources/nsxv-managers/{id}/controller-cluster
 # operationId: updateNsxvControllerCluster
-export def "data-sources-nsxv-managers-controller-cluster updateNsxvControllerCluster" [
+export def "data-sources-nsxv-managers-controller-cluster update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1961,8 +1961,8 @@ export def "data-sources-nsxv-managers-controller-cluster updateNsxvControllerCl
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/nsxv-managers/($id)/controller-cluster")
-  let body = {controller_password: $controller_password, enabled: $enabled} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/nsxv-managers/{id}/controller-cluster"))
+  let body = {"controller_password": $controller_password, "enabled": $enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1973,7 +1973,7 @@ export def "data-sources-nsxv-managers-controller-cluster updateNsxvControllerCl
 #
 # POST /data-sources/nsxv-managers/{id}/disable
 # operationId: disableNsxvManager
-export def "data-sources-nsxv-managers-disable disableNsxvManager" [
+export def "data-sources-nsxv-managers-disable disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1986,7 +1986,7 @@ export def "data-sources-nsxv-managers-disable disableNsxvManager" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/nsxv-managers/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/nsxv-managers/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1996,7 +1996,7 @@ export def "data-sources-nsxv-managers-disable disableNsxvManager" [
 #
 # POST /data-sources/nsxv-managers/{id}/enable
 # operationId: enableNsxvManager
-export def "data-sources-nsxv-managers-enable enableNsxvManager" [
+export def "data-sources-nsxv-managers-enable enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2009,7 +2009,7 @@ export def "data-sources-nsxv-managers-enable enableNsxvManager" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/nsxv-managers/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/nsxv-managers/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2019,7 +2019,7 @@ export def "data-sources-nsxv-managers-enable enableNsxvManager" [
 #
 # GET /data-sources/panorama-firewalls
 # operationId: listPanoramaFirewalls
-export def "data-sources-panorama-firewalls listPanoramaFirewalls" [
+export def "data-sources-panorama-firewalls list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2041,7 +2041,7 @@ export def "data-sources-panorama-firewalls listPanoramaFirewalls" [
 #
 # POST /data-sources/panorama-firewalls
 # operationId: addPanoramaFirewall
-export def "data-sources-panorama-firewalls addPanoramaFirewall" [
+export def "data-sources-panorama-firewalls create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,7 +2079,7 @@ export def "data-sources-panorama-firewalls delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/panorama-firewalls/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/panorama-firewalls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2102,7 +2102,7 @@ export def "data-sources-panorama-firewalls get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/panorama-firewalls/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/panorama-firewalls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2112,7 +2112,7 @@ export def "data-sources-panorama-firewalls get" [
 #
 # PUT /data-sources/panorama-firewalls/{id}
 # operationId: updatePanoramaFirewall
-export def "data-sources-panorama-firewalls updatePanoramaFirewall" [
+export def "data-sources-panorama-firewalls update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2127,7 +2127,7 @@ export def "data-sources-panorama-firewalls updatePanoramaFirewall" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/panorama-firewalls/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/panorama-firewalls/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2138,7 +2138,7 @@ export def "data-sources-panorama-firewalls updatePanoramaFirewall" [
 #
 # POST /data-sources/panorama-firewalls/{id}/disable
 # operationId: disablePanoramaFirewall
-export def "data-sources-panorama-firewalls-disable disablePanoramaFirewall" [
+export def "data-sources-panorama-firewalls-disable disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2151,7 +2151,7 @@ export def "data-sources-panorama-firewalls-disable disablePanoramaFirewall" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/panorama-firewalls/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/panorama-firewalls/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2161,7 +2161,7 @@ export def "data-sources-panorama-firewalls-disable disablePanoramaFirewall" [
 #
 # POST /data-sources/panorama-firewalls/{id}/enable
 # operationId: enablePanoramaFirewall
-export def "data-sources-panorama-firewalls-enable enablePanoramaFirewall" [
+export def "data-sources-panorama-firewalls-enable enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2174,7 +2174,7 @@ export def "data-sources-panorama-firewalls-enable enablePanoramaFirewall" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/panorama-firewalls/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/panorama-firewalls/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2184,7 +2184,7 @@ export def "data-sources-panorama-firewalls-enable enablePanoramaFirewall" [
 #
 # GET /data-sources/ucs-managers
 # operationId: listUcsManagers
-export def "data-sources-ucs-managers listUcsManagers" [
+export def "data-sources-ucs-managers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2206,7 +2206,7 @@ export def "data-sources-ucs-managers listUcsManagers" [
 #
 # POST /data-sources/ucs-managers
 # operationId: addUcsManager
-export def "data-sources-ucs-managers addUcsManager" [
+export def "data-sources-ucs-managers create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2244,7 +2244,7 @@ export def "data-sources-ucs-managers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/ucs-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/ucs-managers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2267,7 +2267,7 @@ export def "data-sources-ucs-managers get" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/ucs-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/ucs-managers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2277,7 +2277,7 @@ export def "data-sources-ucs-managers get" [
 #
 # PUT /data-sources/ucs-managers/{id}
 # operationId: updateUcsManager
-export def "data-sources-ucs-managers updateUcsManager" [
+export def "data-sources-ucs-managers update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2292,7 +2292,7 @@ export def "data-sources-ucs-managers updateUcsManager" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/ucs-managers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/ucs-managers/{id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2303,7 +2303,7 @@ export def "data-sources-ucs-managers updateUcsManager" [
 #
 # POST /data-sources/ucs-managers/{id}/disable
 # operationId: disableUcsManager
-export def "data-sources-ucs-managers-disable disableUcsManager" [
+export def "data-sources-ucs-managers-disable disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2316,7 +2316,7 @@ export def "data-sources-ucs-managers-disable disableUcsManager" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/ucs-managers/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/ucs-managers/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2326,7 +2326,7 @@ export def "data-sources-ucs-managers-disable disableUcsManager" [
 #
 # POST /data-sources/ucs-managers/{id}/enable
 # operationId: enableUcsManager
-export def "data-sources-ucs-managers-enable enableUcsManager" [
+export def "data-sources-ucs-managers-enable enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2339,7 +2339,7 @@ export def "data-sources-ucs-managers-enable enableUcsManager" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/ucs-managers/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/ucs-managers/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2362,7 +2362,7 @@ export def "data-sources-ucs-managers-snmp-config get" [
 ]: nothing -> record<config_snmp_2c: record<community_string: string>, config_snmp_3: record<authentication_password: string, authentication_type: string, context_name: string, privacy_password: string, privacy_type: string, username: string>, snmp_enabled: bool, snmp_version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/ucs-managers/($id)/snmp-config")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/ucs-managers/{id}/snmp-config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2374,7 +2374,7 @@ export def "data-sources-ucs-managers-snmp-config get" [
 # operationId: updateUcsSnmpConfig
 # --config_snmp_2c shape: {community_string?: string}
 # --config_snmp_3 shape: {authentication_password?: string, authentication_type?: "NO_AUTH"|"MD5"|"SHA", context_name?: string, privacy_password?: string, privacy_type?: "AES"|"DES"|"AES128"|"AES192"|"AES256"|"3DES"|"NO_PRIV", username?: string}
-export def "data-sources-ucs-managers-snmp-config updateUcsSnmpConfig" [
+export def "data-sources-ucs-managers-snmp-config update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2392,8 +2392,8 @@ export def "data-sources-ucs-managers-snmp-config updateUcsSnmpConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/ucs-managers/($id)/snmp-config")
-  let body = {config_snmp_2c: $config_snmp_2c, config_snmp_3: $config_snmp_3, snmp_enabled: $snmp_enabled, snmp_version: $snmp_version} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/ucs-managers/{id}/snmp-config"))
+  let body = {"config_snmp_2c": $config_snmp_2c, "config_snmp_3": $config_snmp_3, "snmp_enabled": $snmp_enabled, "snmp_version": $snmp_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2404,7 +2404,7 @@ export def "data-sources-ucs-managers-snmp-config updateUcsSnmpConfig" [
 #
 # GET /data-sources/vcenters
 # operationId: listVcenters
-export def "data-sources-vcenters listVcenters" [
+export def "data-sources-vcenters list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2428,7 +2428,7 @@ export def "data-sources-vcenters listVcenters" [
 # POST /data-sources/vcenters
 # operationId: addVcenterDatasource
 # --credentials shape: {password: string, username: string}
-export def "data-sources-vcenters addVcenterDatasource" [
+export def "data-sources-vcenters create-vcenter-datasource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2450,7 +2450,7 @@ export def "data-sources-vcenters addVcenterDatasource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data-sources/vcenters")
-  let body = {enabled: $enabled, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials} | compact
+  let body = {"enabled": $enabled, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2474,7 +2474,7 @@ export def "data-sources-vcenters delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/vcenters/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/vcenters/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2498,7 +2498,7 @@ export def "data-sources-vcenters get" [
 ]: nothing -> record<enabled: bool, entity_id: string, entity_type: string, fqdn: string, ip: string, nickname: string, notes: string, proxy_id: string, credentials: record<password: string, username: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/vcenters/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/vcenters/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2509,7 +2509,7 @@ export def "data-sources-vcenters get" [
 # PUT /data-sources/vcenters/{id}
 # operationId: updateVcenter
 # --credentials shape: {password: string, username: string}
-export def "data-sources-vcenters updateVcenter" [
+export def "data-sources-vcenters update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2532,8 +2532,8 @@ export def "data-sources-vcenters updateVcenter" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/vcenters/($id)")
-  let body = {enabled: $enabled, entity_id: $entity_id, entity_type: $entity_type, fqdn: $fqdn, ip: $ip, nickname: $nickname, notes: $notes, proxy_id: $proxy_id, credentials: $credentials} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/vcenters/{id}"))
+  let body = {"enabled": $enabled, "entity_id": $entity_id, "entity_type": $entity_type, "fqdn": $fqdn, "ip": $ip, "nickname": $nickname, "notes": $notes, "proxy_id": $proxy_id, "credentials": $credentials} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2544,7 +2544,7 @@ export def "data-sources-vcenters updateVcenter" [
 #
 # POST /data-sources/vcenters/{id}/disable
 # operationId: disableVcenter
-export def "data-sources-vcenters-disable disableVcenter" [
+export def "data-sources-vcenters-disable disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2557,7 +2557,7 @@ export def "data-sources-vcenters-disable disableVcenter" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/vcenters/($id)/disable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/vcenters/{id}/disable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2567,7 +2567,7 @@ export def "data-sources-vcenters-disable disableVcenter" [
 #
 # POST /data-sources/vcenters/{id}/enable
 # operationId: enableVcenter
-export def "data-sources-vcenters-enable enableVcenter" [
+export def "data-sources-vcenters-enable enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2580,7 +2580,7 @@ export def "data-sources-vcenters-enable enableVcenter" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data-sources/vcenters/($id)/enable")
+  let full_url = (build-url $base ({id: $id} | format pattern "/data-sources/vcenters/{id}/enable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2590,7 +2590,7 @@ export def "data-sources-vcenters-enable enableVcenter" [
 #
 # GET /entities/clusters
 # operationId: listClusters
-export def "entities-clusters listClusters" [
+export def "entities-clusters list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2634,7 +2634,7 @@ export def "entities-clusters get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/clusters/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/clusters/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2644,7 +2644,7 @@ export def "entities-clusters get" [
 #
 # GET /entities/datastores
 # operationId: listDatastores
-export def "entities-datastores listDatastores" [
+export def "entities-datastores list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2688,7 +2688,7 @@ export def "entities-datastores get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/datastores/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/datastores/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2698,7 +2698,7 @@ export def "entities-datastores get" [
 #
 # GET /entities/distributed-virtual-portgroups
 # operationId: listDistributedVirtualPortgroups
-export def "entities-distributed-virtual-portgroups listDistributedVirtualPortgroups" [
+export def "entities-distributed-virtual-portgroups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2742,7 +2742,7 @@ export def "entities-distributed-virtual-portgroups get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/distributed-virtual-portgroups/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/distributed-virtual-portgroups/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2752,7 +2752,7 @@ export def "entities-distributed-virtual-portgroups get" [
 #
 # GET /entities/distributed-virtual-switches
 # operationId: listDistributedVirtualSwitches
-export def "entities-distributed-virtual-switches listDistributedVirtualSwitches" [
+export def "entities-distributed-virtual-switches list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2780,7 +2780,7 @@ export def "entities-distributed-virtual-switches listDistributedVirtualSwitches
 #
 # GET /entities/distributed-virtual-switches/{id}
 # operationId: getDistributedVirtualSwitch
-export def "entities-distributed-virtual-switches get" [
+export def "entities-distributed-virtual-switches get-distributed-virtual-switch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2796,7 +2796,7 @@ export def "entities-distributed-virtual-switches get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/distributed-virtual-switches/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/distributed-virtual-switches/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2806,7 +2806,7 @@ export def "entities-distributed-virtual-switches get" [
 #
 # GET /entities/firewall-rules
 # operationId: listFirewallRules
-export def "entities-firewall-rules listFirewallRules" [
+export def "entities-firewall-rules list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2850,7 +2850,7 @@ export def "entities-firewall-rules get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/firewall-rules/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/firewall-rules/{id}") $qp)
   let accept_val = ($accept | default "action")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2860,7 +2860,7 @@ export def "entities-firewall-rules get" [
 #
 # GET /entities/firewalls
 # operationId: listFirewalls
-export def "entities-firewalls listFirewalls" [
+export def "entities-firewalls list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2904,7 +2904,7 @@ export def "entities-firewalls get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/firewalls/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/firewalls/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2958,7 +2958,7 @@ export def "entities-flows get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/flows/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/flows/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2968,7 +2968,7 @@ export def "entities-flows get" [
 #
 # GET /entities/folders
 # operationId: listFolders
-export def "entities-folders listFolders" [
+export def "entities-folders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3012,7 +3012,7 @@ export def "entities-folders get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/folders/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/folders/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3022,7 +3022,7 @@ export def "entities-folders get" [
 #
 # GET /entities/hosts
 # operationId: listHosts
-export def "entities-hosts listHosts" [
+export def "entities-hosts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3066,7 +3066,7 @@ export def "entities-hosts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/hosts/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/hosts/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3076,7 +3076,7 @@ export def "entities-hosts get" [
 #
 # GET /entities/ip-sets
 # operationId: listIPSets
-export def "entities-ip-sets listIPSets" [
+export def "entities-ip-sets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3120,7 +3120,7 @@ export def "entities-ip-sets get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/ip-sets/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/ip-sets/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3130,7 +3130,7 @@ export def "entities-ip-sets get" [
 #
 # GET /entities/layer2-networks
 # operationId: listLayer2Networks
-export def "entities-layer2-networks listLayer2Networks" [
+export def "entities-layer2-networks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3174,7 +3174,7 @@ export def "entities-layer2-networks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/layer2-networks/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/layer2-networks/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3185,7 +3185,7 @@ export def "entities-layer2-networks get" [
 # POST /entities/names
 # operationId: getNames
 # --entities item shape: {entity_id?: string, time?: int}
-export def "entities-names post" [
+export def "entities-names get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3200,7 +3200,7 @@ export def "entities-names post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/entities/names")
-  let body = {entities: $entities} | compact
+  let body = {"entities": $entities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3211,7 +3211,7 @@ export def "entities-names post" [
 #
 # GET /entities/names/{id}
 # operationId: getName
-export def "entities-names get" [
+export def "entities-names get-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3226,7 +3226,7 @@ export def "entities-names get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/names/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/names/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3236,7 +3236,7 @@ export def "entities-names get" [
 #
 # GET /entities/nsx-managers
 # operationId: listNSXManagers
-export def "entities-nsx-managers listNSXManagers" [
+export def "entities-nsx-managers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3280,7 +3280,7 @@ export def "entities-nsx-managers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/nsx-managers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/nsx-managers/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3290,7 +3290,7 @@ export def "entities-nsx-managers get" [
 #
 # GET /entities/problems
 # operationId: listProblemEvents
-export def "entities-problems listProblemEvents" [
+export def "entities-problems list-problem-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3318,7 +3318,7 @@ export def "entities-problems listProblemEvents" [
 #
 # GET /entities/problems/{id}
 # operationId: getProblemEvent
-export def "entities-problems get" [
+export def "entities-problems get-problem-event" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3334,7 +3334,7 @@ export def "entities-problems get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/problems/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/problems/{id}") $qp)
   let accept_val = ($accept | default "admin_state")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3344,7 +3344,7 @@ export def "entities-problems get" [
 #
 # GET /entities/security-groups
 # operationId: listSecurityGroups
-export def "entities-security-groups listSecurityGroups" [
+export def "entities-security-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3388,7 +3388,7 @@ export def "entities-security-groups get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/security-groups/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/security-groups/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3398,7 +3398,7 @@ export def "entities-security-groups get" [
 #
 # GET /entities/security-tags
 # operationId: listSecurityTags
-export def "entities-security-tags listSecurityTags" [
+export def "entities-security-tags list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3442,7 +3442,7 @@ export def "entities-security-tags get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/security-tags/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/security-tags/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3452,7 +3452,7 @@ export def "entities-security-tags get" [
 #
 # GET /entities/service-groups
 # operationId: listServiceGroups
-export def "entities-service-groups listServiceGroups" [
+export def "entities-service-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3496,7 +3496,7 @@ export def "entities-service-groups get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/service-groups/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/service-groups/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3506,7 +3506,7 @@ export def "entities-service-groups get" [
 #
 # GET /entities/services
 # operationId: listServices
-export def "entities-services listServices" [
+export def "entities-services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3550,7 +3550,7 @@ export def "entities-services get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/services/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/services/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3560,7 +3560,7 @@ export def "entities-services get" [
 #
 # GET /entities/vc-datacenters
 # operationId: listDatacenters
-export def "entities-vc-datacenters listDatacenters" [
+export def "entities-vc-datacenters list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3604,7 +3604,7 @@ export def "entities-vc-datacenters get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/vc-datacenters/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/vc-datacenters/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3614,7 +3614,7 @@ export def "entities-vc-datacenters get" [
 #
 # GET /entities/vcenter-managers
 # operationId: listVcenterManagers
-export def "entities-vcenter-managers listVcenterManagers" [
+export def "entities-vcenter-managers list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3658,7 +3658,7 @@ export def "entities-vcenter-managers get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/vcenter-managers/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/vcenter-managers/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3668,7 +3668,7 @@ export def "entities-vcenter-managers get" [
 #
 # GET /entities/vmknics
 # operationId: listVmknics
-export def "entities-vmknics listVmknics" [
+export def "entities-vmknics list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3712,7 +3712,7 @@ export def "entities-vmknics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/vmknics/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/vmknics/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3722,7 +3722,7 @@ export def "entities-vmknics get" [
 #
 # GET /entities/vms
 # operationId: listVms
-export def "entities-vms listVms" [
+export def "entities-vms list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3766,7 +3766,7 @@ export def "entities-vms get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/vms/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/vms/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3776,7 +3776,7 @@ export def "entities-vms get" [
 #
 # GET /entities/vnics
 # operationId: listVnics
-export def "entities-vnics listVnics" [
+export def "entities-vnics list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3820,7 +3820,7 @@ export def "entities-vnics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "time" $time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/entities/vnics/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/entities/vnics/{id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3830,7 +3830,7 @@ export def "entities-vnics get" [
 #
 # GET /groups/applications
 # operationId: listApplications
-export def "groups-applications listApplications" [
+export def "groups-applications list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3858,7 +3858,7 @@ export def "groups-applications listApplications" [
 #
 # POST /groups/applications
 # operationId: addApplication
-export def "groups-applications addApplication" [
+export def "groups-applications create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3874,7 +3874,7 @@ export def "groups-applications addApplication" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups/applications")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3898,7 +3898,7 @@ export def "groups-applications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/applications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/applications/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3922,7 +3922,7 @@ export def "groups-applications get" [
 ]: nothing -> record<entity_id: string, entity_type: string, name: string, create_time: int, created_by: string, last_modified_by: string, last_modified_time: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/applications/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/applications/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3932,7 +3932,7 @@ export def "groups-applications get" [
 #
 # GET /groups/applications/{id}/tiers
 # operationId: listApplicationTiers
-export def "groups-applications-tiers listApplicationTiers" [
+export def "groups-applications-tiers list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3946,7 +3946,7 @@ export def "groups-applications-tiers listApplicationTiers" [
 ]: nothing -> record<results: table<entity_id: string, entity_type: string, name: string, application: record, group_membership_criteria: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/applications/($id)/tiers")
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/applications/{id}/tiers"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3957,7 +3957,7 @@ export def "groups-applications-tiers listApplicationTiers" [
 # POST /groups/applications/{id}/tiers
 # operationId: addTier
 # --group_membership_criteria item shape: {ip_address_membership_criteria?: record, membership_type?: "SearchMembershipCriteria"|"IPAddressMembershipCriteria", search_membership_criteria?: record}
-export def "groups-applications-tiers addTier" [
+export def "groups-applications-tiers create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3974,8 +3974,8 @@ export def "groups-applications-tiers addTier" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/applications/($id)/tiers")
-  let body = {group_membership_criteria: $group_membership_criteria, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/groups/applications/{id}/tiers"))
+  let body = {"group_membership_criteria": $group_membership_criteria, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4000,7 +4000,7 @@ export def "groups-applications-tiers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/applications/($id)/tiers/($tier_id)")
+  let full_url = (build-url $base ({id: $id, tier_id: $tier_id} | format pattern "/groups/applications/{id}/tiers/{tier_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4025,7 +4025,7 @@ export def "groups-applications-tiers get" [
 ]: nothing -> record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/applications/($id)/tiers/($tier_id)")
+  let full_url = (build-url $base ({id: $id, tier_id: $tier_id} | format pattern "/groups/applications/{id}/tiers/{tier_id}"))
   let accept_val = ($accept | default "application")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4046,12 +4046,12 @@ export def "groups-tiers get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-26 # Response content type
-  --Authorization: string # Authorization Header
+  --authorization: string # Authorization Header
 ]: nothing -> record<entity_id: string, entity_type: string, name: string, application: record<entity_id: string, entity_type: string>, group_membership_criteria: table<ip_address_membership_criteria: record, membership_type: string, search_membership_criteria: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/groups/tiers/($tier_id)")
-  let extra_headers = {"Authorization": $Authorization} | compact
+  let full_url = (build-url $base ({tier_id: $tier_id} | format pattern "/groups/tiers/{tier_id}"))
+  let extra_headers = {"Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4084,7 +4084,7 @@ export def "info-version get" [
 #
 # GET /infra/nodes
 # operationId: listNodes
-export def "infra-nodes listNodes" [
+export def "infra-nodes list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4121,7 +4121,7 @@ export def "infra-nodes get" [
 ]: nothing -> record<entity_type: string, id: string, ip_address: string, name: string, node_id: string, node_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/infra/nodes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/infra/nodes/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4134,7 +4134,7 @@ export def "infra-nodes get" [
 # --group_1 shape: {entity?: record}
 # --group_2 shape: {entity?: record}
 # --time_range shape: {end_time?: int, start_time?: int}
-export def "micro-seg-recommended-rules listRecommendedRules" [
+export def "micro-seg-recommended-rules list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4152,7 +4152,7 @@ export def "micro-seg-recommended-rules listRecommendedRules" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/micro-seg/recommended-rules")
-  let body = {group_1: $group_1, group_2: $group_2, time_range: $time_range} | compact
+  let body = {"group_1": $group_1, "group_2": $group_2, "time_range": $time_range} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4166,7 +4166,7 @@ export def "micro-seg-recommended-rules listRecommendedRules" [
 # --group_1 shape: {entity?: record}
 # --group_2 shape: {entity?: record}
 # --time_range shape: {end_time?: int, start_time?: int}
-export def "micro-seg-recommended-rules-nsx exportNsxRecommendedRules" [
+export def "micro-seg-recommended-rules-nsx export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4183,7 +4183,7 @@ export def "micro-seg-recommended-rules-nsx exportNsxRecommendedRules" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/micro-seg/recommended-rules/nsx")
-  let body = {group_1: $group_1, group_2: $group_2, time_range: $time_range} | compact
+  let body = {"group_1": $group_1, "group_2": $group_2, "time_range": $time_range} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4196,7 +4196,7 @@ export def "micro-seg-recommended-rules-nsx exportNsxRecommendedRules" [
 # operationId: searchEntities
 # --sort_by shape: {field?: string, order?: "ASC"|"DESC"}
 # --time_range shape: {end_time?: int, start_time?: int}
-export def "search searchEntities" [
+export def "search list-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4216,7 +4216,7 @@ export def "search searchEntities" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/search")
-  let body = {cursor: $cursor, entity_type: $entity_type, filter: $filter, size: $size, sort_by: $sort_by, time_range: $time_range} | compact
+  let body = {"cursor": $cursor, "entity_type": $entity_type, "filter": $filter, "size": $size, "sort_by": $sort_by, "time_range": $time_range} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

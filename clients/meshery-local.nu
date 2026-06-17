@@ -168,13 +168,13 @@ export def "application-deploy idPostDeployApplicationFile" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Upload YamlYml File: string # format: binary
+  --upload-yaml-yml-file: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/application/deploy")
-  let body = {Upload Yaml/Yml File: $Upload YamlYml File} | compact
+  let body = {"Upload Yaml/Yml File": $upload_yaml_yml_file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -198,7 +198,7 @@ export def "application idDeleteMesheryApplicationFile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/application/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/application/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,7 +221,7 @@ export def "application idGetMesheryApplication" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/application/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/application/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -288,7 +288,7 @@ export def "filter-file idGetFilterFiles" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/filter/file/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/filter/file/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -311,7 +311,7 @@ export def "filter idDeleteMesheryFilter" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/filter/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/filter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -334,7 +334,7 @@ export def "filter idGetMesheryFilter" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/filter/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/filter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,7 +357,7 @@ export def "oam idGETOAMMesheryPattern" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/oam/($type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/api/oam/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -380,7 +380,7 @@ export def "oam idPOSTOAMMesheryPattern" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/oam/($type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/api/oam/{type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,13 +465,13 @@ export def "pattern-deploy idPostDeployPattern" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Upload YamlYml File: string # format: binary
+  --upload-yaml-yml-file: string # format: binary
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pattern/deploy")
-  let body = {Upload Yaml/Yml File: $Upload YamlYml File} | compact
+  let body = {"Upload Yaml/Yml File": $upload_yaml_yml_file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -495,7 +495,7 @@ export def "pattern idDeleteMesheryPattern" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/pattern/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/pattern/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,7 +518,7 @@ export def "pattern idGetMesheryPattern" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/pattern/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/pattern/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -549,7 +549,7 @@ export def "perf-profile idRunPerfTest" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/perf/profile")
-  let body = {clients: $clients, duration: $duration, id: $id, labels: $labels, name: $name, smp_version: $smp_version} | compact
+  let body = {"clients": $clients, "duration": $duration, "id": $id, "labels": $labels, "name": $name, "smp_version": $smp_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -595,7 +595,7 @@ export def "perf-profile-result idGetSinglePerfResult" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/perf/profile/result/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/perf/profile/result/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -755,13 +755,13 @@ export def "system-adapter-operation idPostAdapterOperation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --adapter: string
   --query: string
-  --customBody: string
+  --custom-body: string
   --namespace: string
-  --deleteOp: string
+  --delete-op: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "adapter" $adapter "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "customBody" $customBody "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "deleteOp" $deleteOp "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "adapter" $adapter "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "customBody" $custom_body "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "deleteOp" $delete_op "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/system/adapter/operation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1097,11 +1097,11 @@ export def "telemetry-metrics-grafana-boards idGetGrafanaBoards" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dashboardSearch: string
+  --dashboard-search: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dashboardSearch" $dashboardSearch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dashboardSearch" $dashboard_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/telemetry/metrics/grafana/boards" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1187,14 +1187,14 @@ export def "telemetry-metrics-grafana-config idPostGrafanaConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --grafanaAPIKey: string
-  --grafanaURL: string
+  --grafana-api-key: string
+  --grafana-url: string
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/telemetry/metrics/grafana/config")
-  let body = {grafanaAPIKey: $grafanaAPIKey, grafanaURL: $grafanaURL} | compact
+  let body = {"grafanaAPIKey": $grafana_api_key, "grafanaURL": $grafana_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1424,7 +1424,7 @@ export def "user-performance-profiles idSavePerformanceProfile" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user/performance/profiles")
-  let body = {concurrent_request: $concurrent_request, duration: $duration, endpoints: $endpoints, load_generators: $load_generators, name: $name, qps: $qps, service_mesh: $service_mesh} | compact
+  let body = {"concurrent_request": $concurrent_request, "duration": $duration, "endpoints": $endpoints, "load_generators": $load_generators, "name": $name, "qps": $qps, "service_mesh": $service_mesh} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1470,7 +1470,7 @@ export def "user-performance-profiles idDeletePerformanceProfile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/user/performance/profiles/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/performance/profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1493,7 +1493,7 @@ export def "user-performance-profiles idGetSinglePerformanceProfile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/user/performance/profiles/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/performance/profiles/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1516,7 +1516,7 @@ export def "user-performance-profiles-results idGETProfileResults" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/user/performance/profiles/($id)/results")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/performance/profiles/{id}/results"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1539,7 +1539,7 @@ export def "user-performance-profiles-run idRunPerformanceTest" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/user/performance/profiles/($id)/run")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/performance/profiles/{id}/run"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1662,7 +1662,7 @@ export def "user-prefs-perf idPostLoadPreferences" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/user/prefs/perf")
-  let body = {clients: $clients, duration: $duration, id: $id, labels: $labels, name: $name, smp_version: $smp_version} | compact
+  let body = {"clients": $clients, "duration": $duration, "id": $id, "labels": $labels, "name": $name, "smp_version": $smp_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1730,7 +1730,7 @@ export def "user-schedules idDeleteSchedules" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/user/schedules/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/schedules/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1753,7 +1753,7 @@ export def "user-schedules idGetSingleSchedule" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-token"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/user/schedules/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/user/schedules/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

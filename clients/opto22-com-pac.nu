@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "device readDeviceDetails" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "device get-device-details" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /device
 # operationId: readDeviceDetails
-export def "device readDeviceDetails" [
+export def "device get-device-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +115,7 @@ export def "device readDeviceDetails" [
 #
 # GET /device/strategy
 # operationId: readStrategyDetails
-export def "device-strategy readStrategyDetails" [
+export def "device-strategy get-strategy-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "device-strategy readStrategyDetails" [
 #
 # GET /device/strategy/ios/analogInputs
 # operationId: readAnalogInputs
-export def "device-strategy-ios-analog-inputs readAnalogInputs" [
+export def "device-strategy-ios-analog-inputs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,8 +159,8 @@ export def "device-strategy-ios-analog-inputs readAnalogInputs" [
 #
 # GET /device/strategy/ios/analogInputs/{ioName}/eu
 # operationId: readAnalogInputEu
-export def "device-strategy-ios-analog-inputs-eu readAnalogInputEu" [
-  ioName: string
+export def "device-strategy-ios-analog-inputs-eu get" [
+  io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "device-strategy-ios-analog-inputs-eu readAnalogInputEu" [
 ]: nothing -> record<value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/ios/analogInputs/($ioName)/eu")
+  let full_url = (build-url $base ({io_name: $io_name} | format pattern "/device/strategy/ios/analogInputs/{io_name}/eu"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,7 +182,7 @@ export def "device-strategy-ios-analog-inputs-eu readAnalogInputEu" [
 #
 # GET /device/strategy/ios/analogOutputs
 # operationId: readAnalogOutputs
-export def "device-strategy-ios-analog-outputs readAnalogOutputs" [
+export def "device-strategy-ios-analog-outputs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,8 +204,8 @@ export def "device-strategy-ios-analog-outputs readAnalogOutputs" [
 #
 # GET /device/strategy/ios/analogOutputs/{ioName}/eu
 # operationId: readAnalogOutputEu
-export def "device-strategy-ios-analog-outputs-eu readAnalogOutputEu" [
-  ioName: string
+export def "device-strategy-ios-analog-outputs-eu get" [
+  io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "device-strategy-ios-analog-outputs-eu readAnalogOutputEu" [
 ]: nothing -> record<value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/ios/analogOutputs/($ioName)/eu")
+  let full_url = (build-url $base ({io_name: $io_name} | format pattern "/device/strategy/ios/analogOutputs/{io_name}/eu"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -228,7 +228,7 @@ export def "device-strategy-ios-analog-outputs-eu readAnalogOutputEu" [
 # POST /device/strategy/ios/analogOutputs/{ioName}/eu
 # operationId: writeAnalogOutputEu
 export def "device-strategy-ios-analog-outputs-eu writeAnalogOutputEu" [
-  ioName: string
+  io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,8 +242,8 @@ export def "device-strategy-ios-analog-outputs-eu writeAnalogOutputEu" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/ios/analogOutputs/($ioName)/eu")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({io_name: $io_name} | format pattern "/device/strategy/ios/analogOutputs/{io_name}/eu"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -254,7 +254,7 @@ export def "device-strategy-ios-analog-outputs-eu writeAnalogOutputEu" [
 #
 # GET /device/strategy/ios/digitalInputs
 # operationId: readDigitalInputs
-export def "device-strategy-ios-digital-inputs readDigitalInputs" [
+export def "device-strategy-ios-digital-inputs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,8 +276,8 @@ export def "device-strategy-ios-digital-inputs readDigitalInputs" [
 #
 # GET /device/strategy/ios/digitalInputs/{ioName}/state
 # operationId: readDigitalInputState
-export def "device-strategy-ios-digital-inputs-state readDigitalInputState" [
-  ioName: string
+export def "device-strategy-ios-digital-inputs-state get" [
+  io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "device-strategy-ios-digital-inputs-state readDigitalInputState" [
 ]: nothing -> record<value: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/ios/digitalInputs/($ioName)/state")
+  let full_url = (build-url $base ({io_name: $io_name} | format pattern "/device/strategy/ios/digitalInputs/{io_name}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +299,7 @@ export def "device-strategy-ios-digital-inputs-state readDigitalInputState" [
 #
 # GET /device/strategy/ios/digitalOutputs
 # operationId: readDigitalOutputs
-export def "device-strategy-ios-digital-outputs readDigitalOutputs" [
+export def "device-strategy-ios-digital-outputs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,8 +321,8 @@ export def "device-strategy-ios-digital-outputs readDigitalOutputs" [
 #
 # GET /device/strategy/ios/digitalOutputs/{ioName}/state
 # operationId: readDigitalOutputState
-export def "device-strategy-ios-digital-outputs-state readDigitalOutputState" [
-  ioName: string
+export def "device-strategy-ios-digital-outputs-state get" [
+  io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "device-strategy-ios-digital-outputs-state readDigitalOutputState" [
 ]: nothing -> record<value: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/ios/digitalOutputs/($ioName)/state")
+  let full_url = (build-url $base ({io_name: $io_name} | format pattern "/device/strategy/ios/digitalOutputs/{io_name}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,7 +345,7 @@ export def "device-strategy-ios-digital-outputs-state readDigitalOutputState" [
 # POST /device/strategy/ios/digitalOutputs/{ioName}/state
 # operationId: writeDigitalOutputState
 export def "device-strategy-ios-digital-outputs-state writeDigitalOutputState" [
-  ioName: string
+  io_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,8 +359,8 @@ export def "device-strategy-ios-digital-outputs-state writeDigitalOutputState" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/ios/digitalOutputs/($ioName)/state")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({io_name: $io_name} | format pattern "/device/strategy/ios/digitalOutputs/{io_name}/state"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -371,7 +371,7 @@ export def "device-strategy-ios-digital-outputs-state writeDigitalOutputState" [
 #
 # GET /device/strategy/tables/floats
 # operationId: readFloatTables
-export def "device-strategy-tables-floats readFloatTables" [
+export def "device-strategy-tables-floats list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,8 +393,8 @@ export def "device-strategy-tables-floats readFloatTables" [
 #
 # GET /device/strategy/tables/floats/{tableName}
 # operationId: readFloatTable
-export def "device-strategy-tables-floats readFloatTable" [
-  tableName: string
+export def "device-strategy-tables-floats get" [
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,13 +403,13 @@ export def "device-strategy-tables-floats readFloatTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # Index of first element to read (default is 0) (format: int32)
-  --numElements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
+  --start-index: int # Index of first element to read (default is 0) (format: int32)
+  --num-elements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
 ]: nothing -> list<float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "numElements" $numElements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/device/strategy/tables/floats/($tableName)" $qp)
+  let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({table_name: $table_name} | format pattern "/device/strategy/tables/floats/{table_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -420,7 +420,7 @@ export def "device-strategy-tables-floats readFloatTable" [
 # POST /device/strategy/tables/floats/{tableName}
 # operationId: writeFloatTable
 export def "device-strategy-tables-floats writeFloatTable" [
-  tableName: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,14 +429,14 @@ export def "device-strategy-tables-floats writeFloatTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # Index of first element to write (default is 0) (format: int32)
+  --start-index: int # Index of first element to write (default is 0) (format: int32)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/device/strategy/tables/floats/($tableName)" $qp)
+  let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({table_name: $table_name} | format pattern "/device/strategy/tables/floats/{table_name}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -447,8 +447,8 @@ export def "device-strategy-tables-floats writeFloatTable" [
 #
 # GET /device/strategy/tables/floats/{tableName}/{index}
 # operationId: readFloatTableElement
-export def "device-strategy-tables-floats readFloatTableElement" [
-  tableName: string
+export def "device-strategy-tables-floats get-float-table-element" [
+  table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -461,7 +461,7 @@ export def "device-strategy-tables-floats readFloatTableElement" [
 ]: nothing -> record<value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/tables/floats/($tableName)/($index)")
+  let full_url = (build-url $base ({table_name: $table_name, index: $index} | format pattern "/device/strategy/tables/floats/{table_name}/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -472,7 +472,7 @@ export def "device-strategy-tables-floats readFloatTableElement" [
 # POST /device/strategy/tables/floats/{tableName}/{index}
 # operationId: writeFloatTableElement
 export def "device-strategy-tables-floats writeFloatTableElement" [
-  tableName: string
+  table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -487,8 +487,8 @@ export def "device-strategy-tables-floats writeFloatTableElement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/tables/floats/($tableName)/($index)")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({table_name: $table_name, index: $index} | format pattern "/device/strategy/tables/floats/{table_name}/{index}"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -499,7 +499,7 @@ export def "device-strategy-tables-floats writeFloatTableElement" [
 #
 # GET /device/strategy/tables/int32s
 # operationId: readInt32Tables
-export def "device-strategy-tables-int32s readInt32Tables" [
+export def "device-strategy-tables-int32s list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,8 +521,8 @@ export def "device-strategy-tables-int32s readInt32Tables" [
 #
 # GET /device/strategy/tables/int32s/{tableName}
 # operationId: readInt32Table
-export def "device-strategy-tables-int32s readInt32Table" [
-  tableName: string
+export def "device-strategy-tables-int32s get" [
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,13 +531,13 @@ export def "device-strategy-tables-int32s readInt32Table" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # Index of first element to read (default is 0) (format: int32)
-  --numElements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
+  --start-index: int # Index of first element to read (default is 0) (format: int32)
+  --num-elements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "numElements" $numElements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/device/strategy/tables/int32s/($tableName)" $qp)
+  let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({table_name: $table_name} | format pattern "/device/strategy/tables/int32s/{table_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -548,7 +548,7 @@ export def "device-strategy-tables-int32s readInt32Table" [
 # POST /device/strategy/tables/int32s/{tableName}
 # operationId: writeInt32Table
 export def "device-strategy-tables-int32s writeInt32Table" [
-  tableName: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -557,14 +557,14 @@ export def "device-strategy-tables-int32s writeInt32Table" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # Index of first element to write (default is 0) (format: int32)
+  --start-index: int # Index of first element to write (default is 0) (format: int32)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/device/strategy/tables/int32s/($tableName)" $qp)
+  let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({table_name: $table_name} | format pattern "/device/strategy/tables/int32s/{table_name}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -575,8 +575,8 @@ export def "device-strategy-tables-int32s writeInt32Table" [
 #
 # GET /device/strategy/tables/int32s/{tableName}/{index}
 # operationId: readInt32TableElement
-export def "device-strategy-tables-int32s readInt32TableElement" [
-  tableName: string
+export def "device-strategy-tables-int32s get-int32-table-element" [
+  table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,7 +589,7 @@ export def "device-strategy-tables-int32s readInt32TableElement" [
 ]: nothing -> record<value: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/tables/int32s/($tableName)/($index)")
+  let full_url = (build-url $base ({table_name: $table_name, index: $index} | format pattern "/device/strategy/tables/int32s/{table_name}/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -600,7 +600,7 @@ export def "device-strategy-tables-int32s readInt32TableElement" [
 # POST /device/strategy/tables/int32s/{tableName}/{index}
 # operationId: writeInt32TableElement
 export def "device-strategy-tables-int32s writeInt32TableElement" [
-  tableName: string
+  table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,8 +615,8 @@ export def "device-strategy-tables-int32s writeInt32TableElement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/tables/int32s/($tableName)/($index)")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({table_name: $table_name, index: $index} | format pattern "/device/strategy/tables/int32s/{table_name}/{index}"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -627,7 +627,7 @@ export def "device-strategy-tables-int32s writeInt32TableElement" [
 #
 # GET /device/strategy/tables/int64s
 # operationId: readInt64Tables
-export def "device-strategy-tables-int64s readInt64Tables" [
+export def "device-strategy-tables-int64s list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -649,8 +649,8 @@ export def "device-strategy-tables-int64s readInt64Tables" [
 #
 # GET /device/strategy/tables/int64s/{tableName}
 # operationId: readInt64Table
-export def "device-strategy-tables-int64s readInt64Table" [
-  tableName: string
+export def "device-strategy-tables-int64s get" [
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,13 +659,13 @@ export def "device-strategy-tables-int64s readInt64Table" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # Index of first element to read (default is 0) (format: int32)
-  --numElements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
+  --start-index: int # Index of first element to read (default is 0) (format: int32)
+  --num-elements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
 ]: nothing -> list<int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "numElements" $numElements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/device/strategy/tables/int64s/($tableName)" $qp)
+  let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({table_name: $table_name} | format pattern "/device/strategy/tables/int64s/{table_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -676,7 +676,7 @@ export def "device-strategy-tables-int64s readInt64Table" [
 # POST /device/strategy/tables/int64s/{tableName}
 # operationId: writeInt64Table
 export def "device-strategy-tables-int64s writeInt64Table" [
-  tableName: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,14 +685,14 @@ export def "device-strategy-tables-int64s writeInt64Table" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # Index of first element to write; default is 0 (format: int32)
+  --start-index: int # Index of first element to write; default is 0 (format: int32)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/device/strategy/tables/int64s/($tableName)" $qp)
+  let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({table_name: $table_name} | format pattern "/device/strategy/tables/int64s/{table_name}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -703,8 +703,8 @@ export def "device-strategy-tables-int64s writeInt64Table" [
 #
 # GET /device/strategy/tables/int64s/{tableName}/_string
 # operationId: readInt64TableAsString
-export def "device-strategy-tables-int64s-string readInt64TableAsString" [
-  tableName: string
+export def "device-strategy-tables-int64s-string get-int64-table-as" [
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,13 +713,13 @@ export def "device-strategy-tables-int64s-string readInt64TableAsString" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # Index of first element to read (default is 0) (format: int32)
-  --numElements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
+  --start-index: int # Index of first element to read (default is 0) (format: int32)
+  --num-elements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "numElements" $numElements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/device/strategy/tables/int64s/($tableName)/_string" $qp)
+  let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({table_name: $table_name} | format pattern "/device/strategy/tables/int64s/{table_name}/_string") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -730,7 +730,7 @@ export def "device-strategy-tables-int64s-string readInt64TableAsString" [
 # POST /device/strategy/tables/int64s/{tableName}/_string
 # operationId: writeInt64TableAsString
 export def "device-strategy-tables-int64s-string writeInt64TableAsString" [
-  tableName: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -739,14 +739,14 @@ export def "device-strategy-tables-int64s-string writeInt64TableAsString" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # Index of first element to write; default is 0. (format: int32)
+  --start-index: int # Index of first element to write; default is 0. (format: int32)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/device/strategy/tables/int64s/($tableName)/_string" $qp)
+  let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({table_name: $table_name} | format pattern "/device/strategy/tables/int64s/{table_name}/_string") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -757,8 +757,8 @@ export def "device-strategy-tables-int64s-string writeInt64TableAsString" [
 #
 # GET /device/strategy/tables/int64s/{tableName}/{index}
 # operationId: readInt64TableElement
-export def "device-strategy-tables-int64s readInt64TableElement" [
-  tableName: string
+export def "device-strategy-tables-int64s get-int64-table-element" [
+  table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +771,7 @@ export def "device-strategy-tables-int64s readInt64TableElement" [
 ]: nothing -> record<value: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/tables/int64s/($tableName)/($index)")
+  let full_url = (build-url $base ({table_name: $table_name, index: $index} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -782,7 +782,7 @@ export def "device-strategy-tables-int64s readInt64TableElement" [
 # POST /device/strategy/tables/int64s/{tableName}/{index}
 # operationId: writeInt64TableElement
 export def "device-strategy-tables-int64s writeInt64TableElement" [
-  tableName: string
+  table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,8 +797,8 @@ export def "device-strategy-tables-int64s writeInt64TableElement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/tables/int64s/($tableName)/($index)")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({table_name: $table_name, index: $index} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -809,8 +809,8 @@ export def "device-strategy-tables-int64s writeInt64TableElement" [
 #
 # GET /device/strategy/tables/int64s/{tableName}/{index}/_string
 # operationId: readInt64TableElementAsString
-export def "device-strategy-tables-int64s-string readInt64TableElementAsString" [
-  tableName: string
+export def "device-strategy-tables-int64s-string get-int64-table-element-as" [
+  table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,7 +823,7 @@ export def "device-strategy-tables-int64s-string readInt64TableElementAsString" 
 ]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/tables/int64s/($tableName)/($index)/_string")
+  let full_url = (build-url $base ({table_name: $table_name, index: $index} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}/_string"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -834,7 +834,7 @@ export def "device-strategy-tables-int64s-string readInt64TableElementAsString" 
 # POST /device/strategy/tables/int64s/{tableName}/{index}/_string
 # operationId: writeInt64TableElementAsString
 export def "device-strategy-tables-int64s-string writeInt64TableElementAsString" [
-  tableName: string
+  table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -849,8 +849,8 @@ export def "device-strategy-tables-int64s-string writeInt64TableElementAsString"
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/tables/int64s/($tableName)/($index)/_string")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({table_name: $table_name, index: $index} | format pattern "/device/strategy/tables/int64s/{table_name}/{index}/_string"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -861,7 +861,7 @@ export def "device-strategy-tables-int64s-string writeInt64TableElementAsString"
 #
 # GET /device/strategy/tables/strings
 # operationId: readStringTables
-export def "device-strategy-tables-strings readStringTables" [
+export def "device-strategy-tables-strings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,8 +883,8 @@ export def "device-strategy-tables-strings readStringTables" [
 #
 # GET /device/strategy/tables/strings/{tableName}
 # operationId: readStringTable
-export def "device-strategy-tables-strings readStringTable" [
-  tableName: string
+export def "device-strategy-tables-strings get" [
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,13 +893,13 @@ export def "device-strategy-tables-strings readStringTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # Index of first element to read (default is 0) (format: int32)
-  --numElements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
+  --start-index: int # Index of first element to read (default is 0) (format: int32)
+  --num-elements: int # Number of elements to read (default is number of elements in the table minus startIndex) (format: int32)
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar") (serialize-qp "numElements" $numElements "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/device/strategy/tables/strings/($tableName)" $qp)
+  let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "numElements" $num_elements "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({table_name: $table_name} | format pattern "/device/strategy/tables/strings/{table_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -910,7 +910,7 @@ export def "device-strategy-tables-strings readStringTable" [
 # POST /device/strategy/tables/strings/{tableName}
 # operationId: writeStringTable
 export def "device-strategy-tables-strings writeStringTable" [
-  tableName: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -919,14 +919,14 @@ export def "device-strategy-tables-strings writeStringTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startIndex: int # Index of first element to write (default is 0) (format: int32)
+  --start-index: int # Index of first element to write (default is 0) (format: int32)
   --body: record
 ]: any -> record<errorCode: int, message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startIndex" $startIndex "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/device/strategy/tables/strings/($tableName)" $qp)
+  let qp = [(serialize-qp "startIndex" $start_index "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({table_name: $table_name} | format pattern "/device/strategy/tables/strings/{table_name}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -937,8 +937,8 @@ export def "device-strategy-tables-strings writeStringTable" [
 #
 # GET /device/strategy/tables/strings/{tableName}/{index}
 # operationId: readStringTableElement
-export def "device-strategy-tables-strings readStringTableElement" [
-  tableName: string
+export def "device-strategy-tables-strings get-string-table-element" [
+  table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -951,7 +951,7 @@ export def "device-strategy-tables-strings readStringTableElement" [
 ]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/tables/strings/($tableName)/($index)")
+  let full_url = (build-url $base ({table_name: $table_name, index: $index} | format pattern "/device/strategy/tables/strings/{table_name}/{index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -962,7 +962,7 @@ export def "device-strategy-tables-strings readStringTableElement" [
 # POST /device/strategy/tables/strings/{tableName}/{index}
 # operationId: writeStringTableElement
 export def "device-strategy-tables-strings writeStringTableElement" [
-  tableName: string
+  table_name: string
   index: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -977,8 +977,8 @@ export def "device-strategy-tables-strings writeStringTableElement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/tables/strings/($tableName)/($index)")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({table_name: $table_name, index: $index} | format pattern "/device/strategy/tables/strings/{table_name}/{index}"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -989,7 +989,7 @@ export def "device-strategy-tables-strings writeStringTableElement" [
 #
 # GET /device/strategy/vars/downTimers
 # operationId: readDownTimerVars
-export def "device-strategy-vars-down-timers readDownTimerVars" [
+export def "device-strategy-vars-down-timers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,8 +1011,8 @@ export def "device-strategy-vars-down-timers readDownTimerVars" [
 #
 # GET /device/strategy/vars/downTimers/{downTimerName}/value
 # operationId: readDownTimerValue
-export def "device-strategy-vars-down-timers-value readDownTimerValue" [
-  downTimerName: string
+export def "device-strategy-vars-down-timers-value get" [
+  down_timer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1024,7 @@ export def "device-strategy-vars-down-timers-value readDownTimerValue" [
 ]: nothing -> record<value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/downTimers/($downTimerName)/value")
+  let full_url = (build-url $base ({down_timer_name: $down_timer_name} | format pattern "/device/strategy/vars/downTimers/{down_timer_name}/value"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1034,7 +1034,7 @@ export def "device-strategy-vars-down-timers-value readDownTimerValue" [
 #
 # GET /device/strategy/vars/floats
 # operationId: readFloatVars
-export def "device-strategy-vars-floats readFloatVars" [
+export def "device-strategy-vars-floats list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,8 +1056,8 @@ export def "device-strategy-vars-floats readFloatVars" [
 #
 # GET /device/strategy/vars/floats/{floatName}
 # operationId: readFloatVar
-export def "device-strategy-vars-floats readFloatVar" [
-  floatName: string
+export def "device-strategy-vars-floats get" [
+  float_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1069,7 +1069,7 @@ export def "device-strategy-vars-floats readFloatVar" [
 ]: nothing -> record<value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/floats/($floatName)")
+  let full_url = (build-url $base ({float_name: $float_name} | format pattern "/device/strategy/vars/floats/{float_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1080,7 +1080,7 @@ export def "device-strategy-vars-floats readFloatVar" [
 # POST /device/strategy/vars/floats/{floatName}
 # operationId: writeFloatVar
 export def "device-strategy-vars-floats writeFloatVar" [
-  floatName: string
+  float_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,8 +1094,8 @@ export def "device-strategy-vars-floats writeFloatVar" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/floats/($floatName)")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({float_name: $float_name} | format pattern "/device/strategy/vars/floats/{float_name}"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1106,7 +1106,7 @@ export def "device-strategy-vars-floats writeFloatVar" [
 #
 # GET /device/strategy/vars/int32s
 # operationId: readInt32Vars
-export def "device-strategy-vars-int32s readInt32Vars" [
+export def "device-strategy-vars-int32s list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,8 +1128,8 @@ export def "device-strategy-vars-int32s readInt32Vars" [
 #
 # GET /device/strategy/vars/int32s/{int32Name}
 # operationId: readInt32Var
-export def "device-strategy-vars-int32s readInt32Var" [
-  int32Name: string
+export def "device-strategy-vars-int32s get" [
+  int32_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1141,7 +1141,7 @@ export def "device-strategy-vars-int32s readInt32Var" [
 ]: nothing -> record<value: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/int32s/($int32Name)")
+  let full_url = (build-url $base ({int32_name: $int32_name} | format pattern "/device/strategy/vars/int32s/{int32_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1152,7 +1152,7 @@ export def "device-strategy-vars-int32s readInt32Var" [
 # POST /device/strategy/vars/int32s/{int32Name}
 # operationId: writeInt32Var
 export def "device-strategy-vars-int32s writeInt32Var" [
-  int32Name: string
+  int32_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1166,8 +1166,8 @@ export def "device-strategy-vars-int32s writeInt32Var" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/int32s/($int32Name)")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({int32_name: $int32_name} | format pattern "/device/strategy/vars/int32s/{int32_name}"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1178,7 +1178,7 @@ export def "device-strategy-vars-int32s writeInt32Var" [
 #
 # GET /device/strategy/vars/int64s
 # operationId: readInt64Vars
-export def "device-strategy-vars-int64s readInt64Vars" [
+export def "device-strategy-vars-int64s list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1200,7 +1200,7 @@ export def "device-strategy-vars-int64s readInt64Vars" [
 #
 # GET /device/strategy/vars/int64s/_string
 # operationId: readInt64VarsAsStrings
-export def "device-strategy-vars-int64s-string readInt64VarsAsStrings" [
+export def "device-strategy-vars-int64s-string get-int64-vars-as" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1222,8 +1222,8 @@ export def "device-strategy-vars-int64s-string readInt64VarsAsStrings" [
 #
 # GET /device/strategy/vars/int64s/{int64Name}
 # operationId: readInt64Var
-export def "device-strategy-vars-int64s readInt64Var" [
-  int64Name: string
+export def "device-strategy-vars-int64s get" [
+  int64_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1235,7 +1235,7 @@ export def "device-strategy-vars-int64s readInt64Var" [
 ]: nothing -> record<value: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/int64s/($int64Name)")
+  let full_url = (build-url $base ({int64_name: $int64_name} | format pattern "/device/strategy/vars/int64s/{int64_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1246,7 +1246,7 @@ export def "device-strategy-vars-int64s readInt64Var" [
 # POST /device/strategy/vars/int64s/{int64Name}
 # operationId: writeInt64Var
 export def "device-strategy-vars-int64s writeInt64Var" [
-  int64Name: string
+  int64_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,8 +1260,8 @@ export def "device-strategy-vars-int64s writeInt64Var" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/int64s/($int64Name)")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({int64_name: $int64_name} | format pattern "/device/strategy/vars/int64s/{int64_name}"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1272,8 +1272,8 @@ export def "device-strategy-vars-int64s writeInt64Var" [
 #
 # GET /device/strategy/vars/int64s/{int64Name}/_string
 # operationId: readInt64VarAsString
-export def "device-strategy-vars-int64s-string readInt64VarAsString" [
-  int64Name: string
+export def "device-strategy-vars-int64s-string get-int64-var-as" [
+  int64_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1285,7 +1285,7 @@ export def "device-strategy-vars-int64s-string readInt64VarAsString" [
 ]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/int64s/($int64Name)/_string")
+  let full_url = (build-url $base ({int64_name: $int64_name} | format pattern "/device/strategy/vars/int64s/{int64_name}/_string"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1296,7 +1296,7 @@ export def "device-strategy-vars-int64s-string readInt64VarAsString" [
 # POST /device/strategy/vars/int64s/{int64Name}/_string
 # operationId: writeInt64VarAsString
 export def "device-strategy-vars-int64s-string writeInt64VarAsString" [
-  int64Name: string
+  int64_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,8 +1310,8 @@ export def "device-strategy-vars-int64s-string writeInt64VarAsString" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/int64s/($int64Name)/_string")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({int64_name: $int64_name} | format pattern "/device/strategy/vars/int64s/{int64_name}/_string"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1322,7 +1322,7 @@ export def "device-strategy-vars-int64s-string writeInt64VarAsString" [
 #
 # GET /device/strategy/vars/strings
 # operationId: readStringVars
-export def "device-strategy-vars-strings readStringVars" [
+export def "device-strategy-vars-strings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1344,8 +1344,8 @@ export def "device-strategy-vars-strings readStringVars" [
 #
 # GET /device/strategy/vars/strings/{stringName}
 # operationId: readStringVar
-export def "device-strategy-vars-strings readStringVar" [
-  stringName: string
+export def "device-strategy-vars-strings get" [
+  string_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1357,7 +1357,7 @@ export def "device-strategy-vars-strings readStringVar" [
 ]: nothing -> record<value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/strings/($stringName)")
+  let full_url = (build-url $base ({string_name: $string_name} | format pattern "/device/strategy/vars/strings/{string_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1368,7 +1368,7 @@ export def "device-strategy-vars-strings readStringVar" [
 # POST /device/strategy/vars/strings/{stringName}
 # operationId: writeStringVar
 export def "device-strategy-vars-strings writeStringVar" [
-  stringName: string
+  string_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1382,8 +1382,8 @@ export def "device-strategy-vars-strings writeStringVar" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/strings/($stringName)")
-  let body = {value: $value} | compact
+  let full_url = (build-url $base ({string_name: $string_name} | format pattern "/device/strategy/vars/strings/{string_name}"))
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1394,7 +1394,7 @@ export def "device-strategy-vars-strings writeStringVar" [
 #
 # GET /device/strategy/vars/upTimers
 # operationId: readUpTimerVars
-export def "device-strategy-vars-up-timers readUpTimerVars" [
+export def "device-strategy-vars-up-timers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1416,8 +1416,8 @@ export def "device-strategy-vars-up-timers readUpTimerVars" [
 #
 # GET /device/strategy/vars/upTimers/{upTimerName}/value
 # operationId: readUpTimerValue
-export def "device-strategy-vars-up-timers-value readUpTimerValue" [
-  upTimerName: string
+export def "device-strategy-vars-up-timers-value get" [
+  up_timer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,7 +1429,7 @@ export def "device-strategy-vars-up-timers-value readUpTimerValue" [
 ]: nothing -> record<value: float> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/device/strategy/vars/upTimers/($upTimerName)/value")
+  let full_url = (build-url $base ({up_timer_name: $up_timer_name} | format pattern "/device/strategy/vars/upTimers/{up_timer_name}/value"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

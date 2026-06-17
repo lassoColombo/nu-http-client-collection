@@ -70,7 +70,7 @@ def type-completer [] { ["Hive" "Scope" "USql"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "build-job Build" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "build-job build" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 # POST /buildJob
 # operationId: Job_Build
 # --properties shape: {runtimeVersion?: string, script: string, type: string}
-export def "build-job Build" [
+export def "build-job build" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +114,7 @@ export def "build-job Build" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/buildJob" $qp)
-  let body = {name: $name, properties: $properties, type: $type} | compact
+  let body = {"name": $name, "properties": $properties, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -125,7 +125,7 @@ export def "build-job Build" [
 #
 # GET /jobs
 # operationId: Job_List
-export def "jobs List" [
+export def "jobs list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,8 +155,8 @@ export def "jobs List" [
 #
 # GET /jobs/{jobIdentity}
 # operationId: Job_Get
-export def "jobs Get" [
-  jobIdentity: string
+export def "jobs get" [
+  job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "jobs Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/jobs/($jobIdentity)" $qp)
+  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -180,8 +180,8 @@ export def "jobs Get" [
 #
 # PATCH /jobs/{jobIdentity}
 # operationId: Job_Update
-export def "jobs Update" [
-  jobIdentity: string
+export def "jobs update" [
+  job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,8 +191,8 @@ export def "jobs Update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --degreeOfParallelism: int # The degree of parallelism used for this job. (format: int32)
-  --degreeOfParallelismPercent: float # the degree of parallelism in percentage used for this job. (format: double)
+  --degree-of-parallelism: int # The degree of parallelism used for this job. (format: int32)
+  --degree-of-parallelism-percent: float # the degree of parallelism in percentage used for this job. (format: double)
   --priority: int # The priority value for the current job. Lower numbers have a higher priority. By default, a job has a priority of 1000. This must be greater than 0. (format: int32)
   --tags: record # The key-value pairs used to add additional metadata to the job information.
 ]: any -> record<errorMessage: table<description: string, details: string, endOffset: int, errorId: string, filePath: string, helpLink: string, innerError: record, internalDiagnostics: string, lineNumber: int, message: string, resolution: string, severity: string, source: string, startOffset: int>, properties: record<runtimeVersion: string, script: string, type: string>, stateAuditRecords: table<details: string, newState: string, requestedByUser: string, timeStamp: string>, degreeOfParallelism: int, degreeOfParallelismPercent: float, endTime: string, hierarchyQueueNode: string, jobId: string, logFilePatterns: list<string>, logFolder: string, name: string, priority: int, related: record<pipelineId: string, pipelineName: string, pipelineUri: string, recurrenceId: string, recurrenceName: string, runId: string>, result: string, startTime: string, state: string, submitTime: string, submitter: string, tags: record, type: string> {
@@ -200,8 +200,8 @@ export def "jobs Update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/jobs/($jobIdentity)" $qp)
-  let body = {degreeOfParallelism: $degreeOfParallelism, degreeOfParallelismPercent: $degreeOfParallelismPercent, priority: $priority, tags: $tags} | compact
+  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}") $qp)
+  let body = {"degreeOfParallelism": $degree_of_parallelism, "degreeOfParallelismPercent": $degree_of_parallelism_percent, "priority": $priority, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,8 +214,8 @@ export def "jobs Update" [
 # operationId: Job_Create
 # --related shape: {pipelineId?: string, pipelineName?: string, pipelineUri?: string, recurrenceId: string, recurrenceName?: string, runId?: string}
 # --properties shape: {runtimeVersion?: string, script: string, type: string}
-export def "jobs Create" [
-  jobIdentity: string
+export def "jobs create" [
+  job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,9 +225,9 @@ export def "jobs Create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --degreeOfParallelism: int # The degree of parallelism to use for this job. At most one of degreeOfParallelism and degreeOfParallelismPercent should be specified. If none, a default value of 1 will be used for degreeOfParallelism. (format: int32, default: 1)
-  --degreeOfParallelismPercent: float # the degree of parallelism in percentage used for this job. At most one of degreeOfParallelism and degreeOfParallelismPercent should be specified. If none, a default value of 1 will be used for degreeOfParallelism. (format: double)
-  --logFilePatterns: list # The list of log file name patterns to find in the logFolder. '*' is the only matching character allowed. Example format: jobExecution*.log or *mylog*.txt
+  --degree-of-parallelism: int # The degree of parallelism to use for this job. At most one of degreeOfParallelism and degreeOfParallelismPercent should be specified. If none, a default value of 1 will be used for degreeOfParallelism. (format: int32, default: 1)
+  --degree-of-parallelism-percent: float # the degree of parallelism in percentage used for this job. At most one of degreeOfParallelism and degreeOfParallelismPercent should be specified. If none, a default value of 1 will be used for degreeOfParallelism. (format: double)
+  --log-file-patterns: list # The list of log file name patterns to find in the logFolder. '*' is the only matching character allowed. Example format: jobExecution*.log or *mylog*.txt
   name: string # The friendly name of the job to submit.
   --priority: int # The priority value to use for the current job. Lower numbers have a higher priority. By default, a job has a priority of 1000. This must be greater than 0. (format: int32)
   --related: any # Job relationship information properties including pipeline information, correlation information, etc. — shape: {pipelineId?: string, pipelineName?: string, pipelineUri?: string, recurrenceId: string, recurrenceName?: string, runId?: string}
@@ -238,8 +238,8 @@ export def "jobs Create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/jobs/($jobIdentity)" $qp)
-  let body = {degreeOfParallelism: $degreeOfParallelism, degreeOfParallelismPercent: $degreeOfParallelismPercent, logFilePatterns: $logFilePatterns, name: $name, priority: $priority, related: $related, properties: $properties, type: $type} | compact
+  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}") $qp)
+  let body = {"degreeOfParallelism": $degree_of_parallelism, "degreeOfParallelismPercent": $degree_of_parallelism_percent, "logFilePatterns": $log_file_patterns, "name": $name, "priority": $priority, "related": $related, "properties": $properties, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,8 +250,8 @@ export def "jobs Create" [
 #
 # POST /jobs/{jobIdentity}/CancelJob
 # operationId: Job_Cancel
-export def "jobs-cancel-job Cancel" [
-  jobIdentity: string
+export def "jobs-cancel-job cancel" [
+  job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "jobs-cancel-job Cancel" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/jobs/($jobIdentity)/CancelJob" $qp)
+  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}/CancelJob") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -275,8 +275,8 @@ export def "jobs-cancel-job Cancel" [
 #
 # GET /jobs/{jobIdentity}/GetDebugDataPath
 # operationId: Job_GetDebugDataPath
-export def "jobs-get-debug-data-path GetDebugDataPath" [
-  jobIdentity: string
+export def "jobs-get-debug-data-path get" [
+  job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "jobs-get-debug-data-path GetDebugDataPath" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/jobs/($jobIdentity)/GetDebugDataPath" $qp)
+  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}/GetDebugDataPath") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,8 +300,8 @@ export def "jobs-get-debug-data-path GetDebugDataPath" [
 #
 # GET /jobs/{jobIdentity}/GetStatistics
 # operationId: Job_GetStatistics
-export def "jobs-get-statistics GetStatistics" [
-  jobIdentity: string
+export def "jobs-get-statistics get" [
+  job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +315,7 @@ export def "jobs-get-statistics GetStatistics" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/jobs/($jobIdentity)/GetStatistics" $qp)
+  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}/GetStatistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,8 +325,8 @@ export def "jobs-get-statistics GetStatistics" [
 #
 # POST /jobs/{jobIdentity}/YieldJob
 # operationId: Job_Yield
-export def "jobs-yield-job Yield" [
-  jobIdentity: string
+export def "jobs-yield-job post" [
+  job_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "jobs-yield-job Yield" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/jobs/($jobIdentity)/YieldJob" $qp)
+  let full_url = (build-url $base ({job_identity: $job_identity} | format pattern "/jobs/{job_identity}/YieldJob") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,7 +350,7 @@ export def "jobs-yield-job Yield" [
 #
 # GET /pipelines
 # operationId: Pipeline_List
-export def "pipelines List" [
+export def "pipelines list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,13 +359,13 @@ export def "pipelines List" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startDateTime: string # The start date for when to get the list of pipelines. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
-  --endDateTime: string # The end date for when to get the list of pipelines. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
+  --start-date-time: string # The start date for when to get the list of pipelines. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
+  --end-date-time: string # The end date for when to get the list of pipelines. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<auHoursCanceled: float, auHoursFailed: float, auHoursSucceeded: float, lastSubmitTime: string, numJobsCanceled: int, numJobsFailed: int, numJobsSucceeded: int, pipelineId: string, pipelineName: string, pipelineUri: string, recurrences: list, runs: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDateTime" $startDateTime "scalar") (serialize-qp "endDateTime" $endDateTime "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pipelines" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -376,8 +376,8 @@ export def "pipelines List" [
 #
 # GET /pipelines/{pipelineIdentity}
 # operationId: Pipeline_Get
-export def "pipelines Get" [
-  pipelineIdentity: string
+export def "pipelines get" [
+  pipeline_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,14 +386,14 @@ export def "pipelines Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startDateTime: string # The start date for when to get the pipeline and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
-  --endDateTime: string # The end date for when to get the pipeline and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
+  --start-date-time: string # The start date for when to get the pipeline and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
+  --end-date-time: string # The end date for when to get the pipeline and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
   --api-version: string # Client Api Version.
 ]: nothing -> record<auHoursCanceled: float, auHoursFailed: float, auHoursSucceeded: float, lastSubmitTime: string, numJobsCanceled: int, numJobsFailed: int, numJobsSucceeded: int, pipelineId: string, pipelineName: string, pipelineUri: string, recurrences: list<string>, runs: table<lastSubmitTime: string, runId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDateTime" $startDateTime "scalar") (serialize-qp "endDateTime" $endDateTime "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pipelines/($pipelineIdentity)" $qp)
+  let qp = [(serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({pipeline_identity: $pipeline_identity} | format pattern "/pipelines/{pipeline_identity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -403,7 +403,7 @@ export def "pipelines Get" [
 #
 # GET /recurrences
 # operationId: Recurrence_List
-export def "recurrences List" [
+export def "recurrences list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,13 +412,13 @@ export def "recurrences List" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startDateTime: string # The start date for when to get the list of recurrences. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
-  --endDateTime: string # The end date for when to get the list of recurrences. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
+  --start-date-time: string # The start date for when to get the list of recurrences. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
+  --end-date-time: string # The end date for when to get the list of recurrences. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
   --api-version: string # Client Api Version.
 ]: nothing -> record<nextLink: string, value: table<auHoursCanceled: float, auHoursFailed: float, auHoursSucceeded: float, lastSubmitTime: string, numJobsCanceled: int, numJobsFailed: int, numJobsSucceeded: int, recurrenceId: string, recurrenceName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDateTime" $startDateTime "scalar") (serialize-qp "endDateTime" $endDateTime "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recurrences" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -429,8 +429,8 @@ export def "recurrences List" [
 #
 # GET /recurrences/{recurrenceIdentity}
 # operationId: Recurrence_Get
-export def "recurrences Get" [
-  recurrenceIdentity: string
+export def "recurrences get" [
+  recurrence_identity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,14 +439,14 @@ export def "recurrences Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startDateTime: string # The start date for when to get the recurrence and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
-  --endDateTime: string # The end date for when to get recurrence and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
+  --start-date-time: string # The start date for when to get the recurrence and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
+  --end-date-time: string # The end date for when to get recurrence and aggregate its data. The startDateTime and endDateTime can be no more than 30 days apart. (format: date-time)
   --api-version: string # Client Api Version.
 ]: nothing -> record<auHoursCanceled: float, auHoursFailed: float, auHoursSucceeded: float, lastSubmitTime: string, numJobsCanceled: int, numJobsFailed: int, numJobsSucceeded: int, recurrenceId: string, recurrenceName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startDateTime" $startDateTime "scalar") (serialize-qp "endDateTime" $endDateTime "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/recurrences/($recurrenceIdentity)" $qp)
+  let qp = [(serialize-qp "startDateTime" $start_date_time "scalar") (serialize-qp "endDateTime" $end_date_time "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({recurrence_identity: $recurrence_identity} | format pattern "/recurrences/{recurrence_identity}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

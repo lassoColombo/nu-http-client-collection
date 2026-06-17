@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-batch-ai-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-batch-ai-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.BatchAI/operations
 # operationId: Operations_List
-export def "providers-microsoft-batch-ai-operations List" [
+export def "providers-microsoft-batch-ai-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-batch-ai-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.BatchAI/locations/{location}/usages
 # operationId: Usages_List
-export def "subscriptions-providers-microsoft-batch-ai-locations-usages List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-batch-ai-locations-usages list" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -133,7 +133,7 @@ export def "subscriptions-providers-microsoft-batch-ai-locations-usages List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.BatchAI/locations/($location)/usages" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.BatchAI/locations/{location}/usages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -143,8 +143,8 @@ export def "subscriptions-providers-microsoft-batch-ai-locations-usages List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.BatchAI/workspaces
 # operationId: Workspaces_List
-export def "subscriptions-providers-microsoft-batch-ai-workspaces List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-batch-ai-workspaces list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "subscriptions-providers-microsoft-batch-ai-workspaces List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.BatchAI/workspaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.BatchAI/workspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,9 +169,9 @@ export def "subscriptions-providers-microsoft-batch-ai-workspaces List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces
 # operationId: Workspaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,10 +196,10 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}
 # operationId: Workspaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces Delete" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -223,10 +223,10 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}
 # operationId: Workspaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces Get" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,10 +250,10 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}
 # operationId: Workspaces_Update
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces Update" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces update" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,8 +269,8 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,10 +281,10 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}
 # operationId: Workspaces_Create
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces Create" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces create" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,8 +301,8 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)" $qp)
-  let body = {location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}") $qp)
+  let body = {"location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -313,10 +313,10 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters
 # operationId: Clusters_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters ListByWorkspace" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters list-by" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/clusters" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,11 +341,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters/{clusterName}
 # operationId: Clusters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters Delete" [
-  resourceGroupName: string
-  workspaceName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/clusters/($clusterName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters/{cluster_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -369,11 +369,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters/{clusterName}
 # operationId: Clusters_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters Get" [
-  resourceGroupName: string
-  workspaceName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -387,7 +387,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/clusters/($clusterName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters/{cluster_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -398,11 +398,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters/{clusterName}
 # operationId: Clusters_Update
 # --properties shape: {scaleSettings?: any}
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters Update" [
-  resourceGroupName: string
-  workspaceName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters update" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,8 +418,8 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/clusters/($clusterName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters/{cluster_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -431,11 +431,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters/{clusterName}
 # operationId: Clusters_Create
 # --properties shape: {nodeSetup?: any, scaleSettings?: any, subnet?: any, userAccountSettings: any, virtualMachineConfiguration?: any, vmPriority?: "dedicated"|"lowpriority", vmSize: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters Create" [
-  resourceGroupName: string
-  workspaceName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters create" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,8 +451,8 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/clusters/($clusterName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters/{cluster_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -463,11 +463,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/clusters/{clusterName}/listRemoteLoginInformation
 # operationId: Clusters_ListRemoteLoginInformation
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters-list-remote-login-information ListRemoteLoginInformation" [
-  resourceGroupName: string
-  workspaceName: string
-  clusterName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-clusters-list-remote-login-information list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,7 +481,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/clusters/($clusterName)/listRemoteLoginInformation" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, cluster_name: $cluster_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/clusters/{cluster_name}/listRemoteLoginInformation") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -491,10 +491,10 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments
 # operationId: Experiments_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments ListByWorkspace" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments list-by" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +509,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -519,11 +519,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}
 # operationId: Experiments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments Delete" [
-  resourceGroupName: string
-  workspaceName: string
-  experimentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  experiment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments/($experimentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,11 +547,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}
 # operationId: Experiments_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments Get" [
-  resourceGroupName: string
-  workspaceName: string
-  experimentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  experiment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments/($experimentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -575,11 +575,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}
 # operationId: Experiments_Create
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments Create" [
-  resourceGroupName: string
-  workspaceName: string
-  experimentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments create" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  experiment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments/($experimentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -603,11 +603,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs
 # operationId: Jobs_ListByExperiment
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs ListByExperiment" [
-  resourceGroupName: string
-  workspaceName: string
-  experimentName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs list-by" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  experiment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,7 +622,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments/($experimentName)/jobs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -632,12 +632,12 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}
 # operationId: Jobs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs Delete" [
-  resourceGroupName: string
-  workspaceName: string
-  experimentName: string
-  jobName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  experiment_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments/($experimentName)/jobs/($jobName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -661,12 +661,12 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs Get" [
-  resourceGroupName: string
-  workspaceName: string
-  experimentName: string
-  jobName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  experiment_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments/($experimentName)/jobs/($jobName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -691,12 +691,12 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}
 # operationId: Jobs_Create
 # --properties shape: {caffe2Settings?: any, caffeSettings?: any, chainerSettings?: any, cluster: any, cntkSettings?: any, constraints?: any, containerSettings?: any, customMpiSettings?: any, customToolkitSettings?: any, environmentVariables?: list, horovodSettings?: any, inputDirectories?: list, jobPreparation?: any, mountVolumes?: any, nodeCount: int, outputDirectories?: list, pyTorchSettings?: any, schedulingPriority?: "low"|"normal"|"high", secrets?: list, stdOutErrPathPrefix: string, tensorFlowSettings?: any}
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs Create" [
-  resourceGroupName: string
-  workspaceName: string
-  experimentName: string
-  jobName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs create" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  experiment_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,8 +712,8 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments/($experimentName)/jobs/($jobName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -724,12 +724,12 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}/listOutputFiles
 # operationId: Jobs_ListOutputFiles
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs-list-output-files ListOutputFiles" [
-  resourceGroupName: string
-  workspaceName: string
-  experimentName: string
-  jobName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs-list-output-files list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  experiment_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,7 +747,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "outputdirectoryid" $outputdirectoryid "scalar") (serialize-qp "directory" $directory "scalar") (serialize-qp "linkexpiryinminutes" $linkexpiryinminutes "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments/($experimentName)/jobs/($jobName)/listOutputFiles" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}/listOutputFiles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -757,12 +757,12 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}/listRemoteLoginInformation
 # operationId: Jobs_ListRemoteLoginInformation
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs-list-remote-login-information ListRemoteLoginInformation" [
-  resourceGroupName: string
-  workspaceName: string
-  experimentName: string
-  jobName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs-list-remote-login-information list" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  experiment_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,7 +776,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments/($experimentName)/jobs/($jobName)/listRemoteLoginInformation" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}/listRemoteLoginInformation") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -786,12 +786,12 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/experiments/{experimentName}/jobs/{jobName}/terminate
 # operationId: Jobs_Terminate
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs-terminate Terminate" [
-  resourceGroupName: string
-  workspaceName: string
-  experimentName: string
-  jobName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-experiments-jobs-terminate post" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  experiment_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -805,7 +805,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/experiments/($experimentName)/jobs/($jobName)/terminate" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, experiment_name: $experiment_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/experiments/{experiment_name}/jobs/{job_name}/terminate") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -815,10 +815,10 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/fileServers
 # operationId: FileServers_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers ListByWorkspace" [
-  resourceGroupName: string
-  workspaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers list-by" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,7 +833,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/fileServers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/fileServers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -843,11 +843,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/fileServers/{fileServerName}
 # operationId: FileServers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers Delete" [
-  resourceGroupName: string
-  workspaceName: string
-  fileServerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers delete" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  file_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,7 +861,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/fileServers/($fileServerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, file_server_name: $file_server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/fileServers/{file_server_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -871,11 +871,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/fileServers/{fileServerName}
 # operationId: FileServers_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers Get" [
-  resourceGroupName: string
-  workspaceName: string
-  fileServerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers get" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  file_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -889,7 +889,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/fileServers/($fileServerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, file_server_name: $file_server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/fileServers/{file_server_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -900,11 +900,11 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.BatchAI/workspaces/{workspaceName}/fileServers/{fileServerName}
 # operationId: FileServers_Create
 # --properties shape: {dataDisks: any, sshConfiguration: any, subnet?: any, vmSize: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers Create" [
-  resourceGroupName: string
-  workspaceName: string
-  fileServerName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspaces-file-servers create" [
+  subscription_id: string
+  resource_group_name: string
+  workspace_name: string
+  file_server_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,8 +920,8 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-ai-workspace
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.BatchAI/workspaces/($workspaceName)/fileServers/($fileServerName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, workspace_name: $workspace_name, file_server_name: $file_server_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.BatchAI/workspaces/{workspace_name}/fileServers/{file_server_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

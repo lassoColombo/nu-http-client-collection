@@ -106,16 +106,16 @@ export def "chrome-html chromeFromHtmlPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fileName: string # e.g. test.pdf
+  --file-name: string # e.g. test.pdf
   html: string # format: html, e.g. <p>Hello World</p>
-  --inlinePdf: oneof<nothing, bool> # e.g. true
+  --inline-pdf: oneof<nothing, bool> # e.g. true
   --options: record # shape: {landscape?: string, printBackground?: bool}
 ]: any -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chrome/html")
-  let body = {fileName: $fileName, html: $html, inlinePdf: $inlinePdf, options: $options} | compact
+  let body = {"fileName": $file_name, "html": $html, "inlinePdf": $inline_pdf, "options": $options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,8 +162,8 @@ export def "chrome-url chromeFromUrlPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fileName: string # e.g. test.pdf
-  --inlinePdf: oneof<nothing, bool> # e.g. true
+  --file-name: string # e.g. test.pdf
+  --inline-pdf: oneof<nothing, bool> # e.g. true
   --options: record # shape: {landscape?: string, printBackground?: bool}
   --body-url: string # format: url, e.g. https://www.github.com
 ]: any -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
@@ -171,7 +171,7 @@ export def "chrome-url chromeFromUrlPost" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chrome/url")
-  let body = {fileName: $fileName, inlinePdf: $inlinePdf, options: $options, url: $body_url} | compact
+  let body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "options": $options, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,15 +191,15 @@ export def "libreoffice-convert libreConvertPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fileName: string # e.g. test.pdf
-  --inlinePdf: oneof<nothing, bool> # e.g. true
+  --file-name: string # e.g. test.pdf
+  --inline-pdf: oneof<nothing, bool> # e.g. true
   --body-url: string # format: url, e.g. https://www.api2pdf.com/wp-content/themes/api2pdf/assets/samples/sample-word-doc.docx
 ]: any -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/libreoffice/convert")
-  let body = {fileName: $fileName, inlinePdf: $inlinePdf, url: $body_url} | compact
+  let body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -219,15 +219,15 @@ export def "merge mergePost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fileName: string # e.g. test.pdf
-  --inlinePdf: oneof<nothing, bool> # e.g. true
+  --file-name: string # e.g. test.pdf
+  --inline-pdf: oneof<nothing, bool> # e.g. true
   urls: list # format: list of urls to pdfs, e.g. [link-to-pdf1, link-to-pdf2, link-to-pdf3]
 ]: any -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/merge")
-  let body = {fileName: $fileName, inlinePdf: $inlinePdf, urls: $urls} | compact
+  let body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "urls": $urls} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -248,16 +248,16 @@ export def "wkhtmltopdf-html wkhtmltopdfFromHtmlPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fileName: string # e.g. test.pdf
+  --file-name: string # e.g. test.pdf
   html: string # format: html, e.g. <p>Hello World</p>
-  --inlinePdf: oneof<nothing, bool> # e.g. true
+  --inline-pdf: oneof<nothing, bool> # e.g. true
   --options: record # shape: {orientation?: string, pageSize?: string}
 ]: any -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wkhtmltopdf/html")
-  let body = {fileName: $fileName, html: $html, inlinePdf: $inlinePdf, options: $options} | compact
+  let body = {"fileName": $file_name, "html": $html, "inlinePdf": $inline_pdf, "options": $options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -304,8 +304,8 @@ export def "wkhtmltopdf-url wkhtmltopdfFromUrlPost" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fileName: string # e.g. test.pdf
-  --inlinePdf: oneof<nothing, bool> # e.g. true
+  --file-name: string # e.g. test.pdf
+  --inline-pdf: oneof<nothing, bool> # e.g. true
   --options: record # shape: {orientation?: string, pageSize?: string}
   --body-url: string # format: url, e.g. https://www.github.com
 ]: any -> record<cost: float, mbIn: float, mbOut: float, pdf: string, success: bool> {
@@ -313,7 +313,7 @@ export def "wkhtmltopdf-url wkhtmltopdfFromUrlPost" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wkhtmltopdf/url")
-  let body = {fileName: $fileName, inlinePdf: $inlinePdf, options: $options, url: $body_url} | compact
+  let body = {"fileName": $file_name, "inlinePdf": $inline_pdf, "options": $options, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-capacity-calculate-price Calculate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-capacity-calculate-price post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/Microsoft.Capacity/calculatePrice
 # operationId: ReservationOrder_Calculate
-export def "providers-microsoft-capacity-calculate-price Calculate" [
+export def "providers-microsoft-capacity-calculate-price post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +117,7 @@ export def "providers-microsoft-capacity-calculate-price Calculate" [
 #
 # GET /providers/Microsoft.Capacity/operations
 # operationId: Operation_List
-export def "providers-microsoft-capacity-operations List" [
+export def "providers-microsoft-capacity-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,7 +141,7 @@ export def "providers-microsoft-capacity-operations List" [
 #
 # GET /providers/Microsoft.Capacity/reservationOrders
 # operationId: ReservationOrder_List
-export def "providers-microsoft-capacity-reservation-orders List" [
+export def "providers-microsoft-capacity-reservation-orders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,8 +165,8 @@ export def "providers-microsoft-capacity-reservation-orders List" [
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}
 # operationId: ReservationOrder_Get
-export def "providers-microsoft-capacity-reservation-orders Get" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders get" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "providers-microsoft-capacity-reservation-orders Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,8 +191,8 @@ export def "providers-microsoft-capacity-reservation-orders Get" [
 #
 # PUT /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}
 # operationId: ReservationOrder_Purchase
-export def "providers-microsoft-capacity-reservation-orders Purchase" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders put" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "providers-microsoft-capacity-reservation-orders Purchase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,8 +216,8 @@ export def "providers-microsoft-capacity-reservation-orders Purchase" [
 #
 # POST /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/merge
 # operationId: Reservation_Merge
-export def "providers-microsoft-capacity-reservation-orders-merge Merge" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders-merge post" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "providers-microsoft-capacity-reservation-orders-merge Merge" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/merge" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/merge") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -241,8 +241,8 @@ export def "providers-microsoft-capacity-reservation-orders-merge Merge" [
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations
 # operationId: Reservation_List
-export def "providers-microsoft-capacity-reservation-orders-reservations List" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders-reservations list" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/reservations" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -266,9 +266,9 @@ export def "providers-microsoft-capacity-reservation-orders-reservations List" [
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}
 # operationId: Reservation_Get
-export def "providers-microsoft-capacity-reservation-orders-reservations Get" [
-  reservationId: string
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders-reservations get" [
+  reservation_order_id: string
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/reservations/($reservationId)" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id, reservation_id: $reservation_id} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -293,9 +293,9 @@ export def "providers-microsoft-capacity-reservation-orders-reservations Get" [
 #
 # PATCH /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}
 # operationId: Reservation_Update
-export def "providers-microsoft-capacity-reservation-orders-reservations Update" [
-  reservationOrderId: string
-  reservationId: string
+export def "providers-microsoft-capacity-reservation-orders-reservations update" [
+  reservation_order_id: string
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations Update"
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/reservations/($reservationId)" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id, reservation_id: $reservation_id} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -319,9 +319,9 @@ export def "providers-microsoft-capacity-reservation-orders-reservations Update"
 #
 # POST /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}/availableScopes
 # operationId: Reservation_AvailableScopes
-export def "providers-microsoft-capacity-reservation-orders-reservations-available-scopes AvailableScopes" [
-  reservationOrderId: string
-  reservationId: string
+export def "providers-microsoft-capacity-reservation-orders-reservations-available-scopes post" [
+  reservation_order_id: string
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations-availab
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/reservations/($reservationId)/availableScopes" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id, reservation_id: $reservation_id} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}/availableScopes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -345,9 +345,9 @@ export def "providers-microsoft-capacity-reservation-orders-reservations-availab
 #
 # GET /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/reservations/{reservationId}/revisions
 # operationId: Reservation_ListRevisions
-export def "providers-microsoft-capacity-reservation-orders-reservations-revisions ListRevisions" [
-  reservationId: string
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders-reservations-revisions list" [
+  reservation_order_id: string
+  reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "providers-microsoft-capacity-reservation-orders-reservations-revisio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/reservations/($reservationId)/revisions" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id, reservation_id: $reservation_id} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/reservations/{reservation_id}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -371,8 +371,8 @@ export def "providers-microsoft-capacity-reservation-orders-reservations-revisio
 #
 # POST /providers/Microsoft.Capacity/reservationOrders/{reservationOrderId}/split
 # operationId: Reservation_Split
-export def "providers-microsoft-capacity-reservation-orders-split Split" [
-  reservationOrderId: string
+export def "providers-microsoft-capacity-reservation-orders-split post" [
+  reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "providers-microsoft-capacity-reservation-orders-split Split" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Capacity/reservationOrders/($reservationOrderId)/split" $qp)
+  let full_url = (build-url $base ({reservation_order_id: $reservation_order_id} | format pattern "/providers/Microsoft.Capacity/reservationOrders/{reservation_order_id}/split") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -396,8 +396,8 @@ export def "providers-microsoft-capacity-reservation-orders-split Split" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/appliedReservations
 # operationId: GetAppliedReservationList
-export def "subscriptions-providers-microsoft-capacity-applied-reservations GetAppliedReservationList" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-capacity-applied-reservations get-applied-reservation-list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "subscriptions-providers-microsoft-capacity-applied-reservations GetA
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/appliedReservations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/appliedReservations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -421,8 +421,8 @@ export def "subscriptions-providers-microsoft-capacity-applied-reservations GetA
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Capacity/catalogs
 # operationId: GetCatalog
-export def "subscriptions-providers-microsoft-capacity-catalogs GetCatalog" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-capacity-catalogs get" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -432,13 +432,13 @@ export def "subscriptions-providers-microsoft-capacity-catalogs GetCatalog" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Supported version for this document is 2019-04-01
-  --reservedResourceType: string # The type of the resource for which the skus should be provided.
+  --reserved-resource-type: string # The type of the resource for which the skus should be provided.
   --location: string # Filters the skus based on the location specified in this parameter. This can be an azure region or global
 ]: nothing -> table<billingPlans: record, locations: list<string>, name: string, resourceType: string, restrictions: list<record>, skuProperties: list<record>, terms: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "reservedResourceType" $reservedResourceType "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Capacity/catalogs" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "reservedResourceType" $reserved_resource_type "scalar") (serialize-qp "location" $location "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Capacity/catalogs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

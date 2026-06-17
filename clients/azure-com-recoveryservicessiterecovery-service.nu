@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-recovery-services-replication-eligibility-results List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-recovery-services-replication-eligibility-results list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{virtualMachineName}/providers/Microsoft.RecoveryServices/replicationEligibilityResults
 # operationId: ReplicationEligibilityResults_List
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-recovery-services-replication-eligibility-results List" [
-  resourceGroupName: string
-  subscriptionId: string
-  virtualMachineName: string
+export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-recovery-services-replication-eligibility-results list" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Compute/virtualMachines/($virtualMachineName)/providers/Microsoft.RecoveryServices/replicationEligibilityResults" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_machine_name: $virtual_machine_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/virtualMachines/{virtual_machine_name}/providers/Microsoft.RecoveryServices/replicationEligibilityResults") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,10 +120,10 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{virtualMachineName}/providers/Microsoft.RecoveryServices/replicationEligibilityResults/default
 # operationId: ReplicationEligibilityResults_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-recovery-services-replication-eligibility-results-default Get" [
-  resourceGroupName: string
-  subscriptionId: string
-  virtualMachineName: string
+export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-recovery-services-replication-eligibility-results-default get" [
+  subscription_id: string
+  resource_group_name: string
+  virtual_machine_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Compute/virtualMachines/($virtualMachineName)/providers/Microsoft.RecoveryServices/replicationEligibilityResults/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, virtual_machine_name: $virtual_machine_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Compute/virtualMachines/{virtual_machine_name}/providers/Microsoft.RecoveryServices/replicationEligibilityResults/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,9 +147,9 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/operations
 # operationId: Operations_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-operations List" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-operations list" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/operations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,10 +173,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationAlertSettings
 # operationId: ReplicationAlertSettings_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-alert-settings List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-alert-settings list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationAlertSettings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationAlertSettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,11 +200,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationAlertSettings/{alertSettingName}
 # operationId: ReplicationAlertSettings_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-alert-settings Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  alertSettingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-alert-settings get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  alert_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationAlertSettings/($alertSettingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, alert_setting_name: $alert_setting_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationAlertSettings/{alert_setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,11 +229,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationAlertSettings/{alertSettingName}
 # operationId: ReplicationAlertSettings_Create
 # --properties shape: {customEmailAddresses?: list, locale?: string, sendToOwners?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-alert-settings Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  alertSettingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-alert-settings create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  alert_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,8 +249,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationAlertSettings/($alertSettingName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, alert_setting_name: $alert_setting_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationAlertSettings/{alert_setting_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,10 +261,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationEvents
 # operationId: ReplicationEvents_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-events List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-events list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationEvents" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationEvents") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,11 +289,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationEvents/{eventName}
 # operationId: ReplicationEvents_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-events Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  eventName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-events get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  event_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -307,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationEvents/($eventName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, event_name: $event_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationEvents/{event_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -317,10 +317,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics
 # operationId: ReplicationFabrics_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,11 +344,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}
 # operationId: ReplicationFabrics_Purge
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics Purge" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -372,11 +372,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}
 # operationId: ReplicationFabrics_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -401,11 +401,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}
 # operationId: ReplicationFabrics_Create
 # --properties shape: {customDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,8 +421,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -433,11 +433,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/checkConsistency
 # operationId: ReplicationFabrics_CheckConsistency
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-check-consistency CheckConsistency" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-check-consistency check" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/checkConsistency" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/checkConsistency") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -461,11 +461,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/migratetoaad
 # operationId: ReplicationFabrics_MigrateToAad
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-migratetoaad MigrateToAad" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-migratetoaad post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/migratetoaad" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/migratetoaad") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -490,11 +490,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/reassociateGateway
 # operationId: ReplicationFabrics_ReassociateGateway
 # --properties shape: {containerName?: string, sourceProcessServerId?: string, targetProcessServerId?: string, updateType?: string, vmsToMigrate?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-reassociate-gateway ReassociateGateway" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-reassociate-gateway post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,8 +510,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/reassociateGateway" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/reassociateGateway") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -522,11 +522,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/remove
 # operationId: ReplicationFabrics_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-remove Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-remove delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/remove" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/remove") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -551,11 +551,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/renewCertificate
 # operationId: ReplicationFabrics_RenewCertificate
 # --properties shape: {renewCertificateType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-renew-certificate RenewCertificate" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-renew-certificate post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,8 +571,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/renewCertificate" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/renewCertificate") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -583,11 +583,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationLogicalNetworks
 # operationId: ReplicationLogicalNetworks_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-logical-networks ListByReplicationFabrics" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-logical-networks list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationLogicalNetworks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationLogicalNetworks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -611,12 +611,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationLogicalNetworks/{logicalNetworkName}
 # operationId: ReplicationLogicalNetworks_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-logical-networks Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  logicalNetworkName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-logical-networks get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  logical_network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +630,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationLogicalNetworks/($logicalNetworkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, logical_network_name: $logical_network_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationLogicalNetworks/{logical_network_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -640,11 +640,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks
 # operationId: ReplicationNetworks_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks ListByReplicationFabrics" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -658,7 +658,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationNetworks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -668,12 +668,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}
 # operationId: ReplicationNetworks_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  networkName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,7 +687,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationNetworks/($networkName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, network_name: $network_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -697,12 +697,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}/replicationNetworkMappings
 # operationId: ReplicationNetworkMappings_ListByReplicationNetworks
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings ListByReplicationNetworks" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  networkName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  network_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationNetworks/($networkName)/replicationNetworkMappings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, network_name: $network_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -726,13 +726,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}/replicationNetworkMappings/{networkMappingName}
 # operationId: ReplicationNetworkMappings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  networkName: string
-  networkMappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  network_name: string
+  network_mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationNetworks/($networkName)/replicationNetworkMappings/($networkMappingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, network_name: $network_name, network_mapping_name: $network_mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -756,13 +756,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}/replicationNetworkMappings/{networkMappingName}
 # operationId: ReplicationNetworkMappings_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  networkName: string
-  networkMappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  network_name: string
+  network_mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -776,7 +776,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationNetworks/($networkName)/replicationNetworkMappings/($networkMappingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, network_name: $network_name, network_mapping_name: $network_mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -787,13 +787,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}/replicationNetworkMappings/{networkMappingName}
 # operationId: ReplicationNetworkMappings_Update
 # --properties shape: {fabricSpecificDetails?: record, recoveryFabricName?: string, recoveryNetworkId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings Update" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  networkName: string
-  networkMappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  network_name: string
+  network_mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,8 +809,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationNetworks/($networkName)/replicationNetworkMappings/($networkMappingName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, network_name: $network_name, network_mapping_name: $network_mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -822,13 +822,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}/replicationNetworkMappings/{networkMappingName}
 # operationId: ReplicationNetworkMappings_Create
 # --properties shape: {fabricSpecificDetails?: record, recoveryFabricName?: string, recoveryNetworkId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  networkName: string
-  networkMappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  network_name: string
+  network_mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,8 +844,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationNetworks/($networkName)/replicationNetworkMappings/($networkMappingName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, network_name: $network_name, network_mapping_name: $network_mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationNetworks/{network_name}/replicationNetworkMappings/{network_mapping_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -856,11 +856,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers
 # operationId: ReplicationProtectionContainers_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers ListByReplicationFabrics" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,7 +874,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -884,12 +884,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}
 # operationId: ReplicationProtectionContainers_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,7 +903,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -914,12 +914,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}
 # operationId: ReplicationProtectionContainers_Create
 # --properties shape: {providerSpecificInput?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -935,8 +935,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -948,12 +948,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/discoverProtectableItem
 # operationId: ReplicationProtectionContainers_DiscoverProtectableItem
 # --properties shape: {friendlyName?: string, ipAddress?: string, osType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-discover-protectable-item DiscoverProtectableItem" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-discover-protectable-item post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,8 +969,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/discoverProtectableItem" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/discoverProtectableItem") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -981,12 +981,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/remove
 # operationId: ReplicationProtectionContainers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-remove Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-remove delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/remove" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/remove") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1010,12 +1010,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems
 # operationId: ReplicationMigrationItems_ListByReplicationProtectionContainers
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items ListByReplicationProtectionContainers" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationMigrationItems" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1039,13 +1039,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}
 # operationId: ReplicationMigrationItems_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  migrationItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  migration_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,12 +1055,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --deleteOption: string # The delete option.
+  --delete-option: string # The delete option.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "deleteOption" $deleteOption "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationMigrationItems/($migrationItemName)" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "deleteOption" $delete_option "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, migration_item_name: $migration_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1070,13 +1070,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}
 # operationId: ReplicationMigrationItems_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  migrationItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  migration_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1090,7 +1090,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationMigrationItems/($migrationItemName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, migration_item_name: $migration_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1101,13 +1101,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}
 # operationId: ReplicationMigrationItems_Update
 # --properties shape: {providerSpecificDetails: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items Update" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  migrationItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  migration_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1123,8 +1123,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationMigrationItems/($migrationItemName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, migration_item_name: $migration_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1136,13 +1136,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}
 # operationId: ReplicationMigrationItems_Create
 # --properties shape: {policyId: string, providerSpecificDetails: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  migrationItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  migration_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1158,8 +1158,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationMigrationItems/($migrationItemName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, migration_item_name: $migration_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1171,13 +1171,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}/migrate
 # operationId: ReplicationMigrationItems_Migrate
 # --properties shape: {providerSpecificDetails: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-migrate Migrate" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  migrationItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-migrate post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  migration_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,8 +1193,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationMigrationItems/($migrationItemName)/migrate" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, migration_item_name: $migration_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/migrate") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1205,13 +1205,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}/migrationRecoveryPoints
 # operationId: MigrationRecoveryPoints_ListByReplicationMigrationItems
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-migration-recovery-points ListByReplicationMigrationItems" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  migrationItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-migration-recovery-points list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  migration_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,7 +1225,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationMigrationItems/($migrationItemName)/migrationRecoveryPoints" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, migration_item_name: $migration_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/migrationRecoveryPoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1235,14 +1235,14 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}/migrationRecoveryPoints/{migrationRecoveryPointName}
 # operationId: MigrationRecoveryPoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-migration-recovery-points Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  migrationItemName: string
-  migrationRecoveryPointName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-migration-recovery-points get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  migration_item_name: string
+  migration_recovery_point_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1256,7 +1256,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationMigrationItems/($migrationItemName)/migrationRecoveryPoints/($migrationRecoveryPointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, migration_item_name: $migration_item_name, migration_recovery_point_name: $migration_recovery_point_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/migrationRecoveryPoints/{migration_recovery_point_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1267,13 +1267,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}/testMigrate
 # operationId: ReplicationMigrationItems_TestMigrate
 # --properties shape: {providerSpecificDetails: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-test-migrate TestMigrate" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  migrationItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-test-migrate test" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  migration_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1289,8 +1289,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationMigrationItems/($migrationItemName)/testMigrate" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, migration_item_name: $migration_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/testMigrate") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1302,13 +1302,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}/testMigrateCleanup
 # operationId: ReplicationMigrationItems_TestMigrateCleanup
 # --properties shape: {comments?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-test-migrate-cleanup TestMigrateCleanup" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  migrationItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-test-migrate-cleanup test" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  migration_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,8 +1324,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationMigrationItems/($migrationItemName)/testMigrateCleanup" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, migration_item_name: $migration_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationMigrationItems/{migration_item_name}/testMigrateCleanup") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1336,12 +1336,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectableItems
 # operationId: ReplicationProtectableItems_ListByReplicationProtectionContainers
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protectable-items ListByReplicationProtectionContainers" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protectable-items list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1356,7 +1356,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectableItems" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectableItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1366,13 +1366,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectableItems/{protectableItemName}
 # operationId: ReplicationProtectableItems_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protectable-items Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  protectableItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protectable-items get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  protectable_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1386,7 +1386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectableItems/($protectableItemName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, protectable_item_name: $protectable_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectableItems/{protectable_item_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1396,12 +1396,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems
 # operationId: ReplicationProtectedItems_ListByReplicationProtectionContainers
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items ListByReplicationProtectionContainers" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,7 +1415,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1425,13 +1425,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}
 # operationId: ReplicationProtectedItems_Purge
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items Purge" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1445,7 +1445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1455,13 +1455,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}
 # operationId: ReplicationProtectedItems_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1475,7 +1475,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1486,13 +1486,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}
 # operationId: ReplicationProtectedItems_Update
 # --properties shape: {enableRdpOnTargetOption?: string, licenseType?: "NotSpecified"|"NoLicenseType"|"WindowsServer", providerSpecificDetails?: record, recoveryAvailabilitySetId?: string, recoveryAzureVMName?: string, recoveryAzureVMSize?: string, selectedRecoveryAzureNetworkId?: string, selectedSourceNicId?: string, selectedTfoAzureNetworkId?: string, vmNics?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items Update" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1508,8 +1508,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1521,13 +1521,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}
 # operationId: ReplicationProtectedItems_Create
 # --properties shape: {policyId?: string, protectableItemId?: string, providerSpecificDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1543,8 +1543,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1556,13 +1556,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/ResolveHealthErrors
 # operationId: ReplicationProtectedItems_ResolveHealthErrors
 # --properties shape: {healthErrors?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-resolve-health-errors ResolveHealthErrors" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-resolve-health-errors post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1578,8 +1578,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/ResolveHealthErrors" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/ResolveHealthErrors") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1591,13 +1591,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/addDisks
 # operationId: ReplicationProtectedItems_AddDisks
 # --properties shape: {providerSpecificDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-add-disks AddDisks" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-add-disks create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1613,8 +1613,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/addDisks" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/addDisks") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1626,13 +1626,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/applyRecoveryPoint
 # operationId: ReplicationProtectedItems_ApplyRecoveryPoint
 # --properties shape: {providerSpecificDetails?: record, recoveryPointId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-apply-recovery-point ApplyRecoveryPoint" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-apply-recovery-point post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1648,8 +1648,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/applyRecoveryPoint" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/applyRecoveryPoint") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1660,13 +1660,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/failoverCommit
 # operationId: ReplicationProtectedItems_FailoverCommit
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-failover-commit FailoverCommit" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-failover-commit commit" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,7 +1680,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/failoverCommit" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/failoverCommit") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1691,13 +1691,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/plannedFailover
 # operationId: ReplicationProtectedItems_PlannedFailover
 # --properties shape: {failoverDirection?: string, providerSpecificDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-planned-failover PlannedFailover" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-planned-failover post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1713,8 +1713,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/plannedFailover" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/plannedFailover") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1726,13 +1726,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/reProtect
 # operationId: ReplicationProtectedItems_Reprotect
 # --properties shape: {failoverDirection?: string, providerSpecificDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-re-protect Reprotect" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-re-protect post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1748,8 +1748,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/reProtect" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/reProtect") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1760,13 +1760,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/recoveryPoints
 # operationId: RecoveryPoints_ListByReplicationProtectedItems
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-recovery-points ListByReplicationProtectedItems" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-recovery-points list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1780,7 +1780,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/recoveryPoints" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/recoveryPoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1790,14 +1790,14 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/recoveryPoints/{recoveryPointName}
 # operationId: RecoveryPoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-recovery-points Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
-  recoveryPointName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-recovery-points get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
+  recovery_point_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1811,7 +1811,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/recoveryPoints/($recoveryPointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name, recovery_point_name: $recovery_point_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/recoveryPoints/{recovery_point_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1822,13 +1822,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/remove
 # operationId: ReplicationProtectedItems_Delete
 # --properties shape: {disableProtectionReason?: "NotSpecified"|"MigrationComplete", replicationProviderInput?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-remove Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-remove delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,8 +1844,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/remove" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/remove") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1857,13 +1857,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/removeDisks
 # operationId: ReplicationProtectedItems_RemoveDisks
 # --properties shape: {providerSpecificDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-remove-disks RemoveDisks" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-remove-disks delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1879,8 +1879,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/removeDisks" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/removeDisks") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1891,13 +1891,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/repairReplication
 # operationId: ReplicationProtectedItems_RepairReplication
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-repair-replication RepairReplication" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-repair-replication post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1911,7 +1911,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/repairReplication" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/repairReplication") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1921,13 +1921,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/targetComputeSizes
 # operationId: TargetComputeSizes_ListByReplicationProtectedItems
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-target-compute-sizes ListByReplicationProtectedItems" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-target-compute-sizes list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1941,7 +1941,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/targetComputeSizes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/targetComputeSizes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1952,13 +1952,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/testFailover
 # operationId: ReplicationProtectedItems_TestFailover
 # --properties shape: {failoverDirection?: string, networkId?: string, networkType?: string, providerSpecificDetails?: record, skipTestFailoverCleanup?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-test-failover TestFailover" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-test-failover test" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1974,8 +1974,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/testFailover" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/testFailover") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1987,13 +1987,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/testFailoverCleanup
 # operationId: ReplicationProtectedItems_TestFailoverCleanup
 # --properties shape: {comments?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-test-failover-cleanup TestFailoverCleanup" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-test-failover-cleanup test" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2009,8 +2009,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/testFailoverCleanup" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/testFailoverCleanup") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2022,13 +2022,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/unplannedFailover
 # operationId: ReplicationProtectedItems_UnplannedFailover
 # --properties shape: {failoverDirection?: string, providerSpecificDetails?: record, sourceSiteOperations?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-unplanned-failover UnplannedFailover" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicatedProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-unplanned-failover post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replicated_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2044,8 +2044,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicatedProtectedItemName)/unplannedFailover" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replicated_protected_item_name: $replicated_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replicated_protected_item_name}/unplannedFailover") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2057,13 +2057,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicationProtectedItemName}/updateMobilityService
 # operationId: ReplicationProtectedItems_UpdateMobilityService
 # --properties shape: {runAsAccountId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-update-mobility-service UpdateMobilityService" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  replicationProtectedItemName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-update-mobility-service update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  replication_protected_item_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,8 +2079,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectedItems/($replicationProtectedItemName)/updateMobilityService" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, replication_protected_item_name: $replication_protected_item_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectedItems/{replication_protected_item_name}/updateMobilityService") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2091,12 +2091,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings
 # operationId: ReplicationProtectionContainerMappings_ListByReplicationProtectionContainers
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings ListByReplicationProtectionContainers" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2110,7 +2110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectionContainerMappings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2120,13 +2120,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings/{mappingName}
 # operationId: ReplicationProtectionContainerMappings_Purge
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings Purge" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  mappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2140,7 +2140,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectionContainerMappings/($mappingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, mapping_name: $mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2150,13 +2150,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings/{mappingName}
 # operationId: ReplicationProtectionContainerMappings_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  mappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2170,7 +2170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectionContainerMappings/($mappingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, mapping_name: $mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2181,13 +2181,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings/{mappingName}
 # operationId: ReplicationProtectionContainerMappings_Update
 # --properties shape: {providerSpecificInput?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings Update" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  mappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2203,8 +2203,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectionContainerMappings/($mappingName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, mapping_name: $mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2216,13 +2216,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings/{mappingName}
 # operationId: ReplicationProtectionContainerMappings_Create
 # --properties shape: {policyId?: string, providerSpecificInput?: record, targetProtectionContainerId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  mappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2238,8 +2238,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectionContainerMappings/($mappingName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, mapping_name: $mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2251,13 +2251,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings/{mappingName}/remove
 # operationId: ReplicationProtectionContainerMappings_Delete
 # --properties shape: {providerSpecificInput?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings-remove Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
-  mappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings-remove delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
+  mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2273,8 +2273,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/replicationProtectionContainerMappings/($mappingName)/remove" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name, mapping_name: $mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/replicationProtectionContainerMappings/{mapping_name}/remove") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2286,12 +2286,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/switchprotection
 # operationId: ReplicationProtectionContainers_SwitchProtection
 # --properties shape: {providerSpecificDetails?: record, replicationProtectedItemName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-switchprotection SwitchProtection" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  protectionContainerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-switchprotection post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  protection_container_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2307,8 +2307,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationProtectionContainers/($protectionContainerName)/switchprotection" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, protection_container_name: $protection_container_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationProtectionContainers/{protection_container_name}/switchprotection") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2319,11 +2319,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders
 # operationId: ReplicationRecoveryServicesProviders_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers ListByReplicationFabrics" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2337,7 +2337,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationRecoveryServicesProviders" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2347,12 +2347,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders/{providerName}
 # operationId: ReplicationRecoveryServicesProviders_Purge
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers Purge" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  providerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  provider_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2366,7 +2366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationRecoveryServicesProviders/($providerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, provider_name: $provider_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2376,12 +2376,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders/{providerName}
 # operationId: ReplicationRecoveryServicesProviders_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  providerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  provider_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2395,7 +2395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationRecoveryServicesProviders/($providerName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, provider_name: $provider_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2406,12 +2406,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders/{providerName}
 # operationId: ReplicationRecoveryServicesProviders_Create
 # --properties shape: {authenticationIdentityInput: record, machineName: string, resourceAccessIdentityInput: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  providerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  provider_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2427,8 +2427,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationRecoveryServicesProviders/($providerName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, provider_name: $provider_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2439,12 +2439,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders/{providerName}/refreshProvider
 # operationId: ReplicationRecoveryServicesProviders_RefreshProvider
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers-refresh-provider RefreshProvider" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  providerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers-refresh-provider refresh" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  provider_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2458,7 +2458,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationRecoveryServicesProviders/($providerName)/refreshProvider" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, provider_name: $provider_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}/refreshProvider") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2468,12 +2468,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders/{providerName}/remove
 # operationId: ReplicationRecoveryServicesProviders_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers-remove Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  providerName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers-remove delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  provider_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2487,7 +2487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationRecoveryServicesProviders/($providerName)/remove" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, provider_name: $provider_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationRecoveryServicesProviders/{provider_name}/remove") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2497,11 +2497,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications
 # operationId: ReplicationStorageClassifications_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications ListByReplicationFabrics" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2515,7 +2515,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationStorageClassifications" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2525,12 +2525,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications/{storageClassificationName}
 # operationId: ReplicationStorageClassifications_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  storageClassificationName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  storage_classification_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2544,7 +2544,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationStorageClassifications/($storageClassificationName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, storage_classification_name: $storage_classification_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2554,12 +2554,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications/{storageClassificationName}/replicationStorageClassificationMappings
 # operationId: ReplicationStorageClassificationMappings_ListByReplicationStorageClassifications
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings ListByReplicationStorageClassifications" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  storageClassificationName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  storage_classification_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2573,7 +2573,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationStorageClassifications/($storageClassificationName)/replicationStorageClassificationMappings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, storage_classification_name: $storage_classification_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2583,13 +2583,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications/{storageClassificationName}/replicationStorageClassificationMappings/{storageClassificationMappingName}
 # operationId: ReplicationStorageClassificationMappings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  storageClassificationName: string
-  storageClassificationMappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  storage_classification_name: string
+  storage_classification_mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2603,7 +2603,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationStorageClassifications/($storageClassificationName)/replicationStorageClassificationMappings/($storageClassificationMappingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, storage_classification_name: $storage_classification_name, storage_classification_mapping_name: $storage_classification_mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings/{storage_classification_mapping_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2613,13 +2613,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications/{storageClassificationName}/replicationStorageClassificationMappings/{storageClassificationMappingName}
 # operationId: ReplicationStorageClassificationMappings_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  storageClassificationName: string
-  storageClassificationMappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  storage_classification_name: string
+  storage_classification_mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2633,7 +2633,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationStorageClassifications/($storageClassificationName)/replicationStorageClassificationMappings/($storageClassificationMappingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, storage_classification_name: $storage_classification_name, storage_classification_mapping_name: $storage_classification_mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings/{storage_classification_mapping_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2644,13 +2644,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications/{storageClassificationName}/replicationStorageClassificationMappings/{storageClassificationMappingName}
 # operationId: ReplicationStorageClassificationMappings_Create
 # --properties shape: {targetStorageClassificationId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  storageClassificationName: string
-  storageClassificationMappingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  storage_classification_name: string
+  storage_classification_mapping_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2666,8 +2666,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationStorageClassifications/($storageClassificationName)/replicationStorageClassificationMappings/($storageClassificationMappingName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, storage_classification_name: $storage_classification_name, storage_classification_mapping_name: $storage_classification_mapping_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationStorageClassifications/{storage_classification_name}/replicationStorageClassificationMappings/{storage_classification_mapping_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2678,11 +2678,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationvCenters
 # operationId: ReplicationvCenters_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers ListByReplicationFabrics" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers list-by" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2696,7 +2696,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationvCenters" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2706,12 +2706,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationvCenters/{vCenterName}
 # operationId: ReplicationvCenters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  vCenterName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  v_center_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2725,7 +2725,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationvCenters/($vCenterName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, v_center_name: $v_center_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2735,12 +2735,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationvCenters/{vCenterName}
 # operationId: ReplicationvCenters_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  vCenterName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  v_center_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2754,7 +2754,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationvCenters/($vCenterName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, v_center_name: $v_center_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2765,12 +2765,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationvCenters/{vCenterName}
 # operationId: ReplicationvCenters_Update
 # --properties shape: {friendlyName?: string, ipAddress?: string, port?: string, processServerId?: string, runAsAccountId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers Update" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  vCenterName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  v_center_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2786,8 +2786,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationvCenters/($vCenterName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, v_center_name: $v_center_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2799,12 +2799,12 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationvCenters/{vCenterName}
 # operationId: ReplicationvCenters_Create
 # --properties shape: {friendlyName?: string, ipAddress?: string, port?: string, processServerId?: string, runAsAccountId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  fabricName: string
-  vCenterName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  fabric_name: string
+  v_center_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2820,8 +2820,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationFabrics/($fabricName)/replicationvCenters/($vCenterName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, fabric_name: $fabric_name, v_center_name: $v_center_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationFabrics/{fabric_name}/replicationvCenters/{v_center_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2832,10 +2832,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs
 # operationId: ReplicationJobs_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2850,7 +2850,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationJobs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2860,10 +2860,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs/export
 # operationId: ReplicationJobs_Export
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-export Export" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-export export" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2873,18 +2873,18 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --affectedObjectTypes: string # The type of objects.
-  --endTime: string # Date time to get jobs up to.
-  --fabricId: string # The Id of the fabric to search jobs under.
-  --jobStatus: string # The states of the job to be filtered can be in.
-  --startTime: string # Date time to get jobs from.
+  --affected-object-types: string # The type of objects.
+  --end-time: string # Date time to get jobs up to.
+  --fabric-id: string # The Id of the fabric to search jobs under.
+  --job-status: string # The states of the job to be filtered can be in.
+  --start-time: string # Date time to get jobs from.
 ]: any -> record<properties: record<activityId: string, allowedActions: list<string>, customDetails: record<affectedObjectDetails: record, instanceType: string>, endTime: string, errors: list<record>, friendlyName: string, scenarioName: string, startTime: string, state: string, stateDescription: string, targetInstanceType: string, targetObjectId: string, targetObjectName: string, tasks: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationJobs/export" $qp)
-  let body = {affectedObjectTypes: $affectedObjectTypes, endTime: $endTime, fabricId: $fabricId, jobStatus: $jobStatus, startTime: $startTime} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/export") $qp)
+  let body = {"affectedObjectTypes": $affected_object_types, "endTime": $end_time, "fabricId": $fabric_id, "jobStatus": $job_status, "startTime": $start_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2895,11 +2895,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs/{jobName}
 # operationId: ReplicationJobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2913,7 +2913,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationJobs/($jobName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, job_name: $job_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2923,11 +2923,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs/{jobName}/cancel
 # operationId: ReplicationJobs_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-cancel Cancel" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-cancel cancel" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2941,7 +2941,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationJobs/($jobName)/cancel" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, job_name: $job_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}/cancel") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2951,11 +2951,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs/{jobName}/restart
 # operationId: ReplicationJobs_Restart
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-restart Restart" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-restart restart" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2969,7 +2969,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationJobs/($jobName)/restart" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, job_name: $job_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}/restart") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2980,11 +2980,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs/{jobName}/resume
 # operationId: ReplicationJobs_Resume
 # --properties shape: {comments?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-resume Resume" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-resume post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3000,8 +3000,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationJobs/($jobName)/resume" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, job_name: $job_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationJobs/{job_name}/resume") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3012,10 +3012,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationMigrationItems
 # operationId: ReplicationMigrationItems_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-migration-items List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-migration-items list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3025,13 +3025,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --skipToken: string # The pagination token.
+  --skip-token: string # The pagination token.
   --filter: string # OData filter options.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "skipToken" $skipToken "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationMigrationItems" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "skipToken" $skip_token "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationMigrationItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3041,10 +3041,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationNetworkMappings
 # operationId: ReplicationNetworkMappings_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-network-mappings List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-network-mappings list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3058,7 +3058,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationNetworkMappings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationNetworkMappings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3068,10 +3068,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationNetworks
 # operationId: ReplicationNetworks_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-networks List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-networks list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3085,7 +3085,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationNetworks" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationNetworks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3095,10 +3095,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationPolicies
 # operationId: ReplicationPolicies_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3112,7 +3112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationPolicies" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3122,11 +3122,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationPolicies/{policyName}
 # operationId: ReplicationPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  policyName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3140,7 +3140,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationPolicies/($policyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, policy_name: $policy_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3150,11 +3150,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationPolicies/{policyName}
 # operationId: ReplicationPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  policyName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3168,7 +3168,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationPolicies/($policyName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, policy_name: $policy_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3179,11 +3179,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationPolicies/{policyName}
 # operationId: ReplicationPolicies_Update
 # --properties shape: {replicationProviderSettings?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies Update" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  policyName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3199,8 +3199,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationPolicies/($policyName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, policy_name: $policy_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3212,11 +3212,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationPolicies/{policyName}
 # operationId: ReplicationPolicies_Create
 # --properties shape: {providerSpecificInput?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  policyName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3232,8 +3232,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationPolicies/($policyName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, policy_name: $policy_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationPolicies/{policy_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3244,10 +3244,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationProtectedItems
 # operationId: ReplicationProtectedItems_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-protected-items List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-protected-items list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3257,13 +3257,13 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --skipToken: string # The pagination token. Possible values: "FabricId" or "FabricId_CloudId" or null
+  --skip-token: string # The pagination token. Possible values: "FabricId" or "FabricId_CloudId" or null
   --filter: string # OData filter options.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "skipToken" $skipToken "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationProtectedItems" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "skipToken" $skip_token "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationProtectedItems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3273,10 +3273,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationProtectionContainerMappings
 # operationId: ReplicationProtectionContainerMappings_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-protection-container-mappings List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-protection-container-mappings list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3290,7 +3290,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationProtectionContainerMappings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationProtectionContainerMappings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3300,10 +3300,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationProtectionContainers
 # operationId: ReplicationProtectionContainers_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-protection-containers List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-protection-containers list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3317,7 +3317,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationProtectionContainers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationProtectionContainers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3327,10 +3327,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans
 # operationId: ReplicationRecoveryPlans_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3344,7 +3344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3354,11 +3354,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}
 # operationId: ReplicationRecoveryPlans_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans Delete" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  recoveryPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  recovery_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3372,7 +3372,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans/($recoveryPlanName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, recovery_plan_name: $recovery_plan_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3382,11 +3382,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}
 # operationId: ReplicationRecoveryPlans_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  recoveryPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  recovery_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3400,7 +3400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans/($recoveryPlanName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, recovery_plan_name: $recovery_plan_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3411,11 +3411,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}
 # operationId: ReplicationRecoveryPlans_Update
 # --properties shape: {groups?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans Update" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  recoveryPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  recovery_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3431,8 +3431,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans/($recoveryPlanName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, recovery_plan_name: $recovery_plan_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3444,11 +3444,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}
 # operationId: ReplicationRecoveryPlans_Create
 # --properties shape: {failoverDeploymentModel?: "NotApplicable"|"Classic"|"ResourceManager", groups: list, primaryFabricId: string, recoveryFabricId: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  recoveryPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  recovery_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3464,8 +3464,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans/($recoveryPlanName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, recovery_plan_name: $recovery_plan_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3476,11 +3476,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/failoverCommit
 # operationId: ReplicationRecoveryPlans_FailoverCommit
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-failover-commit FailoverCommit" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  recoveryPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-failover-commit commit" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  recovery_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3494,7 +3494,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans/($recoveryPlanName)/failoverCommit" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, recovery_plan_name: $recovery_plan_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/failoverCommit") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3505,11 +3505,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/plannedFailover
 # operationId: ReplicationRecoveryPlans_PlannedFailover
 # --properties shape: {failoverDirection: "PrimaryToRecovery"|"RecoveryToPrimary", providerSpecificDetails?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-planned-failover PlannedFailover" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  recoveryPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-planned-failover post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  recovery_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3525,8 +3525,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans/($recoveryPlanName)/plannedFailover" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, recovery_plan_name: $recovery_plan_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/plannedFailover") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3537,11 +3537,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/reProtect
 # operationId: ReplicationRecoveryPlans_Reprotect
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-re-protect Reprotect" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  recoveryPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-re-protect post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  recovery_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3555,7 +3555,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans/($recoveryPlanName)/reProtect" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, recovery_plan_name: $recovery_plan_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/reProtect") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3566,11 +3566,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/testFailover
 # operationId: ReplicationRecoveryPlans_TestFailover
 # --properties shape: {failoverDirection: "PrimaryToRecovery"|"RecoveryToPrimary", networkId?: string, networkType: string, providerSpecificDetails?: list, skipTestFailoverCleanup?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-test-failover TestFailover" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  recoveryPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-test-failover test" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  recovery_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3586,8 +3586,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans/($recoveryPlanName)/testFailover" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, recovery_plan_name: $recovery_plan_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/testFailover") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3599,11 +3599,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/testFailoverCleanup
 # operationId: ReplicationRecoveryPlans_TestFailoverCleanup
 # --properties shape: {comments?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-test-failover-cleanup TestFailoverCleanup" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  recoveryPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-test-failover-cleanup test" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  recovery_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3619,8 +3619,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans/($recoveryPlanName)/testFailoverCleanup" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, recovery_plan_name: $recovery_plan_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/testFailoverCleanup") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3632,11 +3632,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/unplannedFailover
 # operationId: ReplicationRecoveryPlans_UnplannedFailover
 # --properties shape: {failoverDirection: "PrimaryToRecovery"|"RecoveryToPrimary", providerSpecificDetails?: list, sourceSiteOperations: "Required"|"NotRequired"}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-unplanned-failover UnplannedFailover" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  recoveryPlanName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-unplanned-failover post" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  recovery_plan_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3652,8 +3652,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryPlans/($recoveryPlanName)/unplannedFailover" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, recovery_plan_name: $recovery_plan_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryPlans/{recovery_plan_name}/unplannedFailover") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3664,10 +3664,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryServicesProviders
 # operationId: ReplicationRecoveryServicesProviders_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-services-providers List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-services-providers list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3681,7 +3681,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationRecoveryServicesProviders" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationRecoveryServicesProviders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3691,10 +3691,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationStorageClassificationMappings
 # operationId: ReplicationStorageClassificationMappings_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-storage-classification-mappings List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-storage-classification-mappings list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3708,7 +3708,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationStorageClassificationMappings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationStorageClassificationMappings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3718,10 +3718,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationStorageClassifications
 # operationId: ReplicationStorageClassifications_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-storage-classifications List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-storage-classifications list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3735,7 +3735,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationStorageClassifications" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationStorageClassifications") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3745,10 +3745,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationSupportedOperatingSystems
 # operationId: SupportedOperatingSystems_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-supported-operating-systems Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-supported-operating-systems get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3762,7 +3762,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationSupportedOperatingSystems" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationSupportedOperatingSystems") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3772,10 +3772,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationVaultHealth
 # operationId: ReplicationVaultHealth_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-health Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-health get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3789,7 +3789,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationVaultHealth" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultHealth") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3799,10 +3799,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationVaultHealth/default/refresh
 # operationId: ReplicationVaultHealth_Refresh
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-health-default-refresh Refresh" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-health-default-refresh refresh" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3816,7 +3816,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationVaultHealth/default/refresh" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultHealth/default/refresh") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3826,10 +3826,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationVaultSettings
 # operationId: ReplicationVaultSetting_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-settings List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-settings list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3843,7 +3843,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationVaultSettings" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultSettings") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3853,11 +3853,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationVaultSettings/{vaultSettingName}
 # operationId: ReplicationVaultSetting_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-settings Get" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  vaultSettingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-settings get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  vault_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3871,7 +3871,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationVaultSettings/($vaultSettingName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, vault_setting_name: $vault_setting_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultSettings/{vault_setting_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3882,11 +3882,11 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationVaultSettings/{vaultSettingName}
 # operationId: ReplicationVaultSetting_Create
 # --properties shape: {migrationSolutionId: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-settings Create" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
-  vaultSettingName: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-settings create" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  vault_setting_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3902,8 +3902,8 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationVaultSettings/($vaultSettingName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, vault_setting_name: $vault_setting_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationVaultSettings/{vault_setting_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3914,10 +3914,10 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationvCenters
 # operationId: ReplicationvCenters_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replicationv-centers List" [
-  resourceName: string
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replicationv-centers list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3931,7 +3931,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/Subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.RecoveryServices/vaults/($resourceName)/replicationvCenters" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/Subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.RecoveryServices/vaults/{resource_name}/replicationvCenters") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

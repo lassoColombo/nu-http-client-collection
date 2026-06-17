@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-maintenance-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-maintenance-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Maintenance/operations
 # operationId: Operations_List
-export def "providers-microsoft-maintenance-operations List" [
+export def "providers-microsoft-maintenance-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,8 +117,8 @@ export def "providers-microsoft-maintenance-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Maintenance/maintenanceConfigurations
 # operationId: MaintenanceConfigurations_List
-export def "subscriptions-providers-microsoft-maintenance-maintenance-configurations List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-maintenance-maintenance-configurations list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -132,7 +132,7 @@ export def "subscriptions-providers-microsoft-maintenance-maintenance-configurat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Maintenance/maintenanceConfigurations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Maintenance/maintenanceConfigurations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,10 +142,10 @@ export def "subscriptions-providers-microsoft-maintenance-maintenance-configurat
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resourceName}
 # operationId: MaintenanceConfigurations_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Maintenance/maintenanceConfigurations/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,10 +169,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resourceName}
 # operationId: MaintenanceConfigurations_Get
-export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Maintenance/maintenanceConfigurations/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -197,10 +197,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resourceName}
 # operationId: MaintenanceConfigurations_Update
 # --properties shape: {extensionProperties?: record, maintenanceScope?: "All"|"Host"|"Resource"|"InResource", namespace?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,8 +218,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Maintenance/maintenanceConfigurations/($resourceName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resource_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -231,10 +231,10 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resourceName}
 # operationId: MaintenanceConfigurations_CreateOrUpdate
 # --properties shape: {extensionProperties?: record, maintenanceScope?: "All"|"Host"|"Resource"|"InResource", namespace?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-microsoft-maintenance-maintenance-configurations create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,8 +252,8 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/Microsoft.Maintenance/maintenanceConfigurations/($resourceName)" $qp)
-  let body = {location: $location, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/Microsoft.Maintenance/maintenanceConfigurations/{resource_name}") $qp)
+  let body = {"location": $location, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -264,14 +264,14 @@ export def "subscriptions-resourcegroups-providers-microsoft-maintenance-mainten
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/applyUpdates/default
 # operationId: ApplyUpdates_CreateOrUpdateParent
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates-default CreateOrUpdateParent" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceParentType: string
-  resourceParentName: string
-  resourceType: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates-default create-or-update-parent" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_parent_type: string
+  resource_parent_name: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceParentType)/($resourceParentName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/applyUpdates/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_parent_type: $resource_parent_type, resource_parent_name: $resource_parent_name, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/applyUpdates/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -295,15 +295,15 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/applyUpdates/{applyUpdateName}
 # operationId: ApplyUpdates_GetParent
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates GetParent" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceParentType: string
-  resourceParentName: string
-  providerName: string
-  resourceType: string
-  resourceName: string
-  applyUpdateName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates get-parent" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_parent_type: string
+  resource_parent_name: string
+  resource_type: string
+  resource_name: string
+  apply_update_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceParentType)/($resourceParentName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/applyUpdates/($applyUpdateName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_parent_type: $resource_parent_type, resource_parent_name: $resource_parent_name, resource_type: $resource_type, resource_name: $resource_name, apply_update_name: $apply_update_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/applyUpdates/{apply_update_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -327,14 +327,14 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments
 # operationId: ConfigurationAssignments_ListParent
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments ListParent" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceParentType: string
-  resourceParentName: string
-  resourceType: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments list-parent" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_parent_type: string
+  resource_parent_name: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceParentType)/($resourceParentName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/configurationAssignments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_parent_type: $resource_parent_type, resource_parent_name: $resource_parent_name, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -358,15 +358,15 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments/{configurationAssignmentName}
 # operationId: ConfigurationAssignments_DeleteParent
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments DeleteParent" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceParentType: string
-  resourceParentName: string
-  resourceType: string
-  resourceName: string
-  configurationAssignmentName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments delete-parent" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_parent_type: string
+  resource_parent_name: string
+  resource_type: string
+  resource_name: string
+  configuration_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceParentType)/($resourceParentName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/configurationAssignments/($configurationAssignmentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_parent_type: $resource_parent_type, resource_parent_name: $resource_parent_name, resource_type: $resource_type, resource_name: $resource_name, configuration_assignment_name: $configuration_assignment_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments/{configuration_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,15 +391,15 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments/{configurationAssignmentName}
 # operationId: ConfigurationAssignments_CreateOrUpdateParent
 # --properties shape: {maintenanceConfigurationId?: string, resourceId?: string}
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments CreateOrUpdateParent" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceParentType: string
-  resourceParentName: string
-  resourceType: string
-  resourceName: string
-  configurationAssignmentName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments create-or-update-parent" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_parent_type: string
+  resource_parent_name: string
+  resource_type: string
+  resource_name: string
+  configuration_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,8 +416,8 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceParentType)/($resourceParentName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/configurationAssignments/($configurationAssignmentName)" $qp)
-  let body = {location: $location, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_parent_type: $resource_parent_type, resource_parent_name: $resource_parent_name, resource_type: $resource_type, resource_name: $resource_name, configuration_assignment_name: $configuration_assignment_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments/{configuration_assignment_name}") $qp)
+  let body = {"location": $location, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -428,14 +428,14 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceParentType}/{resourceParentName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/updates
 # operationId: Updates_ListParent
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-updates ListParent" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceParentType: string
-  resourceParentName: string
-  resourceType: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-updates list-parent" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_parent_type: string
+  resource_parent_name: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,7 +449,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceParentType)/($resourceParentName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/updates" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_parent_type: $resource_parent_type, resource_parent_name: $resource_parent_name, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_parent_type}/{resource_parent_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/updates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -459,12 +459,12 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/applyUpdates/default
 # operationId: ApplyUpdates_CreateOrUpdate
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates-default CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceType: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates-default create-or" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,7 +478,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/applyUpdates/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/applyUpdates/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -488,13 +488,13 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/applyUpdates/{applyUpdateName}
 # operationId: ApplyUpdates_Get
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceType: string
-  resourceName: string
-  applyUpdateName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-apply-updates get" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_type: string
+  resource_name: string
+  apply_update_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/applyUpdates/($applyUpdateName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_type: $resource_type, resource_name: $resource_name, apply_update_name: $apply_update_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/applyUpdates/{apply_update_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -518,12 +518,12 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments
 # operationId: ConfigurationAssignments_List
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments List" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceType: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments list" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/configurationAssignments" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,13 +547,13 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments/{configurationAssignmentName}
 # operationId: ConfigurationAssignments_Delete
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceType: string
-  resourceName: string
-  configurationAssignmentName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments delete" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_type: string
+  resource_name: string
+  configuration_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -567,7 +567,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/configurationAssignments/($configurationAssignmentName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_type: $resource_type, resource_name: $resource_name, configuration_assignment_name: $configuration_assignment_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments/{configuration_assignment_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -578,13 +578,13 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/configurationAssignments/{configurationAssignmentName}
 # operationId: ConfigurationAssignments_CreateOrUpdate
 # --properties shape: {maintenanceConfigurationId?: string, resourceId?: string}
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceType: string
-  resourceName: string
-  configurationAssignmentName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-configuration-assignments create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_type: string
+  resource_name: string
+  configuration_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,8 +601,8 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/configurationAssignments/($configurationAssignmentName)" $qp)
-  let body = {location: $location, properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_type: $resource_type, resource_name: $resource_name, configuration_assignment_name: $configuration_assignment_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/configurationAssignments/{configuration_assignment_name}") $qp)
+  let body = {"location": $location, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -613,12 +613,12 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{providerName}/{resourceType}/{resourceName}/providers/Microsoft.Maintenance/updates
 # operationId: Updates_List
-export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-updates List" [
-  subscriptionId: string
-  resourceGroupName: string
-  providerName: string
-  resourceType: string
-  resourceName: string
+export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenance-updates list" [
+  subscription_id: string
+  resource_group_name: string
+  provider_name: string
+  resource_type: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-maintenan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourcegroups/($resourceGroupName)/providers/($providerName)/($resourceType)/($resourceName)/providers/Microsoft.Maintenance/updates" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, provider_name: $provider_name, resource_type: $resource_type, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourcegroups/{resource_group_name}/providers/{provider_name}/{resource_type}/{resource_name}/providers/Microsoft.Maintenance/updates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

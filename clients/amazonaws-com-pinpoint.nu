@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps CreateApp" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 # POST /v1/apps
 # operationId: CreateApp
 # --CreateApplicationRequest shape: {Name?: any, tags?: any}
-export def "apps CreateApp" [
+export def "apps create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,22 +103,22 @@ export def "apps CreateApp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  CreateApplicationRequest: record # Specifies the display name of an application and the tags to associate with the application. — shape: {Name?: any, tags?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  create_application_request: record # Specifies the display name of an application and the tags to associate with the application. — shape: {Name?: any, tags?: any}
 ]: any -> record<ApplicationResponse: record<Arn: record, Id: record, Name: record, tags: record, CreationDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/apps")
-  let body = {CreateApplicationRequest: $CreateApplicationRequest} | compact
+  let body = {"CreateApplicationRequest": $create_application_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -129,7 +129,7 @@ export def "apps CreateApp" [
 #
 # GET /v1/apps
 # operationId: GetApps
-export def "apps GetApps" [
+export def "apps list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,19 +140,19 @@ export def "apps GetApps" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ApplicationsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/apps" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -164,7 +164,7 @@ export def "apps GetApps" [
 # POST /v1/apps/{application-id}/campaigns
 # operationId: CreateCampaign
 # --WriteCampaignRequest shape: {AdditionalTreatments?: any, CustomDeliveryConfiguration?: any, Description?: any, HoldoutPercent?: any, Hook?: any, IsPaused?: any, Limits?: any, MessageConfiguration?: any, Name?: any, Schedule?: any, SegmentId?: any, SegmentVersion?: any, tags?: any, TemplateConfiguration?: any, TreatmentDescription?: any, TreatmentName?: any, Priority?: any}
-export def "apps-campaigns CreateCampaign" [
+export def "apps-campaigns create" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,22 +174,22 @@ export def "apps-campaigns CreateCampaign" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  WriteCampaignRequest: record # Specifies the configuration and other settings for a campaign. — shape: {AdditionalTreatments?: any, CustomDeliveryConfiguration?: any, Description?: any, HoldoutPercent?: any, Hook?: any, IsPaused?: any, Limits?: any, MessageConfiguration?: any, Name?: any, Schedule?: any, SegmentId?: any, SegmentVersion?: any, tags?: any, TemplateConfiguration?: any, TreatmentDescription?: any, TreatmentName?: any, Priority?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  write_campaign_request: record # Specifies the configuration and other settings for a campaign. — shape: {AdditionalTreatments?: any, CustomDeliveryConfiguration?: any, Description?: any, HoldoutPercent?: any, Hook?: any, IsPaused?: any, Limits?: any, MessageConfiguration?: any, Name?: any, Schedule?: any, SegmentId?: any, SegmentVersion?: any, tags?: any, TemplateConfiguration?: any, TreatmentDescription?: any, TreatmentName?: any, Priority?: any}
 ]: any -> record<CampaignResponse: record<AdditionalTreatments: record, ApplicationId: record, Arn: record, CreationDate: record, CustomDeliveryConfiguration: record<DeliveryUri: record, EndpointTypes: record>, DefaultState: record<CampaignStatus: record>, Description: record, HoldoutPercent: record, Hook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, Id: record, IsPaused: record, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, MessageConfiguration: record<ADMMessage: record, APNSMessage: record, BaiduMessage: record, CustomMessage: record, DefaultMessage: record, EmailMessage: record, GCMMessage: record, SMSMessage: record, InAppMessage: record>, Name: record, Schedule: record<EndTime: record, EventFilter: record, Frequency: record, IsLocalTime: record, QuietTime: record, StartTime: record, Timezone: record>, SegmentId: record, SegmentVersion: record, State: record<CampaignStatus: record>, tags: record, TemplateConfiguration: record<EmailTemplate: record, PushTemplate: record, SMSTemplate: record, VoiceTemplate: record>, TreatmentDescription: record, TreatmentName: record, Version: record, Priority: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/campaigns")
-  let body = {WriteCampaignRequest: $WriteCampaignRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/campaigns"))
+  let body = {"WriteCampaignRequest": $write_campaign_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,7 +200,7 @@ export def "apps-campaigns CreateCampaign" [
 #
 # GET /v1/apps/{application-id}/campaigns
 # operationId: GetCampaigns
-export def "apps-campaigns GetCampaigns" [
+export def "apps-campaigns list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,19 +212,19 @@ export def "apps-campaigns GetCampaigns" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<CampaignsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/campaigns" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/campaigns") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -236,7 +236,7 @@ export def "apps-campaigns GetCampaigns" [
 # POST /v1/templates/{template-name}/email
 # operationId: CreateEmailTemplate
 # --EmailTemplateRequest shape: {DefaultSubstitutions?: any, HtmlPart?: any, RecommenderId?: any, Subject?: any, tags?: any, TemplateDescription?: any, TextPart?: any}
-export def "templates-email CreateEmailTemplate" [
+export def "templates-email create" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,22 +246,22 @@ export def "templates-email CreateEmailTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  EmailTemplateRequest: record # Specifies the content and settings for a message template that can be used in messages that are sent through the email channel. — shape: {DefaultSubstitutions?: any, HtmlPart?: any, RecommenderId?: any, Subject?: any, tags?: any, TemplateDescription?: any, TextPart?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  email_template_request: record # Specifies the content and settings for a message template that can be used in messages that are sent through the email channel. — shape: {DefaultSubstitutions?: any, HtmlPart?: any, RecommenderId?: any, Subject?: any, tags?: any, TemplateDescription?: any, TextPart?: any}
 ]: any -> record<CreateTemplateMessageBody: record<Arn: record, Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/templates/($template_name)/email")
-  let body = {EmailTemplateRequest: $EmailTemplateRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/email"))
+  let body = {"EmailTemplateRequest": $email_template_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -272,7 +272,7 @@ export def "templates-email CreateEmailTemplate" [
 #
 # DELETE /v1/templates/{template-name}/email
 # operationId: DeleteEmailTemplate
-export def "templates-email DeleteEmailTemplate" [
+export def "templates-email delete" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -283,19 +283,19 @@ export def "templates-email DeleteEmailTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<MessageBody: record<Message: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/email" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/email") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -306,7 +306,7 @@ export def "templates-email DeleteEmailTemplate" [
 #
 # GET /v1/templates/{template-name}/email
 # operationId: GetEmailTemplate
-export def "templates-email GetEmailTemplate" [
+export def "templates-email get" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,19 +317,19 @@ export def "templates-email GetEmailTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EmailTemplateResponse: record<Arn: record, CreationDate: record, DefaultSubstitutions: record, HtmlPart: record, LastModifiedDate: record, RecommenderId: record, Subject: record, tags: record, TemplateDescription: record, TemplateName: record, TemplateType: record, TextPart: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/email" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/email") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -341,7 +341,7 @@ export def "templates-email GetEmailTemplate" [
 # PUT /v1/templates/{template-name}/email
 # operationId: UpdateEmailTemplate
 # --EmailTemplateRequest shape: {DefaultSubstitutions?: any, HtmlPart?: any, RecommenderId?: any, Subject?: any, tags?: any, TemplateDescription?: any, TextPart?: any}
-export def "templates-email UpdateEmailTemplate" [
+export def "templates-email update" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,23 +353,23 @@ export def "templates-email UpdateEmailTemplate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --create-new-version: oneof<nothing, bool> # <p>Specifies whether to save the updates as a new version of the message template. Valid values are: true, save the updates as a new version; and, false, save the updates to (overwrite) the latest existing version of the template.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint saves the updates to (overwrites) the latest existing version of the template. If you specify a value of true for this parameter, don't specify a value for the version parameter. Otherwise, an error will occur.</p>
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  EmailTemplateRequest: record # Specifies the content and settings for a message template that can be used in messages that are sent through the email channel. — shape: {DefaultSubstitutions?: any, HtmlPart?: any, RecommenderId?: any, Subject?: any, tags?: any, TemplateDescription?: any, TextPart?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  email_template_request: record # Specifies the content and settings for a message template that can be used in messages that are sent through the email channel. — shape: {DefaultSubstitutions?: any, HtmlPart?: any, RecommenderId?: any, Subject?: any, tags?: any, TemplateDescription?: any, TextPart?: any}
 ]: any -> record<MessageBody: record<Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "create-new-version" $create_new_version "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/email" $qp)
-  let body = {EmailTemplateRequest: $EmailTemplateRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/email") $qp)
+  let body = {"EmailTemplateRequest": $email_template_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,7 +381,7 @@ export def "templates-email UpdateEmailTemplate" [
 # POST /v1/apps/{application-id}/jobs/export
 # operationId: CreateExportJob
 # --ExportJobRequest shape: {RoleArn?: any, S3UrlPrefix?: any, SegmentId?: any, SegmentVersion?: any}
-export def "apps-jobs-export CreateExportJob" [
+export def "apps-jobs-export create" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,22 +391,22 @@ export def "apps-jobs-export CreateExportJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ExportJobRequest: record # Specifies the settings for a job that exports endpoint definitions to an Amazon Simple Storage Service (Amazon S3) bucket. — shape: {RoleArn?: any, S3UrlPrefix?: any, SegmentId?: any, SegmentVersion?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  export_job_request: record # Specifies the settings for a job that exports endpoint definitions to an Amazon Simple Storage Service (Amazon S3) bucket. — shape: {RoleArn?: any, S3UrlPrefix?: any, SegmentId?: any, SegmentVersion?: any}
 ]: any -> record<ExportJobResponse: record<ApplicationId: record, CompletedPieces: record, CompletionDate: record, CreationDate: record, Definition: record<RoleArn: record, S3UrlPrefix: record, SegmentId: record, SegmentVersion: record>, FailedPieces: record, Failures: record, Id: record, JobStatus: record, TotalFailures: record, TotalPieces: record, TotalProcessed: record, Type: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/jobs/export")
-  let body = {ExportJobRequest: $ExportJobRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/jobs/export"))
+  let body = {"ExportJobRequest": $export_job_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -417,7 +417,7 @@ export def "apps-jobs-export CreateExportJob" [
 #
 # GET /v1/apps/{application-id}/jobs/export
 # operationId: GetExportJobs
-export def "apps-jobs-export GetExportJobs" [
+export def "apps-jobs-export list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,19 +429,19 @@ export def "apps-jobs-export GetExportJobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ExportJobsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/jobs/export" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/jobs/export") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -453,7 +453,7 @@ export def "apps-jobs-export GetExportJobs" [
 # POST /v1/apps/{application-id}/jobs/import
 # operationId: CreateImportJob
 # --ImportJobRequest shape: {DefineSegment?: any, ExternalId?: any, Format?: any, RegisterEndpoints?: any, RoleArn?: any, S3Url?: any, SegmentId?: any, SegmentName?: any}
-export def "apps-jobs-import CreateImportJob" [
+export def "apps-jobs-import create" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -463,22 +463,22 @@ export def "apps-jobs-import CreateImportJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ImportJobRequest: record # Specifies the settings for a job that imports endpoint definitions from an Amazon Simple Storage Service (Amazon S3) bucket. — shape: {DefineSegment?: any, ExternalId?: any, Format?: any, RegisterEndpoints?: any, RoleArn?: any, S3Url?: any, SegmentId?: any, SegmentName?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  import_job_request: record # Specifies the settings for a job that imports endpoint definitions from an Amazon Simple Storage Service (Amazon S3) bucket. — shape: {DefineSegment?: any, ExternalId?: any, Format?: any, RegisterEndpoints?: any, RoleArn?: any, S3Url?: any, SegmentId?: any, SegmentName?: any}
 ]: any -> record<ImportJobResponse: record<ApplicationId: record, CompletedPieces: record, CompletionDate: record, CreationDate: record, Definition: record<DefineSegment: record, ExternalId: record, Format: record, RegisterEndpoints: record, RoleArn: record, S3Url: record, SegmentId: record, SegmentName: record>, FailedPieces: record, Failures: record, Id: record, JobStatus: record, TotalFailures: record, TotalPieces: record, TotalProcessed: record, Type: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/jobs/import")
-  let body = {ImportJobRequest: $ImportJobRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/jobs/import"))
+  let body = {"ImportJobRequest": $import_job_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -489,7 +489,7 @@ export def "apps-jobs-import CreateImportJob" [
 #
 # GET /v1/apps/{application-id}/jobs/import
 # operationId: GetImportJobs
-export def "apps-jobs-import GetImportJobs" [
+export def "apps-jobs-import list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -501,19 +501,19 @@ export def "apps-jobs-import GetImportJobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ImportJobsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/jobs/import" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/jobs/import") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -525,7 +525,7 @@ export def "apps-jobs-import GetImportJobs" [
 # POST /v1/templates/{template-name}/inapp
 # operationId: CreateInAppTemplate
 # --InAppTemplateRequest shape: {Content?: any, CustomConfig?: any, Layout?: any, tags?: any, TemplateDescription?: any}
-export def "templates-inapp CreateInAppTemplate" [
+export def "templates-inapp create" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,22 +535,22 @@ export def "templates-inapp CreateInAppTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  InAppTemplateRequest: record # InApp Template Request. — shape: {Content?: any, CustomConfig?: any, Layout?: any, tags?: any, TemplateDescription?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  in_app_template_request: record # InApp Template Request. — shape: {Content?: any, CustomConfig?: any, Layout?: any, tags?: any, TemplateDescription?: any}
 ]: any -> record<TemplateCreateMessageBody: record<Arn: record, Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/templates/($template_name)/inapp")
-  let body = {InAppTemplateRequest: $InAppTemplateRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/inapp"))
+  let body = {"InAppTemplateRequest": $in_app_template_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -561,7 +561,7 @@ export def "templates-inapp CreateInAppTemplate" [
 #
 # DELETE /v1/templates/{template-name}/inapp
 # operationId: DeleteInAppTemplate
-export def "templates-inapp DeleteInAppTemplate" [
+export def "templates-inapp delete" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,19 +572,19 @@ export def "templates-inapp DeleteInAppTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<MessageBody: record<Message: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/inapp" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/inapp") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -595,7 +595,7 @@ export def "templates-inapp DeleteInAppTemplate" [
 #
 # GET /v1/templates/{template-name}/inapp
 # operationId: GetInAppTemplate
-export def "templates-inapp GetInAppTemplate" [
+export def "templates-inapp get" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,19 +606,19 @@ export def "templates-inapp GetInAppTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<InAppTemplateResponse: record<Arn: record, Content: record, CreationDate: record, CustomConfig: record, LastModifiedDate: record, Layout: record, tags: record, TemplateDescription: record, TemplateName: record, TemplateType: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/inapp" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/inapp") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -630,7 +630,7 @@ export def "templates-inapp GetInAppTemplate" [
 # PUT /v1/templates/{template-name}/inapp
 # operationId: UpdateInAppTemplate
 # --InAppTemplateRequest shape: {Content?: any, CustomConfig?: any, Layout?: any, tags?: any, TemplateDescription?: any}
-export def "templates-inapp UpdateInAppTemplate" [
+export def "templates-inapp update" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,23 +642,23 @@ export def "templates-inapp UpdateInAppTemplate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --create-new-version: oneof<nothing, bool> # <p>Specifies whether to save the updates as a new version of the message template. Valid values are: true, save the updates as a new version; and, false, save the updates to (overwrite) the latest existing version of the template.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint saves the updates to (overwrites) the latest existing version of the template. If you specify a value of true for this parameter, don't specify a value for the version parameter. Otherwise, an error will occur.</p>
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  InAppTemplateRequest: record # InApp Template Request. — shape: {Content?: any, CustomConfig?: any, Layout?: any, tags?: any, TemplateDescription?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  in_app_template_request: record # InApp Template Request. — shape: {Content?: any, CustomConfig?: any, Layout?: any, tags?: any, TemplateDescription?: any}
 ]: any -> record<MessageBody: record<Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "create-new-version" $create_new_version "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/inapp" $qp)
-  let body = {InAppTemplateRequest: $InAppTemplateRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/inapp") $qp)
+  let body = {"InAppTemplateRequest": $in_app_template_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -670,7 +670,7 @@ export def "templates-inapp UpdateInAppTemplate" [
 # POST /v1/apps/{application-id}/journeys
 # operationId: CreateJourney
 # --WriteJourneyRequest shape: {Activities?: any, CreationDate?: any, LastModifiedDate?: any, Limits?: any, LocalTime?: any, Name?: any, QuietTime?: any, RefreshFrequency?: any, Schedule?: any, StartActivity?: any, StartCondition?: any, State?: any, WaitForQuietTime?: any, RefreshOnSegmentUpdate?: any, JourneyChannelSettings?: any, SendingSchedule?: any, OpenHours?: any, ClosedDays?: any}
-export def "apps-journeys CreateJourney" [
+export def "apps-journeys create" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,22 +680,22 @@ export def "apps-journeys CreateJourney" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  WriteJourneyRequest: record # Specifies the configuration and other settings for a journey. — shape: {Activities?: any, CreationDate?: any, LastModifiedDate?: any, Limits?: any, LocalTime?: any, Name?: any, QuietTime?: any, RefreshFrequency?: any, Schedule?: any, StartActivity?: any, StartCondition?: any, State?: any, WaitForQuietTime?: any, RefreshOnSegmentUpdate?: any, JourneyChannelSettings?: any, SendingSchedule?: any, OpenHours?: any, ClosedDays?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  write_journey_request: record # Specifies the configuration and other settings for a journey. — shape: {Activities?: any, CreationDate?: any, LastModifiedDate?: any, Limits?: any, LocalTime?: any, Name?: any, QuietTime?: any, RefreshFrequency?: any, Schedule?: any, StartActivity?: any, StartCondition?: any, State?: any, WaitForQuietTime?: any, RefreshOnSegmentUpdate?: any, JourneyChannelSettings?: any, SendingSchedule?: any, OpenHours?: any, ClosedDays?: any}
 ]: any -> record<JourneyResponse: record<Activities: record, ApplicationId: record, CreationDate: record, Id: record, LastModifiedDate: record, Limits: record<DailyCap: record, EndpointReentryCap: record, MessagesPerSecond: record, EndpointReentryInterval: record>, LocalTime: record, Name: record, QuietTime: record<End: record, Start: record>, RefreshFrequency: record, Schedule: record<EndTime: record, StartTime: record, Timezone: record>, StartActivity: record, StartCondition: record<Description: record, EventStartCondition: record, SegmentStartCondition: record>, State: record, tags: record, WaitForQuietTime: record, RefreshOnSegmentUpdate: record, JourneyChannelSettings: record<ConnectCampaignArn: record, ConnectCampaignExecutionRoleArn: record>, SendingSchedule: record, OpenHours: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>, ClosedDays: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/journeys")
-  let body = {WriteJourneyRequest: $WriteJourneyRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/journeys"))
+  let body = {"WriteJourneyRequest": $write_journey_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -706,7 +706,7 @@ export def "apps-journeys CreateJourney" [
 #
 # GET /v1/apps/{application-id}/journeys
 # operationId: ListJourneys
-export def "apps-journeys ListJourneys" [
+export def "apps-journeys list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -718,19 +718,19 @@ export def "apps-journeys ListJourneys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<JourneysResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/journeys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/journeys") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -742,7 +742,7 @@ export def "apps-journeys ListJourneys" [
 # POST /v1/templates/{template-name}/push
 # operationId: CreatePushTemplate
 # --PushNotificationTemplateRequest shape: {ADM?: any, APNS?: any, Baidu?: any, Default?: any, DefaultSubstitutions?: any, GCM?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
-export def "templates-push CreatePushTemplate" [
+export def "templates-push create" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,22 +752,22 @@ export def "templates-push CreatePushTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  PushNotificationTemplateRequest: record # Specifies the content and settings for a message template that can be used in messages that are sent through a push notification channel. — shape: {ADM?: any, APNS?: any, Baidu?: any, Default?: any, DefaultSubstitutions?: any, GCM?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  push_notification_template_request: record # Specifies the content and settings for a message template that can be used in messages that are sent through a push notification channel. — shape: {ADM?: any, APNS?: any, Baidu?: any, Default?: any, DefaultSubstitutions?: any, GCM?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
 ]: any -> record<CreateTemplateMessageBody: record<Arn: record, Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/templates/($template_name)/push")
-  let body = {PushNotificationTemplateRequest: $PushNotificationTemplateRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/push"))
+  let body = {"PushNotificationTemplateRequest": $push_notification_template_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -778,7 +778,7 @@ export def "templates-push CreatePushTemplate" [
 #
 # DELETE /v1/templates/{template-name}/push
 # operationId: DeletePushTemplate
-export def "templates-push DeletePushTemplate" [
+export def "templates-push delete" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,19 +789,19 @@ export def "templates-push DeletePushTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<MessageBody: record<Message: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/push" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/push") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -812,7 +812,7 @@ export def "templates-push DeletePushTemplate" [
 #
 # GET /v1/templates/{template-name}/push
 # operationId: GetPushTemplate
-export def "templates-push GetPushTemplate" [
+export def "templates-push get" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,19 +823,19 @@ export def "templates-push GetPushTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<PushNotificationTemplateResponse: record<ADM: record<Action: record, Body: record, ImageIconUrl: record, ImageUrl: record, RawContent: record, SmallImageIconUrl: record, Sound: record, Title: record, Url: record>, APNS: record<Action: record, Body: record, MediaUrl: record, RawContent: record, Sound: record, Title: record, Url: record>, Arn: record, Baidu: record<Action: record, Body: record, ImageIconUrl: record, ImageUrl: record, RawContent: record, SmallImageIconUrl: record, Sound: record, Title: record, Url: record>, CreationDate: record, Default: record<Action: record, Body: record, Sound: record, Title: record, Url: record>, DefaultSubstitutions: record, GCM: record<Action: record, Body: record, ImageIconUrl: record, ImageUrl: record, RawContent: record, SmallImageIconUrl: record, Sound: record, Title: record, Url: record>, LastModifiedDate: record, RecommenderId: record, tags: record, TemplateDescription: record, TemplateName: record, TemplateType: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/push" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/push") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -847,7 +847,7 @@ export def "templates-push GetPushTemplate" [
 # PUT /v1/templates/{template-name}/push
 # operationId: UpdatePushTemplate
 # --PushNotificationTemplateRequest shape: {ADM?: any, APNS?: any, Baidu?: any, Default?: any, DefaultSubstitutions?: any, GCM?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
-export def "templates-push UpdatePushTemplate" [
+export def "templates-push update" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -859,23 +859,23 @@ export def "templates-push UpdatePushTemplate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --create-new-version: oneof<nothing, bool> # <p>Specifies whether to save the updates as a new version of the message template. Valid values are: true, save the updates as a new version; and, false, save the updates to (overwrite) the latest existing version of the template.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint saves the updates to (overwrites) the latest existing version of the template. If you specify a value of true for this parameter, don't specify a value for the version parameter. Otherwise, an error will occur.</p>
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  PushNotificationTemplateRequest: record # Specifies the content and settings for a message template that can be used in messages that are sent through a push notification channel. — shape: {ADM?: any, APNS?: any, Baidu?: any, Default?: any, DefaultSubstitutions?: any, GCM?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  push_notification_template_request: record # Specifies the content and settings for a message template that can be used in messages that are sent through a push notification channel. — shape: {ADM?: any, APNS?: any, Baidu?: any, Default?: any, DefaultSubstitutions?: any, GCM?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
 ]: any -> record<MessageBody: record<Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "create-new-version" $create_new_version "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/push" $qp)
-  let body = {PushNotificationTemplateRequest: $PushNotificationTemplateRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/push") $qp)
+  let body = {"PushNotificationTemplateRequest": $push_notification_template_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -887,7 +887,7 @@ export def "templates-push UpdatePushTemplate" [
 # POST /v1/recommenders
 # operationId: CreateRecommenderConfiguration
 # --CreateRecommenderConfiguration shape: {Attributes?: any, Description?: any, Name?: any, RecommendationProviderIdType?: any, RecommendationProviderRoleArn?: any, RecommendationProviderUri?: any, RecommendationTransformerUri?: any, RecommendationsDisplayName?: any, RecommendationsPerMessage?: any}
-export def "recommenders CreateRecommenderConfiguration" [
+export def "recommenders create-recommender-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -896,22 +896,22 @@ export def "recommenders CreateRecommenderConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  CreateRecommenderConfiguration: record # Specifies Amazon Pinpoint configuration settings for retrieving and processing recommendation data from a recommender model. — shape: {Attributes?: any, Description?: any, Name?: any, RecommendationProviderIdType?: any, RecommendationProviderRoleArn?: any, RecommendationProviderUri?: any, RecommendationTransformerUri?: any, RecommendationsDisplayName?: any, RecommendationsPerMessage?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  create_recommender_configuration: record # Specifies Amazon Pinpoint configuration settings for retrieving and processing recommendation data from a recommender model. — shape: {Attributes?: any, Description?: any, Name?: any, RecommendationProviderIdType?: any, RecommendationProviderRoleArn?: any, RecommendationProviderUri?: any, RecommendationTransformerUri?: any, RecommendationsDisplayName?: any, RecommendationsPerMessage?: any}
 ]: any -> record<RecommenderConfigurationResponse: record<Attributes: record, CreationDate: record, Description: record, Id: record, LastModifiedDate: record, Name: record, RecommendationProviderIdType: record, RecommendationProviderRoleArn: record, RecommendationProviderUri: record, RecommendationTransformerUri: record, RecommendationsDisplayName: record, RecommendationsPerMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/recommenders")
-  let body = {CreateRecommenderConfiguration: $CreateRecommenderConfiguration} | compact
+  let body = {"CreateRecommenderConfiguration": $create_recommender_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -922,7 +922,7 @@ export def "recommenders CreateRecommenderConfiguration" [
 #
 # GET /v1/recommenders
 # operationId: GetRecommenderConfigurations
-export def "recommenders GetRecommenderConfigurations" [
+export def "recommenders get-recommender-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,19 +933,19 @@ export def "recommenders GetRecommenderConfigurations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ListRecommenderConfigurationsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/recommenders" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -957,7 +957,7 @@ export def "recommenders GetRecommenderConfigurations" [
 # POST /v1/apps/{application-id}/segments
 # operationId: CreateSegment
 # --WriteSegmentRequest shape: {Dimensions?: any, Name?: any, SegmentGroups?: any, tags?: any}
-export def "apps-segments CreateSegment" [
+export def "apps-segments create" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -967,22 +967,22 @@ export def "apps-segments CreateSegment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  WriteSegmentRequest: record # Specifies the configuration, dimension, and other settings for a segment. A WriteSegmentRequest object can include a Dimensions object or a SegmentGroups object, but not both. — shape: {Dimensions?: any, Name?: any, SegmentGroups?: any, tags?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  write_segment_request: record # Specifies the configuration, dimension, and other settings for a segment. A WriteSegmentRequest object can include a Dimensions object or a SegmentGroups object, but not both. — shape: {Dimensions?: any, Name?: any, SegmentGroups?: any, tags?: any}
 ]: any -> record<SegmentResponse: record<ApplicationId: record, Arn: record, CreationDate: record, Dimensions: record<Attributes: record, Behavior: record, Demographic: record, Location: record, Metrics: record, UserAttributes: record>, Id: record, ImportDefinition: record<ChannelCounts: record, ExternalId: record, Format: record, RoleArn: record, S3Url: record, Size: record>, LastModifiedDate: record, Name: record, SegmentGroups: record<Groups: record, Include: record>, SegmentType: record, tags: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/segments")
-  let body = {WriteSegmentRequest: $WriteSegmentRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/segments"))
+  let body = {"WriteSegmentRequest": $write_segment_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -993,7 +993,7 @@ export def "apps-segments CreateSegment" [
 #
 # GET /v1/apps/{application-id}/segments
 # operationId: GetSegments
-export def "apps-segments GetSegments" [
+export def "apps-segments list" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1005,19 +1005,19 @@ export def "apps-segments GetSegments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<SegmentsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/segments" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/segments") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1029,7 +1029,7 @@ export def "apps-segments GetSegments" [
 # POST /v1/templates/{template-name}/sms
 # operationId: CreateSmsTemplate
 # --SMSTemplateRequest shape: {Body?: any, DefaultSubstitutions?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
-export def "templates-sms CreateSmsTemplate" [
+export def "templates-sms create" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1039,22 +1039,22 @@ export def "templates-sms CreateSmsTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  SMSTemplateRequest: record # Specifies the content and settings for a message template that can be used in text messages that are sent through the SMS channel. — shape: {Body?: any, DefaultSubstitutions?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  sms_template_request: record # Specifies the content and settings for a message template that can be used in text messages that are sent through the SMS channel. — shape: {Body?: any, DefaultSubstitutions?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
 ]: any -> record<CreateTemplateMessageBody: record<Arn: record, Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/templates/($template_name)/sms")
-  let body = {SMSTemplateRequest: $SMSTemplateRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/sms"))
+  let body = {"SMSTemplateRequest": $sms_template_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1065,7 +1065,7 @@ export def "templates-sms CreateSmsTemplate" [
 #
 # DELETE /v1/templates/{template-name}/sms
 # operationId: DeleteSmsTemplate
-export def "templates-sms DeleteSmsTemplate" [
+export def "templates-sms delete" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1076,19 +1076,19 @@ export def "templates-sms DeleteSmsTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<MessageBody: record<Message: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/sms" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/sms") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1099,7 +1099,7 @@ export def "templates-sms DeleteSmsTemplate" [
 #
 # GET /v1/templates/{template-name}/sms
 # operationId: GetSmsTemplate
-export def "templates-sms GetSmsTemplate" [
+export def "templates-sms get" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1110,19 +1110,19 @@ export def "templates-sms GetSmsTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<SMSTemplateResponse: record<Arn: record, Body: record, CreationDate: record, DefaultSubstitutions: record, LastModifiedDate: record, RecommenderId: record, tags: record, TemplateDescription: record, TemplateName: record, TemplateType: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/sms" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/sms") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1134,7 +1134,7 @@ export def "templates-sms GetSmsTemplate" [
 # PUT /v1/templates/{template-name}/sms
 # operationId: UpdateSmsTemplate
 # --SMSTemplateRequest shape: {Body?: any, DefaultSubstitutions?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
-export def "templates-sms UpdateSmsTemplate" [
+export def "templates-sms update" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,23 +1146,23 @@ export def "templates-sms UpdateSmsTemplate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --create-new-version: oneof<nothing, bool> # <p>Specifies whether to save the updates as a new version of the message template. Valid values are: true, save the updates as a new version; and, false, save the updates to (overwrite) the latest existing version of the template.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint saves the updates to (overwrites) the latest existing version of the template. If you specify a value of true for this parameter, don't specify a value for the version parameter. Otherwise, an error will occur.</p>
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  SMSTemplateRequest: record # Specifies the content and settings for a message template that can be used in text messages that are sent through the SMS channel. — shape: {Body?: any, DefaultSubstitutions?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  sms_template_request: record # Specifies the content and settings for a message template that can be used in text messages that are sent through the SMS channel. — shape: {Body?: any, DefaultSubstitutions?: any, RecommenderId?: any, tags?: any, TemplateDescription?: any}
 ]: any -> record<MessageBody: record<Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "create-new-version" $create_new_version "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/sms" $qp)
-  let body = {SMSTemplateRequest: $SMSTemplateRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/sms") $qp)
+  let body = {"SMSTemplateRequest": $sms_template_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1174,7 +1174,7 @@ export def "templates-sms UpdateSmsTemplate" [
 # POST /v1/templates/{template-name}/voice
 # operationId: CreateVoiceTemplate
 # --VoiceTemplateRequest shape: {Body?: any, DefaultSubstitutions?: any, LanguageCode?: any, tags?: any, TemplateDescription?: any, VoiceId?: any}
-export def "templates-voice CreateVoiceTemplate" [
+export def "templates-voice create" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1184,22 +1184,22 @@ export def "templates-voice CreateVoiceTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  VoiceTemplateRequest: record # Specifies the content and settings for a message template that can be used in messages that are sent through the voice channel. — shape: {Body?: any, DefaultSubstitutions?: any, LanguageCode?: any, tags?: any, TemplateDescription?: any, VoiceId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  voice_template_request: record # Specifies the content and settings for a message template that can be used in messages that are sent through the voice channel. — shape: {Body?: any, DefaultSubstitutions?: any, LanguageCode?: any, tags?: any, TemplateDescription?: any, VoiceId?: any}
 ]: any -> record<CreateTemplateMessageBody: record<Arn: record, Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/templates/($template_name)/voice")
-  let body = {VoiceTemplateRequest: $VoiceTemplateRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/voice"))
+  let body = {"VoiceTemplateRequest": $voice_template_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1210,7 +1210,7 @@ export def "templates-voice CreateVoiceTemplate" [
 #
 # DELETE /v1/templates/{template-name}/voice
 # operationId: DeleteVoiceTemplate
-export def "templates-voice DeleteVoiceTemplate" [
+export def "templates-voice delete" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1221,19 +1221,19 @@ export def "templates-voice DeleteVoiceTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<MessageBody: record<Message: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/voice" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/voice") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1244,7 +1244,7 @@ export def "templates-voice DeleteVoiceTemplate" [
 #
 # GET /v1/templates/{template-name}/voice
 # operationId: GetVoiceTemplate
-export def "templates-voice GetVoiceTemplate" [
+export def "templates-voice get" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,19 +1255,19 @@ export def "templates-voice GetVoiceTemplate" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<VoiceTemplateResponse: record<Arn: record, Body: record, CreationDate: record, DefaultSubstitutions: record, LanguageCode: record, LastModifiedDate: record, tags: record, TemplateDescription: record, TemplateName: record, TemplateType: record, Version: record, VoiceId: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/voice" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/voice") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1279,7 +1279,7 @@ export def "templates-voice GetVoiceTemplate" [
 # PUT /v1/templates/{template-name}/voice
 # operationId: UpdateVoiceTemplate
 # --VoiceTemplateRequest shape: {Body?: any, DefaultSubstitutions?: any, LanguageCode?: any, tags?: any, TemplateDescription?: any, VoiceId?: any}
-export def "templates-voice UpdateVoiceTemplate" [
+export def "templates-voice update" [
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1291,23 +1291,23 @@ export def "templates-voice UpdateVoiceTemplate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --create-new-version: oneof<nothing, bool> # <p>Specifies whether to save the updates as a new version of the message template. Valid values are: true, save the updates as a new version; and, false, save the updates to (overwrite) the latest existing version of the template.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint saves the updates to (overwrites) the latest existing version of the template. If you specify a value of true for this parameter, don't specify a value for the version parameter. Otherwise, an error will occur.</p>
   --version: string # <p>The unique identifier for the version of the message template to update, retrieve information about, or delete. To retrieve identifiers and other information for all the versions of a template, use the <link  linkend="templates-template-name-template-type-versions">Template Versions</link> resource.</p> <p>If specified, this value must match the identifier for an existing template version. If specified for an update operation, this value must match the identifier for the latest existing version of the template. This restriction helps ensure that race conditions don't occur.</p> <p>If you don't specify a value for this parameter, Amazon Pinpoint does the following:</p> <ul><li><p>For a get operation, retrieves information about the active version of the template.</p></li> <li><p>For an update operation, saves the updates to (overwrites) the latest existing version of the template, if the create-new-version parameter isn't used or is set to false.</p></li> <li><p>For a delete operation, deletes the template, including all versions of the template.</p></li></ul>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  VoiceTemplateRequest: record # Specifies the content and settings for a message template that can be used in messages that are sent through the voice channel. — shape: {Body?: any, DefaultSubstitutions?: any, LanguageCode?: any, tags?: any, TemplateDescription?: any, VoiceId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  voice_template_request: record # Specifies the content and settings for a message template that can be used in messages that are sent through the voice channel. — shape: {Body?: any, DefaultSubstitutions?: any, LanguageCode?: any, tags?: any, TemplateDescription?: any, VoiceId?: any}
 ]: any -> record<MessageBody: record<Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "create-new-version" $create_new_version "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/voice" $qp)
-  let body = {VoiceTemplateRequest: $VoiceTemplateRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name} | format pattern "/v1/templates/{template_name}/voice") $qp)
+  let body = {"VoiceTemplateRequest": $voice_template_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1318,7 +1318,7 @@ export def "templates-voice UpdateVoiceTemplate" [
 #
 # DELETE /v1/apps/{application-id}/channels/adm
 # operationId: DeleteAdmChannel
-export def "apps-channels-adm DeleteAdmChannel" [
+export def "apps-channels-adm delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1328,18 +1328,18 @@ export def "apps-channels-adm DeleteAdmChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ADMChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/adm")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/adm"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1350,7 +1350,7 @@ export def "apps-channels-adm DeleteAdmChannel" [
 #
 # GET /v1/apps/{application-id}/channels/adm
 # operationId: GetAdmChannel
-export def "apps-channels-adm GetAdmChannel" [
+export def "apps-channels-adm get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1360,18 +1360,18 @@ export def "apps-channels-adm GetAdmChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ADMChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/adm")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/adm"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1383,7 +1383,7 @@ export def "apps-channels-adm GetAdmChannel" [
 # PUT /v1/apps/{application-id}/channels/adm
 # operationId: UpdateAdmChannel
 # --ADMChannelRequest shape: {ClientId?: any, ClientSecret?: any, Enabled?: any}
-export def "apps-channels-adm UpdateAdmChannel" [
+export def "apps-channels-adm update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1393,22 +1393,22 @@ export def "apps-channels-adm UpdateAdmChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  ADMChannelRequest: record # Specifies the status and settings of the ADM (Amazon Device Messaging) channel for an application. — shape: {ClientId?: any, ClientSecret?: any, Enabled?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  adm_channel_request: record # Specifies the status and settings of the ADM (Amazon Device Messaging) channel for an application. — shape: {ClientId?: any, ClientSecret?: any, Enabled?: any}
 ]: any -> record<ADMChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/adm")
-  let body = {ADMChannelRequest: $ADMChannelRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/adm"))
+  let body = {"ADMChannelRequest": $adm_channel_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1419,7 +1419,7 @@ export def "apps-channels-adm UpdateAdmChannel" [
 #
 # DELETE /v1/apps/{application-id}/channels/apns
 # operationId: DeleteApnsChannel
-export def "apps-channels-apns DeleteApnsChannel" [
+export def "apps-channels-apns delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1429,18 +1429,18 @@ export def "apps-channels-apns DeleteApnsChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<APNSChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1451,7 +1451,7 @@ export def "apps-channels-apns DeleteApnsChannel" [
 #
 # GET /v1/apps/{application-id}/channels/apns
 # operationId: GetApnsChannel
-export def "apps-channels-apns GetApnsChannel" [
+export def "apps-channels-apns get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1461,18 +1461,18 @@ export def "apps-channels-apns GetApnsChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<APNSChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1484,7 +1484,7 @@ export def "apps-channels-apns GetApnsChannel" [
 # PUT /v1/apps/{application-id}/channels/apns
 # operationId: UpdateApnsChannel
 # --APNSChannelRequest shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
-export def "apps-channels-apns UpdateApnsChannel" [
+export def "apps-channels-apns update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1494,22 +1494,22 @@ export def "apps-channels-apns UpdateApnsChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  APNSChannelRequest: record # Specifies the status and settings of the APNs (Apple Push Notification service) channel for an application. — shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  apns_channel_request: record # Specifies the status and settings of the APNs (Apple Push Notification service) channel for an application. — shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
 ]: any -> record<APNSChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns")
-  let body = {APNSChannelRequest: $APNSChannelRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns"))
+  let body = {"APNSChannelRequest": $apns_channel_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1520,7 +1520,7 @@ export def "apps-channels-apns UpdateApnsChannel" [
 #
 # DELETE /v1/apps/{application-id}/channels/apns_sandbox
 # operationId: DeleteApnsSandboxChannel
-export def "apps-channels-apns-sandbox DeleteApnsSandboxChannel" [
+export def "apps-channels-apns-sandbox delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1530,18 +1530,18 @@ export def "apps-channels-apns-sandbox DeleteApnsSandboxChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<APNSSandboxChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns_sandbox")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns_sandbox"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1552,7 +1552,7 @@ export def "apps-channels-apns-sandbox DeleteApnsSandboxChannel" [
 #
 # GET /v1/apps/{application-id}/channels/apns_sandbox
 # operationId: GetApnsSandboxChannel
-export def "apps-channels-apns-sandbox GetApnsSandboxChannel" [
+export def "apps-channels-apns-sandbox get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,18 +1562,18 @@ export def "apps-channels-apns-sandbox GetApnsSandboxChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<APNSSandboxChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns_sandbox")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns_sandbox"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1585,7 +1585,7 @@ export def "apps-channels-apns-sandbox GetApnsSandboxChannel" [
 # PUT /v1/apps/{application-id}/channels/apns_sandbox
 # operationId: UpdateApnsSandboxChannel
 # --APNSSandboxChannelRequest shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
-export def "apps-channels-apns-sandbox UpdateApnsSandboxChannel" [
+export def "apps-channels-apns-sandbox update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1595,22 +1595,22 @@ export def "apps-channels-apns-sandbox UpdateApnsSandboxChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  APNSSandboxChannelRequest: record # Specifies the status and settings of the APNs (Apple Push Notification service) sandbox channel for an application. — shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  apns_sandbox_channel_request: record # Specifies the status and settings of the APNs (Apple Push Notification service) sandbox channel for an application. — shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
 ]: any -> record<APNSSandboxChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns_sandbox")
-  let body = {APNSSandboxChannelRequest: $APNSSandboxChannelRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns_sandbox"))
+  let body = {"APNSSandboxChannelRequest": $apns_sandbox_channel_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1621,7 +1621,7 @@ export def "apps-channels-apns-sandbox UpdateApnsSandboxChannel" [
 #
 # DELETE /v1/apps/{application-id}/channels/apns_voip
 # operationId: DeleteApnsVoipChannel
-export def "apps-channels-apns-voip DeleteApnsVoipChannel" [
+export def "apps-channels-apns-voip delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1631,18 +1631,18 @@ export def "apps-channels-apns-voip DeleteApnsVoipChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<APNSVoipChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns_voip")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns_voip"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1653,7 +1653,7 @@ export def "apps-channels-apns-voip DeleteApnsVoipChannel" [
 #
 # GET /v1/apps/{application-id}/channels/apns_voip
 # operationId: GetApnsVoipChannel
-export def "apps-channels-apns-voip GetApnsVoipChannel" [
+export def "apps-channels-apns-voip get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1663,18 +1663,18 @@ export def "apps-channels-apns-voip GetApnsVoipChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<APNSVoipChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns_voip")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns_voip"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1686,7 +1686,7 @@ export def "apps-channels-apns-voip GetApnsVoipChannel" [
 # PUT /v1/apps/{application-id}/channels/apns_voip
 # operationId: UpdateApnsVoipChannel
 # --APNSVoipChannelRequest shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
-export def "apps-channels-apns-voip UpdateApnsVoipChannel" [
+export def "apps-channels-apns-voip update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1696,22 +1696,22 @@ export def "apps-channels-apns-voip UpdateApnsVoipChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  APNSVoipChannelRequest: record # Specifies the status and settings of the APNs (Apple Push Notification service) VoIP channel for an application. — shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  apns_voip_channel_request: record # Specifies the status and settings of the APNs (Apple Push Notification service) VoIP channel for an application. — shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
 ]: any -> record<APNSVoipChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns_voip")
-  let body = {APNSVoipChannelRequest: $APNSVoipChannelRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns_voip"))
+  let body = {"APNSVoipChannelRequest": $apns_voip_channel_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1722,7 +1722,7 @@ export def "apps-channels-apns-voip UpdateApnsVoipChannel" [
 #
 # DELETE /v1/apps/{application-id}/channels/apns_voip_sandbox
 # operationId: DeleteApnsVoipSandboxChannel
-export def "apps-channels-apns-voip-sandbox DeleteApnsVoipSandboxChannel" [
+export def "apps-channels-apns-voip-sandbox delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1732,18 +1732,18 @@ export def "apps-channels-apns-voip-sandbox DeleteApnsVoipSandboxChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<APNSVoipSandboxChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns_voip_sandbox")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns_voip_sandbox"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1754,7 +1754,7 @@ export def "apps-channels-apns-voip-sandbox DeleteApnsVoipSandboxChannel" [
 #
 # GET /v1/apps/{application-id}/channels/apns_voip_sandbox
 # operationId: GetApnsVoipSandboxChannel
-export def "apps-channels-apns-voip-sandbox GetApnsVoipSandboxChannel" [
+export def "apps-channels-apns-voip-sandbox get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1764,18 +1764,18 @@ export def "apps-channels-apns-voip-sandbox GetApnsVoipSandboxChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<APNSVoipSandboxChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns_voip_sandbox")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns_voip_sandbox"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1787,7 +1787,7 @@ export def "apps-channels-apns-voip-sandbox GetApnsVoipSandboxChannel" [
 # PUT /v1/apps/{application-id}/channels/apns_voip_sandbox
 # operationId: UpdateApnsVoipSandboxChannel
 # --APNSVoipSandboxChannelRequest shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
-export def "apps-channels-apns-voip-sandbox UpdateApnsVoipSandboxChannel" [
+export def "apps-channels-apns-voip-sandbox update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1797,22 +1797,22 @@ export def "apps-channels-apns-voip-sandbox UpdateApnsVoipSandboxChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  APNSVoipSandboxChannelRequest: record # Specifies the status and settings of the APNs (Apple Push Notification service) VoIP sandbox channel for an application. — shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  apns_voip_sandbox_channel_request: record # Specifies the status and settings of the APNs (Apple Push Notification service) VoIP sandbox channel for an application. — shape: {BundleId?: any, Certificate?: any, DefaultAuthenticationMethod?: any, Enabled?: any, PrivateKey?: any, TeamId?: any, TokenKey?: any, TokenKeyId?: any}
 ]: any -> record<APNSVoipSandboxChannelResponse: record<ApplicationId: record, CreationDate: record, DefaultAuthenticationMethod: record, Enabled: record, HasCredential: record, HasTokenKey: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/apns_voip_sandbox")
-  let body = {APNSVoipSandboxChannelRequest: $APNSVoipSandboxChannelRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/apns_voip_sandbox"))
+  let body = {"APNSVoipSandboxChannelRequest": $apns_voip_sandbox_channel_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1823,7 +1823,7 @@ export def "apps-channels-apns-voip-sandbox UpdateApnsVoipSandboxChannel" [
 #
 # DELETE /v1/apps/{application-id}
 # operationId: DeleteApp
-export def "apps DeleteApp" [
+export def "apps delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1833,18 +1833,18 @@ export def "apps DeleteApp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ApplicationResponse: record<Arn: record, Id: record, Name: record, tags: record, CreationDate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1855,7 +1855,7 @@ export def "apps DeleteApp" [
 #
 # GET /v1/apps/{application-id}
 # operationId: GetApp
-export def "apps GetApp" [
+export def "apps get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1865,18 +1865,18 @@ export def "apps GetApp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ApplicationResponse: record<Arn: record, Id: record, Name: record, tags: record, CreationDate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1887,7 +1887,7 @@ export def "apps GetApp" [
 #
 # DELETE /v1/apps/{application-id}/channels/baidu
 # operationId: DeleteBaiduChannel
-export def "apps-channels-baidu DeleteBaiduChannel" [
+export def "apps-channels-baidu delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1897,18 +1897,18 @@ export def "apps-channels-baidu DeleteBaiduChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<BaiduChannelResponse: record<ApplicationId: record, CreationDate: record, Credential: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/baidu")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/baidu"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1919,7 +1919,7 @@ export def "apps-channels-baidu DeleteBaiduChannel" [
 #
 # GET /v1/apps/{application-id}/channels/baidu
 # operationId: GetBaiduChannel
-export def "apps-channels-baidu GetBaiduChannel" [
+export def "apps-channels-baidu get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1929,18 +1929,18 @@ export def "apps-channels-baidu GetBaiduChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<BaiduChannelResponse: record<ApplicationId: record, CreationDate: record, Credential: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/baidu")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/baidu"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1952,7 +1952,7 @@ export def "apps-channels-baidu GetBaiduChannel" [
 # PUT /v1/apps/{application-id}/channels/baidu
 # operationId: UpdateBaiduChannel
 # --BaiduChannelRequest shape: {ApiKey?: any, Enabled?: any, SecretKey?: any}
-export def "apps-channels-baidu UpdateBaiduChannel" [
+export def "apps-channels-baidu update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1962,22 +1962,22 @@ export def "apps-channels-baidu UpdateBaiduChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  BaiduChannelRequest: record # Specifies the status and settings of the Baidu (Baidu Cloud Push) channel for an application. — shape: {ApiKey?: any, Enabled?: any, SecretKey?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  baidu_channel_request: record # Specifies the status and settings of the Baidu (Baidu Cloud Push) channel for an application. — shape: {ApiKey?: any, Enabled?: any, SecretKey?: any}
 ]: any -> record<BaiduChannelResponse: record<ApplicationId: record, CreationDate: record, Credential: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/baidu")
-  let body = {BaiduChannelRequest: $BaiduChannelRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/baidu"))
+  let body = {"BaiduChannelRequest": $baidu_channel_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1988,7 +1988,7 @@ export def "apps-channels-baidu UpdateBaiduChannel" [
 #
 # DELETE /v1/apps/{application-id}/campaigns/{campaign-id}
 # operationId: DeleteCampaign
-export def "apps-campaigns DeleteCampaign" [
+export def "apps-campaigns delete" [
   application_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1999,18 +1999,18 @@ export def "apps-campaigns DeleteCampaign" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<CampaignResponse: record<AdditionalTreatments: record, ApplicationId: record, Arn: record, CreationDate: record, CustomDeliveryConfiguration: record<DeliveryUri: record, EndpointTypes: record>, DefaultState: record<CampaignStatus: record>, Description: record, HoldoutPercent: record, Hook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, Id: record, IsPaused: record, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, MessageConfiguration: record<ADMMessage: record, APNSMessage: record, BaiduMessage: record, CustomMessage: record, DefaultMessage: record, EmailMessage: record, GCMMessage: record, SMSMessage: record, InAppMessage: record>, Name: record, Schedule: record<EndTime: record, EventFilter: record, Frequency: record, IsLocalTime: record, QuietTime: record, StartTime: record, Timezone: record>, SegmentId: record, SegmentVersion: record, State: record<CampaignStatus: record>, tags: record, TemplateConfiguration: record<EmailTemplate: record, PushTemplate: record, SMSTemplate: record, VoiceTemplate: record>, TreatmentDescription: record, TreatmentName: record, Version: record, Priority: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/campaigns/($campaign_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, campaign_id: $campaign_id} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2021,7 +2021,7 @@ export def "apps-campaigns DeleteCampaign" [
 #
 # GET /v1/apps/{application-id}/campaigns/{campaign-id}
 # operationId: GetCampaign
-export def "apps-campaigns GetCampaign" [
+export def "apps-campaigns get" [
   application_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2032,18 +2032,18 @@ export def "apps-campaigns GetCampaign" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<CampaignResponse: record<AdditionalTreatments: record, ApplicationId: record, Arn: record, CreationDate: record, CustomDeliveryConfiguration: record<DeliveryUri: record, EndpointTypes: record>, DefaultState: record<CampaignStatus: record>, Description: record, HoldoutPercent: record, Hook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, Id: record, IsPaused: record, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, MessageConfiguration: record<ADMMessage: record, APNSMessage: record, BaiduMessage: record, CustomMessage: record, DefaultMessage: record, EmailMessage: record, GCMMessage: record, SMSMessage: record, InAppMessage: record>, Name: record, Schedule: record<EndTime: record, EventFilter: record, Frequency: record, IsLocalTime: record, QuietTime: record, StartTime: record, Timezone: record>, SegmentId: record, SegmentVersion: record, State: record<CampaignStatus: record>, tags: record, TemplateConfiguration: record<EmailTemplate: record, PushTemplate: record, SMSTemplate: record, VoiceTemplate: record>, TreatmentDescription: record, TreatmentName: record, Version: record, Priority: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/campaigns/($campaign_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, campaign_id: $campaign_id} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2055,7 +2055,7 @@ export def "apps-campaigns GetCampaign" [
 # PUT /v1/apps/{application-id}/campaigns/{campaign-id}
 # operationId: UpdateCampaign
 # --WriteCampaignRequest shape: {AdditionalTreatments?: any, CustomDeliveryConfiguration?: any, Description?: any, HoldoutPercent?: any, Hook?: any, IsPaused?: any, Limits?: any, MessageConfiguration?: any, Name?: any, Schedule?: any, SegmentId?: any, SegmentVersion?: any, tags?: any, TemplateConfiguration?: any, TreatmentDescription?: any, TreatmentName?: any, Priority?: any}
-export def "apps-campaigns UpdateCampaign" [
+export def "apps-campaigns update" [
   application_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2066,22 +2066,22 @@ export def "apps-campaigns UpdateCampaign" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  WriteCampaignRequest: record # Specifies the configuration and other settings for a campaign. — shape: {AdditionalTreatments?: any, CustomDeliveryConfiguration?: any, Description?: any, HoldoutPercent?: any, Hook?: any, IsPaused?: any, Limits?: any, MessageConfiguration?: any, Name?: any, Schedule?: any, SegmentId?: any, SegmentVersion?: any, tags?: any, TemplateConfiguration?: any, TreatmentDescription?: any, TreatmentName?: any, Priority?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  write_campaign_request: record # Specifies the configuration and other settings for a campaign. — shape: {AdditionalTreatments?: any, CustomDeliveryConfiguration?: any, Description?: any, HoldoutPercent?: any, Hook?: any, IsPaused?: any, Limits?: any, MessageConfiguration?: any, Name?: any, Schedule?: any, SegmentId?: any, SegmentVersion?: any, tags?: any, TemplateConfiguration?: any, TreatmentDescription?: any, TreatmentName?: any, Priority?: any}
 ]: any -> record<CampaignResponse: record<AdditionalTreatments: record, ApplicationId: record, Arn: record, CreationDate: record, CustomDeliveryConfiguration: record<DeliveryUri: record, EndpointTypes: record>, DefaultState: record<CampaignStatus: record>, Description: record, HoldoutPercent: record, Hook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, Id: record, IsPaused: record, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, MessageConfiguration: record<ADMMessage: record, APNSMessage: record, BaiduMessage: record, CustomMessage: record, DefaultMessage: record, EmailMessage: record, GCMMessage: record, SMSMessage: record, InAppMessage: record>, Name: record, Schedule: record<EndTime: record, EventFilter: record, Frequency: record, IsLocalTime: record, QuietTime: record, StartTime: record, Timezone: record>, SegmentId: record, SegmentVersion: record, State: record<CampaignStatus: record>, tags: record, TemplateConfiguration: record<EmailTemplate: record, PushTemplate: record, SMSTemplate: record, VoiceTemplate: record>, TreatmentDescription: record, TreatmentName: record, Version: record, Priority: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/campaigns/($campaign_id)")
-  let body = {WriteCampaignRequest: $WriteCampaignRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id, campaign_id: $campaign_id} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}"))
+  let body = {"WriteCampaignRequest": $write_campaign_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2092,7 +2092,7 @@ export def "apps-campaigns UpdateCampaign" [
 #
 # DELETE /v1/apps/{application-id}/channels/email
 # operationId: DeleteEmailChannel
-export def "apps-channels-email DeleteEmailChannel" [
+export def "apps-channels-email delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2102,18 +2102,18 @@ export def "apps-channels-email DeleteEmailChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EmailChannelResponse: record<ApplicationId: record, ConfigurationSet: record, CreationDate: record, Enabled: record, FromAddress: record, HasCredential: record, Id: record, Identity: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, MessagesPerSecond: record, Platform: record, RoleArn: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/email")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/email"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2124,7 +2124,7 @@ export def "apps-channels-email DeleteEmailChannel" [
 #
 # GET /v1/apps/{application-id}/channels/email
 # operationId: GetEmailChannel
-export def "apps-channels-email GetEmailChannel" [
+export def "apps-channels-email get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2134,18 +2134,18 @@ export def "apps-channels-email GetEmailChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EmailChannelResponse: record<ApplicationId: record, ConfigurationSet: record, CreationDate: record, Enabled: record, FromAddress: record, HasCredential: record, Id: record, Identity: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, MessagesPerSecond: record, Platform: record, RoleArn: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/email")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/email"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2157,7 +2157,7 @@ export def "apps-channels-email GetEmailChannel" [
 # PUT /v1/apps/{application-id}/channels/email
 # operationId: UpdateEmailChannel
 # --EmailChannelRequest shape: {ConfigurationSet?: any, Enabled?: any, FromAddress?: any, Identity?: any, RoleArn?: any}
-export def "apps-channels-email UpdateEmailChannel" [
+export def "apps-channels-email update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2167,22 +2167,22 @@ export def "apps-channels-email UpdateEmailChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  EmailChannelRequest: record # Specifies the status and settings of the email channel for an application. — shape: {ConfigurationSet?: any, Enabled?: any, FromAddress?: any, Identity?: any, RoleArn?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  email_channel_request: record # Specifies the status and settings of the email channel for an application. — shape: {ConfigurationSet?: any, Enabled?: any, FromAddress?: any, Identity?: any, RoleArn?: any}
 ]: any -> record<EmailChannelResponse: record<ApplicationId: record, ConfigurationSet: record, CreationDate: record, Enabled: record, FromAddress: record, HasCredential: record, Id: record, Identity: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, MessagesPerSecond: record, Platform: record, RoleArn: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/email")
-  let body = {EmailChannelRequest: $EmailChannelRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/email"))
+  let body = {"EmailChannelRequest": $email_channel_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2193,7 +2193,7 @@ export def "apps-channels-email UpdateEmailChannel" [
 #
 # DELETE /v1/apps/{application-id}/endpoints/{endpoint-id}
 # operationId: DeleteEndpoint
-export def "apps-endpoints DeleteEndpoint" [
+export def "apps-endpoints delete" [
   application_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2204,18 +2204,18 @@ export def "apps-endpoints DeleteEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EndpointResponse: record<Address: record, ApplicationId: record, Attributes: record, ChannelType: record, CohortId: record, CreationDate: record, Demographic: record<AppVersion: record, Locale: record, Make: record, Model: record, ModelVersion: record, Platform: record, PlatformVersion: record, Timezone: record>, EffectiveDate: record, EndpointStatus: record, Id: record, Location: record<City: record, Country: record, Latitude: record, Longitude: record, PostalCode: record, Region: record>, Metrics: record, OptOut: record, RequestId: record, User: record<UserAttributes: record, UserId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/endpoints/($endpoint_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, endpoint_id: $endpoint_id} | format pattern "/v1/apps/{application_id}/endpoints/{endpoint_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2226,7 +2226,7 @@ export def "apps-endpoints DeleteEndpoint" [
 #
 # GET /v1/apps/{application-id}/endpoints/{endpoint-id}
 # operationId: GetEndpoint
-export def "apps-endpoints GetEndpoint" [
+export def "apps-endpoints get" [
   application_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2237,18 +2237,18 @@ export def "apps-endpoints GetEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EndpointResponse: record<Address: record, ApplicationId: record, Attributes: record, ChannelType: record, CohortId: record, CreationDate: record, Demographic: record<AppVersion: record, Locale: record, Make: record, Model: record, ModelVersion: record, Platform: record, PlatformVersion: record, Timezone: record>, EffectiveDate: record, EndpointStatus: record, Id: record, Location: record<City: record, Country: record, Latitude: record, Longitude: record, PostalCode: record, Region: record>, Metrics: record, OptOut: record, RequestId: record, User: record<UserAttributes: record, UserId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/endpoints/($endpoint_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, endpoint_id: $endpoint_id} | format pattern "/v1/apps/{application_id}/endpoints/{endpoint_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2260,7 +2260,7 @@ export def "apps-endpoints GetEndpoint" [
 # PUT /v1/apps/{application-id}/endpoints/{endpoint-id}
 # operationId: UpdateEndpoint
 # --EndpointRequest shape: {Address?: any, Attributes?: any, ChannelType?: any, Demographic?: any, EffectiveDate?: any, EndpointStatus?: any, Location?: any, Metrics?: any, OptOut?: any, RequestId?: any, User?: any}
-export def "apps-endpoints UpdateEndpoint" [
+export def "apps-endpoints update" [
   application_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2271,22 +2271,22 @@ export def "apps-endpoints UpdateEndpoint" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  EndpointRequest: record # Specifies the channel type and other settings for an endpoint. — shape: {Address?: any, Attributes?: any, ChannelType?: any, Demographic?: any, EffectiveDate?: any, EndpointStatus?: any, Location?: any, Metrics?: any, OptOut?: any, RequestId?: any, User?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  endpoint_request: record # Specifies the channel type and other settings for an endpoint. — shape: {Address?: any, Attributes?: any, ChannelType?: any, Demographic?: any, EffectiveDate?: any, EndpointStatus?: any, Location?: any, Metrics?: any, OptOut?: any, RequestId?: any, User?: any}
 ]: any -> record<MessageBody: record<Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/endpoints/($endpoint_id)")
-  let body = {EndpointRequest: $EndpointRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id, endpoint_id: $endpoint_id} | format pattern "/v1/apps/{application_id}/endpoints/{endpoint_id}"))
+  let body = {"EndpointRequest": $endpoint_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2297,7 +2297,7 @@ export def "apps-endpoints UpdateEndpoint" [
 #
 # DELETE /v1/apps/{application-id}/eventstream
 # operationId: DeleteEventStream
-export def "apps-eventstream DeleteEventStream" [
+export def "apps-eventstream delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2307,18 +2307,18 @@ export def "apps-eventstream DeleteEventStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EventStream: record<ApplicationId: record, DestinationStreamArn: record, ExternalId: record, LastModifiedDate: record, LastUpdatedBy: record, RoleArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/eventstream")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/eventstream"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2329,7 +2329,7 @@ export def "apps-eventstream DeleteEventStream" [
 #
 # GET /v1/apps/{application-id}/eventstream
 # operationId: GetEventStream
-export def "apps-eventstream GetEventStream" [
+export def "apps-eventstream get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2339,18 +2339,18 @@ export def "apps-eventstream GetEventStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EventStream: record<ApplicationId: record, DestinationStreamArn: record, ExternalId: record, LastModifiedDate: record, LastUpdatedBy: record, RoleArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/eventstream")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/eventstream"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2362,7 +2362,7 @@ export def "apps-eventstream GetEventStream" [
 # POST /v1/apps/{application-id}/eventstream
 # operationId: PutEventStream
 # --WriteEventStream shape: {DestinationStreamArn?: any, RoleArn?: any}
-export def "apps-eventstream PutEventStream" [
+export def "apps-eventstream update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2372,22 +2372,22 @@ export def "apps-eventstream PutEventStream" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  WriteEventStream: record # Specifies the Amazon Resource Name (ARN) of an event stream to publish events to and the AWS Identity and Access Management (IAM) role to use when publishing those events. — shape: {DestinationStreamArn?: any, RoleArn?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  write_event_stream: record # Specifies the Amazon Resource Name (ARN) of an event stream to publish events to and the AWS Identity and Access Management (IAM) role to use when publishing those events. — shape: {DestinationStreamArn?: any, RoleArn?: any}
 ]: any -> record<EventStream: record<ApplicationId: record, DestinationStreamArn: record, ExternalId: record, LastModifiedDate: record, LastUpdatedBy: record, RoleArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/eventstream")
-  let body = {WriteEventStream: $WriteEventStream} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/eventstream"))
+  let body = {"WriteEventStream": $write_event_stream} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2398,7 +2398,7 @@ export def "apps-eventstream PutEventStream" [
 #
 # DELETE /v1/apps/{application-id}/channels/gcm
 # operationId: DeleteGcmChannel
-export def "apps-channels-gcm DeleteGcmChannel" [
+export def "apps-channels-gcm delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2408,18 +2408,18 @@ export def "apps-channels-gcm DeleteGcmChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<GCMChannelResponse: record<ApplicationId: record, CreationDate: record, Credential: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/gcm")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/gcm"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2430,7 +2430,7 @@ export def "apps-channels-gcm DeleteGcmChannel" [
 #
 # GET /v1/apps/{application-id}/channels/gcm
 # operationId: GetGcmChannel
-export def "apps-channels-gcm GetGcmChannel" [
+export def "apps-channels-gcm get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2440,18 +2440,18 @@ export def "apps-channels-gcm GetGcmChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<GCMChannelResponse: record<ApplicationId: record, CreationDate: record, Credential: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/gcm")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/gcm"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2463,7 +2463,7 @@ export def "apps-channels-gcm GetGcmChannel" [
 # PUT /v1/apps/{application-id}/channels/gcm
 # operationId: UpdateGcmChannel
 # --GCMChannelRequest shape: {ApiKey?: any, Enabled?: any}
-export def "apps-channels-gcm UpdateGcmChannel" [
+export def "apps-channels-gcm update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2473,22 +2473,22 @@ export def "apps-channels-gcm UpdateGcmChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  GCMChannelRequest: record # Specifies the status and settings of the GCM channel for an application. This channel enables Amazon Pinpoint to send push notifications through the Firebase Cloud Messaging (FCM), formerly Google Cloud Messaging (GCM), service. — shape: {ApiKey?: any, Enabled?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  gcm_channel_request: record # Specifies the status and settings of the GCM channel for an application. This channel enables Amazon Pinpoint to send push notifications through the Firebase Cloud Messaging (FCM), formerly Google Cloud Messaging (GCM), service. — shape: {ApiKey?: any, Enabled?: any}
 ]: any -> record<GCMChannelResponse: record<ApplicationId: record, CreationDate: record, Credential: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/gcm")
-  let body = {GCMChannelRequest: $GCMChannelRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/gcm"))
+  let body = {"GCMChannelRequest": $gcm_channel_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2499,7 +2499,7 @@ export def "apps-channels-gcm UpdateGcmChannel" [
 #
 # DELETE /v1/apps/{application-id}/journeys/{journey-id}
 # operationId: DeleteJourney
-export def "apps-journeys DeleteJourney" [
+export def "apps-journeys delete" [
   application_id: string
   journey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2510,18 +2510,18 @@ export def "apps-journeys DeleteJourney" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<JourneyResponse: record<Activities: record, ApplicationId: record, CreationDate: record, Id: record, LastModifiedDate: record, Limits: record<DailyCap: record, EndpointReentryCap: record, MessagesPerSecond: record, EndpointReentryInterval: record>, LocalTime: record, Name: record, QuietTime: record<End: record, Start: record>, RefreshFrequency: record, Schedule: record<EndTime: record, StartTime: record, Timezone: record>, StartActivity: record, StartCondition: record<Description: record, EventStartCondition: record, SegmentStartCondition: record>, State: record, tags: record, WaitForQuietTime: record, RefreshOnSegmentUpdate: record, JourneyChannelSettings: record<ConnectCampaignArn: record, ConnectCampaignExecutionRoleArn: record>, SendingSchedule: record, OpenHours: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>, ClosedDays: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/journeys/($journey_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, journey_id: $journey_id} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2532,7 +2532,7 @@ export def "apps-journeys DeleteJourney" [
 #
 # GET /v1/apps/{application-id}/journeys/{journey-id}
 # operationId: GetJourney
-export def "apps-journeys GetJourney" [
+export def "apps-journeys get" [
   application_id: string
   journey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2543,18 +2543,18 @@ export def "apps-journeys GetJourney" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<JourneyResponse: record<Activities: record, ApplicationId: record, CreationDate: record, Id: record, LastModifiedDate: record, Limits: record<DailyCap: record, EndpointReentryCap: record, MessagesPerSecond: record, EndpointReentryInterval: record>, LocalTime: record, Name: record, QuietTime: record<End: record, Start: record>, RefreshFrequency: record, Schedule: record<EndTime: record, StartTime: record, Timezone: record>, StartActivity: record, StartCondition: record<Description: record, EventStartCondition: record, SegmentStartCondition: record>, State: record, tags: record, WaitForQuietTime: record, RefreshOnSegmentUpdate: record, JourneyChannelSettings: record<ConnectCampaignArn: record, ConnectCampaignExecutionRoleArn: record>, SendingSchedule: record, OpenHours: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>, ClosedDays: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/journeys/($journey_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, journey_id: $journey_id} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2566,7 +2566,7 @@ export def "apps-journeys GetJourney" [
 # PUT /v1/apps/{application-id}/journeys/{journey-id}
 # operationId: UpdateJourney
 # --WriteJourneyRequest shape: {Activities?: any, CreationDate?: any, LastModifiedDate?: any, Limits?: any, LocalTime?: any, Name?: any, QuietTime?: any, RefreshFrequency?: any, Schedule?: any, StartActivity?: any, StartCondition?: any, State?: any, WaitForQuietTime?: any, RefreshOnSegmentUpdate?: any, JourneyChannelSettings?: any, SendingSchedule?: any, OpenHours?: any, ClosedDays?: any}
-export def "apps-journeys UpdateJourney" [
+export def "apps-journeys update" [
   application_id: string
   journey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2577,22 +2577,22 @@ export def "apps-journeys UpdateJourney" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  WriteJourneyRequest: record # Specifies the configuration and other settings for a journey. — shape: {Activities?: any, CreationDate?: any, LastModifiedDate?: any, Limits?: any, LocalTime?: any, Name?: any, QuietTime?: any, RefreshFrequency?: any, Schedule?: any, StartActivity?: any, StartCondition?: any, State?: any, WaitForQuietTime?: any, RefreshOnSegmentUpdate?: any, JourneyChannelSettings?: any, SendingSchedule?: any, OpenHours?: any, ClosedDays?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  write_journey_request: record # Specifies the configuration and other settings for a journey. — shape: {Activities?: any, CreationDate?: any, LastModifiedDate?: any, Limits?: any, LocalTime?: any, Name?: any, QuietTime?: any, RefreshFrequency?: any, Schedule?: any, StartActivity?: any, StartCondition?: any, State?: any, WaitForQuietTime?: any, RefreshOnSegmentUpdate?: any, JourneyChannelSettings?: any, SendingSchedule?: any, OpenHours?: any, ClosedDays?: any}
 ]: any -> record<JourneyResponse: record<Activities: record, ApplicationId: record, CreationDate: record, Id: record, LastModifiedDate: record, Limits: record<DailyCap: record, EndpointReentryCap: record, MessagesPerSecond: record, EndpointReentryInterval: record>, LocalTime: record, Name: record, QuietTime: record<End: record, Start: record>, RefreshFrequency: record, Schedule: record<EndTime: record, StartTime: record, Timezone: record>, StartActivity: record, StartCondition: record<Description: record, EventStartCondition: record, SegmentStartCondition: record>, State: record, tags: record, WaitForQuietTime: record, RefreshOnSegmentUpdate: record, JourneyChannelSettings: record<ConnectCampaignArn: record, ConnectCampaignExecutionRoleArn: record>, SendingSchedule: record, OpenHours: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>, ClosedDays: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/journeys/($journey_id)")
-  let body = {WriteJourneyRequest: $WriteJourneyRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id, journey_id: $journey_id} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}"))
+  let body = {"WriteJourneyRequest": $write_journey_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2603,7 +2603,7 @@ export def "apps-journeys UpdateJourney" [
 #
 # DELETE /v1/recommenders/{recommender-id}
 # operationId: DeleteRecommenderConfiguration
-export def "recommenders DeleteRecommenderConfiguration" [
+export def "recommenders delete-recommender-configuration" [
   recommender_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2613,18 +2613,18 @@ export def "recommenders DeleteRecommenderConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RecommenderConfigurationResponse: record<Attributes: record, CreationDate: record, Description: record, Id: record, LastModifiedDate: record, Name: record, RecommendationProviderIdType: record, RecommendationProviderRoleArn: record, RecommendationProviderUri: record, RecommendationTransformerUri: record, RecommendationsDisplayName: record, RecommendationsPerMessage: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/recommenders/($recommender_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({recommender_id: $recommender_id} | format pattern "/v1/recommenders/{recommender_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2635,7 +2635,7 @@ export def "recommenders DeleteRecommenderConfiguration" [
 #
 # GET /v1/recommenders/{recommender-id}
 # operationId: GetRecommenderConfiguration
-export def "recommenders GetRecommenderConfiguration" [
+export def "recommenders get-recommender-configuration" [
   recommender_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2645,18 +2645,18 @@ export def "recommenders GetRecommenderConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<RecommenderConfigurationResponse: record<Attributes: record, CreationDate: record, Description: record, Id: record, LastModifiedDate: record, Name: record, RecommendationProviderIdType: record, RecommendationProviderRoleArn: record, RecommendationProviderUri: record, RecommendationTransformerUri: record, RecommendationsDisplayName: record, RecommendationsPerMessage: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/recommenders/($recommender_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({recommender_id: $recommender_id} | format pattern "/v1/recommenders/{recommender_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2668,7 +2668,7 @@ export def "recommenders GetRecommenderConfiguration" [
 # PUT /v1/recommenders/{recommender-id}
 # operationId: UpdateRecommenderConfiguration
 # --UpdateRecommenderConfiguration shape: {Attributes?: any, Description?: any, Name?: any, RecommendationProviderIdType?: any, RecommendationProviderRoleArn?: any, RecommendationProviderUri?: any, RecommendationTransformerUri?: any, RecommendationsDisplayName?: any, RecommendationsPerMessage?: any}
-export def "recommenders UpdateRecommenderConfiguration" [
+export def "recommenders update-recommender-configuration" [
   recommender_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2678,22 +2678,22 @@ export def "recommenders UpdateRecommenderConfiguration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  UpdateRecommenderConfiguration: record # Specifies Amazon Pinpoint configuration settings for retrieving and processing recommendation data from a recommender model. — shape: {Attributes?: any, Description?: any, Name?: any, RecommendationProviderIdType?: any, RecommendationProviderRoleArn?: any, RecommendationProviderUri?: any, RecommendationTransformerUri?: any, RecommendationsDisplayName?: any, RecommendationsPerMessage?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  update_recommender_configuration: record # Specifies Amazon Pinpoint configuration settings for retrieving and processing recommendation data from a recommender model. — shape: {Attributes?: any, Description?: any, Name?: any, RecommendationProviderIdType?: any, RecommendationProviderRoleArn?: any, RecommendationProviderUri?: any, RecommendationTransformerUri?: any, RecommendationsDisplayName?: any, RecommendationsPerMessage?: any}
 ]: any -> record<RecommenderConfigurationResponse: record<Attributes: record, CreationDate: record, Description: record, Id: record, LastModifiedDate: record, Name: record, RecommendationProviderIdType: record, RecommendationProviderRoleArn: record, RecommendationProviderUri: record, RecommendationTransformerUri: record, RecommendationsDisplayName: record, RecommendationsPerMessage: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/recommenders/($recommender_id)")
-  let body = {UpdateRecommenderConfiguration: $UpdateRecommenderConfiguration} | compact
+  let full_url = (build-url $base ({recommender_id: $recommender_id} | format pattern "/v1/recommenders/{recommender_id}"))
+  let body = {"UpdateRecommenderConfiguration": $update_recommender_configuration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2704,7 +2704,7 @@ export def "recommenders UpdateRecommenderConfiguration" [
 #
 # DELETE /v1/apps/{application-id}/segments/{segment-id}
 # operationId: DeleteSegment
-export def "apps-segments DeleteSegment" [
+export def "apps-segments delete" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2715,18 +2715,18 @@ export def "apps-segments DeleteSegment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<SegmentResponse: record<ApplicationId: record, Arn: record, CreationDate: record, Dimensions: record<Attributes: record, Behavior: record, Demographic: record, Location: record, Metrics: record, UserAttributes: record>, Id: record, ImportDefinition: record<ChannelCounts: record, ExternalId: record, Format: record, RoleArn: record, S3Url: record, Size: record>, LastModifiedDate: record, Name: record, SegmentGroups: record<Groups: record, Include: record>, SegmentType: record, tags: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/segments/($segment_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, segment_id: $segment_id} | format pattern "/v1/apps/{application_id}/segments/{segment_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2737,7 +2737,7 @@ export def "apps-segments DeleteSegment" [
 #
 # GET /v1/apps/{application-id}/segments/{segment-id}
 # operationId: GetSegment
-export def "apps-segments GetSegment" [
+export def "apps-segments get" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2748,18 +2748,18 @@ export def "apps-segments GetSegment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<SegmentResponse: record<ApplicationId: record, Arn: record, CreationDate: record, Dimensions: record<Attributes: record, Behavior: record, Demographic: record, Location: record, Metrics: record, UserAttributes: record>, Id: record, ImportDefinition: record<ChannelCounts: record, ExternalId: record, Format: record, RoleArn: record, S3Url: record, Size: record>, LastModifiedDate: record, Name: record, SegmentGroups: record<Groups: record, Include: record>, SegmentType: record, tags: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/segments/($segment_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, segment_id: $segment_id} | format pattern "/v1/apps/{application_id}/segments/{segment_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2771,7 +2771,7 @@ export def "apps-segments GetSegment" [
 # PUT /v1/apps/{application-id}/segments/{segment-id}
 # operationId: UpdateSegment
 # --WriteSegmentRequest shape: {Dimensions?: any, Name?: any, SegmentGroups?: any, tags?: any}
-export def "apps-segments UpdateSegment" [
+export def "apps-segments update" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2782,22 +2782,22 @@ export def "apps-segments UpdateSegment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  WriteSegmentRequest: record # Specifies the configuration, dimension, and other settings for a segment. A WriteSegmentRequest object can include a Dimensions object or a SegmentGroups object, but not both. — shape: {Dimensions?: any, Name?: any, SegmentGroups?: any, tags?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  write_segment_request: record # Specifies the configuration, dimension, and other settings for a segment. A WriteSegmentRequest object can include a Dimensions object or a SegmentGroups object, but not both. — shape: {Dimensions?: any, Name?: any, SegmentGroups?: any, tags?: any}
 ]: any -> record<SegmentResponse: record<ApplicationId: record, Arn: record, CreationDate: record, Dimensions: record<Attributes: record, Behavior: record, Demographic: record, Location: record, Metrics: record, UserAttributes: record>, Id: record, ImportDefinition: record<ChannelCounts: record, ExternalId: record, Format: record, RoleArn: record, S3Url: record, Size: record>, LastModifiedDate: record, Name: record, SegmentGroups: record<Groups: record, Include: record>, SegmentType: record, tags: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/segments/($segment_id)")
-  let body = {WriteSegmentRequest: $WriteSegmentRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id, segment_id: $segment_id} | format pattern "/v1/apps/{application_id}/segments/{segment_id}"))
+  let body = {"WriteSegmentRequest": $write_segment_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2808,7 +2808,7 @@ export def "apps-segments UpdateSegment" [
 #
 # DELETE /v1/apps/{application-id}/channels/sms
 # operationId: DeleteSmsChannel
-export def "apps-channels-sms DeleteSmsChannel" [
+export def "apps-channels-sms delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2818,18 +2818,18 @@ export def "apps-channels-sms DeleteSmsChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<SMSChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, PromotionalMessagesPerSecond: record, SenderId: record, ShortCode: record, TransactionalMessagesPerSecond: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/sms")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/sms"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2840,7 +2840,7 @@ export def "apps-channels-sms DeleteSmsChannel" [
 #
 # GET /v1/apps/{application-id}/channels/sms
 # operationId: GetSmsChannel
-export def "apps-channels-sms GetSmsChannel" [
+export def "apps-channels-sms get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2850,18 +2850,18 @@ export def "apps-channels-sms GetSmsChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<SMSChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, PromotionalMessagesPerSecond: record, SenderId: record, ShortCode: record, TransactionalMessagesPerSecond: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/sms")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/sms"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2873,7 +2873,7 @@ export def "apps-channels-sms GetSmsChannel" [
 # PUT /v1/apps/{application-id}/channels/sms
 # operationId: UpdateSmsChannel
 # --SMSChannelRequest shape: {Enabled?: any, SenderId?: any, ShortCode?: any}
-export def "apps-channels-sms UpdateSmsChannel" [
+export def "apps-channels-sms update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2883,22 +2883,22 @@ export def "apps-channels-sms UpdateSmsChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  SMSChannelRequest: record # Specifies the status and settings of the SMS channel for an application. — shape: {Enabled?: any, SenderId?: any, ShortCode?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  sms_channel_request: record # Specifies the status and settings of the SMS channel for an application. — shape: {Enabled?: any, SenderId?: any, ShortCode?: any}
 ]: any -> record<SMSChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, PromotionalMessagesPerSecond: record, SenderId: record, ShortCode: record, TransactionalMessagesPerSecond: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/sms")
-  let body = {SMSChannelRequest: $SMSChannelRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/sms"))
+  let body = {"SMSChannelRequest": $sms_channel_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2909,7 +2909,7 @@ export def "apps-channels-sms UpdateSmsChannel" [
 #
 # DELETE /v1/apps/{application-id}/users/{user-id}
 # operationId: DeleteUserEndpoints
-export def "apps-users DeleteUserEndpoints" [
+export def "apps-users delete-user-endpoints" [
   application_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2920,18 +2920,18 @@ export def "apps-users DeleteUserEndpoints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EndpointsResponse: record<Item: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/users/($user_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, user_id: $user_id} | format pattern "/v1/apps/{application_id}/users/{user_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2942,7 +2942,7 @@ export def "apps-users DeleteUserEndpoints" [
 #
 # GET /v1/apps/{application-id}/users/{user-id}
 # operationId: GetUserEndpoints
-export def "apps-users GetUserEndpoints" [
+export def "apps-users get-user-endpoints" [
   application_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2953,18 +2953,18 @@ export def "apps-users GetUserEndpoints" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<EndpointsResponse: record<Item: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/users/($user_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, user_id: $user_id} | format pattern "/v1/apps/{application_id}/users/{user_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2975,7 +2975,7 @@ export def "apps-users GetUserEndpoints" [
 #
 # DELETE /v1/apps/{application-id}/channels/voice
 # operationId: DeleteVoiceChannel
-export def "apps-channels-voice DeleteVoiceChannel" [
+export def "apps-channels-voice delete" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2985,18 +2985,18 @@ export def "apps-channels-voice DeleteVoiceChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<VoiceChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/voice")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/voice"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3007,7 +3007,7 @@ export def "apps-channels-voice DeleteVoiceChannel" [
 #
 # GET /v1/apps/{application-id}/channels/voice
 # operationId: GetVoiceChannel
-export def "apps-channels-voice GetVoiceChannel" [
+export def "apps-channels-voice get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3017,18 +3017,18 @@ export def "apps-channels-voice GetVoiceChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<VoiceChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/voice")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/voice"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3040,7 +3040,7 @@ export def "apps-channels-voice GetVoiceChannel" [
 # PUT /v1/apps/{application-id}/channels/voice
 # operationId: UpdateVoiceChannel
 # --VoiceChannelRequest shape: {Enabled?: any}
-export def "apps-channels-voice UpdateVoiceChannel" [
+export def "apps-channels-voice update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3050,22 +3050,22 @@ export def "apps-channels-voice UpdateVoiceChannel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  VoiceChannelRequest: record # Specifies the status and settings of the voice channel for an application. — shape: {Enabled?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  voice_channel_request: record # Specifies the status and settings of the voice channel for an application. — shape: {Enabled?: any}
 ]: any -> record<VoiceChannelResponse: record<ApplicationId: record, CreationDate: record, Enabled: record, HasCredential: record, Id: record, IsArchived: record, LastModifiedBy: record, LastModifiedDate: record, Platform: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels/voice")
-  let body = {VoiceChannelRequest: $VoiceChannelRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels/voice"))
+  let body = {"VoiceChannelRequest": $voice_channel_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3076,7 +3076,7 @@ export def "apps-channels-voice UpdateVoiceChannel" [
 #
 # GET /v1/apps/{application-id}/kpis/daterange/{kpi-name}
 # operationId: GetApplicationDateRangeKpi
-export def "apps-kpis-daterange GetApplicationDateRangeKpi" [
+export def "apps-kpis-daterange get-application" [
   application_id: string
   kpi_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3091,19 +3091,19 @@ export def "apps-kpis-daterange GetApplicationDateRangeKpi" [
   --next-token: string # The  string that specifies which page of results to return in a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --start-time: string # The first date and time to retrieve data for, as part of an inclusive date range that filters the query results. This value should be in extended ISO 8601 format and use Coordinated Universal Time (UTC), for example: 2019-07-19T20:00:00Z for 8:00 PM UTC July 19, 2019. This value should also be fewer than 90 days from the current day. (format: date-time)
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ApplicationDateRangeKpiResponse: record<ApplicationId: record, EndTime: record, KpiName: record, KpiResult: record<Rows: record>, NextToken: record, StartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "end-time" $end_time "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar") (serialize-qp "start-time" $start_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/kpis/daterange/($kpi_name)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, kpi_name: $kpi_name} | format pattern "/v1/apps/{application_id}/kpis/daterange/{kpi_name}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3114,7 +3114,7 @@ export def "apps-kpis-daterange GetApplicationDateRangeKpi" [
 #
 # GET /v1/apps/{application-id}/settings
 # operationId: GetApplicationSettings
-export def "apps-settings GetApplicationSettings" [
+export def "apps-settings get-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3124,18 +3124,18 @@ export def "apps-settings GetApplicationSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ApplicationSettingsResource: record<ApplicationId: record, CampaignHook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, QuietTime: record<End: record, Start: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/settings")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/settings"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3147,7 +3147,7 @@ export def "apps-settings GetApplicationSettings" [
 # PUT /v1/apps/{application-id}/settings
 # operationId: UpdateApplicationSettings
 # --WriteApplicationSettingsRequest shape: {CampaignHook?: any, CloudWatchMetricsEnabled?: any, EventTaggingEnabled?: bool, Limits?: any, QuietTime?: any}
-export def "apps-settings UpdateApplicationSettings" [
+export def "apps-settings update-application" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3157,22 +3157,22 @@ export def "apps-settings UpdateApplicationSettings" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  WriteApplicationSettingsRequest: record # Specifies the default settings for an application. — shape: {CampaignHook?: any, CloudWatchMetricsEnabled?: any, EventTaggingEnabled?: bool, Limits?: any, QuietTime?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  write_application_settings_request: record # Specifies the default settings for an application. — shape: {CampaignHook?: any, CloudWatchMetricsEnabled?: any, EventTaggingEnabled?: bool, Limits?: any, QuietTime?: any}
 ]: any -> record<ApplicationSettingsResource: record<ApplicationId: record, CampaignHook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, QuietTime: record<End: record, Start: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/settings")
-  let body = {WriteApplicationSettingsRequest: $WriteApplicationSettingsRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/settings"))
+  let body = {"WriteApplicationSettingsRequest": $write_application_settings_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3183,7 +3183,7 @@ export def "apps-settings UpdateApplicationSettings" [
 #
 # GET /v1/apps/{application-id}/campaigns/{campaign-id}/activities
 # operationId: GetCampaignActivities
-export def "apps-campaigns-activities GetCampaignActivities" [
+export def "apps-campaigns-activities get" [
   application_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3196,19 +3196,19 @@ export def "apps-campaigns-activities GetCampaignActivities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ActivitiesResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/campaigns/($campaign_id)/activities" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, campaign_id: $campaign_id} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}/activities") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3219,7 +3219,7 @@ export def "apps-campaigns-activities GetCampaignActivities" [
 #
 # GET /v1/apps/{application-id}/campaigns/{campaign-id}/kpis/daterange/{kpi-name}
 # operationId: GetCampaignDateRangeKpi
-export def "apps-campaigns-kpis-daterange GetCampaignDateRangeKpi" [
+export def "apps-campaigns-kpis-daterange get" [
   application_id: string
   campaign_id: string
   kpi_name: string
@@ -3235,19 +3235,19 @@ export def "apps-campaigns-kpis-daterange GetCampaignDateRangeKpi" [
   --next-token: string # The  string that specifies which page of results to return in a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --start-time: string # The first date and time to retrieve data for, as part of an inclusive date range that filters the query results. This value should be in extended ISO 8601 format and use Coordinated Universal Time (UTC), for example: 2019-07-19T20:00:00Z for 8:00 PM UTC July 19, 2019. This value should also be fewer than 90 days from the current day. (format: date-time)
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<CampaignDateRangeKpiResponse: record<ApplicationId: record, CampaignId: record, EndTime: record, KpiName: record, KpiResult: record<Rows: record>, NextToken: record, StartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "end-time" $end_time "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar") (serialize-qp "start-time" $start_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/campaigns/($campaign_id)/kpis/daterange/($kpi_name)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, campaign_id: $campaign_id, kpi_name: $kpi_name} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}/kpis/daterange/{kpi_name}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3258,7 +3258,7 @@ export def "apps-campaigns-kpis-daterange GetCampaignDateRangeKpi" [
 #
 # GET /v1/apps/{application-id}/campaigns/{campaign-id}/versions/{version}
 # operationId: GetCampaignVersion
-export def "apps-campaigns-versions GetCampaignVersion" [
+export def "apps-campaigns-versions get" [
   application_id: string
   campaign_id: string
   version: string
@@ -3270,18 +3270,18 @@ export def "apps-campaigns-versions GetCampaignVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<CampaignResponse: record<AdditionalTreatments: record, ApplicationId: record, Arn: record, CreationDate: record, CustomDeliveryConfiguration: record<DeliveryUri: record, EndpointTypes: record>, DefaultState: record<CampaignStatus: record>, Description: record, HoldoutPercent: record, Hook: record<LambdaFunctionName: record, Mode: record, WebUrl: record>, Id: record, IsPaused: record, LastModifiedDate: record, Limits: record<Daily: record, MaximumDuration: record, MessagesPerSecond: record, Total: record, Session: record>, MessageConfiguration: record<ADMMessage: record, APNSMessage: record, BaiduMessage: record, CustomMessage: record, DefaultMessage: record, EmailMessage: record, GCMMessage: record, SMSMessage: record, InAppMessage: record>, Name: record, Schedule: record<EndTime: record, EventFilter: record, Frequency: record, IsLocalTime: record, QuietTime: record, StartTime: record, Timezone: record>, SegmentId: record, SegmentVersion: record, State: record<CampaignStatus: record>, tags: record, TemplateConfiguration: record<EmailTemplate: record, PushTemplate: record, SMSTemplate: record, VoiceTemplate: record>, TreatmentDescription: record, TreatmentName: record, Version: record, Priority: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/campaigns/($campaign_id)/versions/($version)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, campaign_id: $campaign_id, version: $version} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}/versions/{version}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3292,7 +3292,7 @@ export def "apps-campaigns-versions GetCampaignVersion" [
 #
 # GET /v1/apps/{application-id}/campaigns/{campaign-id}/versions
 # operationId: GetCampaignVersions
-export def "apps-campaigns-versions GetCampaignVersions" [
+export def "apps-campaigns-versions list" [
   application_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3305,19 +3305,19 @@ export def "apps-campaigns-versions GetCampaignVersions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<CampaignsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/campaigns/($campaign_id)/versions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, campaign_id: $campaign_id} | format pattern "/v1/apps/{application_id}/campaigns/{campaign_id}/versions") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3328,7 +3328,7 @@ export def "apps-campaigns-versions GetCampaignVersions" [
 #
 # GET /v1/apps/{application-id}/channels
 # operationId: GetChannels
-export def "apps-channels GetChannels" [
+export def "apps-channels get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3338,18 +3338,18 @@ export def "apps-channels GetChannels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ChannelsResponse: record<Channels: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/channels")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/channels"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3360,7 +3360,7 @@ export def "apps-channels GetChannels" [
 #
 # GET /v1/apps/{application-id}/jobs/export/{job-id}
 # operationId: GetExportJob
-export def "apps-jobs-export GetExportJob" [
+export def "apps-jobs-export get" [
   application_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3371,18 +3371,18 @@ export def "apps-jobs-export GetExportJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ExportJobResponse: record<ApplicationId: record, CompletedPieces: record, CompletionDate: record, CreationDate: record, Definition: record<RoleArn: record, S3UrlPrefix: record, SegmentId: record, SegmentVersion: record>, FailedPieces: record, Failures: record, Id: record, JobStatus: record, TotalFailures: record, TotalPieces: record, TotalProcessed: record, Type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/jobs/export/($job_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, job_id: $job_id} | format pattern "/v1/apps/{application_id}/jobs/export/{job_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3393,7 +3393,7 @@ export def "apps-jobs-export GetExportJob" [
 #
 # GET /v1/apps/{application-id}/jobs/import/{job-id}
 # operationId: GetImportJob
-export def "apps-jobs-import GetImportJob" [
+export def "apps-jobs-import get" [
   application_id: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3404,18 +3404,18 @@ export def "apps-jobs-import GetImportJob" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ImportJobResponse: record<ApplicationId: record, CompletedPieces: record, CompletionDate: record, CreationDate: record, Definition: record<DefineSegment: record, ExternalId: record, Format: record, RegisterEndpoints: record, RoleArn: record, S3Url: record, SegmentId: record, SegmentName: record>, FailedPieces: record, Failures: record, Id: record, JobStatus: record, TotalFailures: record, TotalPieces: record, TotalProcessed: record, Type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/jobs/import/($job_id)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, job_id: $job_id} | format pattern "/v1/apps/{application_id}/jobs/import/{job_id}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3426,7 +3426,7 @@ export def "apps-jobs-import GetImportJob" [
 #
 # GET /v1/apps/{application-id}/endpoints/{endpoint-id}/inappmessages
 # operationId: GetInAppMessages
-export def "apps-endpoints-inappmessages GetInAppMessages" [
+export def "apps-endpoints-inappmessages get-in-app-messages" [
   application_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3437,18 +3437,18 @@ export def "apps-endpoints-inappmessages GetInAppMessages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<InAppMessagesResponse: record<InAppMessageCampaigns: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/endpoints/($endpoint_id)/inappmessages")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, endpoint_id: $endpoint_id} | format pattern "/v1/apps/{application_id}/endpoints/{endpoint_id}/inappmessages"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3459,7 +3459,7 @@ export def "apps-endpoints-inappmessages GetInAppMessages" [
 #
 # GET /v1/apps/{application-id}/journeys/{journey-id}/kpis/daterange/{kpi-name}
 # operationId: GetJourneyDateRangeKpi
-export def "apps-journeys-kpis-daterange GetJourneyDateRangeKpi" [
+export def "apps-journeys-kpis-daterange get" [
   application_id: string
   journey_id: string
   kpi_name: string
@@ -3475,19 +3475,19 @@ export def "apps-journeys-kpis-daterange GetJourneyDateRangeKpi" [
   --next-token: string # The  string that specifies which page of results to return in a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --start-time: string # The first date and time to retrieve data for, as part of an inclusive date range that filters the query results. This value should be in extended ISO 8601 format and use Coordinated Universal Time (UTC), for example: 2019-07-19T20:00:00Z for 8:00 PM UTC July 19, 2019. This value should also be fewer than 90 days from the current day. (format: date-time)
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<JourneyDateRangeKpiResponse: record<ApplicationId: record, EndTime: record, JourneyId: record, KpiName: record, KpiResult: record<Rows: record>, NextToken: record, StartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "end-time" $end_time "scalar") (serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar") (serialize-qp "start-time" $start_time "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/journeys/($journey_id)/kpis/daterange/($kpi_name)" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, journey_id: $journey_id, kpi_name: $kpi_name} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}/kpis/daterange/{kpi_name}") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3498,10 +3498,10 @@ export def "apps-journeys-kpis-daterange GetJourneyDateRangeKpi" [
 #
 # GET /v1/apps/{application-id}/journeys/{journey-id}/activities/{journey-activity-id}/execution-metrics
 # operationId: GetJourneyExecutionActivityMetrics
-export def "apps-journeys-activities-execution-metrics GetJourneyExecutionActivityMetrics" [
+export def "apps-journeys-activities-execution-metrics get-journey-execution-activity" [
   application_id: string
-  journey_activity_id: string
   journey_id: string
+  journey_activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3512,19 +3512,19 @@ export def "apps-journeys-activities-execution-metrics GetJourneyExecutionActivi
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The  string that specifies which page of results to return in a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<JourneyExecutionActivityMetricsResponse: record<ActivityType: record, ApplicationId: record, JourneyActivityId: record, JourneyId: record, LastEvaluatedTime: record, Metrics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/journeys/($journey_id)/activities/($journey_activity_id)/execution-metrics" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, journey_id: $journey_id, journey_activity_id: $journey_activity_id} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}/activities/{journey_activity_id}/execution-metrics") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3535,7 +3535,7 @@ export def "apps-journeys-activities-execution-metrics GetJourneyExecutionActivi
 #
 # GET /v1/apps/{application-id}/journeys/{journey-id}/execution-metrics
 # operationId: GetJourneyExecutionMetrics
-export def "apps-journeys-execution-metrics GetJourneyExecutionMetrics" [
+export def "apps-journeys-execution-metrics get" [
   application_id: string
   journey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3548,19 +3548,19 @@ export def "apps-journeys-execution-metrics GetJourneyExecutionMetrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The  string that specifies which page of results to return in a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<JourneyExecutionMetricsResponse: record<ApplicationId: record, JourneyId: record, LastEvaluatedTime: record, Metrics: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/journeys/($journey_id)/execution-metrics" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, journey_id: $journey_id} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}/execution-metrics") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3571,7 +3571,7 @@ export def "apps-journeys-execution-metrics GetJourneyExecutionMetrics" [
 #
 # GET /v1/apps/{application-id}/segments/{segment-id}/jobs/export
 # operationId: GetSegmentExportJobs
-export def "apps-segments-jobs-export GetSegmentExportJobs" [
+export def "apps-segments-jobs-export get" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3584,19 +3584,19 @@ export def "apps-segments-jobs-export GetSegmentExportJobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ExportJobsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/segments/($segment_id)/jobs/export" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, segment_id: $segment_id} | format pattern "/v1/apps/{application_id}/segments/{segment_id}/jobs/export") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3607,7 +3607,7 @@ export def "apps-segments-jobs-export GetSegmentExportJobs" [
 #
 # GET /v1/apps/{application-id}/segments/{segment-id}/jobs/import
 # operationId: GetSegmentImportJobs
-export def "apps-segments-jobs-import GetSegmentImportJobs" [
+export def "apps-segments-jobs-import get" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3620,19 +3620,19 @@ export def "apps-segments-jobs-import GetSegmentImportJobs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<ImportJobsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/segments/($segment_id)/jobs/import" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, segment_id: $segment_id} | format pattern "/v1/apps/{application_id}/segments/{segment_id}/jobs/import") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3643,7 +3643,7 @@ export def "apps-segments-jobs-import GetSegmentImportJobs" [
 #
 # GET /v1/apps/{application-id}/segments/{segment-id}/versions/{version}
 # operationId: GetSegmentVersion
-export def "apps-segments-versions GetSegmentVersion" [
+export def "apps-segments-versions get" [
   application_id: string
   segment_id: string
   version: string
@@ -3655,18 +3655,18 @@ export def "apps-segments-versions GetSegmentVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<SegmentResponse: record<ApplicationId: record, Arn: record, CreationDate: record, Dimensions: record<Attributes: record, Behavior: record, Demographic: record, Location: record, Metrics: record, UserAttributes: record>, Id: record, ImportDefinition: record<ChannelCounts: record, ExternalId: record, Format: record, RoleArn: record, S3Url: record, Size: record>, LastModifiedDate: record, Name: record, SegmentGroups: record<Groups: record, Include: record>, SegmentType: record, tags: record, Version: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/segments/($segment_id)/versions/($version)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, segment_id: $segment_id, version: $version} | format pattern "/v1/apps/{application_id}/segments/{segment_id}/versions/{version}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3677,7 +3677,7 @@ export def "apps-segments-versions GetSegmentVersion" [
 #
 # GET /v1/apps/{application-id}/segments/{segment-id}/versions
 # operationId: GetSegmentVersions
-export def "apps-segments-versions GetSegmentVersions" [
+export def "apps-segments-versions list" [
   application_id: string
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3690,19 +3690,19 @@ export def "apps-segments-versions GetSegmentVersions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --qp-token: string # The NextToken string that specifies which page of results to return in a paginated response.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<SegmentsResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page-size" $page_size "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/apps/($application_id)/segments/($segment_id)/versions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({application_id: $application_id, segment_id: $segment_id} | format pattern "/v1/apps/{application_id}/segments/{segment_id}/versions") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3713,7 +3713,7 @@ export def "apps-segments-versions GetSegmentVersions" [
 #
 # GET /v1/tags/{resource-arn}
 # operationId: ListTagsForResource
-export def "tags ListTagsForResource" [
+export def "tags list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3723,18 +3723,18 @@ export def "tags ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<TagsModel: record<tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/tags/($resource_arn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/v1/tags/{resource_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3746,7 +3746,7 @@ export def "tags ListTagsForResource" [
 # POST /v1/tags/{resource-arn}
 # operationId: TagResource
 # --TagsModel shape: {tags?: any}
-export def "tags TagResource" [
+export def "tags tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3756,22 +3756,22 @@ export def "tags TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TagsModel: record # Specifies the tags (keys and values) for an application, campaign, message template, or segment. — shape: {tags?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  tags_model: record # Specifies the tags (keys and values) for an application, campaign, message template, or segment. — shape: {tags?: any}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/tags/($resource_arn)")
-  let body = {TagsModel: $TagsModel} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/v1/tags/{resource_arn}"))
+  let body = {"TagsModel": $tags_model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3782,7 +3782,7 @@ export def "tags TagResource" [
 #
 # GET /v1/templates/{template-name}/{template-type}/versions
 # operationId: ListTemplateVersions
-export def "templates-versions ListTemplateVersions" [
+export def "templates-versions list" [
   template_name: string
   template_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3795,19 +3795,19 @@ export def "templates-versions ListTemplateVersions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --next-token: string # The  string that specifies which page of results to return in a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<TemplateVersionsResponse: record<Item: record, Message: record, NextToken: record, RequestID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/templates/($template_name)/($template_type)/versions" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({template_name: $template_name, template_type: $template_type} | format pattern "/v1/templates/{template_name}/{template_type}/versions") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3818,7 +3818,7 @@ export def "templates-versions ListTemplateVersions" [
 #
 # GET /v1/templates
 # operationId: ListTemplates
-export def "templates ListTemplates" [
+export def "templates list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3831,19 +3831,19 @@ export def "templates ListTemplates" [
   --page-size: string # The maximum number of items to include in each page of a paginated response. This parameter is not supported for application, campaign, and journey metrics.
   --prefix: string # The substring to match in the names of the message templates to include in the results. If you specify this value, Amazon Pinpoint returns only those templates whose names begin with the value that you specify.
   --template-type: string # The type of message template to include in the results. Valid values are: EMAIL, PUSH, SMS, and VOICE. To include all types of templates in the results, don't include this parameter in your request.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<TemplatesResponse: record<Item: record, NextToken: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "page-size" $page_size "scalar") (serialize-qp "prefix" $prefix "scalar") (serialize-qp "template-type" $template_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/templates" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3855,7 +3855,7 @@ export def "templates ListTemplates" [
 # POST /v1/phone/number/validate
 # operationId: PhoneNumberValidate
 # --NumberValidateRequest shape: {IsoCountryCode?: any, PhoneNumber?: any}
-export def "phone-number-validate PhoneNumberValidate" [
+export def "phone-number-validate validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3864,22 +3864,22 @@ export def "phone-number-validate PhoneNumberValidate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  NumberValidateRequest: record # Specifies a phone number to validate and retrieve information about. — shape: {IsoCountryCode?: any, PhoneNumber?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  number_validate_request: record # Specifies a phone number to validate and retrieve information about. — shape: {IsoCountryCode?: any, PhoneNumber?: any}
 ]: any -> record<NumberValidateResponse: record<Carrier: record, City: record, CleansedPhoneNumberE164: record, CleansedPhoneNumberNational: record, Country: record, CountryCodeIso2: record, CountryCodeNumeric: record, County: record, OriginalCountryCodeIso2: record, OriginalPhoneNumber: record, PhoneType: record, PhoneTypeCode: record, Timezone: record, ZipCode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/phone/number/validate")
-  let body = {NumberValidateRequest: $NumberValidateRequest} | compact
+  let body = {"NumberValidateRequest": $number_validate_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3891,7 +3891,7 @@ export def "phone-number-validate PhoneNumberValidate" [
 # POST /v1/apps/{application-id}/events
 # operationId: PutEvents
 # --EventsRequest shape: {BatchItem?: any}
-export def "apps-events PutEvents" [
+export def "apps-events update" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3901,22 +3901,22 @@ export def "apps-events PutEvents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  EventsRequest: record # Specifies a batch of events to process. — shape: {BatchItem?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  events_request: record # Specifies a batch of events to process. — shape: {BatchItem?: any}
 ]: any -> record<EventsResponse: record<Results: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/events")
-  let body = {EventsRequest: $EventsRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/events"))
+  let body = {"EventsRequest": $events_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3928,7 +3928,7 @@ export def "apps-events PutEvents" [
 # PUT /v1/apps/{application-id}/attributes/{attribute-type}
 # operationId: RemoveAttributes
 # --UpdateAttributesRequest shape: {Blacklist?: any}
-export def "apps-attributes RemoveAttributes" [
+export def "apps-attributes delete" [
   application_id: string
   attribute_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3939,22 +3939,22 @@ export def "apps-attributes RemoveAttributes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  UpdateAttributesRequest: record # Specifies one or more attributes to remove from all the endpoints that are associated with an application. — shape: {Blacklist?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  update_attributes_request: record # Specifies one or more attributes to remove from all the endpoints that are associated with an application. — shape: {Blacklist?: any}
 ]: any -> record<AttributesResource: record<ApplicationId: record, AttributeType: record, Attributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/attributes/($attribute_type)")
-  let body = {UpdateAttributesRequest: $UpdateAttributesRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id, attribute_type: $attribute_type} | format pattern "/v1/apps/{application_id}/attributes/{attribute_type}"))
+  let body = {"UpdateAttributesRequest": $update_attributes_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3966,7 +3966,7 @@ export def "apps-attributes RemoveAttributes" [
 # POST /v1/apps/{application-id}/messages
 # operationId: SendMessages
 # --MessageRequest shape: {Addresses?: any, Context?: any, Endpoints?: any, MessageConfiguration?: any, TemplateConfiguration?: any, TraceId?: any}
-export def "apps-messages SendMessages" [
+export def "apps-messages send" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3976,22 +3976,22 @@ export def "apps-messages SendMessages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  MessageRequest: record # Specifies the configuration and other settings for a message. — shape: {Addresses?: any, Context?: any, Endpoints?: any, MessageConfiguration?: any, TemplateConfiguration?: any, TraceId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  message_request: record # Specifies the configuration and other settings for a message. — shape: {Addresses?: any, Context?: any, Endpoints?: any, MessageConfiguration?: any, TemplateConfiguration?: any, TraceId?: any}
 ]: any -> record<MessageResponse: record<ApplicationId: record, EndpointResult: record, RequestId: record, Result: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/messages")
-  let body = {MessageRequest: $MessageRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/messages"))
+  let body = {"MessageRequest": $message_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4003,7 +4003,7 @@ export def "apps-messages SendMessages" [
 # POST /v1/apps/{application-id}/otp
 # operationId: SendOTPMessage
 # --SendOTPMessageRequestParameters shape: {AllowedAttempts?: any, BrandName?: any, Channel?: any, CodeLength?: any, DestinationIdentity?: any, EntityId?: any, Language?: any, OriginationIdentity?: any, ReferenceId?: any, TemplateId?: any, ValidityPeriod?: any}
-export def "apps-otp SendOTPMessage" [
+export def "apps-otp send-otp-message" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4013,22 +4013,22 @@ export def "apps-otp SendOTPMessage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  SendOTPMessageRequestParameters: record # Send OTP message request parameters. — shape: {AllowedAttempts?: any, BrandName?: any, Channel?: any, CodeLength?: any, DestinationIdentity?: any, EntityId?: any, Language?: any, OriginationIdentity?: any, ReferenceId?: any, TemplateId?: any, ValidityPeriod?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  send_otp_message_request_parameters: record # Send OTP message request parameters. — shape: {AllowedAttempts?: any, BrandName?: any, Channel?: any, CodeLength?: any, DestinationIdentity?: any, EntityId?: any, Language?: any, OriginationIdentity?: any, ReferenceId?: any, TemplateId?: any, ValidityPeriod?: any}
 ]: any -> record<MessageResponse: record<ApplicationId: record, EndpointResult: record, RequestId: record, Result: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/otp")
-  let body = {SendOTPMessageRequestParameters: $SendOTPMessageRequestParameters} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/otp"))
+  let body = {"SendOTPMessageRequestParameters": $send_otp_message_request_parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4040,7 +4040,7 @@ export def "apps-otp SendOTPMessage" [
 # POST /v1/apps/{application-id}/users-messages
 # operationId: SendUsersMessages
 # --SendUsersMessageRequest shape: {Context?: any, MessageConfiguration?: any, TemplateConfiguration?: any, TraceId?: any, Users?: any}
-export def "apps-users-messages SendUsersMessages" [
+export def "apps-users-messages send" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4050,22 +4050,22 @@ export def "apps-users-messages SendUsersMessages" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  SendUsersMessageRequest: record # Specifies the configuration and other settings for a message to send to all the endpoints that are associated with a list of users. — shape: {Context?: any, MessageConfiguration?: any, TemplateConfiguration?: any, TraceId?: any, Users?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  send_users_message_request: record # Specifies the configuration and other settings for a message to send to all the endpoints that are associated with a list of users. — shape: {Context?: any, MessageConfiguration?: any, TemplateConfiguration?: any, TraceId?: any, Users?: any}
 ]: any -> record<SendUsersMessageResponse: record<ApplicationId: record, RequestId: record, Result: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/users-messages")
-  let body = {SendUsersMessageRequest: $SendUsersMessageRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/users-messages"))
+  let body = {"SendUsersMessageRequest": $send_users_message_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4076,7 +4076,7 @@ export def "apps-users-messages SendUsersMessages" [
 #
 # DELETE /v1/tags/{resource-arn}#tagKeys
 # operationId: UntagResource
-export def "tags UntagResource" [
+export def "tags untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4086,20 +4086,20 @@ export def "tags UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagKeys: list # The key of the tag to remove from the resource. To remove multiple tags, append the tagKeys parameter and argument for each additional tag to remove, separated by an ampersand (&amp;).
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --tag-keys: list # The key of the tag to remove from the resource. To remove multiple tags, append the tagKeys parameter and argument for each additional tag to remove, separated by an ampersand (&amp;).
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tagKeys" $tagKeys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/tags/($resource_arn)#tagKeys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/v1/tags/{resource_arn}#tagKeys") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4111,7 +4111,7 @@ export def "tags UntagResource" [
 # PUT /v1/apps/{application-id}/endpoints
 # operationId: UpdateEndpointsBatch
 # --EndpointBatchRequest shape: {Item?: any}
-export def "apps-endpoints UpdateEndpointsBatch" [
+export def "apps-endpoints update-endpoints-batch" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4121,22 +4121,22 @@ export def "apps-endpoints UpdateEndpointsBatch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  EndpointBatchRequest: record # Specifies a batch of endpoints to create or update and the settings and attributes to set or change for each endpoint. — shape: {Item?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  endpoint_batch_request: record # Specifies a batch of endpoints to create or update and the settings and attributes to set or change for each endpoint. — shape: {Item?: any}
 ]: any -> record<MessageBody: record<Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/endpoints")
-  let body = {EndpointBatchRequest: $EndpointBatchRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/endpoints"))
+  let body = {"EndpointBatchRequest": $endpoint_batch_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4148,7 +4148,7 @@ export def "apps-endpoints UpdateEndpointsBatch" [
 # PUT /v1/apps/{application-id}/journeys/{journey-id}/state
 # operationId: UpdateJourneyState
 # --JourneyStateRequest shape: {State?: any}
-export def "apps-journeys-state UpdateJourneyState" [
+export def "apps-journeys-state update" [
   application_id: string
   journey_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4159,22 +4159,22 @@ export def "apps-journeys-state UpdateJourneyState" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  JourneyStateRequest: record # Changes the status of a journey. — shape: {State?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  journey_state_request: record # Changes the status of a journey. — shape: {State?: any}
 ]: any -> record<JourneyResponse: record<Activities: record, ApplicationId: record, CreationDate: record, Id: record, LastModifiedDate: record, Limits: record<DailyCap: record, EndpointReentryCap: record, MessagesPerSecond: record, EndpointReentryInterval: record>, LocalTime: record, Name: record, QuietTime: record<End: record, Start: record>, RefreshFrequency: record, Schedule: record<EndTime: record, StartTime: record, Timezone: record>, StartActivity: record, StartCondition: record<Description: record, EventStartCondition: record, SegmentStartCondition: record>, State: record, tags: record, WaitForQuietTime: record, RefreshOnSegmentUpdate: record, JourneyChannelSettings: record<ConnectCampaignArn: record, ConnectCampaignExecutionRoleArn: record>, SendingSchedule: record, OpenHours: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>, ClosedDays: record<EMAIL: record, SMS: record, PUSH: record, VOICE: record, CUSTOM: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/journeys/($journey_id)/state")
-  let body = {JourneyStateRequest: $JourneyStateRequest} | compact
+  let full_url = (build-url $base ({application_id: $application_id, journey_id: $journey_id} | format pattern "/v1/apps/{application_id}/journeys/{journey_id}/state"))
+  let body = {"JourneyStateRequest": $journey_state_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4186,7 +4186,7 @@ export def "apps-journeys-state UpdateJourneyState" [
 # PUT /v1/templates/{template-name}/{template-type}/active-version
 # operationId: UpdateTemplateActiveVersion
 # --TemplateActiveVersionRequest shape: {Version?: any}
-export def "templates-active-version UpdateTemplateActiveVersion" [
+export def "templates-active-version update" [
   template_name: string
   template_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4197,22 +4197,22 @@ export def "templates-active-version UpdateTemplateActiveVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  TemplateActiveVersionRequest: record # Specifies which version of a message template to use as the active version of the template. — shape: {Version?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  template_active_version_request: record # Specifies which version of a message template to use as the active version of the template. — shape: {Version?: any}
 ]: any -> record<MessageBody: record<Message: record, RequestID: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/templates/($template_name)/($template_type)/active-version")
-  let body = {TemplateActiveVersionRequest: $TemplateActiveVersionRequest} | compact
+  let full_url = (build-url $base ({template_name: $template_name, template_type: $template_type} | format pattern "/v1/templates/{template_name}/{template_type}/active-version"))
+  let body = {"TemplateActiveVersionRequest": $template_active_version_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4224,7 +4224,7 @@ export def "templates-active-version UpdateTemplateActiveVersion" [
 # POST /v1/apps/{application-id}/verify-otp
 # operationId: VerifyOTPMessage
 # --VerifyOTPMessageRequestParameters shape: {DestinationIdentity?: any, Otp?: any, ReferenceId?: any}
-export def "apps-verify-otp VerifyOTPMessage" [
+export def "apps-verify-otp verify-otp-message" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4234,22 +4234,22 @@ export def "apps-verify-otp VerifyOTPMessage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  VerifyOTPMessageRequestParameters: record # Verify OTP message request. — shape: {DestinationIdentity?: any, Otp?: any, ReferenceId?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  verify_otp_message_request_parameters: record # Verify OTP message request. — shape: {DestinationIdentity?: any, Otp?: any, ReferenceId?: any}
 ]: any -> record<VerificationResponse: record<Valid: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/apps/($application_id)/verify-otp")
-  let body = {VerifyOTPMessageRequestParameters: $VerifyOTPMessageRequestParameters} | compact
+  let full_url = (build-url $base ({application_id: $application_id} | format pattern "/v1/apps/{application_id}/verify-otp"))
+  let body = {"VerifyOTPMessageRequestParameters": $verify_otp_message_request_parameters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

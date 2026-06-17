@@ -72,7 +72,7 @@ def kind-completer [] { ["shared" "user"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-group-providers-microsoftinsights-workbooks ListByResourceGroup" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-group-providers-microsoftinsights-workbooks list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,9 +96,9 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooks
 # operationId: Workbooks_ListByResourceGroup
-export def "subscriptions-resource-group-providers-microsoftinsights-workbooks ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-group-providers-microsoftinsights-workbooks list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,14 +109,14 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks L
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string@category-completer # Category of workbook to return.
   --tags: list # Tags presents on each workbook returned.
-  --sourceId: string # Azure Resource Id that will fetch all related workbooks.
-  --canFetchContent: oneof<nothing, bool> # Flag indicating whether or not to return the full content for each applicable workbook. If false, only return summary content for workbooks.
+  --source-id: string # Azure Resource Id that will fetch all related workbooks.
+  --can-fetch-content: oneof<nothing, bool> # Flag indicating whether or not to return the full content for each applicable workbook. If false, only return summary content for workbooks.
   --api-version: string # The API version to use for this operation.
 ]: nothing -> record<value: table<properties: record, id: string, kind: string, location: string, name: string, tags: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "tags" $tags "csv") (serialize-qp "sourceId" $sourceId "scalar") (serialize-qp "canFetchContent" $canFetchContent "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroup/($resourceGroupName)/providers/microsoft.insights/workbooks" $qp)
+  let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "tags" $tags "csv") (serialize-qp "sourceId" $source_id "scalar") (serialize-qp "canFetchContent" $can_fetch_content "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroup/{resource_group_name}/providers/microsoft.insights/workbooks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -126,10 +126,10 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks L
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooks/{resourceName}
 # operationId: Workbooks_Delete
-export def "subscriptions-resource-group-providers-microsoftinsights-workbooks Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-group-providers-microsoftinsights-workbooks delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -143,7 +143,7 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks D
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroup/($resourceGroupName)/providers/microsoft.insights/workbooks/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroup/{resource_group_name}/providers/microsoft.insights/workbooks/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -153,10 +153,10 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks D
 #
 # GET /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooks/{resourceName}
 # operationId: Workbooks_Get
-export def "subscriptions-resource-group-providers-microsoftinsights-workbooks Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-group-providers-microsoftinsights-workbooks get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks G
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroup/($resourceGroupName)/providers/microsoft.insights/workbooks/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroup/{resource_group_name}/providers/microsoft.insights/workbooks/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -181,10 +181,10 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks G
 # PATCH /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooks/{resourceName}
 # operationId: Workbooks_Update
 # --properties shape: {category?: string, displayName?: string, serializedData?: string, tags?: list}
-export def "subscriptions-resource-group-providers-microsoftinsights-workbooks Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-group-providers-microsoftinsights-workbooks update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks U
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sourceId: string # Azure Resource Id that will fetch all related workbooks.
+  --source-id: string # Azure Resource Id that will fetch all related workbooks.
   --api-version: string # The API version to use for this operation.
   --kind: string@kind-completer # The kind of workbook. Choices are user and shared.
   --properties: any # Properties that contain a workbook for PATCH operation. — shape: {category?: string, displayName?: string, serializedData?: string, tags?: list}
@@ -202,9 +202,9 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks U
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sourceId" $sourceId "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroup/($resourceGroupName)/providers/microsoft.insights/workbooks/($resourceName)" $qp)
-  let body = {kind: $kind, properties: $properties, tags: $tags} | compact
+  let qp = [(serialize-qp "sourceId" $source_id "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroup/{resource_group_name}/providers/microsoft.insights/workbooks/{resource_name}") $qp)
+  let body = {"kind": $kind, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,10 +216,10 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks U
 # PUT /subscriptions/{subscriptionId}/resourceGroup/{resourceGroupName}/providers/microsoft.insights/workbooks/{resourceName}
 # operationId: Workbooks_CreateOrUpdate
 # --properties shape: {category: string, displayName: string, serializedData: string, tags?: list, userId: string, version?: string}
-export def "subscriptions-resource-group-providers-microsoftinsights-workbooks CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-group-providers-microsoftinsights-workbooks create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks C
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sourceId: string # Azure Resource Id that will fetch all related workbooks.
+  --source-id: string # Azure Resource Id that will fetch all related workbooks.
   --api-version: string # The API version to use for this operation.
   --properties: any # Properties that contain a workbook. — shape: {category: string, displayName: string, serializedData: string, tags?: list, userId: string, version?: string}
   --kind: string@kind-completer # The kind of workbook. Choices are user and shared.
@@ -238,9 +238,9 @@ export def "subscriptions-resource-group-providers-microsoftinsights-workbooks C
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sourceId" $sourceId "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroup/($resourceGroupName)/providers/microsoft.insights/workbooks/($resourceName)" $qp)
-  let body = {properties: $properties, kind: $kind, location: $location, tags: $tags} | compact
+  let qp = [(serialize-qp "sourceId" $source_id "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroup/{resource_group_name}/providers/microsoft.insights/workbooks/{resource_name}") $qp)
+  let body = {"properties": $properties, "kind": $kind, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

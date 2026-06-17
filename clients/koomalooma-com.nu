@@ -131,8 +131,8 @@ export def "users-commitments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-koomalooma-jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($user_id)/commitments")
-  let body = {campaign_id: $campaign_id, promotion_goal_category: $promotion_goal_category, promotion_goal_description: $promotion_goal_description, transaction_value: $transaction_value} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/users/{user_id}/commitments"))
+  let body = {"campaign_id": $campaign_id, "promotion_goal_category": $promotion_goal_category, "promotion_goal_description": $promotion_goal_description, "transaction_value": $transaction_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

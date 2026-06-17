@@ -77,7 +77,7 @@ def new-state-completer [] { ["failed" "success"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "config config" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "config get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -101,7 +101,7 @@ export def commands []: nothing -> table {
 #
 # GET /config
 # operationId: get_config
-export def "config config" [
+export def "config get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -124,7 +124,7 @@ export def "config config" [
 #
 # GET /connections
 # operationId: get_connections
-export def "connections connections" [
+export def "connections get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "connections connection" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/connections")
-  let body = {conn_type: $conn_type, connection_id: $connection_id, description: $description, host: $host, login: $login, port: $port, schema: $schema, extra: $extra, password: $password} | compact
+  let body = {"conn_type": $conn_type, "connection_id": $connection_id, "description": $description, "host": $host, "login": $login, "port": $port, "schema": $schema, "extra": $extra, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,7 +207,7 @@ export def "connections-test connection" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/connections/test")
-  let body = {conn_type: $conn_type, connection_id: $connection_id, description: $description, host: $host, login: $login, port: $port, schema: $schema, extra: $extra, password: $password} | compact
+  let body = {"conn_type": $conn_type, "connection_id": $connection_id, "description": $description, "host": $host, "login": $login, "port": $port, "schema": $schema, "extra": $extra, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -231,7 +231,7 @@ export def "connections connection-by-connection_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/connections/($connection_id)")
+  let full_url = (build-url $base ({connection_id: $connection_id} | format pattern "/connections/{connection_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,7 +254,7 @@ export def "connections connection-by-connection_id-1" [
 ]: nothing -> record<conn_type: string, connection_id: string, description: string, host: string, login: string, port: int, schema: string, extra: string, password: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/connections/($connection_id)")
+  let full_url = (build-url $base ({connection_id: $connection_id} | format pattern "/connections/{connection_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,8 +289,8 @@ export def "connections connection-by-connection_id-2" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/connections/($connection_id)" $qp)
-  let body = {conn_type: $conn_type, connection_id: $body_connection_id, description: $description, host: $host, login: $login, port: $port, schema: $schema, extra: $extra, password: $password} | compact
+  let full_url = (build-url $base ({connection_id: $connection_id} | format pattern "/connections/{connection_id}") $qp)
+  let body = {"conn_type": $conn_type, "connection_id": $body_connection_id, "description": $description, "host": $host, "login": $login, "port": $port, "schema": $schema, "extra": $extra, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -315,7 +315,7 @@ export def "dag-sources source" [
 ]: nothing -> record<content: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dagSources/($file_token)")
+  let full_url = (build-url $base ({file_token: $file_token} | format pattern "/dagSources/{file_token}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -353,7 +353,7 @@ export def "dag-warnings warnings" [
 #
 # GET /dags
 # operationId: get_dags
-export def "dags dags" [
+export def "dags get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,7 +383,7 @@ export def "dags dags" [
 # PATCH /dags
 # operationId: patch_dags
 # --tags item shape: {name?: string}
-export def "dags dags-1" [
+export def "dags patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "dags dags-1" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "update_mask" $update_mask "csv") (serialize-qp "only_active" $only_active "scalar") (serialize-qp "dag_id_pattern" $dag_id_pattern "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/dags" $qp)
-  let body = {is_paused: $is_paused} | compact
+  let body = {"is_paused": $is_paused} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -429,7 +429,7 @@ export def "dags dag-by-dag_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)")
+  let full_url = (build-url $base ({dag_id: $dag_id} | format pattern "/dags/{dag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,7 +452,7 @@ export def "dags dag-by-dag_id-1" [
 ]: nothing -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)")
+  let full_url = (build-url $base ({dag_id: $dag_id} | format pattern "/dags/{dag_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,8 +480,8 @@ export def "dags dag-by-dag_id-2" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dags/($dag_id)" $qp)
-  let body = {is_paused: $is_paused} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id} | format pattern "/dags/{dag_id}") $qp)
+  let body = {"is_paused": $is_paused} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -520,8 +520,8 @@ export def "dags-clear-task-instances instances" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/clearTaskInstances")
-  let body = {dag_run_id: $dag_run_id, dry_run: $body_dry_run, end_date: $end_date, include_downstream: $include_downstream, include_future: $include_future, include_parentdag: $include_parentdag, include_past: $include_past, include_subdags: $include_subdags, include_upstream: $include_upstream, only_failed: $only_failed, only_running: $only_running, reset_dag_runs: $reset_dag_runs, start_date: $start_date, task_ids: $task_ids} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id} | format pattern "/dags/{dag_id}/clearTaskInstances"))
+  let body = {"dag_run_id": $dag_run_id, "dry_run": $body_dry_run, "end_date": $end_date, "include_downstream": $include_downstream, "include_future": $include_future, "include_parentdag": $include_parentdag, "include_past": $include_past, "include_subdags": $include_subdags, "include_upstream": $include_upstream, "only_failed": $only_failed, "only_running": $only_running, "reset_dag_runs": $reset_dag_runs, "start_date": $start_date, "task_ids": $task_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -556,7 +556,7 @@ export def "dags-dag-runs runs" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "execution_date_gte" $execution_date_gte "scalar") (serialize-qp "execution_date_lte" $execution_date_lte "scalar") (serialize-qp "start_date_gte" $start_date_gte "scalar") (serialize-qp "start_date_lte" $start_date_lte "scalar") (serialize-qp "end_date_gte" $end_date_gte "scalar") (serialize-qp "end_date_lte" $end_date_lte "scalar") (serialize-qp "state" $state "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns" $qp)
+  let full_url = (build-url $base ({dag_id: $dag_id} | format pattern "/dags/{dag_id}/dagRuns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -587,8 +587,8 @@ export def "dags-dag-runs run-by-dag_id" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns")
-  let body = {conf: $conf, dag_run_id: $dag_run_id, execution_date: $execution_date, logical_date: $logical_date, note: $note, state: $state} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id} | format pattern "/dags/{dag_id}/dagRuns"))
+  let body = {"conf": $conf, "dag_run_id": $dag_run_id, "execution_date": $execution_date, "logical_date": $logical_date, "note": $note, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -613,7 +613,7 @@ export def "dags-dag-runs run-by-dag_id-dag_run_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)")
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -637,7 +637,7 @@ export def "dags-dag-runs run-by-dag_id-dag_run_id-1" [
 ]: nothing -> record<conf: record, dag_id: string, dag_run_id: string, data_interval_end: string, data_interval_start: string, end_date: string, execution_date: string, external_trigger: bool, last_scheduling_decision: string, logical_date: string, note: string, run_type: string, start_date: string, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)")
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -663,8 +663,8 @@ export def "dags-dag-runs state" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)")
-  let body = {state: $state} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}"))
+  let body = {"state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -691,8 +691,8 @@ export def "dags-dag-runs-clear run" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/clear")
-  let body = {dry_run: $body_dry_run} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/clear"))
+  let body = {"dry_run": $body_dry_run} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -719,8 +719,8 @@ export def "dags-dag-runs-set-note note" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/setNote")
-  let body = {note: $note} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/setNote"))
+  let body = {"note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -748,7 +748,7 @@ export def "dags-dag-runs-task-instances instances" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances" $qp)
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -773,7 +773,7 @@ export def "dags-dag-runs-task-instances instance-by-dag_id-dag_run_id-task_id" 
 ]: nothing -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)")
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -801,8 +801,8 @@ export def "dags-dag-runs-task-instances instance-by-dag_id-dag_run_id-task_id-1
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)")
-  let body = {dry_run: $body_dry_run, new_state: $new_state} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}"))
+  let body = {"dry_run": $body_dry_run, "new_state": $new_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -828,7 +828,7 @@ export def "dags-dag-runs-task-instances-links links" [
 ]: nothing -> record<extra_links: table<class_ref: record, href: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/links")
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/links"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -868,7 +868,7 @@ export def "dags-dag-runs-task-instances-list-mapped instances" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "execution_date_gte" $execution_date_gte "scalar") (serialize-qp "execution_date_lte" $execution_date_lte "scalar") (serialize-qp "start_date_gte" $start_date_gte "scalar") (serialize-qp "start_date_lte" $start_date_lte "scalar") (serialize-qp "end_date_gte" $end_date_gte "scalar") (serialize-qp "end_date_lte" $end_date_lte "scalar") (serialize-qp "duration_gte" $duration_gte "scalar") (serialize-qp "duration_lte" $duration_lte "scalar") (serialize-qp "state" $state "multi") (serialize-qp "pool" $pool "multi") (serialize-qp "queue" $queue "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/listMapped" $qp)
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/listMapped") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -899,7 +899,7 @@ export def "dags-dag-runs-task-instances-logs log" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "full_content" $full_content "scalar") (serialize-qp "map_index" $map_index "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/logs/($task_try_number)" $qp)
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id, task_try_number: $task_try_number} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs/{task_try_number}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -926,8 +926,8 @@ export def "dags-dag-runs-task-instances-set-note note-by-dag_id-dag_run_id-task
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/setNote")
-  let body = {note: $note} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/setNote"))
+  let body = {"note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -956,7 +956,7 @@ export def "dags-dag-runs-task-instances-xcom-entries entries" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/xcomEntries" $qp)
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/xcomEntries") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -984,7 +984,7 @@ export def "dags-dag-runs-task-instances-xcom-entries entry" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deserialize" $deserialize "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/xcomEntries/($xcom_key)" $qp)
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id, xcom_key: $xcom_key} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/xcomEntries/{xcom_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1010,7 +1010,7 @@ export def "dags-dag-runs-task-instances instance-by-dag_id-dag_run_id-task_id-m
 ]: nothing -> record<dag_id: string, dag_run_id: string, duration: float, end_date: string, execution_date: string, executor_config: string, hostname: string, map_index: int, max_tries: int, note: string, operator: string, pid: int, pool: string, pool_slots: int, priority_weight: int, queue: string, queued_when: string, rendered_fields: record, sla_miss: record<dag_id: string, description: string, email_sent: bool, execution_date: string, notification_sent: bool, task_id: string, timestamp: string>, start_date: string, state: string, task_id: string, trigger: record<classpath: string, created_date: string, id: int, kwargs: string, triggerer_id: int>, triggerer_job: record<dag_id: string, end_date: string, executor_class: string, hostname: string, id: int, job_type: string, latest_heartbeat: string, start_date: string, state: string, unixname: string>, try_number: int, unixname: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/($map_index)")
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id, map_index: $map_index} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/{map_index}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1039,8 +1039,8 @@ export def "dags-dag-runs-task-instances instance-by-dag_id-dag_run_id-task_id-m
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/($map_index)")
-  let body = {dry_run: $body_dry_run, new_state: $new_state} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id, map_index: $map_index} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/{map_index}"))
+  let body = {"dry_run": $body_dry_run, "new_state": $new_state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1069,8 +1069,8 @@ export def "dags-dag-runs-task-instances-set-note note-by-dag_id-dag_run_id-task
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/taskInstances/($task_id)/($map_index)/setNote")
-  let body = {note: $note} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id, task_id: $task_id, map_index: $map_index} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/{map_index}/setNote"))
+  let body = {"note": $note} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1095,7 +1095,7 @@ export def "dags-dag-runs-upstream-dataset-events events" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/dagRuns/($dag_run_id)/upstreamDatasetEvents")
+  let full_url = (build-url $base ({dag_id: $dag_id, dag_run_id: $dag_run_id} | format pattern "/dags/{dag_id}/dagRuns/{dag_run_id}/upstreamDatasetEvents"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1118,7 +1118,7 @@ export def "dags-details details" [
 ]: nothing -> record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: table<name: string>, timetable_description: string, catchup: bool, concurrency: float, dag_run_timeout: record<__type: string, days: int, microseconds: int, seconds: int>, doc_md: string, end_date: string, is_paused_upon_creation: bool, last_parsed: string, orientation: string, params: record, render_template_as_native_obj: bool, start_date: string, template_search_path: list<string>, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/details")
+  let full_url = (build-url $base ({dag_id: $dag_id} | format pattern "/dags/{dag_id}/details"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1143,7 +1143,7 @@ export def "dags-tasks tasks" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/dags/($dag_id)/tasks" $qp)
+  let full_url = (build-url $base ({dag_id: $dag_id} | format pattern "/dags/{dag_id}/tasks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1167,7 +1167,7 @@ export def "dags-tasks task" [
 ]: nothing -> record<class_ref: record<class_name: string, module_path: string>, depends_on_past: bool, downstream_task_ids: list<string>, end_date: string, execution_timeout: record<__type: string, days: int, microseconds: int, seconds: int>, extra_links: table<class_ref: record>, is_mapped: bool, owner: string, pool: string, pool_slots: float, priority_weight: float, queue: string, retries: float, retry_delay: record<__type: string, days: int, microseconds: int, seconds: int>, retry_exponential_backoff: bool, start_date: string, sub_dag: record<dag_id: string, default_view: string, description: string, file_token: string, fileloc: string, has_import_errors: bool, has_task_concurrency_limits: bool, is_active: bool, is_paused: bool, is_subdag: bool, last_expired: string, last_parsed_time: string, last_pickled: string, max_active_runs: int, max_active_tasks: int, next_dagrun: string, next_dagrun_create_after: string, next_dagrun_data_interval_end: string, next_dagrun_data_interval_start: string, owners: list<string>, pickle_id: string, root_dag_id: string, schedule_interval: any, scheduler_lock: bool, tags: list<record>, timetable_description: string>, task_id: string, template_fields: list<string>, trigger_rule: string, ui_color: string, ui_fgcolor: string, wait_for_downstream: bool, weight_rule: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/tasks/($task_id)")
+  let full_url = (build-url $base ({dag_id: $dag_id, task_id: $task_id} | format pattern "/dags/{dag_id}/tasks/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1200,8 +1200,8 @@ export def "dags-update-task-instances-state state" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/dags/($dag_id)/updateTaskInstancesState")
-  let body = {dag_run_id: $dag_run_id, dry_run: $body_dry_run, execution_date: $execution_date, include_downstream: $include_downstream, include_future: $include_future, include_past: $include_past, include_upstream: $include_upstream, new_state: $new_state, task_id: $task_id} | compact
+  let full_url = (build-url $base ({dag_id: $dag_id} | format pattern "/dags/{dag_id}/updateTaskInstancesState"))
+  let body = {"dag_run_id": $dag_run_id, "dry_run": $body_dry_run, "execution_date": $execution_date, "include_downstream": $include_downstream, "include_future": $include_future, "include_past": $include_past, "include_upstream": $include_upstream, "new_state": $new_state, "task_id": $task_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1237,7 +1237,7 @@ export def "dags-dag-runs-list batch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dags/~/dagRuns/list")
-  let body = {dag_ids: $dag_ids, end_date_gte: $end_date_gte, end_date_lte: $end_date_lte, execution_date_gte: $execution_date_gte, execution_date_lte: $execution_date_lte, order_by: $order_by, page_limit: $page_limit, page_offset: $page_offset, start_date_gte: $start_date_gte, start_date_lte: $start_date_lte, states: $states} | compact
+  let body = {"dag_ids": $dag_ids, "end_date_gte": $end_date_gte, "end_date_lte": $end_date_lte, "execution_date_gte": $execution_date_gte, "execution_date_lte": $execution_date_lte, "order_by": $order_by, "page_limit": $page_limit, "page_offset": $page_offset, "start_date_gte": $start_date_gte, "start_date_lte": $start_date_lte, "states": $states} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1274,7 +1274,7 @@ export def "dags-dag-runs-task-instances-list batch" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dags/~/dagRuns/~/taskInstances/list")
-  let body = {dag_ids: $dag_ids, duration_gte: $duration_gte, duration_lte: $duration_lte, end_date_gte: $end_date_gte, end_date_lte: $end_date_lte, execution_date_gte: $execution_date_gte, execution_date_lte: $execution_date_lte, pool: $pool, queue: $queue, start_date_gte: $start_date_gte, start_date_lte: $start_date_lte, state: $state} | compact
+  let body = {"dag_ids": $dag_ids, "duration_gte": $duration_gte, "duration_lte": $duration_lte, "end_date_gte": $end_date_gte, "end_date_lte": $end_date_lte, "execution_date_gte": $execution_date_gte, "execution_date_lte": $execution_date_lte, "pool": $pool, "queue": $queue, "start_date_gte": $start_date_gte, "start_date_lte": $start_date_lte, "state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1285,7 +1285,7 @@ export def "dags-dag-runs-task-instances-list batch" [
 #
 # GET /datasets
 # operationId: get_datasets
-export def "datasets datasets" [
+export def "datasets get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1356,7 +1356,7 @@ export def "datasets dataset" [
 ]: nothing -> record<consuming_dags: table<created_at: string, dag_id: string, updated_at: string>, created_at: string, extra: record, id: int, producing_tasks: table<created_at: string, dag_id: string, task_id: string, updated_at: string>, updated_at: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datasets/($uri)")
+  let full_url = (build-url $base ({uri: $uri} | format pattern "/datasets/{uri}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1405,7 +1405,7 @@ export def "event-logs log" [
 ]: nothing -> record<dag_id: string, event: string, event_log_id: int, execution_date: string, extra: string, owner: string, task_id: string, when: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/eventLogs/($event_log_id)")
+  let full_url = (build-url $base ({event_log_id: $event_log_id} | format pattern "/eventLogs/{event_log_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1415,7 +1415,7 @@ export def "event-logs log" [
 #
 # GET /health
 # operationId: get_health
-export def "health health" [
+export def "health get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1476,7 +1476,7 @@ export def "import-errors error" [
 ]: nothing -> record<filename: string, import_error_id: int, stack_trace: string, timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/importErrors/($import_error_id)")
+  let full_url = (build-url $base ({import_error_id: $import_error_id} | format pattern "/importErrors/{import_error_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1486,7 +1486,7 @@ export def "import-errors error" [
 #
 # GET /permissions
 # operationId: get_permissions
-export def "permissions permissions" [
+export def "permissions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1511,7 +1511,7 @@ export def "permissions permissions" [
 #
 # GET /plugins
 # operationId: get_plugins
-export def "plugins plugins" [
+export def "plugins get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,7 +1536,7 @@ export def "plugins plugins" [
 #
 # GET /pools
 # operationId: get_pools
-export def "pools pools" [
+export def "pools get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1579,7 +1579,7 @@ export def "pools pool" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/pools")
-  let body = {description: $description, name: $name, slots: $slots} | compact
+  let body = {"description": $description, "name": $name, "slots": $slots} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1603,7 +1603,7 @@ export def "pools pool-by-pool_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pools/($pool_name)")
+  let full_url = (build-url $base ({pool_name: $pool_name} | format pattern "/pools/{pool_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1626,7 +1626,7 @@ export def "pools pool-by-pool_name-1" [
 ]: nothing -> record<description: string, name: string, occupied_slots: int, open_slots: int, queued_slots: int, slots: int, used_slots: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/pools/($pool_name)")
+  let full_url = (build-url $base ({pool_name: $pool_name} | format pattern "/pools/{pool_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1655,8 +1655,8 @@ export def "pools pool-by-pool_name-2" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pools/($pool_name)" $qp)
-  let body = {description: $description, name: $name, slots: $slots} | compact
+  let full_url = (build-url $base ({pool_name: $pool_name} | format pattern "/pools/{pool_name}") $qp)
+  let body = {"description": $description, "name": $name, "slots": $slots} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1667,7 +1667,7 @@ export def "pools pool-by-pool_name-2" [
 #
 # GET /providers
 # operationId: get_providers
-export def "providers providers" [
+export def "providers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1689,7 +1689,7 @@ export def "providers providers" [
 #
 # GET /roles
 # operationId: get_roles
-export def "roles roles" [
+export def "roles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1732,7 +1732,7 @@ export def "roles role" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles")
-  let body = {actions: $actions, name: $name} | compact
+  let body = {"actions": $actions, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1756,7 +1756,7 @@ export def "roles role-by-role_name" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/roles/($role_name)")
+  let full_url = (build-url $base ({role_name: $role_name} | format pattern "/roles/{role_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1779,7 +1779,7 @@ export def "roles role-by-role_name-1" [
 ]: nothing -> record<actions: table<action: record, resource: record>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/roles/($role_name)")
+  let full_url = (build-url $base ({role_name: $role_name} | format pattern "/roles/{role_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1808,8 +1808,8 @@ export def "roles role-by-role_name-2" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/roles/($role_name)" $qp)
-  let body = {actions: $actions, name: $name} | compact
+  let full_url = (build-url $base ({role_name: $role_name} | format pattern "/roles/{role_name}") $qp)
+  let body = {"actions": $actions, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1820,7 +1820,7 @@ export def "roles role-by-role_name-2" [
 #
 # GET /users
 # operationId: get_users
-export def "users users" [
+export def "users get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1867,7 +1867,7 @@ export def "users user" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {email: $email, first_name: $first_name, last_name: $last_name, roles: $roles, username: $username, password: $password} | compact
+  let body = {"email": $email, "first_name": $first_name, "last_name": $last_name, "roles": $roles, "username": $username, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1891,7 +1891,7 @@ export def "users user-by-username" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1914,7 +1914,7 @@ export def "users user-by-username-1" [
 ]: nothing -> record<active: bool, changed_on: string, created_on: string, email: string, failed_login_count: int, first_name: string, last_login: string, last_name: string, login_count: int, roles: table<name: string>, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($username)")
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1947,8 +1947,8 @@ export def "users user-by-username-2" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($username)" $qp)
-  let body = {email: $email, first_name: $first_name, last_name: $last_name, roles: $roles, username: $body_username, password: $password} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/users/{username}") $qp)
+  let body = {"email": $email, "first_name": $first_name, "last_name": $last_name, "roles": $roles, "username": $body_username, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1959,7 +1959,7 @@ export def "users user-by-username-2" [
 #
 # GET /variables
 # operationId: get_variables
-export def "variables variables" [
+export def "variables get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1985,7 +1985,7 @@ export def "variables variables" [
 #
 # POST /variables
 # operationId: post_variables
-export def "variables variables-1" [
+export def "variables post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,7 +2002,7 @@ export def "variables variables-1" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/variables")
-  let body = {description: $description, key: $key, value: $value} | compact
+  let body = {"description": $description, "key": $key, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2026,7 +2026,7 @@ export def "variables variable-by-variable_key" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/variables/($variable_key)")
+  let full_url = (build-url $base ({variable_key: $variable_key} | format pattern "/variables/{variable_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2049,7 +2049,7 @@ export def "variables variable-by-variable_key-1" [
 ]: nothing -> record<description: string, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/variables/($variable_key)")
+  let full_url = (build-url $base ({variable_key: $variable_key} | format pattern "/variables/{variable_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2078,8 +2078,8 @@ export def "variables variable-by-variable_key-2" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "update_mask" $update_mask "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/variables/($variable_key)" $qp)
-  let body = {description: $description, key: $key, value: $value} | compact
+  let full_url = (build-url $base ({variable_key: $variable_key} | format pattern "/variables/{variable_key}") $qp)
+  let body = {"description": $description, "key": $key, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2090,7 +2090,7 @@ export def "variables variable-by-variable_key-2" [
 #
 # GET /version
 # operationId: get_version
-export def "version version" [
+export def "version get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

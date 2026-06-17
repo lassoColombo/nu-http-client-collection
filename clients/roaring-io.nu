@@ -99,12 +99,12 @@ export def "company-board-members get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
-  --companyId: string # Company identification for the company
+  --country-code: string # Country code for the company
+  --company-id: string # Company identification for the company
 ]: nothing -> record<boardMembers: table<boardMemberCompanyId: string, firstName: string, fromDate: string, fullName: string, givenName: string, middleName: string, personalNumber: string, roleCode: string, roleName: string, surName: string, toDate: string>, changeDate: string, companyId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "companyId" $companyId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-board-members" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -121,15 +121,15 @@ export def "company-board-members post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
-  --companyIds: list
+  --country-code: string # Country code for the company
+  --company-ids: list
 ]: any -> record<companies: table<boardMembers: list, changeDate: string, companyId: string>, responseInfo: record<hitCount: int, noMatchIds: list<string>, requestCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-board-members" $qp)
-  let body = {companyIds: $companyIds} | compact
+  let body = {"companyIds": $company_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,13 +146,13 @@ export def "company-credit-decision get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
-  --companyId: string # Company identification for the company
+  --country-code: string # Country code for the company
+  --company-id: string # Company identification for the company
   --template: string # Template for credit decision
 ]: nothing -> record<address: string, companyId: string, rejections: record<causeOfReject: string, rejectComment: string, rejectText: string>, statusCode: string, statusText: string, town: string, zipCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "companyId" $companyId "scalar") (serialize-qp "template" $template "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyId" $company_id "scalar") (serialize-qp "template" $template "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-credit-decision" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -169,12 +169,12 @@ export def "company-economy-overview get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
-  --companyId: string # Company identification for the company
+  --country-code: string # Country code for the company
+  --company-id: string # Company identification for the company
 ]: nothing -> record<bsCashAndBankBalances: string, bsShareCapital: string, bsTotalAssets: string, bsTotalEquity: string, changeDate: string, companyId: string, kpiNetMarginPercent: string, kpiQuickRatioPercent: string, kpiSolidityPercent: string, nbrOfEmployees: string, nbrOfEmployeesInterval: string, nbrOfEmployeesOfficeInterval: string, netTurnover: string, plNetIncome: string, plOperatingProfit: string, plProfitLossAfterFinItems: string, turnoverInterval: string, turnoverPerEmployee: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "companyId" $companyId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-economy-overview" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -191,15 +191,15 @@ export def "company-economy-overview post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
-  --companyIds: list
+  --country-code: string # Country code for the company
+  --company-ids: list
 ]: any -> record<companies: table<bsCashAndBankBalances: string, bsShareCapital: string, bsTotalAssets: string, bsTotalEquity: string, changeDate: string, companyId: string, kpiNetMarginPercent: string, kpiQuickRatioPercent: string, kpiSolidityPercent: string, nbrOfEmployees: string, nbrOfEmployeesInterval: string, nbrOfEmployeesOfficeInterval: string, netTurnover: string, plNetIncome: string, plOperatingProfit: string, plProfitLossAfterFinItems: string, turnoverInterval: string, turnoverPerEmployee: string>, responseInfo: record<hitCount: int, noMatchIds: list<string>, requestCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-economy-overview" $qp)
-  let body = {companyIds: $companyIds} | compact
+  let body = {"companyIds": $company_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -218,15 +218,15 @@ export def "company-event post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
+  --country-code: string # Country code for the company
   --requests: list # item shape: {companyId?: string, date?: string}
 ]: any -> record<responses: table<changeDate: string, code: string, companyId: string, dataSet: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-event" $qp)
-  let body = {requests: $requests} | compact
+  let body = {"requests": $requests} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -243,12 +243,12 @@ export def "company-overview get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
-  --companyId: string # Company identification for the company
+  --country-code: string # Country code for the company
+  --company-id: string # Company identification for the company
 ]: nothing -> record<address: string, changeDate: string, coAddress: string, commune: string, companyHolder: string, companyId: string, companyName: string, companyRegistrationDate: string, county: string, email: string, employerContributionReg: string, faxNumber: string, industryCode: string, industryText: string, legalGroupCode: string, legalGroupText: string, numberCompanyUnits: int, numberEmployees: string, phoneNumber: string, preliminaryTaxReg: string, severalCompanyName: bool, statusCode: string, statusDateFrom: string, statusTextDetailed: string, statusTextHigh: string, topDirectorFunction: string, topDirectorName: string, town: string, vatReg: string, vepChangedDate: string, visitAddress: string, visitCommune: string, visitCounty: string, visitStreet: string, visitStreetNumber: string, visitStreetUnit: string, visitTown: string, visitZipCode: string, webAddress: string, zipCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "companyId" $companyId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-overview" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -265,15 +265,15 @@ export def "company-overview post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
-  --companyIds: list
+  --country-code: string # Country code for the company
+  --company-ids: list
 ]: any -> record<companies: table<address: string, changeDate: string, coAddress: string, commune: string, companyHolder: string, companyId: string, companyName: string, companyRegistrationDate: string, county: string, email: string, employerContributionReg: string, faxNumber: string, industryCode: string, industryText: string, legalGroupCode: string, legalGroupText: string, numberCompanyUnits: int, numberEmployees: string, phoneNumber: string, preliminaryTaxReg: string, severalCompanyName: bool, statusCode: string, statusDateFrom: string, statusTextDetailed: string, statusTextHigh: string, topDirectorFunction: string, topDirectorName: string, town: string, vatReg: string, vepChangedDate: string, visitAddress: string, visitCommune: string, visitCounty: string, visitStreet: string, visitStreetNumber: string, visitStreetUnit: string, visitTown: string, visitZipCode: string, webAddress: string, zipCode: string>, responseInfo: record<hitCount: int, noMatchIds: list<string>, requestCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-overview" $qp)
-  let body = {companyIds: $companyIds} | compact
+  let body = {"companyIds": $company_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,12 +290,12 @@ export def "company-signatory get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
-  --companyId: string # Company identification for the company
+  --country-code: string # Country code for the company
+  --company-id: string # Company identification for the company
 ]: nothing -> record<changeDate: string, companyId: string, companySignatory: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "companyId" $companyId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyId" $company_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-signatory" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -312,15 +312,15 @@ export def "company-signatory post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
-  --companyIds: list
+  --country-code: string # Country code for the company
+  --company-ids: list
 ]: any -> record<companies: table<changeDate: string, companyId: string, companySignatory: string>, responseInfo: record<hitCount: int, noMatchIds: list<string>, requestCount: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-signatory" $qp)
-  let body = {companyIds: $companyIds} | compact
+  let body = {"companyIds": $company_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -337,13 +337,13 @@ export def "company-simple-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --countryCode: string # Country code for the company
-  --companyName: string # Company name
+  --country-code: string # Country code for the company
+  --company-name: string # Company name
   --town: string # Town
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "countryCode" $countryCode "scalar") (serialize-qp "companyName" $companyName "scalar") (serialize-qp "town" $town "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "countryCode" $country_code "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "town" $town "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/company-simple-search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

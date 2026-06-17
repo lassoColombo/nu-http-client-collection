@@ -71,7 +71,7 @@ def op-completer [] { ["full" "summary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "custom-models GetCustomModels" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "custom-models list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /custom/models
 # operationId: GetCustomModels
-export def "custom-models GetCustomModels" [
+export def "custom-models list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,7 +120,7 @@ export def "custom-models GetCustomModels" [
 # POST /custom/models
 # operationId: TrainCustomModelAsync
 # --sourceFilter shape: {includeSubFolders?: bool, prefix?: string}
-export def "custom-models TrainCustomModelAsync" [
+export def "custom-models post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -130,14 +130,14 @@ export def "custom-models TrainCustomModelAsync" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-source: string # Source path containing the training documents.
-  --sourceFilter: record # Filter to apply to the documents in the source path for training. — shape: {includeSubFolders?: bool, prefix?: string}
-  --useLabelFile: oneof<nothing, bool> # Use label file for training a model. (default: false)
+  --source-filter: record # Filter to apply to the documents in the source path for training. — shape: {includeSubFolders?: bool, prefix?: string}
+  --use-label-file: oneof<nothing, bool> # Use label file for training a model. (default: false)
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/custom/models")
-  let body = {source: $body_source, sourceFilter: $sourceFilter, useLabelFile: $useLabelFile} | compact
+  let body = {"source": $body_source, "sourceFilter": $source_filter, "useLabelFile": $use_label_file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,8 +148,8 @@ export def "custom-models TrainCustomModelAsync" [
 #
 # DELETE /custom/models/{modelId}
 # operationId: DeleteCustomModel
-export def "custom-models DeleteCustomModel" [
-  modelId: string
+export def "custom-models delete" [
+  model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "custom-models DeleteCustomModel" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/custom/models/($modelId)")
+  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/custom/models/{model_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -171,8 +171,8 @@ export def "custom-models DeleteCustomModel" [
 #
 # GET /custom/models/{modelId}
 # operationId: GetCustomModel
-export def "custom-models GetCustomModel" [
-  modelId: string
+export def "custom-models get" [
+  model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,12 +181,12 @@ export def "custom-models GetCustomModel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeKeys: oneof<nothing, bool> # Include list of extracted keys in model information. (default: false)
+  --include-keys: oneof<nothing, bool> # Include list of extracted keys in model information. (default: false)
 ]: nothing -> record<keys: record<clusters: record>, modelInfo: record<createdDateTime: string, lastUpdatedDateTime: string, modelId: string, status: string>, trainResult: record<averageModelAccuracy: float, errors: list<record>, fields: list<record>, trainingDocuments: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeKeys" $includeKeys "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/custom/models/($modelId)" $qp)
+  let qp = [(serialize-qp "includeKeys" $include_keys "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/custom/models/{model_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,8 +196,8 @@ export def "custom-models GetCustomModel" [
 #
 # POST /custom/models/{modelId}/analyze
 # operationId: AnalyzeWithCustomModel
-export def "custom-models-analyze AnalyzeWithCustomModel" [
-  modelId: string
+export def "custom-models-analyze post" [
+  model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,12 +206,12 @@ export def "custom-models-analyze AnalyzeWithCustomModel" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeTextDetails: oneof<nothing, bool> # Include text lines and element references in the result. (default: false)
+  --include-text-details: oneof<nothing, bool> # Include text lines and element references in the result. (default: false)
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeTextDetails" $includeTextDetails "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/custom/models/($modelId)/analyze" $qp)
+  let qp = [(serialize-qp "includeTextDetails" $include_text_details "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({model_id: $model_id} | format pattern "/custom/models/{model_id}/analyze") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,9 +221,9 @@ export def "custom-models-analyze AnalyzeWithCustomModel" [
 #
 # GET /custom/models/{modelId}/analyzeResults/{resultId}
 # operationId: GetAnalyzeFormResult
-export def "custom-models-analyze-results GetAnalyzeFormResult" [
-  modelId: string
-  resultId: string
+export def "custom-models-analyze-results get-analyze-form" [
+  model_id: string
+  result_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "custom-models-analyze-results GetAnalyzeFormResult" [
 ]: nothing -> record<analyzeResult: record<documentResults: list<record>, errors: list<record>, pageResults: list<record>, readResults: list<record>, version: string>, createdDateTime: string, lastUpdatedDateTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/custom/models/($modelId)/analyzeResults/($resultId)")
+  let full_url = (build-url $base ({model_id: $model_id, result_id: $result_id} | format pattern "/custom/models/{model_id}/analyzeResults/{result_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -245,7 +245,7 @@ export def "custom-models-analyze-results GetAnalyzeFormResult" [
 #
 # POST /layout/analyze
 # operationId: AnalyzeLayoutAsync
-export def "layout-analyze AnalyzeLayoutAsync" [
+export def "layout-analyze post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,8 +267,8 @@ export def "layout-analyze AnalyzeLayoutAsync" [
 #
 # GET /layout/analyzeResults/{resultId}
 # operationId: GetAnalyzeLayoutResult
-export def "layout-analyze-results GetAnalyzeLayoutResult" [
-  resultId: string
+export def "layout-analyze-results get" [
+  result_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "layout-analyze-results GetAnalyzeLayoutResult" [
 ]: nothing -> record<analyzeResult: record<documentResults: list<record>, errors: list<record>, pageResults: list<record>, readResults: list<record>, version: string>, createdDateTime: string, lastUpdatedDateTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/layout/analyzeResults/($resultId)")
+  let full_url = (build-url $base ({result_id: $result_id} | format pattern "/layout/analyzeResults/{result_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,7 +290,7 @@ export def "layout-analyze-results GetAnalyzeLayoutResult" [
 #
 # POST /prebuilt/receipt/analyze
 # operationId: AnalyzeReceiptAsync
-export def "prebuilt-receipt-analyze AnalyzeReceiptAsync" [
+export def "prebuilt-receipt-analyze post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,11 +299,11 @@ export def "prebuilt-receipt-analyze AnalyzeReceiptAsync" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeTextDetails: oneof<nothing, bool> # Include text lines and element references in the result. (default: false)
+  --include-text-details: oneof<nothing, bool> # Include text lines and element references in the result. (default: false)
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeTextDetails" $includeTextDetails "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includeTextDetails" $include_text_details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/prebuilt/receipt/analyze" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -314,8 +314,8 @@ export def "prebuilt-receipt-analyze AnalyzeReceiptAsync" [
 #
 # GET /prebuilt/receipt/analyzeResults/{resultId}
 # operationId: GetAnalyzeReceiptResult
-export def "prebuilt-receipt-analyze-results GetAnalyzeReceiptResult" [
-  resultId: string
+export def "prebuilt-receipt-analyze-results get" [
+  result_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "prebuilt-receipt-analyze-results GetAnalyzeReceiptResult" [
 ]: nothing -> record<analyzeResult: record<documentResults: list<record>, errors: list<record>, pageResults: list<record>, readResults: list<record>, version: string>, createdDateTime: string, lastUpdatedDateTime: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/prebuilt/receipt/analyzeResults/($resultId)")
+  let full_url = (build-url $base ({result_id: $result_id} | format pattern "/prebuilt/receipt/analyzeResults/{result_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

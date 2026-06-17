@@ -144,7 +144,7 @@ export def "designer-templates post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/designer/templates/")
-  let body = {components: $components, css: $css, footer_html: $footer_html, format: $format, header_html: $header_html, name: $name, orientation: $orientation, preview_payload: $preview_payload, template_html: $template_html} | compact
+  let body = {"components": $components, "css": $css, "footer_html": $footer_html, "format": $format, "header_html": $header_html, "name": $name, "orientation": $orientation, "preview_payload": $preview_payload, "template_html": $template_html} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,7 +174,7 @@ export def "designer-templates-preview post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/designer/templates/preview")
-  let body = {css: $css, data: $data, footer_html: $footer_html, header_html: $header_html, template_html: $template_html} | compact
+  let body = {"css": $css, "data": $data, "footer_html": $footer_html, "header_html": $header_html, "template_html": $template_html} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -198,7 +198,7 @@ export def "designer-templates delete" [
 ]: nothing -> record<results: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/designer/templates/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/designer/templates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -221,7 +221,7 @@ export def "designer-templates get" [
 ]: nothing -> record<results: record<components: list<record>, created_at: string, css: string, footer_html: string, format: string, header_html: string, id: string, name: string, orientation: string, preview_payload: record, template_html: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/designer/templates/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/designer/templates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -254,8 +254,8 @@ export def "designer-templates put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/designer/templates/($id)")
-  let body = {components: $components, css: $css, footer_html: $footer_html, format: $format, header_html: $header_html, name: $name, orientation: $orientation, preview_payload: $preview_payload, template_html: $template_html} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/designer/templates/{id}"))
+  let body = {"components": $components, "css": $css, "footer_html": $footer_html, "format": $format, "header_html": $header_html, "name": $name, "orientation": $orientation, "preview_payload": $preview_payload, "template_html": $template_html} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -281,8 +281,8 @@ export def "designer-templates-generate post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/designer/templates/($id)/generate")
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/designer/templates/{id}/generate"))
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -333,7 +333,7 @@ export def "templates create" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates")
-  let body = {file: $file} | compact
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -357,7 +357,7 @@ export def "templates delete" [
 ]: nothing -> record<results: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/templates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -380,7 +380,7 @@ export def "templates get" [
 ]: nothing -> record<results: record<created_at: string, fields: list<any>, id: string, name: string, pages: int, size_bytes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/templates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -406,8 +406,8 @@ export def "templates update" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($id)")
-  let body = {fields: $fields, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/templates/{id}"))
+  let body = {"fields": $fields, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -431,7 +431,7 @@ export def "templates-file get" [
 ]: nothing -> record<results: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($id)/file")
+  let full_url = (build-url $base ({id: $id} | format pattern "/templates/{id}/file"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -456,8 +456,8 @@ export def "templates-fill fill" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($id)/fill")
-  let body = {data: $data} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/templates/{id}/fill"))
+  let body = {"data": $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

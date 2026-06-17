@@ -184,7 +184,7 @@ export def "item get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fieldgroups" $fieldgroups "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/item/($item_id)" $qp)
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/item/{item_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,7 +195,7 @@ export def "item get" [
 # POST /item/{item_id}/check_compatibility
 # operationId: checkCompatibility
 # --compatibilityProperties item shape: {name?: string, value?: string}
-export def "item-check-compatibility checkCompatibility" [
+export def "item-check-compatibility check" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,16 +205,16 @@ export def "item-check-compatibility checkCompatibility" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-EBAY-C-MARKETPLACE-ID: string # The ID of the eBay marketplace you want to use. Note: This value is case sensitive. For example: &nbsp;&nbsp;X-EBAY-C-MARKETPLACE-ID = EBAY_US For a list of supported sites see, API Restrictions.
-  --compatibilityProperties: list # An array of attribute name/value pairs used to define a specific product. For example: If you wanted to specify a specific car, one of the name/value pairs would be &quot;name&quot; : &quot;Year&quot;, &quot;value&quot; : &quot;2019&quot; For a list of the attributes required for cars and trucks and motorcycles see Check compatibility in the Buy Integration Guide. — item shape: {name?: string, value?: string}
+  --x-ebay-c-marketplace-id: string # The ID of the eBay marketplace you want to use. Note: This value is case sensitive. For example: &nbsp;&nbsp;X-EBAY-C-MARKETPLACE-ID = EBAY_US For a list of supported sites see, API Restrictions.
+  --compatibility-properties: list # An array of attribute name/value pairs used to define a specific product. For example: If you wanted to specify a specific car, one of the name/value pairs would be &quot;name&quot; : &quot;Year&quot;, &quot;value&quot; : &quot;2019&quot; For a list of the attributes required for cars and trucks and motorcycles see Check compatibility in the Buy Integration Guide. — item shape: {name?: string, value?: string}
 ]: any -> record<compatibilityStatus: string, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/item/($item_id)/check_compatibility")
-  let body = {compatibilityProperties: $compatibilityProperties} | compact
+  let full_url = (build-url $base ({item_id: $item_id} | format pattern "/item/{item_id}/check_compatibility"))
+  let body = {"compatibilityProperties": $compatibility_properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $X_EBAY_C_MARKETPLACE_ID} | compact
+  let extra_headers = {"X-EBAY-C-MARKETPLACE-ID": $x_ebay_c_marketplace_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,7 +261,7 @@ export def "item-summary-search search" [
 #
 # POST /item_summary/search_by_image
 # operationId: searchByImage
-export def "item-summary-search-by-image searchByImage" [
+export def "item-summary-search-by-image list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "item-summary-search-by-image searchByImage" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "aspect_filter" $aspect_filter "scalar") (serialize-qp "category_ids" $category_ids "scalar") (serialize-qp "charity_ids" $charity_ids "scalar") (serialize-qp "fieldgroups" $fieldgroups "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/item_summary/search_by_image" $qp)
-  let body = {image: $image} | compact
+  let body = {"image": $image} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -318,7 +318,7 @@ export def "shopping-cart get" [
 #
 # POST /shopping_cart/add_item
 # operationId: addItem
-export def "shopping-cart-add-item addItem" [
+export def "shopping-cart-add-item create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,14 +327,14 @@ export def "shopping-cart-add-item addItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --itemId: string # The eBay RESTful identifier of the item you want added to the cart. RESTful Item ID Format: v1|#|# For example: v1|272394640372|0 v1|162846450672|461882996982 For more information about item ID for RESTful APIs, see the Legacy API compatibility section of the Buy APIs Overview. Maximum number of items in a cart: 100
+  --item-id: string # The eBay RESTful identifier of the item you want added to the cart. RESTful Item ID Format: v1|#|# For example: v1|272394640372|0 v1|162846450672|461882996982 For more information about item ID for RESTful APIs, see the Legacy API compatibility section of the Buy APIs Overview. Maximum number of items in a cart: 100
   --quantity: int # The number of this item the buyer wants to purchase. If this value is greater than the number available, the service will change this value to the number available. If this happens, a warning is returned. Maximum: number available
 ]: any -> record<cartItems: table<cartItemId: string, cartItemSubtotal: record, image: record, itemId: string, itemWebUrl: string, price: record, quantity: int, title: string>, cartSubtotal: record<currency: string, value: string>, cartWebUrl: string, unavailableCartItems: table<cartItemId: string, cartItemSubtotal: record, image: record, itemId: string, itemWebUrl: string, price: record, quantity: int, title: string>, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shopping_cart/add_item")
-  let body = {itemId: $itemId, quantity: $quantity} | compact
+  let body = {"itemId": $item_id, "quantity": $quantity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -345,7 +345,7 @@ export def "shopping-cart-add-item addItem" [
 #
 # POST /shopping_cart/remove_item
 # operationId: removeItem
-export def "shopping-cart-remove-item removeItem" [
+export def "shopping-cart-remove-item delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,13 +354,13 @@ export def "shopping-cart-remove-item removeItem" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cartItemId: string # The identifier of the item in the cart to be removed. This ID is generated when the item was added to the cart.
+  --cart-item-id: string # The identifier of the item in the cart to be removed. This ID is generated when the item was added to the cart.
 ]: any -> record<cartItems: table<cartItemId: string, cartItemSubtotal: record, image: record, itemId: string, itemWebUrl: string, price: record, quantity: int, title: string>, cartSubtotal: record<currency: string, value: string>, cartWebUrl: string, unavailableCartItems: table<cartItemId: string, cartItemSubtotal: record, image: record, itemId: string, itemWebUrl: string, price: record, quantity: int, title: string>, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shopping_cart/remove_item")
-  let body = {cartItemId: $cartItemId} | compact
+  let body = {"cartItemId": $cart_item_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -371,7 +371,7 @@ export def "shopping-cart-remove-item removeItem" [
 #
 # POST /shopping_cart/update_quantity
 # operationId: updateQuantity
-export def "shopping-cart-update-quantity updateQuantity" [
+export def "shopping-cart-update-quantity update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,14 +380,14 @@ export def "shopping-cart-update-quantity updateQuantity" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cartItemId: string # The identifier of the item in the cart to be updated. This ID is generated when the item was added to the cart.
+  --cart-item-id: string # The identifier of the item in the cart to be updated. This ID is generated when the item was added to the cart.
   --quantity: int # The new quantity for the item that is being updated.
 ]: any -> record<cartItems: table<cartItemId: string, cartItemSubtotal: record, image: record, itemId: string, itemWebUrl: string, price: record, quantity: int, title: string>, cartSubtotal: record<currency: string, value: string>, cartWebUrl: string, unavailableCartItems: table<cartItemId: string, cartItemSubtotal: record, image: record, itemId: string, itemWebUrl: string, price: record, quantity: int, title: string>, warnings: table<category: string, domain: string, errorId: int, inputRefIds: list, longMessage: string, message: string, outputRefIds: list, parameters: list, subdomain: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shopping_cart/update_quantity")
-  let body = {cartItemId: $cartItemId, quantity: $quantity} | compact
+  let body = {"cartItemId": $cart_item_id, "quantity": $quantity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

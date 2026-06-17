@@ -108,19 +108,19 @@ export def "templates-compile compile" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --doc-url-expires-in: int # The doc-url-expires-in is a numerical parameter which takes integers and describes after how many seconds the provided URL is available to download the document. (e.g. 3600)
   --latex-compiler: string@latex-compiler-completer # The latex-compiler parameter can take the following values:  pdflatex lualatex
-  --latex-runs : int # The latex-runs is a numerical parameter and can take values of 1, 2 and 3. 
+  --latex-runs: int # The latex-runs is a numerical parameter and can take values of 1, 2 and 3. 
   --main-file-name: string # The main-file-name is a string parameter which identifies the main file to compile. (e.g. inputFile.tex)
   --doc-file-name: string # The doc-file-name is a string parameter which determines the name of the file. Note that the extension of the file is not required. (e.g. brilliantDocument)
-  --Content-Type: string # Should be set to "application/json" (e.g. application/json)
+  --content-type: string # Should be set to "application/json" (e.g. application/json)
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "advicement api key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "doc-url-expires-in" $doc_url_expires_in "scalar") (serialize-qp "latex-compiler" $latex_compiler "scalar") (serialize-qp "latex-runs " $latex_runs  "scalar") (serialize-qp "main-file-name" $main_file_name "scalar") (serialize-qp "doc-file-name" $doc_file_name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/templates/($template_token)/compile" $qp)
+  let qp = [(serialize-qp "doc-url-expires-in" $doc_url_expires_in "scalar") (serialize-qp "latex-compiler" $latex_compiler "scalar") (serialize-qp "latex-runs " $latex_runs "scalar") (serialize-qp "main-file-name" $main_file_name "scalar") (serialize-qp "doc-file-name" $doc_file_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({template_token: $template_token} | format pattern "/templates/{template_token}/compile") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

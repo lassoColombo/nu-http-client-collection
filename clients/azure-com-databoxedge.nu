@@ -72,7 +72,7 @@ def kind-completer-1 [] { ["FileEvent" "PeriodicTimerEvent"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-box-edge-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-data-box-edge-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DataBoxEdge/operations
 # operationId: Operations_List
-export def "providers-microsoft-data-box-edge-operations List" [
+export def "providers-microsoft-data-box-edge-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,8 +120,8 @@ export def "providers-microsoft-data-box-edge-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices
 # operationId: Devices_ListBySubscription
-export def "subscriptions-providers-microsoft-data-box-edge-data-box-edge-devices ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-data-box-edge-data-box-edge-devices list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,7 +136,7 @@ export def "subscriptions-providers-microsoft-data-box-edge-data-box-edge-device
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -146,9 +146,9 @@ export def "subscriptions-providers-microsoft-data-box-edge-data-box-edge-device
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices
 # operationId: Devices_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,10 +173,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}
 # operationId: Devices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices Delete" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices delete" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -200,10 +200,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}
 # operationId: Devices_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices Get" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -227,10 +227,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}
 # operationId: Devices_Update
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices Update" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices update" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,8 +246,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -260,10 +260,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # operationId: Devices_CreateOrUpdate
 # --properties shape: {dataBoxEdgeDeviceStatus?: "ReadyToSetup"|"Online"|"Offline"|"NeedsAttention"|"Disconnected"|"PartiallyDisconnected"|"Maintenance", description?: string, friendlyName?: string, modelDescription?: string}
 # --sku shape: {name?: "Gateway"|"Edge", tier?: "Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices CreateOrUpdate" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,8 +283,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)" $qp)
-  let body = {etag: $etag, location: $location, properties: $properties, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}") $qp)
+  let body = {"etag": $etag, "location": $location, "properties": $properties, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -295,10 +295,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/alerts
 # operationId: Alerts_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-alerts ListByDataBoxEdgeDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-alerts list-by" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/alerts" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/alerts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,11 +322,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/alerts/{name}
 # operationId: Alerts_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-alerts Get" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-alerts get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/alerts/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/alerts/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -350,10 +350,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/bandwidthSchedules
 # operationId: BandwidthSchedules_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules ListByDataBoxEdgeDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules list-by" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/bandwidthSchedules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/bandwidthSchedules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -377,11 +377,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/bandwidthSchedules/{name}
 # operationId: BandwidthSchedules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules Delete" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules delete" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/bandwidthSchedules/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/bandwidthSchedules/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -405,11 +405,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/bandwidthSchedules/{name}
 # operationId: BandwidthSchedules_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules Get" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,7 +423,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/bandwidthSchedules/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/bandwidthSchedules/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -434,11 +434,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/bandwidthSchedules/{name}
 # operationId: BandwidthSchedules_CreateOrUpdate
 # --properties shape: {days: list, rateInMbps: int, start: string, stop: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules CreateOrUpdate" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-bandwidth-schedules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,8 +454,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/bandwidthSchedules/($name)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/bandwidthSchedules/{name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -466,10 +466,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/downloadUpdates
 # operationId: Devices_DownloadUpdates
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-download-updates DownloadUpdates" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-download-updates download" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/downloadUpdates" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/downloadUpdates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -493,10 +493,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/getExtendedInformation
 # operationId: Devices_GetExtendedInformation
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-get-extended-information GetExtendedInformation" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-get-extended-information get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/getExtendedInformation" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/getExtendedInformation") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,10 +520,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/installUpdates
 # operationId: Devices_InstallUpdates
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-install-updates InstallUpdates" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-install-updates post" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/installUpdates" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/installUpdates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -547,11 +547,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/jobs/{name}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-jobs Get" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-jobs get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/jobs/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/jobs/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -575,10 +575,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/networkSettings/default
 # operationId: Devices_GetNetworkSettings
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-network-settings-default GetNetworkSettings" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-network-settings-default get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,7 +592,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/networkSettings/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/networkSettings/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -602,10 +602,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/nodes
 # operationId: Nodes_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-nodes ListByDataBoxEdgeDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-nodes list-by" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,7 +619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/nodes" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/nodes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -629,11 +629,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/operationsStatus/{name}
 # operationId: OperationsStatus_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-operations-status Get" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-operations-status get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,7 +647,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/operationsStatus/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/operationsStatus/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -657,10 +657,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/orders
 # operationId: Orders_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders ListByDataBoxEdgeDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders list-by" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/orders" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/orders") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -684,10 +684,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/orders/default
 # operationId: Orders_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders-default Delete" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders-default delete" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,7 +701,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/orders/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/orders/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -711,10 +711,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/orders/default
 # operationId: Orders_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders-default Get" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders-default get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,7 +728,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/orders/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/orders/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -739,10 +739,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/orders/default
 # operationId: Orders_CreateOrUpdate
 # --properties shape: {contactInformation: record, currentStatus?: record, shippingAddress: record}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders-default CreateOrUpdate" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-orders-default create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,8 +758,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/orders/default" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/orders/default") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -770,10 +770,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/roles
 # operationId: Roles_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles ListByDataBoxEdgeDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles list-by" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,7 +787,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/roles" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/roles") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -797,11 +797,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/roles/{name}
 # operationId: Roles_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles Delete" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles delete" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -815,7 +815,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/roles/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/roles/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -825,11 +825,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/roles/{name}
 # operationId: Roles_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles Get" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,7 +843,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/roles/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/roles/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -854,11 +854,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/roles/{name}
 # Discriminator (request): kind
 # operationId: Roles_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles CreateOrUpdate" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-roles create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,8 +874,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/roles/($name)" $qp)
-  let body = {kind: $kind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/roles/{name}") $qp)
+  let body = {"kind": $kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -886,10 +886,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/scanForUpdates
 # operationId: Devices_ScanForUpdates
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-scan-for-updates ScanForUpdates" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-scan-for-updates post" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,7 +903,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/scanForUpdates" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/scanForUpdates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -914,10 +914,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/securitySettings/default/update
 # operationId: Devices_CreateOrUpdateSecuritySettings
 # --properties shape: {deviceAdminPassword: record}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-security-settings-default-update CreateOrUpdateSecuritySettings" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-security-settings-default-update create-or" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,8 +933,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/securitySettings/default/update" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/securitySettings/default/update") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -945,10 +945,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/shares
 # operationId: Shares_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares ListByDataBoxEdgeDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares list-by" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/shares" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/shares") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -972,11 +972,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/shares/{name}
 # operationId: Shares_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares Delete" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares delete" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -990,7 +990,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/shares/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/shares/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1000,11 +1000,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/shares/{name}
 # operationId: Shares_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares Get" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1018,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/shares/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/shares/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1029,11 +1029,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/shares/{name}
 # operationId: Shares_CreateOrUpdate
 # --properties shape: {accessProtocol: "SMB"|"NFS", azureContainerInfo?: record, clientAccessRights?: list, dataPolicy?: "Cloud"|"Local", description?: string, monitoringStatus: "Enabled"|"Disabled", refreshDetails?: record, shareStatus: "Offline"|"Unknown"|"OK"|"Updating"|"NeedsAttention", userAccessRights?: list}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares CreateOrUpdate" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1049,8 +1049,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/shares/($name)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/shares/{name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1061,11 +1061,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/shares/{name}/refresh
 # operationId: Shares_Refresh
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares-refresh Refresh" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-shares-refresh refresh" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1079,7 +1079,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/shares/($name)/refresh" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/shares/{name}/refresh") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1089,10 +1089,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/storageAccountCredentials
 # operationId: StorageAccountCredentials_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials ListByDataBoxEdgeDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials list-by" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,7 +1106,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/storageAccountCredentials" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/storageAccountCredentials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1116,11 +1116,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/storageAccountCredentials/{name}
 # operationId: StorageAccountCredentials_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials Delete" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials delete" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,7 +1134,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/storageAccountCredentials/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/storageAccountCredentials/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1144,11 +1144,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/storageAccountCredentials/{name}
 # operationId: StorageAccountCredentials_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials Get" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1162,7 +1162,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/storageAccountCredentials/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/storageAccountCredentials/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1173,11 +1173,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/storageAccountCredentials/{name}
 # operationId: StorageAccountCredentials_CreateOrUpdate
 # --properties shape: {accountKey?: record, accountType: "GeneralPurposeStorage"|"BlobStorage", alias: string, blobDomainName?: string, connectionString?: string, sslStatus: "Enabled"|"Disabled", storageAccountId?: string, userName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials CreateOrUpdate" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-storage-account-credentials create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,8 +1193,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/storageAccountCredentials/($name)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/storageAccountCredentials/{name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1205,10 +1205,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/triggers
 # operationId: Triggers_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers ListByDataBoxEdgeDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers list-by" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1223,7 +1223,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/triggers" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/triggers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1233,11 +1233,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/triggers/{name}
 # operationId: Triggers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers Delete" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers delete" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1251,7 +1251,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/triggers/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/triggers/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1261,11 +1261,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/triggers/{name}
 # operationId: Triggers_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers Get" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1279,7 +1279,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/triggers/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/triggers/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1290,11 +1290,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/triggers/{name}
 # Discriminator (request): kind
 # operationId: Triggers_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers CreateOrUpdate" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-triggers create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,8 +1310,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/triggers/($name)" $qp)
-  let body = {kind: $kind} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/triggers/{name}") $qp)
+  let body = {"kind": $kind} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1322,10 +1322,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/updateSummary/default
 # operationId: Devices_GetUpdateSummary
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-update-summary-default GetUpdateSummary" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-update-summary-default get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1339,7 +1339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/updateSummary/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/updateSummary/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1350,10 +1350,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/uploadCertificate
 # operationId: Devices_UploadCertificate
 # --properties shape: {authenticationType?: "Invalid"|"AzureActiveDirectory", certificate: string}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-upload-certificate UploadCertificate" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-upload-certificate upload" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1369,8 +1369,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/uploadCertificate" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/uploadCertificate") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1381,10 +1381,10 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/users
 # operationId: Users_ListByDataBoxEdgeDevice
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users ListByDataBoxEdgeDevice" [
-  deviceName: string
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users list-by" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/users" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/users") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1408,11 +1408,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/users/{name}
 # operationId: Users_Delete
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users Delete" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users delete" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,7 +1426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/users/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/users/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1436,11 +1436,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/users/{name}
 # operationId: Users_Get
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users Get" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users get" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1454,7 +1454,7 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/users/($name)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/users/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1465,11 +1465,11 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{deviceName}/users/{name}
 # operationId: Users_CreateOrUpdate
 # --properties shape: {encryptedPassword?: record, shareAccessRights?: list}
-export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users CreateOrUpdate" [
-  deviceName: string
+export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data-box-edge-devices-users create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  device_name: string
   name: string
-  subscriptionId: string
-  resourceGroupName: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,8 +1485,8 @@ export def "subscriptions-resource-groups-providers-microsoft-data-box-edge-data
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/($deviceName)/users/($name)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, device_name: $device_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DataBoxEdge/dataBoxEdgeDevices/{device_name}/users/{name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

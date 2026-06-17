@@ -151,7 +151,7 @@ export def "actions get" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/actions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/actions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -206,7 +206,7 @@ export def "certificates post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/certificates")
-  let body = {certificate: $certificate, domain_names: $domain_names, labels: $labels, name: $name, private_key: $private_key, type: $type} | compact
+  let body = {"certificate": $certificate, "domain_names": $domain_names, "labels": $labels, "name": $name, "private_key": $private_key, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -229,7 +229,7 @@ export def "certificates delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/certificates/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/certificates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -251,7 +251,7 @@ export def "certificates get" [
 ]: nothing -> record<certificate: record<certificate: string, created: string, domain_names: list<string>, fingerprint: string, id: int, labels: record, name: string, not_valid_after: string, not_valid_before: string, status: record<error: record, issuance: string, renewal: string>, type: string, used_by: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/certificates/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/certificates/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -276,8 +276,8 @@ export def "certificates put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/certificates/($id)")
-  let body = {labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/certificates/{id}"))
+  let body = {"labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -303,7 +303,7 @@ export def "certificates-actions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/certificates/($id)/actions" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/certificates/{id}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -325,7 +325,7 @@ export def "certificates-actions-retry post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/certificates/($id)/actions/retry")
+  let full_url = (build-url $base ({id: $id} | format pattern "/certificates/{id}/actions/retry"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,7 +348,7 @@ export def "certificates-actions get" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/certificates/($id)/actions/($action_id)")
+  let full_url = (build-url $base ({id: $id, action_id: $action_id} | format pattern "/certificates/{id}/actions/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -393,7 +393,7 @@ export def "datacenters get" [
 ]: nothing -> record<datacenter: record<description: string, id: int, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, server_types: record<available: list, available_for_migration: list, supported: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/datacenters/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/datacenters/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -447,7 +447,7 @@ export def "firewalls post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/firewalls")
-  let body = {apply_to: $apply_to, labels: $labels, name: $name, rules: $rules} | compact
+  let body = {"apply_to": $apply_to, "labels": $labels, "name": $name, "rules": $rules} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -470,7 +470,7 @@ export def "firewalls delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/firewalls/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/firewalls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -492,7 +492,7 @@ export def "firewalls get" [
 ]: nothing -> record<firewall: record<applied_to: list<record>, created: string, id: int, labels: record, name: string, rules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/firewalls/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/firewalls/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -517,8 +517,8 @@ export def "firewalls put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/firewalls/($id)")
-  let body = {labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/firewalls/{id}"))
+  let body = {"labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -544,7 +544,7 @@ export def "firewalls-actions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/firewalls/($id)/actions" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/firewalls/{id}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -569,8 +569,8 @@ export def "firewalls-actions-apply-to-resources post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/firewalls/($id)/actions/apply_to_resources")
-  let body = {apply_to: $apply_to} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/firewalls/{id}/actions/apply_to_resources"))
+  let body = {"apply_to": $apply_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -596,8 +596,8 @@ export def "firewalls-actions-remove-from-resources post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/firewalls/($id)/actions/remove_from_resources")
-  let body = {remove_from: $remove_from} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/firewalls/{id}/actions/remove_from_resources"))
+  let body = {"remove_from": $remove_from} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,8 +623,8 @@ export def "firewalls-actions-set-rules post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/firewalls/($id)/actions/set_rules")
-  let body = {rules: $rules} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/firewalls/{id}/actions/set_rules"))
+  let body = {"rules": $rules} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -648,7 +648,7 @@ export def "firewalls-actions get" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/firewalls/($id)/actions/($action_id)")
+  let full_url = (build-url $base ({id: $id, action_id: $action_id} | format pattern "/firewalls/{id}/actions/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -702,7 +702,7 @@ export def "floating-ips post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/floating_ips")
-  let body = {description: $description, home_location: $home_location, labels: $labels, name: $name, server: $server, type: $type} | compact
+  let body = {"description": $description, "home_location": $home_location, "labels": $labels, "name": $name, "server": $server, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -725,7 +725,7 @@ export def "floating-ips delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/floating_ips/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/floating_ips/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -747,7 +747,7 @@ export def "floating-ips get" [
 ]: nothing -> record<floating_ip: record<blocked: bool, created: string, description: string, dns_ptr: list<record>, home_location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, server: int, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/floating_ips/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/floating_ips/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -773,8 +773,8 @@ export def "floating-ips put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/floating_ips/($id)")
-  let body = {description: $description, labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/floating_ips/{id}"))
+  let body = {"description": $description, "labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -800,7 +800,7 @@ export def "floating-ips-actions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/floating_ips/($id)/actions" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/floating_ips/{id}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -824,8 +824,8 @@ export def "floating-ips-actions-assign post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/floating_ips/($id)/actions/assign")
-  let body = {server: $server} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/floating_ips/{id}/actions/assign"))
+  let body = {"server": $server} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -851,8 +851,8 @@ export def "floating-ips-actions-change-dns-ptr post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/floating_ips/($id)/actions/change_dns_ptr")
-  let body = {dns_ptr: $dns_ptr, ip: $ip} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/floating_ips/{id}/actions/change_dns_ptr"))
+  let body = {"dns_ptr": $dns_ptr, "ip": $ip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -877,8 +877,8 @@ export def "floating-ips-actions-change-protection post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/floating_ips/($id)/actions/change_protection")
-  let body = {delete: $delete} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/floating_ips/{id}/actions/change_protection"))
+  let body = {"delete": $delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -901,7 +901,7 @@ export def "floating-ips-actions-unassign post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/floating_ips/($id)/actions/unassign")
+  let full_url = (build-url $base ({id: $id} | format pattern "/floating_ips/{id}/actions/unassign"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -924,7 +924,7 @@ export def "floating-ips-actions get" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/floating_ips/($id)/actions/($action_id)")
+  let full_url = (build-url $base ({id: $id, action_id: $action_id} | format pattern "/floating_ips/{id}/actions/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -975,7 +975,7 @@ export def "images delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -997,7 +997,7 @@ export def "images get" [
 ]: nothing -> record<image: record<bound_to: int, created: string, created_from: record<id: int, name: string>, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record<delete: bool>, rapid_deploy: bool, status: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1023,8 +1023,8 @@ export def "images put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($id)")
-  let body = {description: $description, labels: $labels, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}"))
+  let body = {"description": $description, "labels": $labels, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1050,7 +1050,7 @@ export def "images-actions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/images/($id)/actions" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1074,8 +1074,8 @@ export def "images-actions-change-protection post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($id)/actions/change_protection")
-  let body = {delete: $delete} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/images/{id}/actions/change_protection"))
+  let body = {"delete": $delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1099,7 +1099,7 @@ export def "images-actions get" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/images/($id)/actions/($action_id)")
+  let full_url = (build-url $base ({id: $id, action_id: $action_id} | format pattern "/images/{id}/actions/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1144,7 +1144,7 @@ export def "isos get" [
 ]: nothing -> record<iso: record<deprecated: string, description: string, id: int, name: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/isos/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/isos/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1189,7 +1189,7 @@ export def "load-balancer-types get" [
 ]: nothing -> record<load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancer_types/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancer_types/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1251,7 +1251,7 @@ export def "load-balancers post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/load_balancers")
-  let body = {algorithm: $algorithm, labels: $labels, load_balancer_type: $load_balancer_type, location: $location, name: $name, network: $network, network_zone: $network_zone, public_interface: $public_interface, services: $services, targets: $targets} | compact
+  let body = {"algorithm": $algorithm, "labels": $labels, "load_balancer_type": $load_balancer_type, "location": $location, "name": $name, "network": $network, "network_zone": $network_zone, "public_interface": $public_interface, "services": $services, "targets": $targets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1274,7 +1274,7 @@ export def "load-balancers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1296,7 +1296,7 @@ export def "load-balancers get" [
 ]: nothing -> record<load_balancer: record<algorithm: record<type: string>, created: string, id: int, included_traffic: int, ingoing_traffic: int, labels: record, load_balancer_type: record<deprecated: string, description: string, id: float, max_assigned_certificates: float, max_connections: float, max_services: float, max_targets: float, name: string, prices: list>, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, outgoing_traffic: int, private_net: list<record>, protection: record<delete: bool>, public_net: record<enabled: bool, ipv4: record, ipv6: record>, services: list<record>, targets: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1321,8 +1321,8 @@ export def "load-balancers put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)")
-  let body = {labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}"))
+  let body = {"labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1348,7 +1348,7 @@ export def "load-balancers-actions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/load_balancers/($id)/actions" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1379,8 +1379,8 @@ export def "load-balancers-actions-add-service post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/add_service")
-  let body = {destination_port: $destination_port, health_check: $health_check, http: $http, listen_port: $listen_port, protocol: $protocol, proxyprotocol: $proxyprotocol} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/add_service"))
+  let body = {"destination_port": $destination_port, "health_check": $health_check, "http": $http, "listen_port": $listen_port, "protocol": $protocol, "proxyprotocol": $proxyprotocol} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1412,8 +1412,8 @@ export def "load-balancers-actions-add-target post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/add_target")
-  let body = {ip: $ip, label_selector: $label_selector, server: $server, type: $type, use_private_ip: $use_private_ip} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/add_target"))
+  let body = {"ip": $ip, "label_selector": $label_selector, "server": $server, "type": $type, "use_private_ip": $use_private_ip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1439,8 +1439,8 @@ export def "load-balancers-actions-attach-to-network post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/attach_to_network")
-  let body = {ip: $ip, network: $network} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/attach_to_network"))
+  let body = {"ip": $ip, "network": $network} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1465,8 +1465,8 @@ export def "load-balancers-actions-change-algorithm post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/change_algorithm")
-  let body = {type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/change_algorithm"))
+  let body = {"type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1492,8 +1492,8 @@ export def "load-balancers-actions-change-dns-ptr post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/change_dns_ptr")
-  let body = {dns_ptr: $dns_ptr, ip: $ip} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/change_dns_ptr"))
+  let body = {"dns_ptr": $dns_ptr, "ip": $ip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1518,8 +1518,8 @@ export def "load-balancers-actions-change-protection post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/change_protection")
-  let body = {delete: $delete} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/change_protection"))
+  let body = {"delete": $delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1544,8 +1544,8 @@ export def "load-balancers-actions-change-type post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/change_type")
-  let body = {load_balancer_type: $load_balancer_type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/change_type"))
+  let body = {"load_balancer_type": $load_balancer_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1570,8 +1570,8 @@ export def "load-balancers-actions-delete-service post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/delete_service")
-  let body = {listen_port: $listen_port} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/delete_service"))
+  let body = {"listen_port": $listen_port} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1596,8 +1596,8 @@ export def "load-balancers-actions-detach-from-network post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/detach_from_network")
-  let body = {network: $network} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/detach_from_network"))
+  let body = {"network": $network} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1620,7 +1620,7 @@ export def "load-balancers-actions-disable-public-interface post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/disable_public_interface")
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/disable_public_interface"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1642,7 +1642,7 @@ export def "load-balancers-actions-enable-public-interface post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/enable_public_interface")
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/enable_public_interface"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1672,8 +1672,8 @@ export def "load-balancers-actions-remove-target post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/remove_target")
-  let body = {ip: $ip, label_selector: $label_selector, server: $server, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/remove_target"))
+  let body = {"ip": $ip, "label_selector": $label_selector, "server": $server, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1705,8 +1705,8 @@ export def "load-balancers-actions-update-service post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/update_service")
-  let body = {destination_port: $destination_port, health_check: $health_check, http: $http, listen_port: $listen_port, protocol: $protocol, proxyprotocol: $proxyprotocol} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/actions/update_service"))
+  let body = {"destination_port": $destination_port, "health_check": $health_check, "http": $http, "listen_port": $listen_port, "protocol": $protocol, "proxyprotocol": $proxyprotocol} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1730,7 +1730,7 @@ export def "load-balancers-actions get" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/load_balancers/($id)/actions/($action_id)")
+  let full_url = (build-url $base ({id: $id, action_id: $action_id} | format pattern "/load_balancers/{id}/actions/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1757,7 +1757,7 @@ export def "load-balancers-metrics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/load_balancers/($id)/metrics" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/load_balancers/{id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1802,7 +1802,7 @@ export def "locations get" [
 ]: nothing -> record<location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/locations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/locations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1857,7 +1857,7 @@ export def "networks post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/networks")
-  let body = {ip_range: $ip_range, labels: $labels, name: $name, routes: $routes, subnets: $subnets} | compact
+  let body = {"ip_range": $ip_range, "labels": $labels, "name": $name, "routes": $routes, "subnets": $subnets} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1880,7 +1880,7 @@ export def "networks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1902,7 +1902,7 @@ export def "networks get" [
 ]: nothing -> record<network: record<created: string, id: int, ip_range: string, labels: record, load_balancers: list<int>, name: string, protection: record<delete: bool>, routes: list<record>, servers: list<int>, subnets: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1928,8 +1928,8 @@ export def "networks put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networks/($id)")
-  let body = {labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}"))
+  let body = {"labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1955,7 +1955,7 @@ export def "networks-actions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/networks/($id)/actions" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1980,8 +1980,8 @@ export def "networks-actions-add-route post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networks/($id)/actions/add_route")
-  let body = {destination: $destination, gateway: $gateway} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}/actions/add_route"))
+  let body = {"destination": $destination, "gateway": $gateway} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2009,8 +2009,8 @@ export def "networks-actions-add-subnet post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networks/($id)/actions/add_subnet")
-  let body = {ip_range: $ip_range, network_zone: $network_zone, type: $type, vswitch_id: $vswitch_id} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}/actions/add_subnet"))
+  let body = {"ip_range": $ip_range, "network_zone": $network_zone, "type": $type, "vswitch_id": $vswitch_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2035,8 +2035,8 @@ export def "networks-actions-change-ip-range post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networks/($id)/actions/change_ip_range")
-  let body = {ip_range: $ip_range} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}/actions/change_ip_range"))
+  let body = {"ip_range": $ip_range} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2061,8 +2061,8 @@ export def "networks-actions-change-protection post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networks/($id)/actions/change_protection")
-  let body = {delete: $delete} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}/actions/change_protection"))
+  let body = {"delete": $delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2088,8 +2088,8 @@ export def "networks-actions-delete-route post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networks/($id)/actions/delete_route")
-  let body = {destination: $destination, gateway: $gateway} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}/actions/delete_route"))
+  let body = {"destination": $destination, "gateway": $gateway} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2114,8 +2114,8 @@ export def "networks-actions-delete-subnet post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networks/($id)/actions/delete_subnet")
-  let body = {ip_range: $ip_range} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/networks/{id}/actions/delete_subnet"))
+  let body = {"ip_range": $ip_range} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2139,7 +2139,7 @@ export def "networks-actions get" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/networks/($id)/actions/($action_id)")
+  let full_url = (build-url $base ({id: $id, action_id: $action_id} | format pattern "/networks/{id}/actions/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2191,7 +2191,7 @@ export def "placement-groups post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/placement_groups")
-  let body = {labels: $labels, name: $name, type: $type} | compact
+  let body = {"labels": $labels, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2214,7 +2214,7 @@ export def "placement-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/placement_groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/placement_groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2236,7 +2236,7 @@ export def "placement-groups get" [
 ]: nothing -> record<placement_group: record<created: string, id: int, labels: record, name: string, servers: list<int>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/placement_groups/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/placement_groups/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2261,8 +2261,8 @@ export def "placement-groups put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/placement_groups/($id)")
-  let body = {labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/placement_groups/{id}"))
+  let body = {"labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2340,7 +2340,7 @@ export def "primary-ips post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/primary_ips")
-  let body = {assignee_id: $assignee_id, assignee_type: $assignee_type, auto_delete: $auto_delete, datacenter: $datacenter, labels: $labels, name: $name, type: $type} | compact
+  let body = {"assignee_id": $assignee_id, "assignee_type": $assignee_type, "auto_delete": $auto_delete, "datacenter": $datacenter, "labels": $labels, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2363,7 +2363,7 @@ export def "primary-ips delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/primary_ips/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/primary_ips/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2385,7 +2385,7 @@ export def "primary-ips get" [
 ]: nothing -> record<primary_ip: record<assignee_id: int, assignee_type: string, auto_delete: bool, blocked: bool, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, dns_ptr: list<record>, id: int, ip: string, labels: record, name: string, protection: record<delete: bool>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/primary_ips/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/primary_ips/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2411,8 +2411,8 @@ export def "primary-ips put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/primary_ips/($id)")
-  let body = {auto_delete: $auto_delete, labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/primary_ips/{id}"))
+  let body = {"auto_delete": $auto_delete, "labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2438,8 +2438,8 @@ export def "primary-ips-actions-assign post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/primary_ips/($id)/actions/assign")
-  let body = {assignee_id: $assignee_id, assignee_type: $assignee_type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/primary_ips/{id}/actions/assign"))
+  let body = {"assignee_id": $assignee_id, "assignee_type": $assignee_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2465,8 +2465,8 @@ export def "primary-ips-actions-change-dns-ptr post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/primary_ips/($id)/actions/change_dns_ptr")
-  let body = {dns_ptr: $dns_ptr, ip: $ip} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/primary_ips/{id}/actions/change_dns_ptr"))
+  let body = {"dns_ptr": $dns_ptr, "ip": $ip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2491,8 +2491,8 @@ export def "primary-ips-actions-change-protection post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/primary_ips/($id)/actions/change_protection")
-  let body = {delete: $delete} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/primary_ips/{id}/actions/change_protection"))
+  let body = {"delete": $delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2515,7 +2515,7 @@ export def "primary-ips-actions-unassign post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/primary_ips/($id)/actions/unassign")
+  let full_url = (build-url $base ({id: $id} | format pattern "/primary_ips/{id}/actions/unassign"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2560,7 +2560,7 @@ export def "server-types get" [
 ]: nothing -> record<server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: float, memory: float, name: string, prices: list<record>, storage_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/server_types/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/server_types/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2626,7 +2626,7 @@ export def "servers post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/servers")
-  let body = {automount: $automount, datacenter: $datacenter, firewalls: $firewalls, image: $image, labels: $labels, location: $location, name: $name, networks: $networks, placement_group: $placement_group, public_net: $public_net, server_type: $server_type, ssh_keys: $ssh_keys, start_after_create: $start_after_create, user_data: $user_data, volumes: $volumes} | compact
+  let body = {"automount": $automount, "datacenter": $datacenter, "firewalls": $firewalls, "image": $image, "labels": $labels, "location": $location, "name": $name, "networks": $networks, "placement_group": $placement_group, "public_net": $public_net, "server_type": $server_type, "ssh_keys": $ssh_keys, "start_after_create": $start_after_create, "user_data": $user_data, "volumes": $volumes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2649,7 +2649,7 @@ export def "servers delete" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2671,7 +2671,7 @@ export def "servers get" [
 ]: nothing -> record<server: record<backup_window: string, created: string, datacenter: record<description: string, id: int, location: record, name: string, server_types: record>, id: int, image: record<bound_to: int, created: string, created_from: record, deleted: string, deprecated: string, description: string, disk_size: float, id: int, image_size: float, labels: record, name: string, os_flavor: string, os_version: string, protection: record, rapid_deploy: bool, status: string, type: string>, included_traffic: float, ingoing_traffic: float, iso: record<deprecated: string, description: string, id: int, name: string, type: string>, labels: record, load_balancers: list<int>, locked: bool, name: string, outgoing_traffic: float, placement_group: record<created: string, id: int, labels: record, name: string, servers: list, type: string>, primary_disk_size: float, private_net: list<record>, protection: record<delete: bool, rebuild: bool>, public_net: record<firewalls: list, floating_ips: list, ipv4: record, ipv6: record>, rescue_enabled: bool, server_type: record<cores: float, cpu_type: string, deprecated: bool, description: string, disk: float, id: int, memory: float, name: string, prices: list, storage_type: string>, status: string, volumes: list<int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2696,8 +2696,8 @@ export def "servers put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)")
-  let body = {labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}"))
+  let body = {"labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2723,7 +2723,7 @@ export def "servers-actions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/servers/($id)/actions" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2747,8 +2747,8 @@ export def "servers-actions-add-to-placement-group post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/add_to_placement_group")
-  let body = {placement_group: $placement_group} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/add_to_placement_group"))
+  let body = {"placement_group": $placement_group} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2773,8 +2773,8 @@ export def "servers-actions-attach-iso post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/attach_iso")
-  let body = {iso: $iso} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/attach_iso"))
+  let body = {"iso": $iso} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2801,8 +2801,8 @@ export def "servers-actions-attach-to-network post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/attach_to_network")
-  let body = {alias_ips: $alias_ips, ip: $ip, network: $network} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/attach_to_network"))
+  let body = {"alias_ips": $alias_ips, "ip": $ip, "network": $network} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2828,8 +2828,8 @@ export def "servers-actions-change-alias-ips post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/change_alias_ips")
-  let body = {alias_ips: $alias_ips, network: $network} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/change_alias_ips"))
+  let body = {"alias_ips": $alias_ips, "network": $network} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2855,8 +2855,8 @@ export def "servers-actions-change-dns-ptr post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/change_dns_ptr")
-  let body = {dns_ptr: $dns_ptr, ip: $ip} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/change_dns_ptr"))
+  let body = {"dns_ptr": $dns_ptr, "ip": $ip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2882,8 +2882,8 @@ export def "servers-actions-change-protection post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/change_protection")
-  let body = {delete: $delete, rebuild: $rebuild} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/change_protection"))
+  let body = {"delete": $delete, "rebuild": $rebuild} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2909,8 +2909,8 @@ export def "servers-actions-change-type post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/change_type")
-  let body = {server_type: $server_type, upgrade_disk: $upgrade_disk} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/change_type"))
+  let body = {"server_type": $server_type, "upgrade_disk": $upgrade_disk} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2938,8 +2938,8 @@ export def "servers-actions-create-image post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/create_image")
-  let body = {description: $description, labels: $labels, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/create_image"))
+  let body = {"description": $description, "labels": $labels, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2964,8 +2964,8 @@ export def "servers-actions-detach-from-network post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/detach_from_network")
-  let body = {network: $network} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/detach_from_network"))
+  let body = {"network": $network} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2988,7 +2988,7 @@ export def "servers-actions-detach-iso post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/detach_iso")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/detach_iso"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3010,7 +3010,7 @@ export def "servers-actions-disable-backup post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/disable_backup")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/disable_backup"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3032,7 +3032,7 @@ export def "servers-actions-disable-rescue post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/disable_rescue")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/disable_rescue"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3054,7 +3054,7 @@ export def "servers-actions-enable-backup post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/enable_backup")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/enable_backup"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3079,8 +3079,8 @@ export def "servers-actions-enable-rescue post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/enable_rescue")
-  let body = {ssh_keys: $ssh_keys, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/enable_rescue"))
+  let body = {"ssh_keys": $ssh_keys, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3103,7 +3103,7 @@ export def "servers-actions-poweroff post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/poweroff")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/poweroff"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3125,7 +3125,7 @@ export def "servers-actions-poweron post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/poweron")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/poweron"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3147,7 +3147,7 @@ export def "servers-actions-reboot post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/reboot")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/reboot"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3171,8 +3171,8 @@ export def "servers-actions-rebuild post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/rebuild")
-  let body = {image: $image} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/rebuild"))
+  let body = {"image": $image} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3195,7 +3195,7 @@ export def "servers-actions-remove-from-placement-group post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/remove_from_placement_group")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/remove_from_placement_group"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3217,7 +3217,7 @@ export def "servers-actions-request-console post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, password: string, wss_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/request_console")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/request_console"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3239,7 +3239,7 @@ export def "servers-actions-reset post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/reset")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/reset"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3261,7 +3261,7 @@ export def "servers-actions-reset-password post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>, root_password: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/reset_password")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/reset_password"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3283,7 +3283,7 @@ export def "servers-actions-shutdown post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/shutdown")
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/actions/shutdown"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3306,7 +3306,7 @@ export def "servers-actions get" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/servers/($id)/actions/($action_id)")
+  let full_url = (build-url $base ({id: $id, action_id: $action_id} | format pattern "/servers/{id}/actions/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3333,7 +3333,7 @@ export def "servers-metrics get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "step" $step "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/servers/($id)/metrics" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/servers/{id}/metrics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3385,7 +3385,7 @@ export def "ssh-keys post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ssh_keys")
-  let body = {labels: $labels, name: $name, public_key: $public_key} | compact
+  let body = {"labels": $labels, "name": $name, "public_key": $public_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3408,7 +3408,7 @@ export def "ssh-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ssh_keys/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ssh_keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3430,7 +3430,7 @@ export def "ssh-keys get" [
 ]: nothing -> record<ssh_key: record<created: string, fingerprint: string, id: int, labels: record, name: string, public_key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ssh_keys/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/ssh_keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3455,8 +3455,8 @@ export def "ssh-keys put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/ssh_keys/($id)")
-  let body = {labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/ssh_keys/{id}"))
+  let body = {"labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3513,7 +3513,7 @@ export def "volumes post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/volumes")
-  let body = {automount: $automount, format: $format, labels: $labels, location: $location, name: $name, server: $server, size: $size} | compact
+  let body = {"automount": $automount, "format": $format, "labels": $labels, "location": $location, "name": $name, "server": $server, "size": $size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3536,7 +3536,7 @@ export def "volumes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/volumes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3558,7 +3558,7 @@ export def "volumes get" [
 ]: nothing -> record<volume: record<created: string, format: string, id: int, labels: record, linux_device: string, location: record<city: string, country: string, description: string, id: float, latitude: float, longitude: float, name: string, network_zone: string>, name: string, protection: record<delete: bool>, server: int, size: float, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/volumes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3584,8 +3584,8 @@ export def "volumes put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($id)")
-  let body = {labels: $labels, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/volumes/{id}"))
+  let body = {"labels": $labels, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3611,7 +3611,7 @@ export def "volumes-actions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $qp_sort "scalar") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/volumes/($id)/actions" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/volumes/{id}/actions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3636,8 +3636,8 @@ export def "volumes-actions-attach post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($id)/actions/attach")
-  let body = {automount: $automount, server: $server} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/volumes/{id}/actions/attach"))
+  let body = {"automount": $automount, "server": $server} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3662,8 +3662,8 @@ export def "volumes-actions-change-protection post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($id)/actions/change_protection")
-  let body = {delete: $delete} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/volumes/{id}/actions/change_protection"))
+  let body = {"delete": $delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3686,7 +3686,7 @@ export def "volumes-actions-detach post" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($id)/actions/detach")
+  let full_url = (build-url $base ({id: $id} | format pattern "/volumes/{id}/actions/detach"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3710,8 +3710,8 @@ export def "volumes-actions-resize post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($id)/actions/resize")
-  let body = {size: $size} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/volumes/{id}/actions/resize"))
+  let body = {"size": $size} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3735,7 +3735,7 @@ export def "volumes-actions get" [
 ]: nothing -> record<action: record<command: string, error: record<code: string, message: string>, finished: string, id: int, progress: float, resources: list<record>, started: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/volumes/($id)/actions/($action_id)")
+  let full_url = (build-url $base ({id: $id, action_id: $action_id} | format pattern "/volumes/{id}/actions/{action_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

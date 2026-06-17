@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tanzania-regions Tanzania-regions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "tanzania-regions get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /{country}
 # operationId: Tanzania-regions
-export def "tanzania-regions Tanzania-regions" [
+export def "tanzania-regions get" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -105,7 +105,7 @@ export def "tanzania-regions Tanzania-regions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($country)")
+  let full_url = (build-url $base ({country: $country} | format pattern "/{country}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -115,7 +115,7 @@ export def "tanzania-regions Tanzania-regions" [
 #
 # GET /{country}/{region}
 # operationId: Districts-in-a-region
-export def "districts-in-region Districts-in-a-region" [
+export def "districts-in-region get" [
   country: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -129,7 +129,7 @@ export def "districts-in-region Districts-in-a-region" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($country)/($region)")
+  let full_url = (build-url $base ({country: $country, region: $region} | format pattern "/{country}/{region}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -139,7 +139,7 @@ export def "districts-in-region Districts-in-a-region" [
 #
 # GET /{country}/{region}/{district}
 # operationId: Wards-in-a-district
-export def "wards-in-a-district Wards-in-a-district" [
+export def "wards-in-a-district get" [
   country: string
   region: string
   district: string
@@ -154,7 +154,7 @@ export def "wards-in-a-district Wards-in-a-district" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($country)/($region)/($district)")
+  let full_url = (build-url $base ({country: $country, region: $region, district: $district} | format pattern "/{country}/{region}/{district}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -164,7 +164,7 @@ export def "wards-in-a-district Wards-in-a-district" [
 #
 # GET /{country}/{region}/{district}/{ward}
 # operationId: streets-in-a-ward
-export def "streets-in-a-ward streets-in-a-ward" [
+export def "streets-in-a-ward get" [
   country: string
   region: string
   district: string
@@ -180,7 +180,7 @@ export def "streets-in-a-ward streets-in-a-ward" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($country)/($region)/($district)/($ward)")
+  let full_url = (build-url $base ({country: $country, region: $region, district: $district, ward: $ward} | format pattern "/{country}/{region}/{district}/{ward}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -207,7 +207,7 @@ export def "neighborhood-in-a-street neighborhood-in-a-street-" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($country)/($region)/($district)/($ward)/($street)")
+  let full_url = (build-url $base ({country: $country, region: $region, district: $district, ward: $ward, street: $street} | format pattern "/{country}/{region}/{district}/{ward}/{street}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

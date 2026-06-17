@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-software-plan-register Register" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-software-plan-register create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,8 +93,8 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.SoftwarePlan/register
 # operationId: SoftwarePlan_Register
-export def "subscriptions-providers-microsoft-software-plan-register Register" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-software-plan-register create" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "subscriptions-providers-microsoft-software-plan-register Register" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.SoftwarePlan/register" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.SoftwarePlan/register") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +118,7 @@ export def "subscriptions-providers-microsoft-software-plan-register Register" [
 #
 # GET /{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits
 # operationId: HybridUseBenefit_List
-export def "providers-microsoft-software-plan-hybrid-use-benefits List" [
+export def "providers-microsoft-software-plan-hybrid-use-benefits list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -134,7 +134,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.SoftwarePlan/hybridUseBenefits" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,9 +144,9 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits List" [
 #
 # DELETE /{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{planId}
 # operationId: HybridUseBenefit_Delete
-export def "providers-microsoft-software-plan-hybrid-use-benefits Delete" [
+export def "providers-microsoft-software-plan-hybrid-use-benefits delete" [
   scope: string
-  planId: string
+  plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits Delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.SoftwarePlan/hybridUseBenefits/($planId)" $qp)
+  let full_url = (build-url $base ({scope: $scope, plan_id: $plan_id} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{plan_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -170,9 +170,9 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits Delete" [
 #
 # GET /{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{planId}
 # operationId: HybridUseBenefit_Get
-export def "providers-microsoft-software-plan-hybrid-use-benefits Get" [
+export def "providers-microsoft-software-plan-hybrid-use-benefits get" [
   scope: string
-  planId: string
+  plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.SoftwarePlan/hybridUseBenefits/($planId)" $qp)
+  let full_url = (build-url $base ({scope: $scope, plan_id: $plan_id} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{plan_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -196,9 +196,9 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits Get" [
 #
 # PATCH /{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{planId}
 # operationId: HybridUseBenefit_Update
-export def "providers-microsoft-software-plan-hybrid-use-benefits Update" [
+export def "providers-microsoft-software-plan-hybrid-use-benefits update" [
   scope: string
-  planId: string
+  plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits Update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.SoftwarePlan/hybridUseBenefits/($planId)" $qp)
+  let full_url = (build-url $base ({scope: $scope, plan_id: $plan_id} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{plan_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,9 +222,9 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits Update" [
 #
 # PUT /{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{planId}
 # operationId: HybridUseBenefit_Create
-export def "providers-microsoft-software-plan-hybrid-use-benefits Create" [
+export def "providers-microsoft-software-plan-hybrid-use-benefits create" [
   scope: string
-  planId: string
+  plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits Create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.SoftwarePlan/hybridUseBenefits/($planId)" $qp)
+  let full_url = (build-url $base ({scope: $scope, plan_id: $plan_id} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{plan_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -248,9 +248,9 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits Create" [
 #
 # GET /{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{planId}/revisions
 # operationId: HybridUseBenefitRevision_List
-export def "providers-microsoft-software-plan-hybrid-use-benefits-revisions List" [
+export def "providers-microsoft-software-plan-hybrid-use-benefits-revisions list" [
   scope: string
-  planId: string
+  plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits-revisions List
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.SoftwarePlan/hybridUseBenefits/($planId)/revisions" $qp)
+  let full_url = (build-url $base ({scope: $scope, plan_id: $plan_id} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/hybridUseBenefits/{plan_id}/revisions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,7 +274,7 @@ export def "providers-microsoft-software-plan-hybrid-use-benefits-revisions List
 #
 # GET /{scope}/providers/Microsoft.SoftwarePlan/operations
 # operationId: Operations_List
-export def "providers-microsoft-software-plan-operations List" [
+export def "providers-microsoft-software-plan-operations list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "providers-microsoft-software-plan-operations List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.SoftwarePlan/operations" $qp)
+  let full_url = (build-url $base ({scope: $scope} | format pattern "/{scope}/providers/Microsoft.SoftwarePlan/operations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -106,21 +106,21 @@ export def "alert-log collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --monitor: string # allows empty value
   --monitor: list # allows empty value
-  --alertService: string # allows empty value
-  --alertService: list # allows empty value
-  --alertLogStatusCode: string # allows empty value
-  --alertLogStatusCode: list # allows empty value
+  --alert-service: string # allows empty value
+  --alert-service: list # allows empty value
+  --alert-log-status-code: string # allows empty value
+  --alert-log-status-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<alertLogErrorMessage: string, alertLogMessageId: string, alertLogStatusCode: string, alertService: string, createdAt: string, dataSegmentCode: string, id: string, monitor: string, partition: string, ping: string, resourceOwner: string, webhookResponseBody: string, webhookResponseHeaders: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor "multi") (serialize-qp "alertService" $alertService "scalar") (serialize-qp "alertService[]" $alertService "multi") (serialize-qp "alertLogStatusCode" $alertLogStatusCode "scalar") (serialize-qp "alertLogStatusCode[]" $alertLogStatusCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor "multi") (serialize-qp "alertService" $alert_service "scalar") (serialize-qp "alertService[]" $alert_service "multi") (serialize-qp "alertLogStatusCode" $alert_log_status_code "scalar") (serialize-qp "alertLogStatusCode[]" $alert_log_status_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/alert-log" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -171,7 +171,7 @@ export def "alert-log-status-code get" [
 ]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/alert-log-status-code/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/alert-log-status-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,7 +195,7 @@ export def "alert-log get" [
 ]: nothing -> record<alertLogErrorMessage: string, alertLogMessageId: string, alertLogStatusCode: string, alertService: string, createdAt: string, dataSegmentCode: string, id: string, monitor: string, partition: string, ping: string, resourceOwner: string, webhookResponseBody: string, webhookResponseHeaders: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/alert-log/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/alert-log/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,15 +216,15 @@ export def "alert-service collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<alertServiceName: string, alertServiceNotes: string, alertServiceTransportCode: string, createdAt: string, creditsPerTransportAlert: int, dataSegmentCode: string, id: string, mediaObjects: list<string>, partition: string, recipientEmailAddress: string, recipientPhoneNumber: string, resourceOwner: string, transportAlerta: string, transportAllMySms: string, transportAmazonSns: string, transportBandwidth: string, transportChatwork: string, transportClickSend: string, transportClickatell: string, transportContactEveryone: string, transportDiscord: string, transportEmail: string, transportEngagespot: string, transportEsendex: string, transportExpo: string, transportFirebase: string, transportFortySixElks: string, transportFreeMobile: string, transportFreshdesk: string, transportGatewayApi: string, transportGitter: string, transportGoogleChat: string, transportGotify: string, transportHelpScout: string, transportInfobip: string, transportIqsms: string, transportKazInfoTeh: string, transportLightSms: string, transportLineNotify: string, transportLinkedIn: string, transportMailjet: string, transportMastodon: string, transportMattermost: string, transportMercure: string, transportMessageBird: string, transportMessageMedia: string, transportMicrosoftTeams: string, transportMobyt: string, transportOctopush: string, transportOneSignal: string, transportOpsgenie: string, transportOrangeSms: string, transportOvhCloud: string, transportPagerDuty: string, transportPagerTree: string, transportPlivo: string, transportPushbullet: string, transportPushover: string, transportPushy: string, transportRingCentral: string, transportRocketChat: string, transportSendberry: string, transportSendinblue: string, transportSimpleTextin: string, transportSinch: string, transportSlack: string, transportSms77: string, transportSmsBiuras: string, transportSmsFactor: string, transportSmsapi: string, transportSmsc: string, transportSmsmode: string, transportSpotHit: string, transportTelegram: string, transportTelnyx: string, transportTermii: string, transportTrello: string, transportTurboSms: string, transportTwilio: string, transportTwitter: string, transportVonage: string, transportWebhook: string, transportYunpian: string, transportZendesk: string, transportZulip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/alert-service" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,93 +245,93 @@ export def "alert-service post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --alertServiceName: string # The name of the alert service. Max 255 characters. (nullable)
-  --alertServiceNotes: string # Notes about the alert service. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
-  --alertServiceTransportCode: string # The transport of the alert service. (nullable, format: iri-reference)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mediaObjects: list # Media objects that must be sent with each alert. Only applicable when you use your own email alert services.
+  --alert-service-name: string # The name of the alert service. Max 255 characters. (nullable)
+  --alert-service-notes: string # Notes about the alert service. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
+  --alert-service-transport-code: string # The transport of the alert service. (nullable, format: iri-reference)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --media-objects: list # Media objects that must be sent with each alert. Only applicable when you use your own email alert services.
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --recipientEmailAddress: string # The email address where alerts will be sent. (nullable, format: email)
-  --recipientPhoneNumber: string # The phone number where alerts will be sent. Ensure that the number format complies with the external transport service that will send the alert. (nullable)
-  --transportAlerta: string # nullable, format: iri-reference
-  --transportAllMySms: string # nullable, format: iri-reference
-  --transportAmazonSns: string # nullable, format: iri-reference
-  --transportBandwidth: string # nullable, format: iri-reference
-  --transportChatwork: string # nullable, format: iri-reference
-  --transportClickSend: string # nullable, format: iri-reference
-  --transportClickatell: string # nullable, format: iri-reference
-  --transportContactEveryone: string # nullable, format: iri-reference
-  --transportDiscord: string # nullable, format: iri-reference
-  --transportEmail: string # nullable, format: iri-reference
-  --transportEngagespot: string # nullable, format: iri-reference
-  --transportEsendex: string # nullable, format: iri-reference
-  --transportExpo: string # nullable, format: iri-reference
-  --transportFirebase: string # nullable, format: iri-reference
-  --transportFortySixElks: string # nullable, format: iri-reference
-  --transportFreeMobile: string # nullable, format: iri-reference
-  --transportFreshdesk: string # nullable, format: iri-reference
-  --transportGatewayApi: string # nullable, format: iri-reference
-  --transportGitter: string # nullable, format: iri-reference
-  --transportGoogleChat: string # nullable, format: iri-reference
-  --transportGotify: string # nullable, format: iri-reference
-  --transportHelpScout: string # nullable, format: iri-reference
-  --transportInfobip: string # nullable, format: iri-reference
-  --transportIqsms: string # nullable, format: iri-reference
-  --transportKazInfoTeh: string # nullable, format: iri-reference
-  --transportLightSms: string # nullable, format: iri-reference
-  --transportLineNotify: string # nullable, format: iri-reference
-  --transportLinkedIn: string # nullable, format: iri-reference
-  --transportMailjet: string # nullable, format: iri-reference
-  --transportMastodon: string # nullable, format: iri-reference
-  --transportMattermost: string # nullable, format: iri-reference
-  --transportMercure: string # nullable, format: iri-reference
-  --transportMessageBird: string # nullable, format: iri-reference
-  --transportMessageMedia: string # nullable, format: iri-reference
-  --transportMicrosoftTeams: string # nullable, format: iri-reference
-  --transportMobyt: string # nullable, format: iri-reference
-  --transportOctopush: string # nullable, format: iri-reference
-  --transportOneSignal: string # nullable, format: iri-reference
-  --transportOpsgenie: string # nullable, format: iri-reference
-  --transportOrangeSms: string # nullable, format: iri-reference
-  --transportOvhCloud: string # nullable, format: iri-reference
-  --transportPagerDuty: string # nullable, format: iri-reference
-  --transportPagerTree: string # nullable, format: iri-reference
-  --transportPlivo: string # nullable, format: iri-reference
-  --transportPushbullet: string # nullable, format: iri-reference
-  --transportPushover: string # nullable, format: iri-reference
-  --transportPushy: string # nullable, format: iri-reference
-  --transportRingCentral: string # nullable, format: iri-reference
-  --transportRocketChat: string # nullable, format: iri-reference
-  --transportSendberry: string # nullable, format: iri-reference
-  --transportSendinblue: string # nullable, format: iri-reference
-  --transportSimpleTextin: string # nullable, format: iri-reference
-  --transportSinch: string # nullable, format: iri-reference
-  --transportSlack: string # nullable, format: iri-reference
-  --transportSms77: string # nullable, format: iri-reference
-  --transportSmsBiuras: string # nullable, format: iri-reference
-  --transportSmsFactor: string # nullable, format: iri-reference
-  --transportSmsapi: string # nullable, format: iri-reference
-  --transportSmsc: string # nullable, format: iri-reference
-  --transportSmsmode: string # nullable, format: iri-reference
-  --transportSpotHit: string # nullable, format: iri-reference
-  --transportTelegram: string # nullable, format: iri-reference
-  --transportTelnyx: string # nullable, format: iri-reference
-  --transportTermii: string # nullable, format: iri-reference
-  --transportTrello: string # nullable, format: iri-reference
-  --transportTurboSms: string # nullable, format: iri-reference
-  --transportTwilio: string # nullable, format: iri-reference
-  --transportTwitter: string # nullable, format: iri-reference
-  --transportVonage: string # nullable, format: iri-reference
-  --transportWebhook: string # nullable, format: iri-reference
-  --transportYunpian: string # nullable, format: iri-reference
-  --transportZendesk: string # nullable, format: iri-reference
-  --transportZulip: string # nullable, format: iri-reference
+  --recipient-email-address: string # The email address where alerts will be sent. (nullable, format: email)
+  --recipient-phone-number: string # The phone number where alerts will be sent. Ensure that the number format complies with the external transport service that will send the alert. (nullable)
+  --transport-alerta: string # nullable, format: iri-reference
+  --transport-all-my-sms: string # nullable, format: iri-reference
+  --transport-amazon-sns: string # nullable, format: iri-reference
+  --transport-bandwidth: string # nullable, format: iri-reference
+  --transport-chatwork: string # nullable, format: iri-reference
+  --transport-click-send: string # nullable, format: iri-reference
+  --transport-clickatell: string # nullable, format: iri-reference
+  --transport-contact-everyone: string # nullable, format: iri-reference
+  --transport-discord: string # nullable, format: iri-reference
+  --transport-email: string # nullable, format: iri-reference
+  --transport-engagespot: string # nullable, format: iri-reference
+  --transport-esendex: string # nullable, format: iri-reference
+  --transport-expo: string # nullable, format: iri-reference
+  --transport-firebase: string # nullable, format: iri-reference
+  --transport-forty-six-elks: string # nullable, format: iri-reference
+  --transport-free-mobile: string # nullable, format: iri-reference
+  --transport-freshdesk: string # nullable, format: iri-reference
+  --transport-gateway-api: string # nullable, format: iri-reference
+  --transport-gitter: string # nullable, format: iri-reference
+  --transport-google-chat: string # nullable, format: iri-reference
+  --transport-gotify: string # nullable, format: iri-reference
+  --transport-help-scout: string # nullable, format: iri-reference
+  --transport-infobip: string # nullable, format: iri-reference
+  --transport-iqsms: string # nullable, format: iri-reference
+  --transport-kaz-info-teh: string # nullable, format: iri-reference
+  --transport-light-sms: string # nullable, format: iri-reference
+  --transport-line-notify: string # nullable, format: iri-reference
+  --transport-linked-in: string # nullable, format: iri-reference
+  --transport-mailjet: string # nullable, format: iri-reference
+  --transport-mastodon: string # nullable, format: iri-reference
+  --transport-mattermost: string # nullable, format: iri-reference
+  --transport-mercure: string # nullable, format: iri-reference
+  --transport-message-bird: string # nullable, format: iri-reference
+  --transport-message-media: string # nullable, format: iri-reference
+  --transport-microsoft-teams: string # nullable, format: iri-reference
+  --transport-mobyt: string # nullable, format: iri-reference
+  --transport-octopush: string # nullable, format: iri-reference
+  --transport-one-signal: string # nullable, format: iri-reference
+  --transport-opsgenie: string # nullable, format: iri-reference
+  --transport-orange-sms: string # nullable, format: iri-reference
+  --transport-ovh-cloud: string # nullable, format: iri-reference
+  --transport-pager-duty: string # nullable, format: iri-reference
+  --transport-pager-tree: string # nullable, format: iri-reference
+  --transport-plivo: string # nullable, format: iri-reference
+  --transport-pushbullet: string # nullable, format: iri-reference
+  --transport-pushover: string # nullable, format: iri-reference
+  --transport-pushy: string # nullable, format: iri-reference
+  --transport-ring-central: string # nullable, format: iri-reference
+  --transport-rocket-chat: string # nullable, format: iri-reference
+  --transport-sendberry: string # nullable, format: iri-reference
+  --transport-sendinblue: string # nullable, format: iri-reference
+  --transport-simple-textin: string # nullable, format: iri-reference
+  --transport-sinch: string # nullable, format: iri-reference
+  --transport-slack: string # nullable, format: iri-reference
+  --transport-sms77: string # nullable, format: iri-reference
+  --transport-sms-biuras: string # nullable, format: iri-reference
+  --transport-sms-factor: string # nullable, format: iri-reference
+  --transport-smsapi: string # nullable, format: iri-reference
+  --transport-smsc: string # nullable, format: iri-reference
+  --transport-smsmode: string # nullable, format: iri-reference
+  --transport-spot-hit: string # nullable, format: iri-reference
+  --transport-telegram: string # nullable, format: iri-reference
+  --transport-telnyx: string # nullable, format: iri-reference
+  --transport-termii: string # nullable, format: iri-reference
+  --transport-trello: string # nullable, format: iri-reference
+  --transport-turbo-sms: string # nullable, format: iri-reference
+  --transport-twilio: string # nullable, format: iri-reference
+  --transport-twitter: string # nullable, format: iri-reference
+  --transport-vonage: string # nullable, format: iri-reference
+  --transport-webhook: string # nullable, format: iri-reference
+  --transport-yunpian: string # nullable, format: iri-reference
+  --transport-zendesk: string # nullable, format: iri-reference
+  --transport-zulip: string # nullable, format: iri-reference
 ]: any -> record<alertServiceName: string, alertServiceNotes: string, alertServiceTransportCode: string, createdAt: string, creditsPerTransportAlert: int, dataSegmentCode: string, id: string, mediaObjects: list<string>, partition: string, recipientEmailAddress: string, recipientPhoneNumber: string, resourceOwner: string, transportAlerta: string, transportAllMySms: string, transportAmazonSns: string, transportBandwidth: string, transportChatwork: string, transportClickSend: string, transportClickatell: string, transportContactEveryone: string, transportDiscord: string, transportEmail: string, transportEngagespot: string, transportEsendex: string, transportExpo: string, transportFirebase: string, transportFortySixElks: string, transportFreeMobile: string, transportFreshdesk: string, transportGatewayApi: string, transportGitter: string, transportGoogleChat: string, transportGotify: string, transportHelpScout: string, transportInfobip: string, transportIqsms: string, transportKazInfoTeh: string, transportLightSms: string, transportLineNotify: string, transportLinkedIn: string, transportMailjet: string, transportMastodon: string, transportMattermost: string, transportMercure: string, transportMessageBird: string, transportMessageMedia: string, transportMicrosoftTeams: string, transportMobyt: string, transportOctopush: string, transportOneSignal: string, transportOpsgenie: string, transportOrangeSms: string, transportOvhCloud: string, transportPagerDuty: string, transportPagerTree: string, transportPlivo: string, transportPushbullet: string, transportPushover: string, transportPushy: string, transportRingCentral: string, transportRocketChat: string, transportSendberry: string, transportSendinblue: string, transportSimpleTextin: string, transportSinch: string, transportSlack: string, transportSms77: string, transportSmsBiuras: string, transportSmsFactor: string, transportSmsapi: string, transportSmsc: string, transportSmsmode: string, transportSpotHit: string, transportTelegram: string, transportTelnyx: string, transportTermii: string, transportTrello: string, transportTurboSms: string, transportTwilio: string, transportTwitter: string, transportVonage: string, transportWebhook: string, transportYunpian: string, transportZendesk: string, transportZulip: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/alert-service")
-  let body = {alertServiceName: $alertServiceName, alertServiceNotes: $alertServiceNotes, alertServiceTransportCode: $alertServiceTransportCode, dataSegmentCode: $dataSegmentCode, mediaObjects: $mediaObjects, partition: $partition, recipientEmailAddress: $recipientEmailAddress, recipientPhoneNumber: $recipientPhoneNumber, transportAlerta: $transportAlerta, transportAllMySms: $transportAllMySms, transportAmazonSns: $transportAmazonSns, transportBandwidth: $transportBandwidth, transportChatwork: $transportChatwork, transportClickSend: $transportClickSend, transportClickatell: $transportClickatell, transportContactEveryone: $transportContactEveryone, transportDiscord: $transportDiscord, transportEmail: $transportEmail, transportEngagespot: $transportEngagespot, transportEsendex: $transportEsendex, transportExpo: $transportExpo, transportFirebase: $transportFirebase, transportFortySixElks: $transportFortySixElks, transportFreeMobile: $transportFreeMobile, transportFreshdesk: $transportFreshdesk, transportGatewayApi: $transportGatewayApi, transportGitter: $transportGitter, transportGoogleChat: $transportGoogleChat, transportGotify: $transportGotify, transportHelpScout: $transportHelpScout, transportInfobip: $transportInfobip, transportIqsms: $transportIqsms, transportKazInfoTeh: $transportKazInfoTeh, transportLightSms: $transportLightSms, transportLineNotify: $transportLineNotify, transportLinkedIn: $transportLinkedIn, transportMailjet: $transportMailjet, transportMastodon: $transportMastodon, transportMattermost: $transportMattermost, transportMercure: $transportMercure, transportMessageBird: $transportMessageBird, transportMessageMedia: $transportMessageMedia, transportMicrosoftTeams: $transportMicrosoftTeams, transportMobyt: $transportMobyt, transportOctopush: $transportOctopush, transportOneSignal: $transportOneSignal, transportOpsgenie: $transportOpsgenie, transportOrangeSms: $transportOrangeSms, transportOvhCloud: $transportOvhCloud, transportPagerDuty: $transportPagerDuty, transportPagerTree: $transportPagerTree, transportPlivo: $transportPlivo, transportPushbullet: $transportPushbullet, transportPushover: $transportPushover, transportPushy: $transportPushy, transportRingCentral: $transportRingCentral, transportRocketChat: $transportRocketChat, transportSendberry: $transportSendberry, transportSendinblue: $transportSendinblue, transportSimpleTextin: $transportSimpleTextin, transportSinch: $transportSinch, transportSlack: $transportSlack, transportSms77: $transportSms77, transportSmsBiuras: $transportSmsBiuras, transportSmsFactor: $transportSmsFactor, transportSmsapi: $transportSmsapi, transportSmsc: $transportSmsc, transportSmsmode: $transportSmsmode, transportSpotHit: $transportSpotHit, transportTelegram: $transportTelegram, transportTelnyx: $transportTelnyx, transportTermii: $transportTermii, transportTrello: $transportTrello, transportTurboSms: $transportTurboSms, transportTwilio: $transportTwilio, transportTwitter: $transportTwitter, transportVonage: $transportVonage, transportWebhook: $transportWebhook, transportYunpian: $transportYunpian, transportZendesk: $transportZendesk, transportZulip: $transportZulip} | compact
+  let body = {"alertServiceName": $alert_service_name, "alertServiceNotes": $alert_service_notes, "alertServiceTransportCode": $alert_service_transport_code, "dataSegmentCode": $data_segment_code, "mediaObjects": $media_objects, "partition": $partition, "recipientEmailAddress": $recipient_email_address, "recipientPhoneNumber": $recipient_phone_number, "transportAlerta": $transport_alerta, "transportAllMySms": $transport_all_my_sms, "transportAmazonSns": $transport_amazon_sns, "transportBandwidth": $transport_bandwidth, "transportChatwork": $transport_chatwork, "transportClickSend": $transport_click_send, "transportClickatell": $transport_clickatell, "transportContactEveryone": $transport_contact_everyone, "transportDiscord": $transport_discord, "transportEmail": $transport_email, "transportEngagespot": $transport_engagespot, "transportEsendex": $transport_esendex, "transportExpo": $transport_expo, "transportFirebase": $transport_firebase, "transportFortySixElks": $transport_forty_six_elks, "transportFreeMobile": $transport_free_mobile, "transportFreshdesk": $transport_freshdesk, "transportGatewayApi": $transport_gateway_api, "transportGitter": $transport_gitter, "transportGoogleChat": $transport_google_chat, "transportGotify": $transport_gotify, "transportHelpScout": $transport_help_scout, "transportInfobip": $transport_infobip, "transportIqsms": $transport_iqsms, "transportKazInfoTeh": $transport_kaz_info_teh, "transportLightSms": $transport_light_sms, "transportLineNotify": $transport_line_notify, "transportLinkedIn": $transport_linked_in, "transportMailjet": $transport_mailjet, "transportMastodon": $transport_mastodon, "transportMattermost": $transport_mattermost, "transportMercure": $transport_mercure, "transportMessageBird": $transport_message_bird, "transportMessageMedia": $transport_message_media, "transportMicrosoftTeams": $transport_microsoft_teams, "transportMobyt": $transport_mobyt, "transportOctopush": $transport_octopush, "transportOneSignal": $transport_one_signal, "transportOpsgenie": $transport_opsgenie, "transportOrangeSms": $transport_orange_sms, "transportOvhCloud": $transport_ovh_cloud, "transportPagerDuty": $transport_pager_duty, "transportPagerTree": $transport_pager_tree, "transportPlivo": $transport_plivo, "transportPushbullet": $transport_pushbullet, "transportPushover": $transport_pushover, "transportPushy": $transport_pushy, "transportRingCentral": $transport_ring_central, "transportRocketChat": $transport_rocket_chat, "transportSendberry": $transport_sendberry, "transportSendinblue": $transport_sendinblue, "transportSimpleTextin": $transport_simple_textin, "transportSinch": $transport_sinch, "transportSlack": $transport_slack, "transportSms77": $transport_sms77, "transportSmsBiuras": $transport_sms_biuras, "transportSmsFactor": $transport_sms_factor, "transportSmsapi": $transport_smsapi, "transportSmsc": $transport_smsc, "transportSmsmode": $transport_smsmode, "transportSpotHit": $transport_spot_hit, "transportTelegram": $transport_telegram, "transportTelnyx": $transport_telnyx, "transportTermii": $transport_termii, "transportTrello": $transport_trello, "transportTurboSms": $transport_turbo_sms, "transportTwilio": $transport_twilio, "transportTwitter": $transport_twitter, "transportVonage": $transport_vonage, "transportWebhook": $transport_webhook, "transportYunpian": $transport_yunpian, "transportZendesk": $transport_zendesk, "transportZulip": $transport_zulip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -382,7 +382,7 @@ export def "alert-service-transport-code get" [
 ]: nothing -> record<codeName: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/alert-service-transport-code/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/alert-service-transport-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -405,7 +405,7 @@ export def "alert-service delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/alert-service/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/alert-service/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -429,7 +429,7 @@ export def "alert-service get" [
 ]: nothing -> record<alertServiceName: string, alertServiceNotes: string, alertServiceTransportCode: string, createdAt: string, creditsPerTransportAlert: int, dataSegmentCode: string, id: string, mediaObjects: list<string>, partition: string, recipientEmailAddress: string, recipientPhoneNumber: string, resourceOwner: string, transportAlerta: string, transportAllMySms: string, transportAmazonSns: string, transportBandwidth: string, transportChatwork: string, transportClickSend: string, transportClickatell: string, transportContactEveryone: string, transportDiscord: string, transportEmail: string, transportEngagespot: string, transportEsendex: string, transportExpo: string, transportFirebase: string, transportFortySixElks: string, transportFreeMobile: string, transportFreshdesk: string, transportGatewayApi: string, transportGitter: string, transportGoogleChat: string, transportGotify: string, transportHelpScout: string, transportInfobip: string, transportIqsms: string, transportKazInfoTeh: string, transportLightSms: string, transportLineNotify: string, transportLinkedIn: string, transportMailjet: string, transportMastodon: string, transportMattermost: string, transportMercure: string, transportMessageBird: string, transportMessageMedia: string, transportMicrosoftTeams: string, transportMobyt: string, transportOctopush: string, transportOneSignal: string, transportOpsgenie: string, transportOrangeSms: string, transportOvhCloud: string, transportPagerDuty: string, transportPagerTree: string, transportPlivo: string, transportPushbullet: string, transportPushover: string, transportPushy: string, transportRingCentral: string, transportRocketChat: string, transportSendberry: string, transportSendinblue: string, transportSimpleTextin: string, transportSinch: string, transportSlack: string, transportSms77: string, transportSmsBiuras: string, transportSmsFactor: string, transportSmsapi: string, transportSmsc: string, transportSmsmode: string, transportSpotHit: string, transportTelegram: string, transportTelnyx: string, transportTermii: string, transportTrello: string, transportTurboSms: string, transportTwilio: string, transportTwitter: string, transportVonage: string, transportWebhook: string, transportYunpian: string, transportZendesk: string, transportZulip: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/alert-service/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/alert-service/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,91 +450,91 @@ export def "alert-service put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --alertServiceName: string # The name of the alert service. Max 255 characters. (nullable)
-  --alertServiceNotes: string # Notes about the alert service. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mediaObjects: list # Media objects that must be sent with each alert. Only applicable when you use your own email alert services.
-  --recipientEmailAddress: string # The email address where alerts will be sent. (nullable, format: email)
-  --recipientPhoneNumber: string # The phone number where alerts will be sent. Ensure that the number format complies with the external transport service that will send the alert. (nullable)
-  --transportAlerta: string # nullable, format: iri-reference
-  --transportAllMySms: string # nullable, format: iri-reference
-  --transportAmazonSns: string # nullable, format: iri-reference
-  --transportBandwidth: string # nullable, format: iri-reference
-  --transportChatwork: string # nullable, format: iri-reference
-  --transportClickSend: string # nullable, format: iri-reference
-  --transportClickatell: string # nullable, format: iri-reference
-  --transportContactEveryone: string # nullable, format: iri-reference
-  --transportDiscord: string # nullable, format: iri-reference
-  --transportEmail: string # nullable, format: iri-reference
-  --transportEngagespot: string # nullable, format: iri-reference
-  --transportEsendex: string # nullable, format: iri-reference
-  --transportExpo: string # nullable, format: iri-reference
-  --transportFirebase: string # nullable, format: iri-reference
-  --transportFortySixElks: string # nullable, format: iri-reference
-  --transportFreeMobile: string # nullable, format: iri-reference
-  --transportFreshdesk: string # nullable, format: iri-reference
-  --transportGatewayApi: string # nullable, format: iri-reference
-  --transportGitter: string # nullable, format: iri-reference
-  --transportGoogleChat: string # nullable, format: iri-reference
-  --transportGotify: string # nullable, format: iri-reference
-  --transportHelpScout: string # nullable, format: iri-reference
-  --transportInfobip: string # nullable, format: iri-reference
-  --transportIqsms: string # nullable, format: iri-reference
-  --transportKazInfoTeh: string # nullable, format: iri-reference
-  --transportLightSms: string # nullable, format: iri-reference
-  --transportLineNotify: string # nullable, format: iri-reference
-  --transportLinkedIn: string # nullable, format: iri-reference
-  --transportMailjet: string # nullable, format: iri-reference
-  --transportMastodon: string # nullable, format: iri-reference
-  --transportMattermost: string # nullable, format: iri-reference
-  --transportMercure: string # nullable, format: iri-reference
-  --transportMessageBird: string # nullable, format: iri-reference
-  --transportMessageMedia: string # nullable, format: iri-reference
-  --transportMicrosoftTeams: string # nullable, format: iri-reference
-  --transportMobyt: string # nullable, format: iri-reference
-  --transportOctopush: string # nullable, format: iri-reference
-  --transportOneSignal: string # nullable, format: iri-reference
-  --transportOpsgenie: string # nullable, format: iri-reference
-  --transportOrangeSms: string # nullable, format: iri-reference
-  --transportOvhCloud: string # nullable, format: iri-reference
-  --transportPagerDuty: string # nullable, format: iri-reference
-  --transportPagerTree: string # nullable, format: iri-reference
-  --transportPlivo: string # nullable, format: iri-reference
-  --transportPushbullet: string # nullable, format: iri-reference
-  --transportPushover: string # nullable, format: iri-reference
-  --transportPushy: string # nullable, format: iri-reference
-  --transportRingCentral: string # nullable, format: iri-reference
-  --transportRocketChat: string # nullable, format: iri-reference
-  --transportSendberry: string # nullable, format: iri-reference
-  --transportSendinblue: string # nullable, format: iri-reference
-  --transportSimpleTextin: string # nullable, format: iri-reference
-  --transportSinch: string # nullable, format: iri-reference
-  --transportSlack: string # nullable, format: iri-reference
-  --transportSms77: string # nullable, format: iri-reference
-  --transportSmsBiuras: string # nullable, format: iri-reference
-  --transportSmsFactor: string # nullable, format: iri-reference
-  --transportSmsapi: string # nullable, format: iri-reference
-  --transportSmsc: string # nullable, format: iri-reference
-  --transportSmsmode: string # nullable, format: iri-reference
-  --transportSpotHit: string # nullable, format: iri-reference
-  --transportTelegram: string # nullable, format: iri-reference
-  --transportTelnyx: string # nullable, format: iri-reference
-  --transportTermii: string # nullable, format: iri-reference
-  --transportTrello: string # nullable, format: iri-reference
-  --transportTurboSms: string # nullable, format: iri-reference
-  --transportTwilio: string # nullable, format: iri-reference
-  --transportTwitter: string # nullable, format: iri-reference
-  --transportVonage: string # nullable, format: iri-reference
-  --transportWebhook: string # nullable, format: iri-reference
-  --transportYunpian: string # nullable, format: iri-reference
-  --transportZendesk: string # nullable, format: iri-reference
-  --transportZulip: string # nullable, format: iri-reference
+  --alert-service-name: string # The name of the alert service. Max 255 characters. (nullable)
+  --alert-service-notes: string # Notes about the alert service. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --media-objects: list # Media objects that must be sent with each alert. Only applicable when you use your own email alert services.
+  --recipient-email-address: string # The email address where alerts will be sent. (nullable, format: email)
+  --recipient-phone-number: string # The phone number where alerts will be sent. Ensure that the number format complies with the external transport service that will send the alert. (nullable)
+  --transport-alerta: string # nullable, format: iri-reference
+  --transport-all-my-sms: string # nullable, format: iri-reference
+  --transport-amazon-sns: string # nullable, format: iri-reference
+  --transport-bandwidth: string # nullable, format: iri-reference
+  --transport-chatwork: string # nullable, format: iri-reference
+  --transport-click-send: string # nullable, format: iri-reference
+  --transport-clickatell: string # nullable, format: iri-reference
+  --transport-contact-everyone: string # nullable, format: iri-reference
+  --transport-discord: string # nullable, format: iri-reference
+  --transport-email: string # nullable, format: iri-reference
+  --transport-engagespot: string # nullable, format: iri-reference
+  --transport-esendex: string # nullable, format: iri-reference
+  --transport-expo: string # nullable, format: iri-reference
+  --transport-firebase: string # nullable, format: iri-reference
+  --transport-forty-six-elks: string # nullable, format: iri-reference
+  --transport-free-mobile: string # nullable, format: iri-reference
+  --transport-freshdesk: string # nullable, format: iri-reference
+  --transport-gateway-api: string # nullable, format: iri-reference
+  --transport-gitter: string # nullable, format: iri-reference
+  --transport-google-chat: string # nullable, format: iri-reference
+  --transport-gotify: string # nullable, format: iri-reference
+  --transport-help-scout: string # nullable, format: iri-reference
+  --transport-infobip: string # nullable, format: iri-reference
+  --transport-iqsms: string # nullable, format: iri-reference
+  --transport-kaz-info-teh: string # nullable, format: iri-reference
+  --transport-light-sms: string # nullable, format: iri-reference
+  --transport-line-notify: string # nullable, format: iri-reference
+  --transport-linked-in: string # nullable, format: iri-reference
+  --transport-mailjet: string # nullable, format: iri-reference
+  --transport-mastodon: string # nullable, format: iri-reference
+  --transport-mattermost: string # nullable, format: iri-reference
+  --transport-mercure: string # nullable, format: iri-reference
+  --transport-message-bird: string # nullable, format: iri-reference
+  --transport-message-media: string # nullable, format: iri-reference
+  --transport-microsoft-teams: string # nullable, format: iri-reference
+  --transport-mobyt: string # nullable, format: iri-reference
+  --transport-octopush: string # nullable, format: iri-reference
+  --transport-one-signal: string # nullable, format: iri-reference
+  --transport-opsgenie: string # nullable, format: iri-reference
+  --transport-orange-sms: string # nullable, format: iri-reference
+  --transport-ovh-cloud: string # nullable, format: iri-reference
+  --transport-pager-duty: string # nullable, format: iri-reference
+  --transport-pager-tree: string # nullable, format: iri-reference
+  --transport-plivo: string # nullable, format: iri-reference
+  --transport-pushbullet: string # nullable, format: iri-reference
+  --transport-pushover: string # nullable, format: iri-reference
+  --transport-pushy: string # nullable, format: iri-reference
+  --transport-ring-central: string # nullable, format: iri-reference
+  --transport-rocket-chat: string # nullable, format: iri-reference
+  --transport-sendberry: string # nullable, format: iri-reference
+  --transport-sendinblue: string # nullable, format: iri-reference
+  --transport-simple-textin: string # nullable, format: iri-reference
+  --transport-sinch: string # nullable, format: iri-reference
+  --transport-slack: string # nullable, format: iri-reference
+  --transport-sms77: string # nullable, format: iri-reference
+  --transport-sms-biuras: string # nullable, format: iri-reference
+  --transport-sms-factor: string # nullable, format: iri-reference
+  --transport-smsapi: string # nullable, format: iri-reference
+  --transport-smsc: string # nullable, format: iri-reference
+  --transport-smsmode: string # nullable, format: iri-reference
+  --transport-spot-hit: string # nullable, format: iri-reference
+  --transport-telegram: string # nullable, format: iri-reference
+  --transport-telnyx: string # nullable, format: iri-reference
+  --transport-termii: string # nullable, format: iri-reference
+  --transport-trello: string # nullable, format: iri-reference
+  --transport-turbo-sms: string # nullable, format: iri-reference
+  --transport-twilio: string # nullable, format: iri-reference
+  --transport-twitter: string # nullable, format: iri-reference
+  --transport-vonage: string # nullable, format: iri-reference
+  --transport-webhook: string # nullable, format: iri-reference
+  --transport-yunpian: string # nullable, format: iri-reference
+  --transport-zendesk: string # nullable, format: iri-reference
+  --transport-zulip: string # nullable, format: iri-reference
 ]: any -> record<alertServiceName: string, alertServiceNotes: string, alertServiceTransportCode: string, createdAt: string, creditsPerTransportAlert: int, dataSegmentCode: string, id: string, mediaObjects: list<string>, partition: string, recipientEmailAddress: string, recipientPhoneNumber: string, resourceOwner: string, transportAlerta: string, transportAllMySms: string, transportAmazonSns: string, transportBandwidth: string, transportChatwork: string, transportClickSend: string, transportClickatell: string, transportContactEveryone: string, transportDiscord: string, transportEmail: string, transportEngagespot: string, transportEsendex: string, transportExpo: string, transportFirebase: string, transportFortySixElks: string, transportFreeMobile: string, transportFreshdesk: string, transportGatewayApi: string, transportGitter: string, transportGoogleChat: string, transportGotify: string, transportHelpScout: string, transportInfobip: string, transportIqsms: string, transportKazInfoTeh: string, transportLightSms: string, transportLineNotify: string, transportLinkedIn: string, transportMailjet: string, transportMastodon: string, transportMattermost: string, transportMercure: string, transportMessageBird: string, transportMessageMedia: string, transportMicrosoftTeams: string, transportMobyt: string, transportOctopush: string, transportOneSignal: string, transportOpsgenie: string, transportOrangeSms: string, transportOvhCloud: string, transportPagerDuty: string, transportPagerTree: string, transportPlivo: string, transportPushbullet: string, transportPushover: string, transportPushy: string, transportRingCentral: string, transportRocketChat: string, transportSendberry: string, transportSendinblue: string, transportSimpleTextin: string, transportSinch: string, transportSlack: string, transportSms77: string, transportSmsBiuras: string, transportSmsFactor: string, transportSmsapi: string, transportSmsc: string, transportSmsmode: string, transportSpotHit: string, transportTelegram: string, transportTelnyx: string, transportTermii: string, transportTrello: string, transportTurboSms: string, transportTwilio: string, transportTwitter: string, transportVonage: string, transportWebhook: string, transportYunpian: string, transportZendesk: string, transportZulip: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/alert-service/($id)")
-  let body = {alertServiceName: $alertServiceName, alertServiceNotes: $alertServiceNotes, dataSegmentCode: $dataSegmentCode, mediaObjects: $mediaObjects, recipientEmailAddress: $recipientEmailAddress, recipientPhoneNumber: $recipientPhoneNumber, transportAlerta: $transportAlerta, transportAllMySms: $transportAllMySms, transportAmazonSns: $transportAmazonSns, transportBandwidth: $transportBandwidth, transportChatwork: $transportChatwork, transportClickSend: $transportClickSend, transportClickatell: $transportClickatell, transportContactEveryone: $transportContactEveryone, transportDiscord: $transportDiscord, transportEmail: $transportEmail, transportEngagespot: $transportEngagespot, transportEsendex: $transportEsendex, transportExpo: $transportExpo, transportFirebase: $transportFirebase, transportFortySixElks: $transportFortySixElks, transportFreeMobile: $transportFreeMobile, transportFreshdesk: $transportFreshdesk, transportGatewayApi: $transportGatewayApi, transportGitter: $transportGitter, transportGoogleChat: $transportGoogleChat, transportGotify: $transportGotify, transportHelpScout: $transportHelpScout, transportInfobip: $transportInfobip, transportIqsms: $transportIqsms, transportKazInfoTeh: $transportKazInfoTeh, transportLightSms: $transportLightSms, transportLineNotify: $transportLineNotify, transportLinkedIn: $transportLinkedIn, transportMailjet: $transportMailjet, transportMastodon: $transportMastodon, transportMattermost: $transportMattermost, transportMercure: $transportMercure, transportMessageBird: $transportMessageBird, transportMessageMedia: $transportMessageMedia, transportMicrosoftTeams: $transportMicrosoftTeams, transportMobyt: $transportMobyt, transportOctopush: $transportOctopush, transportOneSignal: $transportOneSignal, transportOpsgenie: $transportOpsgenie, transportOrangeSms: $transportOrangeSms, transportOvhCloud: $transportOvhCloud, transportPagerDuty: $transportPagerDuty, transportPagerTree: $transportPagerTree, transportPlivo: $transportPlivo, transportPushbullet: $transportPushbullet, transportPushover: $transportPushover, transportPushy: $transportPushy, transportRingCentral: $transportRingCentral, transportRocketChat: $transportRocketChat, transportSendberry: $transportSendberry, transportSendinblue: $transportSendinblue, transportSimpleTextin: $transportSimpleTextin, transportSinch: $transportSinch, transportSlack: $transportSlack, transportSms77: $transportSms77, transportSmsBiuras: $transportSmsBiuras, transportSmsFactor: $transportSmsFactor, transportSmsapi: $transportSmsapi, transportSmsc: $transportSmsc, transportSmsmode: $transportSmsmode, transportSpotHit: $transportSpotHit, transportTelegram: $transportTelegram, transportTelnyx: $transportTelnyx, transportTermii: $transportTermii, transportTrello: $transportTrello, transportTurboSms: $transportTurboSms, transportTwilio: $transportTwilio, transportTwitter: $transportTwitter, transportVonage: $transportVonage, transportWebhook: $transportWebhook, transportYunpian: $transportYunpian, transportZendesk: $transportZendesk, transportZulip: $transportZulip} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/alert-service/{id}"))
+  let body = {"alertServiceName": $alert_service_name, "alertServiceNotes": $alert_service_notes, "dataSegmentCode": $data_segment_code, "mediaObjects": $media_objects, "recipientEmailAddress": $recipient_email_address, "recipientPhoneNumber": $recipient_phone_number, "transportAlerta": $transport_alerta, "transportAllMySms": $transport_all_my_sms, "transportAmazonSns": $transport_amazon_sns, "transportBandwidth": $transport_bandwidth, "transportChatwork": $transport_chatwork, "transportClickSend": $transport_click_send, "transportClickatell": $transport_clickatell, "transportContactEveryone": $transport_contact_everyone, "transportDiscord": $transport_discord, "transportEmail": $transport_email, "transportEngagespot": $transport_engagespot, "transportEsendex": $transport_esendex, "transportExpo": $transport_expo, "transportFirebase": $transport_firebase, "transportFortySixElks": $transport_forty_six_elks, "transportFreeMobile": $transport_free_mobile, "transportFreshdesk": $transport_freshdesk, "transportGatewayApi": $transport_gateway_api, "transportGitter": $transport_gitter, "transportGoogleChat": $transport_google_chat, "transportGotify": $transport_gotify, "transportHelpScout": $transport_help_scout, "transportInfobip": $transport_infobip, "transportIqsms": $transport_iqsms, "transportKazInfoTeh": $transport_kaz_info_teh, "transportLightSms": $transport_light_sms, "transportLineNotify": $transport_line_notify, "transportLinkedIn": $transport_linked_in, "transportMailjet": $transport_mailjet, "transportMastodon": $transport_mastodon, "transportMattermost": $transport_mattermost, "transportMercure": $transport_mercure, "transportMessageBird": $transport_message_bird, "transportMessageMedia": $transport_message_media, "transportMicrosoftTeams": $transport_microsoft_teams, "transportMobyt": $transport_mobyt, "transportOctopush": $transport_octopush, "transportOneSignal": $transport_one_signal, "transportOpsgenie": $transport_opsgenie, "transportOrangeSms": $transport_orange_sms, "transportOvhCloud": $transport_ovh_cloud, "transportPagerDuty": $transport_pager_duty, "transportPagerTree": $transport_pager_tree, "transportPlivo": $transport_plivo, "transportPushbullet": $transport_pushbullet, "transportPushover": $transport_pushover, "transportPushy": $transport_pushy, "transportRingCentral": $transport_ring_central, "transportRocketChat": $transport_rocket_chat, "transportSendberry": $transport_sendberry, "transportSendinblue": $transport_sendinblue, "transportSimpleTextin": $transport_simple_textin, "transportSinch": $transport_sinch, "transportSlack": $transport_slack, "transportSms77": $transport_sms77, "transportSmsBiuras": $transport_sms_biuras, "transportSmsFactor": $transport_sms_factor, "transportSmsapi": $transport_smsapi, "transportSmsc": $transport_smsc, "transportSmsmode": $transport_smsmode, "transportSpotHit": $transport_spot_hit, "transportTelegram": $transport_telegram, "transportTelnyx": $transport_telnyx, "transportTermii": $transport_termii, "transportTrello": $transport_trello, "transportTurboSms": $transport_turbo_sms, "transportTwilio": $transport_twilio, "transportTwitter": $transport_twitter, "transportVonage": $transport_vonage, "transportWebhook": $transport_webhook, "transportYunpian": $transport_yunpian, "transportZendesk": $transport_zendesk, "transportZulip": $transport_zulip} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -585,7 +585,7 @@ export def "credits-consumption get" [
 ]: nothing -> record<createdAt: string, creditsConsumptionEventCode: string, creditsConsumptionNotes: string, creditsEventId: string, creditsEventIri: string, creditsUsed: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/credits-consumption/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/credits-consumption/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -635,7 +635,7 @@ export def "http-method-code get" [
 ]: nothing -> record<codeName: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/http-method-code/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/http-method-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -656,15 +656,15 @@ export def "media-object collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<contentUrl: string, createdAt: string, dataSegmentCode: string, fileSize: int, id: string, keywords: string, mimeType: string, originalName: string, partition: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/media-object" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -685,7 +685,7 @@ export def "media-object post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (format: string)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (format: string)
   --file: string # format: binary
   --keywords: string # A string of keywords that can be used to search for a resource. Max 100 characters. (format: string)
   --partition: string # The unique id of the partition. Can be just the id or an IRI. (format: string)
@@ -694,7 +694,7 @@ export def "media-object post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/media-object")
-  let body = {dataSegmentCode: $dataSegmentCode, file: $file, keywords: $keywords, partition: $partition} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "file": $file, "keywords": $keywords, "partition": $partition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -718,7 +718,7 @@ export def "media-object delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/media-object/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/media-object/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -742,7 +742,7 @@ export def "media-object get" [
 ]: nothing -> record<contentUrl: string, createdAt: string, dataSegmentCode: string, fileSize: int, id: string, keywords: string, mimeType: string, originalName: string, partition: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/media-object/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/media-object/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -763,15 +763,15 @@ export def "monitor collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<alertPayloadExtended: string, alertPayloadShort: string, alertServices: list<string>, allowUnauthenticatedPings: bool, contentCheckMustNotExist: bool, contentCheckText: string, contentCheckUrl: string, contentCheckXpathFilter: string, createdAt: string, dataSegmentCode: string, graceSeconds: int, humanizedInterval: string, id: string, internalMonitorName: string, intervalDays: int, intervalHours: int, intervalMinutes: int, intervalMonths: int, intervalSeconds: int, intervalYears: int, isMonitorPaused: bool, lastPingAt: string, monitorName: string, monitorNotes: string, monitorStatusCode: string, monitorTypeCode: string, nextPingAt: string, partition: string, pingSecret: string, publicDescription: string, resourceOwner: string, startMonitorAt: string, startMonitorAtUtc: string, systemMessages: list<string>, timezoneCode: string, webResponseSecondsLimit: int, webResponseUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/monitor" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -792,38 +792,38 @@ export def "monitor post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --alertPayloadExtended: string # Payload that must be sent in the body of each alert when you use your own email or webhook alert services. This is the body for email alerts and the request body for webhook alerts. This text is not sent when using the built-in alert services. Sending user-supplied text via our own email server is too big a risk to our email reputation. Max 2 MB characters. (nullable)
-  --alertPayloadShort: string # Payload that must be sent in the body of each alert when you use your own short message alert services. This also serves as the subject for email alerts. Not used for webhooks. This text is not sent when using the built-in alert services. Sending user-supplied text via our own email server is too big a risk to our email reputation. Max 100 characters. (nullable)
-  --alertServices: list # The alert services that are related to this resource.
-  --allowUnauthenticatedPings: oneof<nothing, bool> # Indicates that the monitor will accept pings that are not OAuth authenticated.
-  --contentCheckMustNotExist: oneof<nothing, bool> # Indicates that the Web Content monitor must verify the absence of the text or the Xpath node, and dispatch an alert if it is present. The default behavior is to verify the presence of the text or the Xpath node, and dispatch an alert if it is absent.
-  --contentCheckText: string # The text (case-insensitive) that must or must not be present at the contentCheckUrl. If contentCheckXpathFilter is supplied, then the only the text within that nodes is evaluated, otherwise text on the entire web page is evaluated. (nullable)
-  --contentCheckUrl: string # The URL that the Web Content monitor type must evaluate for the specified conditions. (nullable, format: uri)
-  --contentCheckXpathFilter: string # The Xpath filter (<a href="https://en.wikipedia.org/wiki/XPath">Xpath</a>, <a href="https://devhints.io/xpath">Xpath Cheatsheet</a>) that selects a specific node in the HTML of the target web page. If contentCheckText is supplied, then only the text within the selected node is evaluated. If contentCheckText is left empty, then the presence or the absence of the selected node is evaluated. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --graceSeconds: int # The number of grace seconds after expiry of the time when the next ping was expected, before raising an alert. The number of grace seconds to allow before classifying a Measured Monitor task duration as an anomaly. (nullable)
-  --intervalDays: int # The number of days in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --intervalHours: int # The number of hours in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --intervalMinutes: int # The number of minutes in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --intervalMonths: int # The number of months in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --intervalSeconds: int # The number of seconds in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --intervalYears: int # The number of years in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --isMonitorPaused: oneof<nothing, bool> # Indicates that the monitor is paused and will not send alerts.
-  --monitorName: string # The name of the monitor. Max 255 characters. (nullable)
-  --monitorNotes: string # Notes about the monitor. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
-  --monitorTypeCode: string # The type of the monitor. (nullable, format: iri-reference)
+  --alert-payload-extended: string # Payload that must be sent in the body of each alert when you use your own email or webhook alert services. This is the body for email alerts and the request body for webhook alerts. This text is not sent when using the built-in alert services. Sending user-supplied text via our own email server is too big a risk to our email reputation. Max 2 MB characters. (nullable)
+  --alert-payload-short: string # Payload that must be sent in the body of each alert when you use your own short message alert services. This also serves as the subject for email alerts. Not used for webhooks. This text is not sent when using the built-in alert services. Sending user-supplied text via our own email server is too big a risk to our email reputation. Max 100 characters. (nullable)
+  --alert-services: list # The alert services that are related to this resource.
+  --allow-unauthenticated-pings: oneof<nothing, bool> # Indicates that the monitor will accept pings that are not OAuth authenticated.
+  --content-check-must-not-exist: oneof<nothing, bool> # Indicates that the Web Content monitor must verify the absence of the text or the Xpath node, and dispatch an alert if it is present. The default behavior is to verify the presence of the text or the Xpath node, and dispatch an alert if it is absent.
+  --content-check-text: string # The text (case-insensitive) that must or must not be present at the contentCheckUrl. If contentCheckXpathFilter is supplied, then the only the text within that nodes is evaluated, otherwise text on the entire web page is evaluated. (nullable)
+  --content-check-url: string # The URL that the Web Content monitor type must evaluate for the specified conditions. (nullable, format: uri)
+  --content-check-xpath-filter: string # The Xpath filter (<a href="https://en.wikipedia.org/wiki/XPath">Xpath</a>, <a href="https://devhints.io/xpath">Xpath Cheatsheet</a>) that selects a specific node in the HTML of the target web page. If contentCheckText is supplied, then only the text within the selected node is evaluated. If contentCheckText is left empty, then the presence or the absence of the selected node is evaluated. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --grace-seconds: int # The number of grace seconds after expiry of the time when the next ping was expected, before raising an alert. The number of grace seconds to allow before classifying a Measured Monitor task duration as an anomaly. (nullable)
+  --interval-days: int # The number of days in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --interval-hours: int # The number of hours in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --interval-minutes: int # The number of minutes in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --interval-months: int # The number of months in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --interval-seconds: int # The number of seconds in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --interval-years: int # The number of years in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --is-monitor-paused: oneof<nothing, bool> # Indicates that the monitor is paused and will not send alerts.
+  --monitor-name: string # The name of the monitor. Max 255 characters. (nullable)
+  --monitor-notes: string # Notes about the monitor. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
+  --monitor-type-code: string # The type of the monitor. (nullable, format: iri-reference)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --publicDescription: string # A text description of the monitor that is accessible to unauthenticated users that receive an alert from the monitor. Formatting using Markdown is allowed. HTML will be removed. (nullable)
-  --startMonitorAt: string # When to start the Regular Interval type monitor or Heartbeat type monitor, or when to send the first alert of the Scheduled Repeatable Alert monitor. Cannot be blank for a Regular Interval, Heartbeat, or Scheduled Repeatable Alert type monitor, must be blank for other monitors types. This date-time is always interpreted to be in the timezone of the monitor. Any UTC offset is ignored. (nullable, format: date-time)
-  timezoneCode: string # The timezone of the monitor. Dates and times in alerts and reports will be in this time zone. (format: iri-reference)
-  --webResponseSecondsLimit: int # The time in seconds that the Web Response monitor type must allow for the web page to respond. (nullable)
-  --webResponseUrl: string # The URL that the Web Response monitor type must evaluate for the specified conditions. (nullable, format: uri)
+  --public-description: string # A text description of the monitor that is accessible to unauthenticated users that receive an alert from the monitor. Formatting using Markdown is allowed. HTML will be removed. (nullable)
+  --start-monitor-at: string # When to start the Regular Interval type monitor or Heartbeat type monitor, or when to send the first alert of the Scheduled Repeatable Alert monitor. Cannot be blank for a Regular Interval, Heartbeat, or Scheduled Repeatable Alert type monitor, must be blank for other monitors types. This date-time is always interpreted to be in the timezone of the monitor. Any UTC offset is ignored. (nullable, format: date-time)
+  timezone_code: string # The timezone of the monitor. Dates and times in alerts and reports will be in this time zone. (format: iri-reference)
+  --web-response-seconds-limit: int # The time in seconds that the Web Response monitor type must allow for the web page to respond. (nullable)
+  --web-response-url: string # The URL that the Web Response monitor type must evaluate for the specified conditions. (nullable, format: uri)
 ]: any -> record<alertPayloadExtended: string, alertPayloadShort: string, alertServices: list<string>, allowUnauthenticatedPings: bool, contentCheckMustNotExist: bool, contentCheckText: string, contentCheckUrl: string, contentCheckXpathFilter: string, createdAt: string, dataSegmentCode: string, graceSeconds: int, humanizedInterval: string, id: string, internalMonitorName: string, intervalDays: int, intervalHours: int, intervalMinutes: int, intervalMonths: int, intervalSeconds: int, intervalYears: int, isMonitorPaused: bool, lastPingAt: string, monitorName: string, monitorNotes: string, monitorStatusCode: string, monitorTypeCode: string, nextPingAt: string, partition: string, pingSecret: string, publicDescription: string, resourceOwner: string, startMonitorAt: string, startMonitorAtUtc: string, systemMessages: list<string>, timezoneCode: string, webResponseSecondsLimit: int, webResponseUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/monitor")
-  let body = {alertPayloadExtended: $alertPayloadExtended, alertPayloadShort: $alertPayloadShort, alertServices: $alertServices, allowUnauthenticatedPings: $allowUnauthenticatedPings, contentCheckMustNotExist: $contentCheckMustNotExist, contentCheckText: $contentCheckText, contentCheckUrl: $contentCheckUrl, contentCheckXpathFilter: $contentCheckXpathFilter, dataSegmentCode: $dataSegmentCode, graceSeconds: $graceSeconds, intervalDays: $intervalDays, intervalHours: $intervalHours, intervalMinutes: $intervalMinutes, intervalMonths: $intervalMonths, intervalSeconds: $intervalSeconds, intervalYears: $intervalYears, isMonitorPaused: $isMonitorPaused, monitorName: $monitorName, monitorNotes: $monitorNotes, monitorTypeCode: $monitorTypeCode, partition: $partition, publicDescription: $publicDescription, startMonitorAt: $startMonitorAt, timezoneCode: $timezoneCode, webResponseSecondsLimit: $webResponseSecondsLimit, webResponseUrl: $webResponseUrl} | compact
+  let body = {"alertPayloadExtended": $alert_payload_extended, "alertPayloadShort": $alert_payload_short, "alertServices": $alert_services, "allowUnauthenticatedPings": $allow_unauthenticated_pings, "contentCheckMustNotExist": $content_check_must_not_exist, "contentCheckText": $content_check_text, "contentCheckUrl": $content_check_url, "contentCheckXpathFilter": $content_check_xpath_filter, "dataSegmentCode": $data_segment_code, "graceSeconds": $grace_seconds, "intervalDays": $interval_days, "intervalHours": $interval_hours, "intervalMinutes": $interval_minutes, "intervalMonths": $interval_months, "intervalSeconds": $interval_seconds, "intervalYears": $interval_years, "isMonitorPaused": $is_monitor_paused, "monitorName": $monitor_name, "monitorNotes": $monitor_notes, "monitorTypeCode": $monitor_type_code, "partition": $partition, "publicDescription": $public_description, "startMonitorAt": $start_monitor_at, "timezoneCode": $timezone_code, "webResponseSecondsLimit": $web_response_seconds_limit, "webResponseUrl": $web_response_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -874,7 +874,7 @@ export def "monitor-status-code get" [
 ]: nothing -> record<codeDescription: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/monitor-status-code/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/monitor-status-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,19 +895,19 @@ export def "monitor-status-log collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --monitor: string # allows empty value
   --monitor: list # allows empty value
-  --monitorStatusCode: string # allows empty value
-  --monitorStatusCode: list # allows empty value
+  --monitor-status-code: string # allows empty value
+  --monitor-status-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, monitor: string, monitorStatusCode: string, partition: string, ping: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor "multi") (serialize-qp "monitorStatusCode" $monitorStatusCode "scalar") (serialize-qp "monitorStatusCode[]" $monitorStatusCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor "multi") (serialize-qp "monitorStatusCode" $monitor_status_code "scalar") (serialize-qp "monitorStatusCode[]" $monitor_status_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/monitor-status-log" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -932,7 +932,7 @@ export def "monitor-status-log get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, monitor: string, monitorStatusCode: string, partition: string, ping: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/monitor-status-log/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/monitor-status-log/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -982,7 +982,7 @@ export def "monitor-type-code get" [
 ]: nothing -> record<codeDescription: string, codeDescriptionExpanded: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/monitor-type-code/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/monitor-type-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1005,7 +1005,7 @@ export def "monitor delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/monitor/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/monitor/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1029,7 +1029,7 @@ export def "monitor get" [
 ]: nothing -> record<alertPayloadExtended: string, alertPayloadShort: string, alertServices: list<string>, allowUnauthenticatedPings: bool, contentCheckMustNotExist: bool, contentCheckText: string, contentCheckUrl: string, contentCheckXpathFilter: string, createdAt: string, dataSegmentCode: string, graceSeconds: int, humanizedInterval: string, id: string, internalMonitorName: string, intervalDays: int, intervalHours: int, intervalMinutes: int, intervalMonths: int, intervalSeconds: int, intervalYears: int, isMonitorPaused: bool, lastPingAt: string, monitorName: string, monitorNotes: string, monitorStatusCode: string, monitorTypeCode: string, nextPingAt: string, partition: string, pingSecret: string, publicDescription: string, resourceOwner: string, startMonitorAt: string, startMonitorAtUtc: string, systemMessages: list<string>, timezoneCode: string, webResponseSecondsLimit: int, webResponseUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/monitor/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/monitor/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1050,36 +1050,36 @@ export def "monitor put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --alertPayloadExtended: string # Payload that must be sent in the body of each alert when you use your own email or webhook alert services. This is the body for email alerts and the request body for webhook alerts. This text is not sent when using the built-in alert services. Sending user-supplied text via our own email server is too big a risk to our email reputation. Max 2 MB characters. (nullable)
-  --alertPayloadShort: string # Payload that must be sent in the body of each alert when you use your own short message alert services. This also serves as the subject for email alerts. Not used for webhooks. This text is not sent when using the built-in alert services. Sending user-supplied text via our own email server is too big a risk to our email reputation. Max 100 characters. (nullable)
-  --alertServices: list # The alert services that are related to this resource.
-  --allowUnauthenticatedPings: oneof<nothing, bool> # Indicates that the monitor will accept pings that are not OAuth authenticated.
-  --contentCheckMustNotExist: oneof<nothing, bool> # Indicates that the Web Content monitor must verify the absence of the text or the Xpath node, and dispatch an alert if it is present. The default behavior is to verify the presence of the text or the Xpath node, and dispatch an alert if it is absent.
-  --contentCheckText: string # The text (case-insensitive) that must or must not be present at the contentCheckUrl. If contentCheckXpathFilter is supplied, then the only the text within that nodes is evaluated, otherwise text on the entire web page is evaluated. (nullable)
-  --contentCheckUrl: string # The URL that the Web Content monitor type must evaluate for the specified conditions. (nullable, format: uri)
-  --contentCheckXpathFilter: string # The Xpath filter (<a href="https://en.wikipedia.org/wiki/XPath">Xpath</a>, <a href="https://devhints.io/xpath">Xpath Cheatsheet</a>) that selects a specific node in the HTML of the target web page. If contentCheckText is supplied, then only the text within the selected node is evaluated. If contentCheckText is left empty, then the presence or the absence of the selected node is evaluated. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --graceSeconds: int # The number of grace seconds after expiry of the time when the next ping was expected, before raising an alert. The number of grace seconds to allow before classifying a Measured Monitor task duration as an anomaly. (nullable)
-  --intervalDays: int # The number of days in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --intervalHours: int # The number of hours in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --intervalMinutes: int # The number of minutes in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --intervalMonths: int # The number of months in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --intervalSeconds: int # The number of seconds in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --intervalYears: int # The number of years in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
-  --isMonitorPaused: oneof<nothing, bool> # Indicates that the monitor is paused and will not send alerts.
-  --monitorName: string # The name of the monitor. Max 255 characters. (nullable)
-  --monitorNotes: string # Notes about the monitor. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
-  --publicDescription: string # A text description of the monitor that is accessible to unauthenticated users that receive an alert from the monitor. Formatting using Markdown is allowed. HTML will be removed. (nullable)
-  --startMonitorAt: string # When to start the Regular Interval type monitor or Heartbeat type monitor, or when to send the first alert of the Scheduled Repeatable Alert monitor. Cannot be blank for a Regular Interval, Heartbeat, or Scheduled Repeatable Alert type monitor, must be blank for other monitors types. This date-time is always interpreted to be in the timezone of the monitor. Any UTC offset is ignored. (nullable, format: date-time)
-  timezoneCode: string # The timezone of the monitor. Dates and times in alerts and reports will be in this time zone. (format: iri-reference)
-  --webResponseSecondsLimit: int # The time in seconds that the Web Response monitor type must allow for the web page to respond. (nullable)
-  --webResponseUrl: string # The URL that the Web Response monitor type must evaluate for the specified conditions. (nullable, format: uri)
+  --alert-payload-extended: string # Payload that must be sent in the body of each alert when you use your own email or webhook alert services. This is the body for email alerts and the request body for webhook alerts. This text is not sent when using the built-in alert services. Sending user-supplied text via our own email server is too big a risk to our email reputation. Max 2 MB characters. (nullable)
+  --alert-payload-short: string # Payload that must be sent in the body of each alert when you use your own short message alert services. This also serves as the subject for email alerts. Not used for webhooks. This text is not sent when using the built-in alert services. Sending user-supplied text via our own email server is too big a risk to our email reputation. Max 100 characters. (nullable)
+  --alert-services: list # The alert services that are related to this resource.
+  --allow-unauthenticated-pings: oneof<nothing, bool> # Indicates that the monitor will accept pings that are not OAuth authenticated.
+  --content-check-must-not-exist: oneof<nothing, bool> # Indicates that the Web Content monitor must verify the absence of the text or the Xpath node, and dispatch an alert if it is present. The default behavior is to verify the presence of the text or the Xpath node, and dispatch an alert if it is absent.
+  --content-check-text: string # The text (case-insensitive) that must or must not be present at the contentCheckUrl. If contentCheckXpathFilter is supplied, then the only the text within that nodes is evaluated, otherwise text on the entire web page is evaluated. (nullable)
+  --content-check-url: string # The URL that the Web Content monitor type must evaluate for the specified conditions. (nullable, format: uri)
+  --content-check-xpath-filter: string # The Xpath filter (<a href="https://en.wikipedia.org/wiki/XPath">Xpath</a>, <a href="https://devhints.io/xpath">Xpath Cheatsheet</a>) that selects a specific node in the HTML of the target web page. If contentCheckText is supplied, then only the text within the selected node is evaluated. If contentCheckText is left empty, then the presence or the absence of the selected node is evaluated. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --grace-seconds: int # The number of grace seconds after expiry of the time when the next ping was expected, before raising an alert. The number of grace seconds to allow before classifying a Measured Monitor task duration as an anomaly. (nullable)
+  --interval-days: int # The number of days in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --interval-hours: int # The number of hours in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --interval-minutes: int # The number of minutes in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --interval-months: int # The number of months in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --interval-seconds: int # The number of seconds in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --interval-years: int # The number of years in the expected ping / run / measured / scheduled interval. Can be left blank. Can be specified together with any combination of the other interval fields. (nullable)
+  --is-monitor-paused: oneof<nothing, bool> # Indicates that the monitor is paused and will not send alerts.
+  --monitor-name: string # The name of the monitor. Max 255 characters. (nullable)
+  --monitor-notes: string # Notes about the monitor. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
+  --public-description: string # A text description of the monitor that is accessible to unauthenticated users that receive an alert from the monitor. Formatting using Markdown is allowed. HTML will be removed. (nullable)
+  --start-monitor-at: string # When to start the Regular Interval type monitor or Heartbeat type monitor, or when to send the first alert of the Scheduled Repeatable Alert monitor. Cannot be blank for a Regular Interval, Heartbeat, or Scheduled Repeatable Alert type monitor, must be blank for other monitors types. This date-time is always interpreted to be in the timezone of the monitor. Any UTC offset is ignored. (nullable, format: date-time)
+  timezone_code: string # The timezone of the monitor. Dates and times in alerts and reports will be in this time zone. (format: iri-reference)
+  --web-response-seconds-limit: int # The time in seconds that the Web Response monitor type must allow for the web page to respond. (nullable)
+  --web-response-url: string # The URL that the Web Response monitor type must evaluate for the specified conditions. (nullable, format: uri)
 ]: any -> record<alertPayloadExtended: string, alertPayloadShort: string, alertServices: list<string>, allowUnauthenticatedPings: bool, contentCheckMustNotExist: bool, contentCheckText: string, contentCheckUrl: string, contentCheckXpathFilter: string, createdAt: string, dataSegmentCode: string, graceSeconds: int, humanizedInterval: string, id: string, internalMonitorName: string, intervalDays: int, intervalHours: int, intervalMinutes: int, intervalMonths: int, intervalSeconds: int, intervalYears: int, isMonitorPaused: bool, lastPingAt: string, monitorName: string, monitorNotes: string, monitorStatusCode: string, monitorTypeCode: string, nextPingAt: string, partition: string, pingSecret: string, publicDescription: string, resourceOwner: string, startMonitorAt: string, startMonitorAtUtc: string, systemMessages: list<string>, timezoneCode: string, webResponseSecondsLimit: int, webResponseUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/monitor/($id)")
-  let body = {alertPayloadExtended: $alertPayloadExtended, alertPayloadShort: $alertPayloadShort, alertServices: $alertServices, allowUnauthenticatedPings: $allowUnauthenticatedPings, contentCheckMustNotExist: $contentCheckMustNotExist, contentCheckText: $contentCheckText, contentCheckUrl: $contentCheckUrl, contentCheckXpathFilter: $contentCheckXpathFilter, dataSegmentCode: $dataSegmentCode, graceSeconds: $graceSeconds, intervalDays: $intervalDays, intervalHours: $intervalHours, intervalMinutes: $intervalMinutes, intervalMonths: $intervalMonths, intervalSeconds: $intervalSeconds, intervalYears: $intervalYears, isMonitorPaused: $isMonitorPaused, monitorName: $monitorName, monitorNotes: $monitorNotes, publicDescription: $publicDescription, startMonitorAt: $startMonitorAt, timezoneCode: $timezoneCode, webResponseSecondsLimit: $webResponseSecondsLimit, webResponseUrl: $webResponseUrl} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/monitor/{id}"))
+  let body = {"alertPayloadExtended": $alert_payload_extended, "alertPayloadShort": $alert_payload_short, "alertServices": $alert_services, "allowUnauthenticatedPings": $allow_unauthenticated_pings, "contentCheckMustNotExist": $content_check_must_not_exist, "contentCheckText": $content_check_text, "contentCheckUrl": $content_check_url, "contentCheckXpathFilter": $content_check_xpath_filter, "dataSegmentCode": $data_segment_code, "graceSeconds": $grace_seconds, "intervalDays": $interval_days, "intervalHours": $interval_hours, "intervalMinutes": $interval_minutes, "intervalMonths": $interval_months, "intervalSeconds": $interval_seconds, "intervalYears": $interval_years, "isMonitorPaused": $is_monitor_paused, "monitorName": $monitor_name, "monitorNotes": $monitor_notes, "publicDescription": $public_description, "startMonitorAt": $start_monitor_at, "timezoneCode": $timezone_code, "webResponseSecondsLimit": $web_response_seconds_limit, "webResponseUrl": $web_response_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1101,13 +1101,13 @@ export def "partition collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<alertServices: list<string>, createdAt: string, dataSegmentCode: string, id: string, monitors: list<string>, partitionName: string, partitionNotes: string, resourceOwner: string, teamInvitations: list<string>, teamMembers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/partition" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1128,15 +1128,15 @@ export def "partition post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --partitionName: string # The name of the partition. Max 255 characters. (nullable)
-  --partitionNotes: string # Notes about the partition. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --partition-name: string # The name of the partition. Max 255 characters. (nullable)
+  --partition-notes: string # Notes about the partition. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
 ]: any -> record<alertServices: list<string>, createdAt: string, dataSegmentCode: string, id: string, monitors: list<string>, partitionName: string, partitionNotes: string, resourceOwner: string, teamInvitations: list<string>, teamMembers: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/partition")
-  let body = {dataSegmentCode: $dataSegmentCode, partitionName: $partitionName, partitionNotes: $partitionNotes} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partitionName": $partition_name, "partitionNotes": $partition_notes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1160,7 +1160,7 @@ export def "partition delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/partition/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/partition/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1184,7 +1184,7 @@ export def "partition get" [
 ]: nothing -> record<alertServices: list<string>, createdAt: string, dataSegmentCode: string, id: string, monitors: list<string>, partitionName: string, partitionNotes: string, resourceOwner: string, teamInvitations: list<string>, teamMembers: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/partition/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/partition/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1205,15 +1205,15 @@ export def "partition put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --partitionName: string # The name of the partition. Max 255 characters. (nullable)
-  --partitionNotes: string # Notes about the partition. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --partition-name: string # The name of the partition. Max 255 characters. (nullable)
+  --partition-notes: string # Notes about the partition. Max 10,000 characters. Formatting using Markdown is allowed. HTML will be removed. (nullable)
 ]: any -> record<alertServices: list<string>, createdAt: string, dataSegmentCode: string, id: string, monitors: list<string>, partitionName: string, partitionNotes: string, resourceOwner: string, teamInvitations: list<string>, teamMembers: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/partition/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, partitionName: $partitionName, partitionNotes: $partitionNotes} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/partition/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "partitionName": $partition_name, "partitionNotes": $partition_notes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1235,8 +1235,8 @@ export def "ping collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --monitor: string # allows empty value
   --monitor: list # allows empty value
   --partition: string # allows empty value
@@ -1245,7 +1245,7 @@ export def "ping collection" [
 ]: nothing -> table<alertLogs: list<string>, createdAt: string, dataSegmentCode: string, expectNextPingAt: string, expectNextPingAtEpoch: int, id: string, ipAddress: string, monitor: string, monitorStatusLog: string, partition: string, pingCustomCode: string, pingCustomPayload: string, pingMethodCode: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "monitor" $monitor "scalar") (serialize-qp "monitor[]" $monitor "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/ping" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1266,17 +1266,17 @@ export def "ping post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --expectNextPingAt: string # When to expect the next ping for a Last Ping monitor type. This date-time is always interpreted to be in the timezone of the monitor. Any UTC offset is ignored. Supply either "expectNextPingAt", or "expectNextPingAtEpoch", or a X_NEXT_PING request header, not more than one of those options. Must be blank for other monitor types. (nullable, format: date-time)
-  --expectNextPingAtEpoch: int # When to expect the next ping for a Last Ping monitor type, expressed in epoch timestamp format. Supply either "expectNextPingAt", or "expectNextPingAtEpoch", or a X_NEXT_PING request header, not more than one of those options. Must be blank for other monitor types. (nullable)
+  --expect-next-ping-at: string # When to expect the next ping for a Last Ping monitor type. This date-time is always interpreted to be in the timezone of the monitor. Any UTC offset is ignored. Supply either "expectNextPingAt", or "expectNextPingAtEpoch", or a X_NEXT_PING request header, not more than one of those options. Must be blank for other monitor types. (nullable, format: date-time)
+  --expect-next-ping-at-epoch: int # When to expect the next ping for a Last Ping monitor type, expressed in epoch timestamp format. Supply either "expectNextPingAt", or "expectNextPingAtEpoch", or a X_NEXT_PING request header, not more than one of those options. Must be blank for other monitor types. (nullable)
   monitor: string # The monitor that is related to this resource instance. (format: iri-reference)
-  --pingCustomCode: string # The client-supplied custom code that is appended to the ping. Only the first 10 characters are used and saved. (nullable)
-  --pingCustomPayload: string # The client-supplied custom payload that is saved with the ping. Only the first 100 characters are saved. This value overrides the value of an monitor's alert payload, if the ping results in an alert. (nullable)
+  --ping-custom-code: string # The client-supplied custom code that is appended to the ping. Only the first 10 characters are used and saved. (nullable)
+  --ping-custom-payload: string # The client-supplied custom payload that is saved with the ping. Only the first 100 characters are saved. This value overrides the value of an monitor's alert payload, if the ping results in an alert. (nullable)
 ]: any -> record<alertLogs: list<string>, createdAt: string, dataSegmentCode: string, expectNextPingAt: string, expectNextPingAtEpoch: int, id: string, ipAddress: string, monitor: string, monitorStatusLog: string, partition: string, pingCustomCode: string, pingCustomPayload: string, pingMethodCode: string, resourceOwner: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/ping")
-  let body = {expectNextPingAt: $expectNextPingAt, expectNextPingAtEpoch: $expectNextPingAtEpoch, monitor: $monitor, pingCustomCode: $pingCustomCode, pingCustomPayload: $pingCustomPayload} | compact
+  let body = {"expectNextPingAt": $expect_next_ping_at, "expectNextPingAtEpoch": $expect_next_ping_at_epoch, "monitor": $monitor, "pingCustomCode": $ping_custom_code, "pingCustomPayload": $ping_custom_payload} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1327,7 +1327,7 @@ export def "ping-method-code get" [
 ]: nothing -> record<codeName: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/ping-method-code/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/ping-method-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1351,7 +1351,7 @@ export def "ping get" [
 ]: nothing -> record<alertLogs: list<string>, createdAt: string, dataSegmentCode: string, expectNextPingAt: string, expectNextPingAtEpoch: int, id: string, ipAddress: string, monitor: string, monitorStatusLog: string, partition: string, pingCustomCode: string, pingCustomPayload: string, pingMethodCode: string, resourceOwner: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/ping/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/ping/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1372,17 +1372,17 @@ export def "team-invitation collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
-  --inviteeEmail: string # allows empty value
-  --inviteeEmail: list # allows empty value
+  --invitee-email: string # allows empty value
+  --invitee-email: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, inviteeEmail: string, inviteeFirstName: string, inviteeLastName: string, partition: string, resourceOwner: string, statusAt: string, teamInvitationStatus: string, teamMemberRoleCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "inviteeEmail" $inviteeEmail "scalar") (serialize-qp "inviteeEmail[]" $inviteeEmail "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "inviteeEmail" $invitee_email "scalar") (serialize-qp "inviteeEmail[]" $invitee_email "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/team-invitation" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1403,18 +1403,18 @@ export def "team-invitation post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --inviteeEmail: string # The email address of the person that is being invited. (nullable, format: email)
-  --inviteeFirstName: string # The first name of the person that is being invited. (nullable)
-  --inviteeLastName: string # The last name of the person that is being invited. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --invitee-email: string # The email address of the person that is being invited. (nullable, format: email)
+  --invitee-first-name: string # The first name of the person that is being invited. (nullable)
+  --invitee-last-name: string # The last name of the person that is being invited. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --teamMemberRoleCode: string # The role of the team member on the team. (format: iri-reference)
+  --team-member-role-code: string # The role of the team member on the team. (format: iri-reference)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, inviteeEmail: string, inviteeFirstName: string, inviteeLastName: string, partition: string, resourceOwner: string, statusAt: string, teamInvitationStatus: string, teamMemberRoleCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/team-invitation")
-  let body = {dataSegmentCode: $dataSegmentCode, inviteeEmail: $inviteeEmail, inviteeFirstName: $inviteeFirstName, inviteeLastName: $inviteeLastName, partition: $partition, teamMemberRoleCode: $teamMemberRoleCode} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "inviteeEmail": $invitee_email, "inviteeFirstName": $invitee_first_name, "inviteeLastName": $invitee_last_name, "partition": $partition, "teamMemberRoleCode": $team_member_role_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1438,7 +1438,7 @@ export def "team-invitation delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/team-invitation/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/team-invitation/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1462,7 +1462,7 @@ export def "team-invitation get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, inviteeEmail: string, inviteeFirstName: string, inviteeLastName: string, partition: string, resourceOwner: string, statusAt: string, teamInvitationStatus: string, teamMemberRoleCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/team-invitation/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/team-invitation/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1483,17 +1483,17 @@ export def "team-member collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
-  --userAccount: string # allows empty value
-  --userAccount: list # allows empty value
+  --user-account: string # allows empty value
+  --user-account: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, teamMemberRoleCode: string, userAccount: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "userAccount" $userAccount "scalar") (serialize-qp "userAccount[]" $userAccount "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "userAccount" $user_account "scalar") (serialize-qp "userAccount[]" $user_account "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/team-member" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1544,7 +1544,7 @@ export def "team-member-role-code get" [
 ]: nothing -> record<codeDescription: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/team-member-role-code/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/team-member-role-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1567,7 +1567,7 @@ export def "team-member delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/team-member/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/team-member/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1591,7 +1591,7 @@ export def "team-member get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, teamMemberRoleCode: string, userAccount: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/team-member/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/team-member/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1612,14 +1612,14 @@ export def "team-member put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --teamMemberRoleCode: string # The role of the team member on the team. (nullable, format: iri-reference)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --team-member-role-code: string # The role of the team member on the team. (nullable, format: iri-reference)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, teamMemberRoleCode: string, userAccount: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/team-member/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, teamMemberRoleCode: $teamMemberRoleCode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/team-member/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "teamMemberRoleCode": $team_member_role_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1670,7 +1670,7 @@ export def "timezone-code get" [
 ]: nothing -> record<codeName: string, id: string, offsetFromUtc: float, timezoneDateString: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/timezone-code/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/timezone-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1691,15 +1691,15 @@ export def "transport-alerta collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<alertaApiKey: string, alertaCorrelate: string, alertaEnvironment: string, alertaEvent: string, alertaGroup: string, alertaHost: string, alertaOrigin: string, alertaResource: string, alertaService: string, alertaSeverity: string, alertaStatus: string, alertaTags: string, alertaType: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-alerta" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1720,28 +1720,28 @@ export def "transport-alerta post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --alertaApiKey: string # The API key for the Alerta service. (nullable)
-  --alertaCorrelate: string # The comma-separated list of related event names for the Alerta service. (nullable)
-  --alertaEnvironment: string # The environment value for the Alerta service. (nullable)
-  --alertaEvent: string # The event value for the Alerta service. (nullable)
-  --alertaGroup: string # The group value for the Alerta service. (nullable)
-  --alertaHost: string # The host name for the Alerta service (omit the "https://" part). (nullable, format: hostname)
-  --alertaOrigin: string # The origin value for the Alerta service. (nullable)
-  --alertaResource: string # The resource value for the Alerta service. (nullable)
-  --alertaService: string # The comma-separated list of affected services for the Alerta service. (nullable)
-  --alertaSeverity: string # The severity value for the Alerta service. (nullable)
-  --alertaStatus: string # The status value for the Alerta service. (nullable)
-  --alertaTags: string # The comma-separated list of tags for the Alerta service. (nullable)
-  --alertaType: string # The type value for the Alerta service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --alerta-api-key: string # The API key for the Alerta service. (nullable)
+  --alerta-correlate: string # The comma-separated list of related event names for the Alerta service. (nullable)
+  --alerta-environment: string # The environment value for the Alerta service. (nullable)
+  --alerta-event: string # The event value for the Alerta service. (nullable)
+  --alerta-group: string # The group value for the Alerta service. (nullable)
+  --alerta-host: string # The host name for the Alerta service (omit the "https://" part). (nullable, format: hostname)
+  --alerta-origin: string # The origin value for the Alerta service. (nullable)
+  --alerta-resource: string # The resource value for the Alerta service. (nullable)
+  --alerta-service: string # The comma-separated list of affected services for the Alerta service. (nullable)
+  --alerta-severity: string # The severity value for the Alerta service. (nullable)
+  --alerta-status: string # The status value for the Alerta service. (nullable)
+  --alerta-tags: string # The comma-separated list of tags for the Alerta service. (nullable)
+  --alerta-type: string # The type value for the Alerta service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<alertaApiKey: string, alertaCorrelate: string, alertaEnvironment: string, alertaEvent: string, alertaGroup: string, alertaHost: string, alertaOrigin: string, alertaResource: string, alertaService: string, alertaSeverity: string, alertaStatus: string, alertaTags: string, alertaType: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-alerta")
-  let body = {alertaApiKey: $alertaApiKey, alertaCorrelate: $alertaCorrelate, alertaEnvironment: $alertaEnvironment, alertaEvent: $alertaEvent, alertaGroup: $alertaGroup, alertaHost: $alertaHost, alertaOrigin: $alertaOrigin, alertaResource: $alertaResource, alertaService: $alertaService, alertaSeverity: $alertaSeverity, alertaStatus: $alertaStatus, alertaTags: $alertaTags, alertaType: $alertaType, dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName} | compact
+  let body = {"alertaApiKey": $alerta_api_key, "alertaCorrelate": $alerta_correlate, "alertaEnvironment": $alerta_environment, "alertaEvent": $alerta_event, "alertaGroup": $alerta_group, "alertaHost": $alerta_host, "alertaOrigin": $alerta_origin, "alertaResource": $alerta_resource, "alertaService": $alerta_service, "alertaSeverity": $alerta_severity, "alertaStatus": $alerta_status, "alertaTags": $alerta_tags, "alertaType": $alerta_type, "dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1765,7 +1765,7 @@ export def "transport-alerta delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-alerta/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-alerta/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1789,7 +1789,7 @@ export def "transport-alerta get" [
 ]: nothing -> record<alertaApiKey: string, alertaCorrelate: string, alertaEnvironment: string, alertaEvent: string, alertaGroup: string, alertaHost: string, alertaOrigin: string, alertaResource: string, alertaService: string, alertaSeverity: string, alertaStatus: string, alertaTags: string, alertaType: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-alerta/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-alerta/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1810,27 +1810,27 @@ export def "transport-alerta put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --alertaApiKey: string # The API key for the Alerta service. (nullable)
-  --alertaCorrelate: string # The comma-separated list of related event names for the Alerta service. (nullable)
-  --alertaEnvironment: string # The environment value for the Alerta service. (nullable)
-  --alertaEvent: string # The event value for the Alerta service. (nullable)
-  --alertaGroup: string # The group value for the Alerta service. (nullable)
-  --alertaHost: string # The host name for the Alerta service (omit the "https://" part). (nullable, format: hostname)
-  --alertaOrigin: string # The origin value for the Alerta service. (nullable)
-  --alertaResource: string # The resource value for the Alerta service. (nullable)
-  --alertaService: string # The comma-separated list of affected services for the Alerta service. (nullable)
-  --alertaSeverity: string # The severity value for the Alerta service. (nullable)
-  --alertaStatus: string # The status value for the Alerta service. (nullable)
-  --alertaTags: string # The comma-separated list of tags for the Alerta service. (nullable)
-  --alertaType: string # The type value for the Alerta service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --alerta-api-key: string # The API key for the Alerta service. (nullable)
+  --alerta-correlate: string # The comma-separated list of related event names for the Alerta service. (nullable)
+  --alerta-environment: string # The environment value for the Alerta service. (nullable)
+  --alerta-event: string # The event value for the Alerta service. (nullable)
+  --alerta-group: string # The group value for the Alerta service. (nullable)
+  --alerta-host: string # The host name for the Alerta service (omit the "https://" part). (nullable, format: hostname)
+  --alerta-origin: string # The origin value for the Alerta service. (nullable)
+  --alerta-resource: string # The resource value for the Alerta service. (nullable)
+  --alerta-service: string # The comma-separated list of affected services for the Alerta service. (nullable)
+  --alerta-severity: string # The severity value for the Alerta service. (nullable)
+  --alerta-status: string # The status value for the Alerta service. (nullable)
+  --alerta-tags: string # The comma-separated list of tags for the Alerta service. (nullable)
+  --alerta-type: string # The type value for the Alerta service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<alertaApiKey: string, alertaCorrelate: string, alertaEnvironment: string, alertaEvent: string, alertaGroup: string, alertaHost: string, alertaOrigin: string, alertaResource: string, alertaService: string, alertaSeverity: string, alertaStatus: string, alertaTags: string, alertaType: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-alerta/($id)")
-  let body = {alertaApiKey: $alertaApiKey, alertaCorrelate: $alertaCorrelate, alertaEnvironment: $alertaEnvironment, alertaEvent: $alertaEvent, alertaGroup: $alertaGroup, alertaHost: $alertaHost, alertaOrigin: $alertaOrigin, alertaResource: $alertaResource, alertaService: $alertaService, alertaSeverity: $alertaSeverity, alertaStatus: $alertaStatus, alertaTags: $alertaTags, alertaType: $alertaType, dataSegmentCode: $dataSegmentCode, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-alerta/{id}"))
+  let body = {"alertaApiKey": $alerta_api_key, "alertaCorrelate": $alerta_correlate, "alertaEnvironment": $alerta_environment, "alertaEvent": $alerta_event, "alertaGroup": $alerta_group, "alertaHost": $alerta_host, "alertaOrigin": $alerta_origin, "alertaResource": $alerta_resource, "alertaService": $alerta_service, "alertaSeverity": $alerta_severity, "alertaStatus": $alerta_status, "alertaTags": $alerta_tags, "alertaType": $alerta_type, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1852,15 +1852,15 @@ export def "transport-all-my-sms collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<allMySmsApiKey: string, allMySmsFrom: string, allMySmsLogin: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-all-my-sms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1881,18 +1881,18 @@ export def "transport-all-my-sms post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --allMySmsApiKey: string # The API key for the Allmysms service. Stored in encrypted format. (nullable)
-  --allMySmsFrom: string # The sender value (default 36180) for the Allmysms service. (nullable)
-  --allMySmsLogin: string # The login credential for the Allmysms service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --all-my-sms-api-key: string # The API key for the Allmysms service. Stored in encrypted format. (nullable)
+  --all-my-sms-from: string # The sender value (default 36180) for the Allmysms service. (nullable)
+  --all-my-sms-login: string # The login credential for the Allmysms service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<allMySmsApiKey: string, allMySmsFrom: string, allMySmsLogin: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-all-my-sms")
-  let body = {allMySmsApiKey: $allMySmsApiKey, allMySmsFrom: $allMySmsFrom, allMySmsLogin: $allMySmsLogin, dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName} | compact
+  let body = {"allMySmsApiKey": $all_my_sms_api_key, "allMySmsFrom": $all_my_sms_from, "allMySmsLogin": $all_my_sms_login, "dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1916,7 +1916,7 @@ export def "transport-all-my-sms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-all-my-sms/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-all-my-sms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1940,7 +1940,7 @@ export def "transport-all-my-sms get" [
 ]: nothing -> record<allMySmsApiKey: string, allMySmsFrom: string, allMySmsLogin: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-all-my-sms/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-all-my-sms/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1961,17 +1961,17 @@ export def "transport-all-my-sms put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --allMySmsApiKey: string # The API key for the Allmysms service. Stored in encrypted format. (nullable)
-  --allMySmsFrom: string # The sender value (default 36180) for the Allmysms service. (nullable)
-  --allMySmsLogin: string # The login credential for the Allmysms service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --all-my-sms-api-key: string # The API key for the Allmysms service. Stored in encrypted format. (nullable)
+  --all-my-sms-from: string # The sender value (default 36180) for the Allmysms service. (nullable)
+  --all-my-sms-login: string # The login credential for the Allmysms service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<allMySmsApiKey: string, allMySmsFrom: string, allMySmsLogin: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-all-my-sms/($id)")
-  let body = {allMySmsApiKey: $allMySmsApiKey, allMySmsFrom: $allMySmsFrom, allMySmsLogin: $allMySmsLogin, dataSegmentCode: $dataSegmentCode, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-all-my-sms/{id}"))
+  let body = {"allMySmsApiKey": $all_my_sms_api_key, "allMySmsFrom": $all_my_sms_from, "allMySmsLogin": $all_my_sms_login, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1993,15 +1993,15 @@ export def "transport-amazon-sns collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<amazonSnsAccessKey: string, amazonSnsRegion: string, amazonSnsSecretKey: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-amazon-sns" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2022,18 +2022,18 @@ export def "transport-amazon-sns post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --amazonSnsAccessKey: string # The access key for the Amazon SNS service. (nullable)
-  --amazonSnsRegion: string # The region for the Amazon SNS service. (nullable)
-  --amazonSnsSecretKey: string # The secret key for the Amazon SNS service. Stored in encrypted format. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --amazon-sns-access-key: string # The access key for the Amazon SNS service. (nullable)
+  --amazon-sns-region: string # The region for the Amazon SNS service. (nullable)
+  --amazon-sns-secret-key: string # The secret key for the Amazon SNS service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<amazonSnsAccessKey: string, amazonSnsRegion: string, amazonSnsSecretKey: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-amazon-sns")
-  let body = {amazonSnsAccessKey: $amazonSnsAccessKey, amazonSnsRegion: $amazonSnsRegion, amazonSnsSecretKey: $amazonSnsSecretKey, dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName} | compact
+  let body = {"amazonSnsAccessKey": $amazon_sns_access_key, "amazonSnsRegion": $amazon_sns_region, "amazonSnsSecretKey": $amazon_sns_secret_key, "dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2057,7 +2057,7 @@ export def "transport-amazon-sns delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-amazon-sns/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-amazon-sns/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2081,7 +2081,7 @@ export def "transport-amazon-sns get" [
 ]: nothing -> record<amazonSnsAccessKey: string, amazonSnsRegion: string, amazonSnsSecretKey: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-amazon-sns/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-amazon-sns/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2102,17 +2102,17 @@ export def "transport-amazon-sns put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --amazonSnsAccessKey: string # The access key for the Amazon SNS service. (nullable)
-  --amazonSnsRegion: string # The region for the Amazon SNS service. (nullable)
-  --amazonSnsSecretKey: string # The secret key for the Amazon SNS service. Stored in encrypted format. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --amazon-sns-access-key: string # The access key for the Amazon SNS service. (nullable)
+  --amazon-sns-region: string # The region for the Amazon SNS service. (nullable)
+  --amazon-sns-secret-key: string # The secret key for the Amazon SNS service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<amazonSnsAccessKey: string, amazonSnsRegion: string, amazonSnsSecretKey: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-amazon-sns/($id)")
-  let body = {amazonSnsAccessKey: $amazonSnsAccessKey, amazonSnsRegion: $amazonSnsRegion, amazonSnsSecretKey: $amazonSnsSecretKey, dataSegmentCode: $dataSegmentCode, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-amazon-sns/{id}"))
+  let body = {"amazonSnsAccessKey": $amazon_sns_access_key, "amazonSnsRegion": $amazon_sns_region, "amazonSnsSecretKey": $amazon_sns_secret_key, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2134,15 +2134,15 @@ export def "transport-bandwidth collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<bandwidthAccountId: string, bandwidthApplicationId: string, bandwidthFrom: string, bandwidthPassword: string, bandwidthUsername: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-bandwidth" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2163,20 +2163,20 @@ export def "transport-bandwidth post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --bandwidthAccountId: string # The account ID value for the Bandwidth service. (nullable)
-  --bandwidthApplicationId: string # The application ID value for the Bandwidth service. (nullable)
-  --bandwidthFrom: string # The from value for the Bandwidth service. (nullable)
-  --bandwidthPassword: string # The password for the Bandwidth service. Stored in encrypted format. (nullable)
-  --bandwidthUsername: string # The username for the Bandwidth service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --bandwidth-account-id: string # The account ID value for the Bandwidth service. (nullable)
+  --bandwidth-application-id: string # The application ID value for the Bandwidth service. (nullable)
+  --bandwidth-from: string # The from value for the Bandwidth service. (nullable)
+  --bandwidth-password: string # The password for the Bandwidth service. Stored in encrypted format. (nullable)
+  --bandwidth-username: string # The username for the Bandwidth service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<bandwidthAccountId: string, bandwidthApplicationId: string, bandwidthFrom: string, bandwidthPassword: string, bandwidthUsername: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-bandwidth")
-  let body = {bandwidthAccountId: $bandwidthAccountId, bandwidthApplicationId: $bandwidthApplicationId, bandwidthFrom: $bandwidthFrom, bandwidthPassword: $bandwidthPassword, bandwidthUsername: $bandwidthUsername, dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName} | compact
+  let body = {"bandwidthAccountId": $bandwidth_account_id, "bandwidthApplicationId": $bandwidth_application_id, "bandwidthFrom": $bandwidth_from, "bandwidthPassword": $bandwidth_password, "bandwidthUsername": $bandwidth_username, "dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2200,7 +2200,7 @@ export def "transport-bandwidth delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-bandwidth/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-bandwidth/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2224,7 +2224,7 @@ export def "transport-bandwidth get" [
 ]: nothing -> record<bandwidthAccountId: string, bandwidthApplicationId: string, bandwidthFrom: string, bandwidthPassword: string, bandwidthUsername: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-bandwidth/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-bandwidth/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2245,19 +2245,19 @@ export def "transport-bandwidth put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --bandwidthAccountId: string # The account ID value for the Bandwidth service. (nullable)
-  --bandwidthApplicationId: string # The application ID value for the Bandwidth service. (nullable)
-  --bandwidthFrom: string # The from value for the Bandwidth service. (nullable)
-  --bandwidthPassword: string # The password for the Bandwidth service. Stored in encrypted format. (nullable)
-  --bandwidthUsername: string # The username for the Bandwidth service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --bandwidth-account-id: string # The account ID value for the Bandwidth service. (nullable)
+  --bandwidth-application-id: string # The application ID value for the Bandwidth service. (nullable)
+  --bandwidth-from: string # The from value for the Bandwidth service. (nullable)
+  --bandwidth-password: string # The password for the Bandwidth service. Stored in encrypted format. (nullable)
+  --bandwidth-username: string # The username for the Bandwidth service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<bandwidthAccountId: string, bandwidthApplicationId: string, bandwidthFrom: string, bandwidthPassword: string, bandwidthUsername: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-bandwidth/($id)")
-  let body = {bandwidthAccountId: $bandwidthAccountId, bandwidthApplicationId: $bandwidthApplicationId, bandwidthFrom: $bandwidthFrom, bandwidthPassword: $bandwidthPassword, bandwidthUsername: $bandwidthUsername, dataSegmentCode: $dataSegmentCode, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-bandwidth/{id}"))
+  let body = {"bandwidthAccountId": $bandwidth_account_id, "bandwidthApplicationId": $bandwidth_application_id, "bandwidthFrom": $bandwidth_from, "bandwidthPassword": $bandwidth_password, "bandwidthUsername": $bandwidth_username, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2279,15 +2279,15 @@ export def "transport-chatwork collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<chatworkApiToken: string, chatworkRoomId: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-chatwork" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2308,17 +2308,17 @@ export def "transport-chatwork post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --chatworkApiToken: string # The API token for the Chatwork service. Stored in encrypted format. (nullable)
-  --chatworkRoomId: string # The room ID for the Chatwork service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --chatwork-api-token: string # The API token for the Chatwork service. Stored in encrypted format. (nullable)
+  --chatwork-room-id: string # The room ID for the Chatwork service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<chatworkApiToken: string, chatworkRoomId: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-chatwork")
-  let body = {chatworkApiToken: $chatworkApiToken, chatworkRoomId: $chatworkRoomId, dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName} | compact
+  let body = {"chatworkApiToken": $chatwork_api_token, "chatworkRoomId": $chatwork_room_id, "dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2342,7 +2342,7 @@ export def "transport-chatwork delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-chatwork/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-chatwork/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2366,7 +2366,7 @@ export def "transport-chatwork get" [
 ]: nothing -> record<chatworkApiToken: string, chatworkRoomId: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-chatwork/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-chatwork/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2387,16 +2387,16 @@ export def "transport-chatwork put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --chatworkApiToken: string # The API token for the Chatwork service. Stored in encrypted format. (nullable)
-  --chatworkRoomId: string # The room ID for the Chatwork service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --chatwork-api-token: string # The API token for the Chatwork service. Stored in encrypted format. (nullable)
+  --chatwork-room-id: string # The room ID for the Chatwork service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<chatworkApiToken: string, chatworkRoomId: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-chatwork/($id)")
-  let body = {chatworkApiToken: $chatworkApiToken, chatworkRoomId: $chatworkRoomId, dataSegmentCode: $dataSegmentCode, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-chatwork/{id}"))
+  let body = {"chatworkApiToken": $chatwork_api_token, "chatworkRoomId": $chatwork_room_id, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2418,15 +2418,15 @@ export def "transport-click-send collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<clickSendApiKey: string, clickSendApiUsername: string, clickSendFrom: string, clickSendFromEmail: string, clickSendListId: string, clickSendSource: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-click-send" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2447,21 +2447,21 @@ export def "transport-click-send post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clickSendApiKey: string # The API key for the ClickSend service. Stored in encrypted format. (nullable)
-  --clickSendApiUsername: string # The API username for the ClickSend service. (nullable)
-  --clickSendFrom: string # The from value for the ClickSend service. (nullable)
-  --clickSendFromEmail: string # The from email value where replies must be emailed for the ClickSend service. (nullable, format: email)
-  --clickSendListId: string # The recipient list ID value for the ClickSend service. (nullable)
-  --clickSendSource: string # The source method of sending value for the ClickSend service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --click-send-api-key: string # The API key for the ClickSend service. Stored in encrypted format. (nullable)
+  --click-send-api-username: string # The API username for the ClickSend service. (nullable)
+  --click-send-from: string # The from value for the ClickSend service. (nullable)
+  --click-send-from-email: string # The from email value where replies must be emailed for the ClickSend service. (nullable, format: email)
+  --click-send-list-id: string # The recipient list ID value for the ClickSend service. (nullable)
+  --click-send-source: string # The source method of sending value for the ClickSend service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<clickSendApiKey: string, clickSendApiUsername: string, clickSendFrom: string, clickSendFromEmail: string, clickSendListId: string, clickSendSource: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-click-send")
-  let body = {clickSendApiKey: $clickSendApiKey, clickSendApiUsername: $clickSendApiUsername, clickSendFrom: $clickSendFrom, clickSendFromEmail: $clickSendFromEmail, clickSendListId: $clickSendListId, clickSendSource: $clickSendSource, dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName} | compact
+  let body = {"clickSendApiKey": $click_send_api_key, "clickSendApiUsername": $click_send_api_username, "clickSendFrom": $click_send_from, "clickSendFromEmail": $click_send_from_email, "clickSendListId": $click_send_list_id, "clickSendSource": $click_send_source, "dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2485,7 +2485,7 @@ export def "transport-click-send delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-click-send/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-click-send/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2509,7 +2509,7 @@ export def "transport-click-send get" [
 ]: nothing -> record<clickSendApiKey: string, clickSendApiUsername: string, clickSendFrom: string, clickSendFromEmail: string, clickSendListId: string, clickSendSource: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-click-send/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-click-send/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2530,20 +2530,20 @@ export def "transport-click-send put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clickSendApiKey: string # The API key for the ClickSend service. Stored in encrypted format. (nullable)
-  --clickSendApiUsername: string # The API username for the ClickSend service. (nullable)
-  --clickSendFrom: string # The from value for the ClickSend service. (nullable)
-  --clickSendFromEmail: string # The from email value where replies must be emailed for the ClickSend service. (nullable, format: email)
-  --clickSendListId: string # The recipient list ID value for the ClickSend service. (nullable)
-  --clickSendSource: string # The source method of sending value for the ClickSend service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --click-send-api-key: string # The API key for the ClickSend service. Stored in encrypted format. (nullable)
+  --click-send-api-username: string # The API username for the ClickSend service. (nullable)
+  --click-send-from: string # The from value for the ClickSend service. (nullable)
+  --click-send-from-email: string # The from email value where replies must be emailed for the ClickSend service. (nullable, format: email)
+  --click-send-list-id: string # The recipient list ID value for the ClickSend service. (nullable)
+  --click-send-source: string # The source method of sending value for the ClickSend service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<clickSendApiKey: string, clickSendApiUsername: string, clickSendFrom: string, clickSendFromEmail: string, clickSendListId: string, clickSendSource: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-click-send/($id)")
-  let body = {clickSendApiKey: $clickSendApiKey, clickSendApiUsername: $clickSendApiUsername, clickSendFrom: $clickSendFrom, clickSendFromEmail: $clickSendFromEmail, clickSendListId: $clickSendListId, clickSendSource: $clickSendSource, dataSegmentCode: $dataSegmentCode, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-click-send/{id}"))
+  let body = {"clickSendApiKey": $click_send_api_key, "clickSendApiUsername": $click_send_api_username, "clickSendFrom": $click_send_from, "clickSendFromEmail": $click_send_from_email, "clickSendListId": $click_send_list_id, "clickSendSource": $click_send_source, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2565,15 +2565,15 @@ export def "transport-clickatell collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<clickatellAccessToken: string, clickatellFrom: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-clickatell" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2594,17 +2594,17 @@ export def "transport-clickatell post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clickatellAccessToken: string # The access token for the Clickatell service. Stored in encrypted format. (nullable)
-  --clickatellFrom: string # The from value for the Clickatell service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --clickatell-access-token: string # The access token for the Clickatell service. Stored in encrypted format. (nullable)
+  --clickatell-from: string # The from value for the Clickatell service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<clickatellAccessToken: string, clickatellFrom: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-clickatell")
-  let body = {clickatellAccessToken: $clickatellAccessToken, clickatellFrom: $clickatellFrom, dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName} | compact
+  let body = {"clickatellAccessToken": $clickatell_access_token, "clickatellFrom": $clickatell_from, "dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2628,7 +2628,7 @@ export def "transport-clickatell delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-clickatell/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-clickatell/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2652,7 +2652,7 @@ export def "transport-clickatell get" [
 ]: nothing -> record<clickatellAccessToken: string, clickatellFrom: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-clickatell/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-clickatell/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2673,16 +2673,16 @@ export def "transport-clickatell put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --clickatellAccessToken: string # The access token for the Clickatell service. Stored in encrypted format. (nullable)
-  --clickatellFrom: string # The from value for the Clickatell service. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --clickatell-access-token: string # The access token for the Clickatell service. Stored in encrypted format. (nullable)
+  --clickatell-from: string # The from value for the Clickatell service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<clickatellAccessToken: string, clickatellFrom: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-clickatell/($id)")
-  let body = {clickatellAccessToken: $clickatellAccessToken, clickatellFrom: $clickatellFrom, dataSegmentCode: $dataSegmentCode, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-clickatell/{id}"))
+  let body = {"clickatellAccessToken": $clickatell_access_token, "clickatellFrom": $clickatell_from, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2704,15 +2704,15 @@ export def "transport-contact-everyone collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<contactEveryoneCategory: string, contactEveryoneDiffusionName: string, contactEveryoneToken: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-contact-everyone" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2733,18 +2733,18 @@ export def "transport-contact-everyone post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --contactEveryoneCategory: string # The label of the category that will be displayed in the external service event logs of the ContactEveryone service. (nullable)
-  --contactEveryoneDiffusionName: string # The label of the diffusion that will be displayed in the external service event logs of the ContactEveryone service. (nullable)
-  --contactEveryoneToken: string # The token for the Contact Everyone service. Stored in encrypted format. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --contact-everyone-category: string # The label of the category that will be displayed in the external service event logs of the ContactEveryone service. (nullable)
+  --contact-everyone-diffusion-name: string # The label of the diffusion that will be displayed in the external service event logs of the ContactEveryone service. (nullable)
+  --contact-everyone-token: string # The token for the Contact Everyone service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<contactEveryoneCategory: string, contactEveryoneDiffusionName: string, contactEveryoneToken: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-contact-everyone")
-  let body = {contactEveryoneCategory: $contactEveryoneCategory, contactEveryoneDiffusionName: $contactEveryoneDiffusionName, contactEveryoneToken: $contactEveryoneToken, dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName} | compact
+  let body = {"contactEveryoneCategory": $contact_everyone_category, "contactEveryoneDiffusionName": $contact_everyone_diffusion_name, "contactEveryoneToken": $contact_everyone_token, "dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2768,7 +2768,7 @@ export def "transport-contact-everyone delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-contact-everyone/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-contact-everyone/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2792,7 +2792,7 @@ export def "transport-contact-everyone get" [
 ]: nothing -> record<contactEveryoneCategory: string, contactEveryoneDiffusionName: string, contactEveryoneToken: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-contact-everyone/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-contact-everyone/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2813,17 +2813,17 @@ export def "transport-contact-everyone put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --contactEveryoneCategory: string # The label of the category that will be displayed in the external service event logs of the ContactEveryone service. (nullable)
-  --contactEveryoneDiffusionName: string # The label of the diffusion that will be displayed in the external service event logs of the ContactEveryone service. (nullable)
-  --contactEveryoneToken: string # The token for the Contact Everyone service. Stored in encrypted format. (nullable)
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --contact-everyone-category: string # The label of the category that will be displayed in the external service event logs of the ContactEveryone service. (nullable)
+  --contact-everyone-diffusion-name: string # The label of the diffusion that will be displayed in the external service event logs of the ContactEveryone service. (nullable)
+  --contact-everyone-token: string # The token for the Contact Everyone service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<contactEveryoneCategory: string, contactEveryoneDiffusionName: string, contactEveryoneToken: string, createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-contact-everyone/($id)")
-  let body = {contactEveryoneCategory: $contactEveryoneCategory, contactEveryoneDiffusionName: $contactEveryoneDiffusionName, contactEveryoneToken: $contactEveryoneToken, dataSegmentCode: $dataSegmentCode, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-contact-everyone/{id}"))
+  let body = {"contactEveryoneCategory": $contact_everyone_category, "contactEveryoneDiffusionName": $contact_everyone_diffusion_name, "contactEveryoneToken": $contact_everyone_token, "dataSegmentCode": $data_segment_code, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2845,15 +2845,15 @@ export def "transport-discord collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, discordToken: string, discordWebhookId: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-discord" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2874,17 +2874,17 @@ export def "transport-discord post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --discordToken: string # The token for the Discord service. Stored in encrypted format. (nullable)
-  --discordWebhookId: string # The webhook ID for the Discord service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --discord-token: string # The token for the Discord service. Stored in encrypted format. (nullable)
+  --discord-webhook-id: string # The webhook ID for the Discord service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, discordToken: string, discordWebhookId: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-discord")
-  let body = {dataSegmentCode: $dataSegmentCode, discordToken: $discordToken, discordWebhookId: $discordWebhookId, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "discordToken": $discord_token, "discordWebhookId": $discord_webhook_id, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2908,7 +2908,7 @@ export def "transport-discord delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-discord/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-discord/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2932,7 +2932,7 @@ export def "transport-discord get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, discordToken: string, discordWebhookId: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-discord/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-discord/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2953,16 +2953,16 @@ export def "transport-discord put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --discordToken: string # The token for the Discord service. Stored in encrypted format. (nullable)
-  --discordWebhookId: string # The webhook ID for the Discord service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --discord-token: string # The token for the Discord service. Stored in encrypted format. (nullable)
+  --discord-webhook-id: string # The webhook ID for the Discord service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, discordToken: string, discordWebhookId: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-discord/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, discordToken: $discordToken, discordWebhookId: $discordWebhookId, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-discord/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "discordToken": $discord_token, "discordWebhookId": $discord_webhook_id, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2984,15 +2984,15 @@ export def "transport-email collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, emailFromAddress: string, emailFromName: string, emailPassword: string, emailPort: int, emailServer: string, emailUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-email" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3013,21 +3013,21 @@ export def "transport-email post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --emailFromAddress: string # The sender email address for the SMTP Email service. (nullable, format: email)
-  --emailFromName: string # The sender name for the SMTP Email service. (nullable)
-  --emailPassword: string # The password for the SMTP Email service. Stored in encrypted format. (nullable)
-  --emailPort: int # The port for the SMTP Email service. (nullable)
-  --emailServer: string # The server for the SMTP Email service. (nullable)
-  --emailUsername: string # The username for the SMTP Email service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --email-from-address: string # The sender email address for the SMTP Email service. (nullable, format: email)
+  --email-from-name: string # The sender name for the SMTP Email service. (nullable)
+  --email-password: string # The password for the SMTP Email service. Stored in encrypted format. (nullable)
+  --email-port: int # The port for the SMTP Email service. (nullable)
+  --email-server: string # The server for the SMTP Email service. (nullable)
+  --email-username: string # The username for the SMTP Email service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, emailFromAddress: string, emailFromName: string, emailPassword: string, emailPort: int, emailServer: string, emailUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-email")
-  let body = {dataSegmentCode: $dataSegmentCode, emailFromAddress: $emailFromAddress, emailFromName: $emailFromName, emailPassword: $emailPassword, emailPort: $emailPort, emailServer: $emailServer, emailUsername: $emailUsername, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "emailFromAddress": $email_from_address, "emailFromName": $email_from_name, "emailPassword": $email_password, "emailPort": $email_port, "emailServer": $email_server, "emailUsername": $email_username, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3051,7 +3051,7 @@ export def "transport-email delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-email/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-email/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3075,7 +3075,7 @@ export def "transport-email get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, emailFromAddress: string, emailFromName: string, emailPassword: string, emailPort: int, emailServer: string, emailUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-email/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-email/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3096,20 +3096,20 @@ export def "transport-email put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --emailFromAddress: string # The sender email address for the SMTP Email service. (nullable, format: email)
-  --emailFromName: string # The sender name for the SMTP Email service. (nullable)
-  --emailPassword: string # The password for the SMTP Email service. Stored in encrypted format. (nullable)
-  --emailPort: int # The port for the SMTP Email service. (nullable)
-  --emailServer: string # The server for the SMTP Email service. (nullable)
-  --emailUsername: string # The username for the SMTP Email service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --email-from-address: string # The sender email address for the SMTP Email service. (nullable, format: email)
+  --email-from-name: string # The sender name for the SMTP Email service. (nullable)
+  --email-password: string # The password for the SMTP Email service. Stored in encrypted format. (nullable)
+  --email-port: int # The port for the SMTP Email service. (nullable)
+  --email-server: string # The server for the SMTP Email service. (nullable)
+  --email-username: string # The username for the SMTP Email service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, emailFromAddress: string, emailFromName: string, emailPassword: string, emailPort: int, emailServer: string, emailUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-email/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, emailFromAddress: $emailFromAddress, emailFromName: $emailFromName, emailPassword: $emailPassword, emailPort: $emailPort, emailServer: $emailServer, emailUsername: $emailUsername, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-email/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "emailFromAddress": $email_from_address, "emailFromName": $email_from_name, "emailPassword": $email_password, "emailPort": $email_port, "emailServer": $email_server, "emailUsername": $email_username, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3131,15 +3131,15 @@ export def "transport-engagespot collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, engagespotApiKey: string, engagespotCampaignName: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-engagespot" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3160,17 +3160,17 @@ export def "transport-engagespot post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --engagespotApiKey: string # The API key for the EngageSpot service. Stored in encrypted format. (nullable)
-  --engagespotCampaignName: string # The campaign name for the EngageSpot service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --engagespot-api-key: string # The API key for the EngageSpot service. Stored in encrypted format. (nullable)
+  --engagespot-campaign-name: string # The campaign name for the EngageSpot service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, engagespotApiKey: string, engagespotCampaignName: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-engagespot")
-  let body = {dataSegmentCode: $dataSegmentCode, engagespotApiKey: $engagespotApiKey, engagespotCampaignName: $engagespotCampaignName, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "engagespotApiKey": $engagespot_api_key, "engagespotCampaignName": $engagespot_campaign_name, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3194,7 +3194,7 @@ export def "transport-engagespot delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-engagespot/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-engagespot/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3218,7 +3218,7 @@ export def "transport-engagespot get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, engagespotApiKey: string, engagespotCampaignName: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-engagespot/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-engagespot/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3239,16 +3239,16 @@ export def "transport-engagespot put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --engagespotApiKey: string # The API key for the EngageSpot service. Stored in encrypted format. (nullable)
-  --engagespotCampaignName: string # The campaign name for the EngageSpot service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --engagespot-api-key: string # The API key for the EngageSpot service. Stored in encrypted format. (nullable)
+  --engagespot-campaign-name: string # The campaign name for the EngageSpot service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, engagespotApiKey: string, engagespotCampaignName: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-engagespot/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, engagespotApiKey: $engagespotApiKey, engagespotCampaignName: $engagespotCampaignName, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-engagespot/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "engagespotApiKey": $engagespot_api_key, "engagespotCampaignName": $engagespot_campaign_name, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3270,15 +3270,15 @@ export def "transport-esendex collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, esendexAccountReference: string, esendexFrom: string, esendexPassword: string, esendexUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-esendex" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3299,19 +3299,19 @@ export def "transport-esendex post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --esendexAccountReference: string # The account reference that the message should be sent from for the Esendex service. (nullable)
-  --esendexFrom: string # The alphanumeric originator for the message to appear to originate from for the Esendex service. (nullable)
-  --esendexPassword: string # The API password for the Esendex service. Stored in encrypted format. (nullable)
-  --esendexUsername: string # The account email for the Esendex service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --esendex-account-reference: string # The account reference that the message should be sent from for the Esendex service. (nullable)
+  --esendex-from: string # The alphanumeric originator for the message to appear to originate from for the Esendex service. (nullable)
+  --esendex-password: string # The API password for the Esendex service. Stored in encrypted format. (nullable)
+  --esendex-username: string # The account email for the Esendex service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, esendexAccountReference: string, esendexFrom: string, esendexPassword: string, esendexUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-esendex")
-  let body = {dataSegmentCode: $dataSegmentCode, esendexAccountReference: $esendexAccountReference, esendexFrom: $esendexFrom, esendexPassword: $esendexPassword, esendexUsername: $esendexUsername, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "esendexAccountReference": $esendex_account_reference, "esendexFrom": $esendex_from, "esendexPassword": $esendex_password, "esendexUsername": $esendex_username, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3335,7 +3335,7 @@ export def "transport-esendex delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-esendex/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-esendex/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3359,7 +3359,7 @@ export def "transport-esendex get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, esendexAccountReference: string, esendexFrom: string, esendexPassword: string, esendexUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-esendex/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-esendex/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3380,18 +3380,18 @@ export def "transport-esendex put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --esendexAccountReference: string # The account reference that the message should be sent from for the Esendex service. (nullable)
-  --esendexFrom: string # The alphanumeric originator for the message to appear to originate from for the Esendex service. (nullable)
-  --esendexPassword: string # The API password for the Esendex service. Stored in encrypted format. (nullable)
-  --esendexUsername: string # The account email for the Esendex service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --esendex-account-reference: string # The account reference that the message should be sent from for the Esendex service. (nullable)
+  --esendex-from: string # The alphanumeric originator for the message to appear to originate from for the Esendex service. (nullable)
+  --esendex-password: string # The API password for the Esendex service. Stored in encrypted format. (nullable)
+  --esendex-username: string # The account email for the Esendex service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, esendexAccountReference: string, esendexFrom: string, esendexPassword: string, esendexUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-esendex/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, esendexAccountReference: $esendexAccountReference, esendexFrom: $esendexFrom, esendexPassword: $esendexPassword, esendexUsername: $esendexUsername, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-esendex/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "esendexAccountReference": $esendex_account_reference, "esendexFrom": $esendex_from, "esendexPassword": $esendex_password, "esendexUsername": $esendex_username, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3413,15 +3413,15 @@ export def "transport-expo collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, expoToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-expo" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3442,16 +3442,16 @@ export def "transport-expo post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --expoToken: string # The token for the Expo service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --expo-token: string # The token for the Expo service. Stored in encrypted format. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, expoToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-expo")
-  let body = {dataSegmentCode: $dataSegmentCode, expoToken: $expoToken, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "expoToken": $expo_token, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3475,7 +3475,7 @@ export def "transport-expo delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-expo/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-expo/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3499,7 +3499,7 @@ export def "transport-expo get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, expoToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-expo/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-expo/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3520,15 +3520,15 @@ export def "transport-expo put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --expoToken: string # The token for the Expo service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --expo-token: string # The token for the Expo service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, expoToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-expo/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, expoToken: $expoToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-expo/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "expoToken": $expo_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3550,15 +3550,15 @@ export def "transport-firebase collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, firebasePassword: string, firebaseUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-firebase" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3579,17 +3579,17 @@ export def "transport-firebase post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --firebasePassword: string # The password for the Firebase service. Stored in encrypted format. (nullable)
-  --firebaseUsername: string # The username for the Firebase service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --firebase-password: string # The password for the Firebase service. Stored in encrypted format. (nullable)
+  --firebase-username: string # The username for the Firebase service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, firebasePassword: string, firebaseUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-firebase")
-  let body = {dataSegmentCode: $dataSegmentCode, firebasePassword: $firebasePassword, firebaseUsername: $firebaseUsername, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "firebasePassword": $firebase_password, "firebaseUsername": $firebase_username, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3613,7 +3613,7 @@ export def "transport-firebase delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-firebase/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-firebase/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3637,7 +3637,7 @@ export def "transport-firebase get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, firebasePassword: string, firebaseUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-firebase/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-firebase/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3658,16 +3658,16 @@ export def "transport-firebase put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --firebasePassword: string # The password for the Firebase service. Stored in encrypted format. (nullable)
-  --firebaseUsername: string # The username for the Firebase service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --firebase-password: string # The password for the Firebase service. Stored in encrypted format. (nullable)
+  --firebase-username: string # The username for the Firebase service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, firebasePassword: string, firebaseUsername: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-firebase/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, firebasePassword: $firebasePassword, firebaseUsername: $firebaseUsername, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-firebase/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "firebasePassword": $firebase_password, "firebaseUsername": $firebase_username, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3689,15 +3689,15 @@ export def "transport-forty-six-elks collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, fortySixElksApiPassword: string, fortySixElksApiUsername: string, fortySixElksFrom: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-forty-six-elks" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3718,18 +3718,18 @@ export def "transport-forty-six-elks post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --fortySixElksApiPassword: string # The API password for the 46elks service. Stored in encrypted format. (nullable)
-  --fortySixElksApiUsername: string # The API username for the 46elks service. (nullable)
-  --fortySixElksFrom: string # The alphanumeric originator for the message to appear to originate from for the 46elks service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --forty-six-elks-api-password: string # The API password for the 46elks service. Stored in encrypted format. (nullable)
+  --forty-six-elks-api-username: string # The API username for the 46elks service. (nullable)
+  --forty-six-elks-from: string # The alphanumeric originator for the message to appear to originate from for the 46elks service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, fortySixElksApiPassword: string, fortySixElksApiUsername: string, fortySixElksFrom: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-forty-six-elks")
-  let body = {dataSegmentCode: $dataSegmentCode, fortySixElksApiPassword: $fortySixElksApiPassword, fortySixElksApiUsername: $fortySixElksApiUsername, fortySixElksFrom: $fortySixElksFrom, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "fortySixElksApiPassword": $forty_six_elks_api_password, "fortySixElksApiUsername": $forty_six_elks_api_username, "fortySixElksFrom": $forty_six_elks_from, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3753,7 +3753,7 @@ export def "transport-forty-six-elks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-forty-six-elks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-forty-six-elks/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3777,7 +3777,7 @@ export def "transport-forty-six-elks get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, fortySixElksApiPassword: string, fortySixElksApiUsername: string, fortySixElksFrom: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-forty-six-elks/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-forty-six-elks/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3798,17 +3798,17 @@ export def "transport-forty-six-elks put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --fortySixElksApiPassword: string # The API password for the 46elks service. Stored in encrypted format. (nullable)
-  --fortySixElksApiUsername: string # The API username for the 46elks service. (nullable)
-  --fortySixElksFrom: string # The alphanumeric originator for the message to appear to originate from for the 46elks service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --forty-six-elks-api-password: string # The API password for the 46elks service. Stored in encrypted format. (nullable)
+  --forty-six-elks-api-username: string # The API username for the 46elks service. (nullable)
+  --forty-six-elks-from: string # The alphanumeric originator for the message to appear to originate from for the 46elks service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, fortySixElksApiPassword: string, fortySixElksApiUsername: string, fortySixElksFrom: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-forty-six-elks/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, fortySixElksApiPassword: $fortySixElksApiPassword, fortySixElksApiUsername: $fortySixElksApiUsername, fortySixElksFrom: $fortySixElksFrom, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-forty-six-elks/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "fortySixElksApiPassword": $forty_six_elks_api_password, "fortySixElksApiUsername": $forty_six_elks_api_username, "fortySixElksFrom": $forty_six_elks_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3830,15 +3830,15 @@ export def "transport-free-mobile collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, freeMobileApiKey: string, freeMobileLogin: string, freeMobilePhone: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-free-mobile" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3859,18 +3859,18 @@ export def "transport-free-mobile post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --freeMobileApiKey: string # The API key for the Free Mobile service. Stored in encrypted format. (nullable)
-  --freeMobileLogin: string # The login for the Free Mobile service. (nullable)
-  --freeMobilePhone: string # The phone number for the Free Mobile service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --free-mobile-api-key: string # The API key for the Free Mobile service. Stored in encrypted format. (nullable)
+  --free-mobile-login: string # The login for the Free Mobile service. (nullable)
+  --free-mobile-phone: string # The phone number for the Free Mobile service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, freeMobileApiKey: string, freeMobileLogin: string, freeMobilePhone: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-free-mobile")
-  let body = {dataSegmentCode: $dataSegmentCode, freeMobileApiKey: $freeMobileApiKey, freeMobileLogin: $freeMobileLogin, freeMobilePhone: $freeMobilePhone, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "freeMobileApiKey": $free_mobile_api_key, "freeMobileLogin": $free_mobile_login, "freeMobilePhone": $free_mobile_phone, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3894,7 +3894,7 @@ export def "transport-free-mobile delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-free-mobile/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-free-mobile/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3918,7 +3918,7 @@ export def "transport-free-mobile get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, freeMobileApiKey: string, freeMobileLogin: string, freeMobilePhone: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-free-mobile/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-free-mobile/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3939,17 +3939,17 @@ export def "transport-free-mobile put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --freeMobileApiKey: string # The API key for the Free Mobile service. Stored in encrypted format. (nullable)
-  --freeMobileLogin: string # The login for the Free Mobile service. (nullable)
-  --freeMobilePhone: string # The phone number for the Free Mobile service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --free-mobile-api-key: string # The API key for the Free Mobile service. Stored in encrypted format. (nullable)
+  --free-mobile-login: string # The login for the Free Mobile service. (nullable)
+  --free-mobile-phone: string # The phone number for the Free Mobile service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, freeMobileApiKey: string, freeMobileLogin: string, freeMobilePhone: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-free-mobile/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, freeMobileApiKey: $freeMobileApiKey, freeMobileLogin: $freeMobileLogin, freeMobilePhone: $freeMobilePhone, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-free-mobile/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "freeMobileApiKey": $free_mobile_api_key, "freeMobileLogin": $free_mobile_login, "freeMobilePhone": $free_mobile_phone, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3971,15 +3971,15 @@ export def "transport-freshdesk collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, freshdeskApiKey: string, freshdeskEmail: string, freshdeskHost: string, freshdeskPriority: string, freshdeskType: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-freshdesk" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4000,20 +4000,20 @@ export def "transport-freshdesk post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --freshdeskApiKey: string # The API key for the Freshdesk service. Stored in encrypted format. (nullable)
-  --freshdeskEmail: string # The requester email address for the Freshdesk service. (nullable, format: email)
-  --freshdeskHost: string # The host name for the Freshdesk service (domain.freshdesk.com). (nullable, format: hostname)
-  --freshdeskPriority: string # The ticket priority for the Freshdesk service. (nullable)
-  --freshdeskType: string # The ticket type for the Freshdesk service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --freshdesk-api-key: string # The API key for the Freshdesk service. Stored in encrypted format. (nullable)
+  --freshdesk-email: string # The requester email address for the Freshdesk service. (nullable, format: email)
+  --freshdesk-host: string # The host name for the Freshdesk service (domain.freshdesk.com). (nullable, format: hostname)
+  --freshdesk-priority: string # The ticket priority for the Freshdesk service. (nullable)
+  --freshdesk-type: string # The ticket type for the Freshdesk service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, freshdeskApiKey: string, freshdeskEmail: string, freshdeskHost: string, freshdeskPriority: string, freshdeskType: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-freshdesk")
-  let body = {dataSegmentCode: $dataSegmentCode, freshdeskApiKey: $freshdeskApiKey, freshdeskEmail: $freshdeskEmail, freshdeskHost: $freshdeskHost, freshdeskPriority: $freshdeskPriority, freshdeskType: $freshdeskType, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "freshdeskApiKey": $freshdesk_api_key, "freshdeskEmail": $freshdesk_email, "freshdeskHost": $freshdesk_host, "freshdeskPriority": $freshdesk_priority, "freshdeskType": $freshdesk_type, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4037,7 +4037,7 @@ export def "transport-freshdesk delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-freshdesk/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-freshdesk/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4061,7 +4061,7 @@ export def "transport-freshdesk get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, freshdeskApiKey: string, freshdeskEmail: string, freshdeskHost: string, freshdeskPriority: string, freshdeskType: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-freshdesk/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-freshdesk/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4082,19 +4082,19 @@ export def "transport-freshdesk put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --freshdeskApiKey: string # The API key for the Freshdesk service. Stored in encrypted format. (nullable)
-  --freshdeskEmail: string # The requester email address for the Freshdesk service. (nullable, format: email)
-  --freshdeskHost: string # The host name for the Freshdesk service (domain.freshdesk.com). (nullable, format: hostname)
-  --freshdeskPriority: string # The ticket priority for the Freshdesk service. (nullable)
-  --freshdeskType: string # The ticket type for the Freshdesk service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --freshdesk-api-key: string # The API key for the Freshdesk service. Stored in encrypted format. (nullable)
+  --freshdesk-email: string # The requester email address for the Freshdesk service. (nullable, format: email)
+  --freshdesk-host: string # The host name for the Freshdesk service (domain.freshdesk.com). (nullable, format: hostname)
+  --freshdesk-priority: string # The ticket priority for the Freshdesk service. (nullable)
+  --freshdesk-type: string # The ticket type for the Freshdesk service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, freshdeskApiKey: string, freshdeskEmail: string, freshdeskHost: string, freshdeskPriority: string, freshdeskType: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-freshdesk/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, freshdeskApiKey: $freshdeskApiKey, freshdeskEmail: $freshdeskEmail, freshdeskHost: $freshdeskHost, freshdeskPriority: $freshdeskPriority, freshdeskType: $freshdeskType, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-freshdesk/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "freshdeskApiKey": $freshdesk_api_key, "freshdeskEmail": $freshdesk_email, "freshdeskHost": $freshdesk_host, "freshdeskPriority": $freshdesk_priority, "freshdeskType": $freshdesk_type, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4116,15 +4116,15 @@ export def "transport-gateway-api collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, gatewayApiFrom: string, gatewayApiToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-gateway-api" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4145,17 +4145,17 @@ export def "transport-gateway-api post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --gatewayApiFrom: string # The sender name for the Gateway API service. (nullable)
-  --gatewayApiToken: string # The token for the Gateway API service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --gateway-api-from: string # The sender name for the Gateway API service. (nullable)
+  --gateway-api-token: string # The token for the Gateway API service. Stored in encrypted format. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, gatewayApiFrom: string, gatewayApiToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-gateway-api")
-  let body = {dataSegmentCode: $dataSegmentCode, gatewayApiFrom: $gatewayApiFrom, gatewayApiToken: $gatewayApiToken, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "gatewayApiFrom": $gateway_api_from, "gatewayApiToken": $gateway_api_token, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4179,7 +4179,7 @@ export def "transport-gateway-api delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-gateway-api/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-gateway-api/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4203,7 +4203,7 @@ export def "transport-gateway-api get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, gatewayApiFrom: string, gatewayApiToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-gateway-api/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-gateway-api/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4224,16 +4224,16 @@ export def "transport-gateway-api put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --gatewayApiFrom: string # The sender name for the Gateway API service. (nullable)
-  --gatewayApiToken: string # The token for the Gateway API service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --gateway-api-from: string # The sender name for the Gateway API service. (nullable)
+  --gateway-api-token: string # The token for the Gateway API service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, gatewayApiFrom: string, gatewayApiToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-gateway-api/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, gatewayApiFrom: $gatewayApiFrom, gatewayApiToken: $gatewayApiToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-gateway-api/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "gatewayApiFrom": $gateway_api_from, "gatewayApiToken": $gateway_api_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4255,15 +4255,15 @@ export def "transport-gitter collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, gitterRoomId: string, gitterToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-gitter" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4284,17 +4284,17 @@ export def "transport-gitter post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --gitterRoomId: string # The room ID for the Gitter service. (nullable)
-  --gitterToken: string # The token for the Gitter service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --gitter-room-id: string # The room ID for the Gitter service. (nullable)
+  --gitter-token: string # The token for the Gitter service. Stored in encrypted format. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, gitterRoomId: string, gitterToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-gitter")
-  let body = {dataSegmentCode: $dataSegmentCode, gitterRoomId: $gitterRoomId, gitterToken: $gitterToken, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "gitterRoomId": $gitter_room_id, "gitterToken": $gitter_token, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4318,7 +4318,7 @@ export def "transport-gitter delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-gitter/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-gitter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4342,7 +4342,7 @@ export def "transport-gitter get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, gitterRoomId: string, gitterToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-gitter/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-gitter/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4363,16 +4363,16 @@ export def "transport-gitter put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --gitterRoomId: string # The room ID for the Gitter service. (nullable)
-  --gitterToken: string # The token for the Gitter service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --gitter-room-id: string # The room ID for the Gitter service. (nullable)
+  --gitter-token: string # The token for the Gitter service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, gitterRoomId: string, gitterToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-gitter/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, gitterRoomId: $gitterRoomId, gitterToken: $gitterToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-gitter/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "gitterRoomId": $gitter_room_id, "gitterToken": $gitter_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4394,15 +4394,15 @@ export def "transport-google-chat collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, googleChatAccessKey: string, googleChatAccessToken: string, googleChatSpace: string, googleChatThreadKey: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-google-chat" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4423,19 +4423,19 @@ export def "transport-google-chat post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --googleChatAccessKey: string # The access key for the Google Chat service. (nullable)
-  --googleChatAccessToken: string # The access token for the Google Chat service. Stored in encrypted format. (nullable)
-  --googleChatSpace: string # The space name for the Google Chat service. (nullable)
-  --googleChatThreadKey: string # The optional thread key for the Google Chat service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --google-chat-access-key: string # The access key for the Google Chat service. (nullable)
+  --google-chat-access-token: string # The access token for the Google Chat service. Stored in encrypted format. (nullable)
+  --google-chat-space: string # The space name for the Google Chat service. (nullable)
+  --google-chat-thread-key: string # The optional thread key for the Google Chat service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, googleChatAccessKey: string, googleChatAccessToken: string, googleChatSpace: string, googleChatThreadKey: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-google-chat")
-  let body = {dataSegmentCode: $dataSegmentCode, googleChatAccessKey: $googleChatAccessKey, googleChatAccessToken: $googleChatAccessToken, googleChatSpace: $googleChatSpace, googleChatThreadKey: $googleChatThreadKey, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "googleChatAccessKey": $google_chat_access_key, "googleChatAccessToken": $google_chat_access_token, "googleChatSpace": $google_chat_space, "googleChatThreadKey": $google_chat_thread_key, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4459,7 +4459,7 @@ export def "transport-google-chat delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-google-chat/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-google-chat/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4483,7 +4483,7 @@ export def "transport-google-chat get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, googleChatAccessKey: string, googleChatAccessToken: string, googleChatSpace: string, googleChatThreadKey: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-google-chat/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-google-chat/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4504,18 +4504,18 @@ export def "transport-google-chat put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --googleChatAccessKey: string # The access key for the Google Chat service. (nullable)
-  --googleChatAccessToken: string # The access token for the Google Chat service. Stored in encrypted format. (nullable)
-  --googleChatSpace: string # The space name for the Google Chat service. (nullable)
-  --googleChatThreadKey: string # The optional thread key for the Google Chat service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --google-chat-access-key: string # The access key for the Google Chat service. (nullable)
+  --google-chat-access-token: string # The access token for the Google Chat service. Stored in encrypted format. (nullable)
+  --google-chat-space: string # The space name for the Google Chat service. (nullable)
+  --google-chat-thread-key: string # The optional thread key for the Google Chat service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, googleChatAccessKey: string, googleChatAccessToken: string, googleChatSpace: string, googleChatThreadKey: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-google-chat/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, googleChatAccessKey: $googleChatAccessKey, googleChatAccessToken: $googleChatAccessToken, googleChatSpace: $googleChatSpace, googleChatThreadKey: $googleChatThreadKey, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-google-chat/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "googleChatAccessKey": $google_chat_access_key, "googleChatAccessToken": $google_chat_access_token, "googleChatSpace": $google_chat_space, "googleChatThreadKey": $google_chat_thread_key, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4537,15 +4537,15 @@ export def "transport-gotify collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, gotifyApiUrl: string, gotifyAppToken: string, gotifyPriority: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-gotify" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4566,18 +4566,18 @@ export def "transport-gotify post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --gotifyApiUrl: string # The API URL name for the Gotify service (https://example.com) - (do not include the path /message/createMessage). (nullable, format: uri)
-  --gotifyAppToken: string # The app token for the Gotify service. Stored in encrypted format. (nullable)
-  --gotifyPriority: string # The priority for the Gotify service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --gotify-api-url: string # The API URL name for the Gotify service (https://example.com) - (do not include the path /message/createMessage). (nullable, format: uri)
+  --gotify-app-token: string # The app token for the Gotify service. Stored in encrypted format. (nullable)
+  --gotify-priority: string # The priority for the Gotify service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, gotifyApiUrl: string, gotifyAppToken: string, gotifyPriority: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-gotify")
-  let body = {dataSegmentCode: $dataSegmentCode, gotifyApiUrl: $gotifyApiUrl, gotifyAppToken: $gotifyAppToken, gotifyPriority: $gotifyPriority, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "gotifyApiUrl": $gotify_api_url, "gotifyAppToken": $gotify_app_token, "gotifyPriority": $gotify_priority, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4601,7 +4601,7 @@ export def "transport-gotify delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-gotify/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-gotify/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4625,7 +4625,7 @@ export def "transport-gotify get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, gotifyApiUrl: string, gotifyAppToken: string, gotifyPriority: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-gotify/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-gotify/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4646,17 +4646,17 @@ export def "transport-gotify put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --gotifyApiUrl: string # The API URL name for the Gotify service (https://example.com) - (do not include the path /message/createMessage). (nullable, format: uri)
-  --gotifyAppToken: string # The app token for the Gotify service. Stored in encrypted format. (nullable)
-  --gotifyPriority: string # The priority for the Gotify service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --gotify-api-url: string # The API URL name for the Gotify service (https://example.com) - (do not include the path /message/createMessage). (nullable, format: uri)
+  --gotify-app-token: string # The app token for the Gotify service. Stored in encrypted format. (nullable)
+  --gotify-priority: string # The priority for the Gotify service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, gotifyApiUrl: string, gotifyAppToken: string, gotifyPriority: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-gotify/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, gotifyApiUrl: $gotifyApiUrl, gotifyAppToken: $gotifyAppToken, gotifyPriority: $gotifyPriority, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-gotify/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "gotifyApiUrl": $gotify_api_url, "gotifyAppToken": $gotify_app_token, "gotifyPriority": $gotify_priority, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4678,15 +4678,15 @@ export def "transport-help-scout collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, helpScoutCustomerEmail: string, helpScoutMailboxId: int, helpScoutOauthToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-help-scout" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4707,18 +4707,18 @@ export def "transport-help-scout post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --helpScoutCustomerEmail: string # The requester customer email address for the HelpScout service. (nullable, format: email)
-  --helpScoutMailboxId: int # The mailbox ID for the HelpScout service. (nullable)
-  --helpScoutOauthToken: string # The OAuth token for the HelpScout service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --help-scout-customer-email: string # The requester customer email address for the HelpScout service. (nullable, format: email)
+  --help-scout-mailbox-id: int # The mailbox ID for the HelpScout service. (nullable)
+  --help-scout-oauth-token: string # The OAuth token for the HelpScout service. Stored in encrypted format. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, helpScoutCustomerEmail: string, helpScoutMailboxId: int, helpScoutOauthToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-help-scout")
-  let body = {dataSegmentCode: $dataSegmentCode, helpScoutCustomerEmail: $helpScoutCustomerEmail, helpScoutMailboxId: $helpScoutMailboxId, helpScoutOauthToken: $helpScoutOauthToken, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "helpScoutCustomerEmail": $help_scout_customer_email, "helpScoutMailboxId": $help_scout_mailbox_id, "helpScoutOauthToken": $help_scout_oauth_token, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4742,7 +4742,7 @@ export def "transport-help-scout delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-help-scout/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-help-scout/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4766,7 +4766,7 @@ export def "transport-help-scout get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, helpScoutCustomerEmail: string, helpScoutMailboxId: int, helpScoutOauthToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-help-scout/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-help-scout/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4787,17 +4787,17 @@ export def "transport-help-scout put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --helpScoutCustomerEmail: string # The requester customer email address for the HelpScout service. (nullable, format: email)
-  --helpScoutMailboxId: int # The mailbox ID for the HelpScout service. (nullable)
-  --helpScoutOauthToken: string # The OAuth token for the HelpScout service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --help-scout-customer-email: string # The requester customer email address for the HelpScout service. (nullable, format: email)
+  --help-scout-mailbox-id: int # The mailbox ID for the HelpScout service. (nullable)
+  --help-scout-oauth-token: string # The OAuth token for the HelpScout service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, helpScoutCustomerEmail: string, helpScoutMailboxId: int, helpScoutOauthToken: string, id: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-help-scout/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, helpScoutCustomerEmail: $helpScoutCustomerEmail, helpScoutMailboxId: $helpScoutMailboxId, helpScoutOauthToken: $helpScoutOauthToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-help-scout/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "helpScoutCustomerEmail": $help_scout_customer_email, "helpScoutMailboxId": $help_scout_mailbox_id, "helpScoutOauthToken": $help_scout_oauth_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4819,15 +4819,15 @@ export def "transport-infobip collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, infobipAuthToken: string, infobipFrom: string, infobipHost: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-infobip" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4848,18 +4848,18 @@ export def "transport-infobip post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --infobipAuthToken: string # The auth token for the Infobip service. Stored in encrypted format. (nullable)
-  --infobipFrom: string # The sender value for the Infobip service. (nullable)
-  --infobipHost: string # The host for the Infobip service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --infobip-auth-token: string # The auth token for the Infobip service. Stored in encrypted format. (nullable)
+  --infobip-from: string # The sender value for the Infobip service. (nullable)
+  --infobip-host: string # The host for the Infobip service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, infobipAuthToken: string, infobipFrom: string, infobipHost: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-infobip")
-  let body = {dataSegmentCode: $dataSegmentCode, infobipAuthToken: $infobipAuthToken, infobipFrom: $infobipFrom, infobipHost: $infobipHost, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "infobipAuthToken": $infobip_auth_token, "infobipFrom": $infobip_from, "infobipHost": $infobip_host, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4883,7 +4883,7 @@ export def "transport-infobip delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-infobip/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-infobip/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4907,7 +4907,7 @@ export def "transport-infobip get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, infobipAuthToken: string, infobipFrom: string, infobipHost: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-infobip/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-infobip/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4928,17 +4928,17 @@ export def "transport-infobip put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --infobipAuthToken: string # The auth token for the Infobip service. Stored in encrypted format. (nullable)
-  --infobipFrom: string # The sender value for the Infobip service. (nullable)
-  --infobipHost: string # The host for the Infobip service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --infobip-auth-token: string # The auth token for the Infobip service. Stored in encrypted format. (nullable)
+  --infobip-from: string # The sender value for the Infobip service. (nullable)
+  --infobip-host: string # The host for the Infobip service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, infobipAuthToken: string, infobipFrom: string, infobipHost: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-infobip/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, infobipAuthToken: $infobipAuthToken, infobipFrom: $infobipFrom, infobipHost: $infobipHost, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-infobip/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "infobipAuthToken": $infobip_auth_token, "infobipFrom": $infobip_from, "infobipHost": $infobip_host, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4960,15 +4960,15 @@ export def "transport-iqsms collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, iqsmsFrom: string, iqsmsLogin: string, iqsmsPassword: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-iqsms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4989,18 +4989,18 @@ export def "transport-iqsms post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --iqsmsFrom: string # The sender value for the Iqsms service. (nullable)
-  --iqsmsLogin: string # The login for the Iqsms service. (nullable)
-  --iqsmsPassword: string # The password for the Iqsms service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --iqsms-from: string # The sender value for the Iqsms service. (nullable)
+  --iqsms-login: string # The login for the Iqsms service. (nullable)
+  --iqsms-password: string # The password for the Iqsms service. Stored in encrypted format. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, iqsmsFrom: string, iqsmsLogin: string, iqsmsPassword: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-iqsms")
-  let body = {dataSegmentCode: $dataSegmentCode, iqsmsFrom: $iqsmsFrom, iqsmsLogin: $iqsmsLogin, iqsmsPassword: $iqsmsPassword, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "iqsmsFrom": $iqsms_from, "iqsmsLogin": $iqsms_login, "iqsmsPassword": $iqsms_password, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5024,7 +5024,7 @@ export def "transport-iqsms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-iqsms/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-iqsms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5048,7 +5048,7 @@ export def "transport-iqsms get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, iqsmsFrom: string, iqsmsLogin: string, iqsmsPassword: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-iqsms/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-iqsms/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5069,17 +5069,17 @@ export def "transport-iqsms put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --iqsmsFrom: string # The sender value for the Iqsms service. (nullable)
-  --iqsmsLogin: string # The login for the Iqsms service. (nullable)
-  --iqsmsPassword: string # The password for the Iqsms service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --iqsms-from: string # The sender value for the Iqsms service. (nullable)
+  --iqsms-login: string # The login for the Iqsms service. (nullable)
+  --iqsms-password: string # The password for the Iqsms service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, iqsmsFrom: string, iqsmsLogin: string, iqsmsPassword: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-iqsms/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, iqsmsFrom: $iqsmsFrom, iqsmsLogin: $iqsmsLogin, iqsmsPassword: $iqsmsPassword, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-iqsms/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "iqsmsFrom": $iqsms_from, "iqsmsLogin": $iqsms_login, "iqsmsPassword": $iqsms_password, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5101,15 +5101,15 @@ export def "transport-kaz-info-teh collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, kazInfoTehFrom: string, kazInfoTehPassword: string, kazInfoTehUsername: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-kaz-info-teh" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5130,18 +5130,18 @@ export def "transport-kaz-info-teh post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --kazInfoTehFrom: string # The from value for the KazInfoTeh service. (nullable)
-  --kazInfoTehPassword: string # The password for the KazInfoTeh service. Stored in encrypted format. (nullable)
-  --kazInfoTehUsername: string # The username for the KazInfoTeh service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --kaz-info-teh-from: string # The from value for the KazInfoTeh service. (nullable)
+  --kaz-info-teh-password: string # The password for the KazInfoTeh service. Stored in encrypted format. (nullable)
+  --kaz-info-teh-username: string # The username for the KazInfoTeh service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, kazInfoTehFrom: string, kazInfoTehPassword: string, kazInfoTehUsername: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-kaz-info-teh")
-  let body = {dataSegmentCode: $dataSegmentCode, kazInfoTehFrom: $kazInfoTehFrom, kazInfoTehPassword: $kazInfoTehPassword, kazInfoTehUsername: $kazInfoTehUsername, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "kazInfoTehFrom": $kaz_info_teh_from, "kazInfoTehPassword": $kaz_info_teh_password, "kazInfoTehUsername": $kaz_info_teh_username, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5165,7 +5165,7 @@ export def "transport-kaz-info-teh delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-kaz-info-teh/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-kaz-info-teh/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5189,7 +5189,7 @@ export def "transport-kaz-info-teh get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, kazInfoTehFrom: string, kazInfoTehPassword: string, kazInfoTehUsername: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-kaz-info-teh/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-kaz-info-teh/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5210,17 +5210,17 @@ export def "transport-kaz-info-teh put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --kazInfoTehFrom: string # The from value for the KazInfoTeh service. (nullable)
-  --kazInfoTehPassword: string # The password for the KazInfoTeh service. Stored in encrypted format. (nullable)
-  --kazInfoTehUsername: string # The username for the KazInfoTeh service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --kaz-info-teh-from: string # The from value for the KazInfoTeh service. (nullable)
+  --kaz-info-teh-password: string # The password for the KazInfoTeh service. Stored in encrypted format. (nullable)
+  --kaz-info-teh-username: string # The username for the KazInfoTeh service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, kazInfoTehFrom: string, kazInfoTehPassword: string, kazInfoTehUsername: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-kaz-info-teh/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, kazInfoTehFrom: $kazInfoTehFrom, kazInfoTehPassword: $kazInfoTehPassword, kazInfoTehUsername: $kazInfoTehUsername, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-kaz-info-teh/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "kazInfoTehFrom": $kaz_info_teh_from, "kazInfoTehPassword": $kaz_info_teh_password, "kazInfoTehUsername": $kaz_info_teh_username, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5242,15 +5242,15 @@ export def "transport-light-sms collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, lightSmsLogin: string, lightSmsPhone: string, lightSmsToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-light-sms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5271,18 +5271,18 @@ export def "transport-light-sms post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --lightSmsLogin: string # The login for the LightSMS service. (nullable)
-  --lightSmsPhone: string # The sender phone number for the LightSMS service. (nullable)
-  --lightSmsToken: string # The token for the LightSMS service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --light-sms-login: string # The login for the LightSMS service. (nullable)
+  --light-sms-phone: string # The sender phone number for the LightSMS service. (nullable)
+  --light-sms-token: string # The token for the LightSMS service. Stored in encrypted format. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, lightSmsLogin: string, lightSmsPhone: string, lightSmsToken: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-light-sms")
-  let body = {dataSegmentCode: $dataSegmentCode, lightSmsLogin: $lightSmsLogin, lightSmsPhone: $lightSmsPhone, lightSmsToken: $lightSmsToken, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "lightSmsLogin": $light_sms_login, "lightSmsPhone": $light_sms_phone, "lightSmsToken": $light_sms_token, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5306,7 +5306,7 @@ export def "transport-light-sms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-light-sms/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-light-sms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5330,7 +5330,7 @@ export def "transport-light-sms get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, lightSmsLogin: string, lightSmsPhone: string, lightSmsToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-light-sms/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-light-sms/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5351,17 +5351,17 @@ export def "transport-light-sms put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --lightSmsLogin: string # The login for the LightSMS service. (nullable)
-  --lightSmsPhone: string # The sender phone number for the LightSMS service. (nullable)
-  --lightSmsToken: string # The token for the LightSMS service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --light-sms-login: string # The login for the LightSMS service. (nullable)
+  --light-sms-phone: string # The sender phone number for the LightSMS service. (nullable)
+  --light-sms-token: string # The token for the LightSMS service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, lightSmsLogin: string, lightSmsPhone: string, lightSmsToken: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-light-sms/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, lightSmsLogin: $lightSmsLogin, lightSmsPhone: $lightSmsPhone, lightSmsToken: $lightSmsToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-light-sms/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "lightSmsLogin": $light_sms_login, "lightSmsPhone": $light_sms_phone, "lightSmsToken": $light_sms_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5383,15 +5383,15 @@ export def "transport-line-notify collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, lineNotifyAccessToken: string, lineNotifyStickerId: string, lineNotifyStickerPackageId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-line-notify" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5412,18 +5412,18 @@ export def "transport-line-notify post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --lineNotifyAccessToken: string # The access token for the LINE Notify service. Stored in encrypted format. (nullable)
-  --lineNotifyStickerId: string # The sticker ID value for the LINE Notify service. (nullable)
-  --lineNotifyStickerPackageId: string # The sticker package ID value for the LINE Notify service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --line-notify-access-token: string # The access token for the LINE Notify service. Stored in encrypted format. (nullable)
+  --line-notify-sticker-id: string # The sticker ID value for the LINE Notify service. (nullable)
+  --line-notify-sticker-package-id: string # The sticker package ID value for the LINE Notify service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, lineNotifyAccessToken: string, lineNotifyStickerId: string, lineNotifyStickerPackageId: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-line-notify")
-  let body = {dataSegmentCode: $dataSegmentCode, lineNotifyAccessToken: $lineNotifyAccessToken, lineNotifyStickerId: $lineNotifyStickerId, lineNotifyStickerPackageId: $lineNotifyStickerPackageId, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "lineNotifyAccessToken": $line_notify_access_token, "lineNotifyStickerId": $line_notify_sticker_id, "lineNotifyStickerPackageId": $line_notify_sticker_package_id, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5447,7 +5447,7 @@ export def "transport-line-notify delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-line-notify/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-line-notify/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5471,7 +5471,7 @@ export def "transport-line-notify get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, lineNotifyAccessToken: string, lineNotifyStickerId: string, lineNotifyStickerPackageId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-line-notify/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-line-notify/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5492,17 +5492,17 @@ export def "transport-line-notify put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --lineNotifyAccessToken: string # The access token for the LINE Notify service. Stored in encrypted format. (nullable)
-  --lineNotifyStickerId: string # The sticker ID value for the LINE Notify service. (nullable)
-  --lineNotifyStickerPackageId: string # The sticker package ID value for the LINE Notify service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --line-notify-access-token: string # The access token for the LINE Notify service. Stored in encrypted format. (nullable)
+  --line-notify-sticker-id: string # The sticker ID value for the LINE Notify service. (nullable)
+  --line-notify-sticker-package-id: string # The sticker package ID value for the LINE Notify service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, lineNotifyAccessToken: string, lineNotifyStickerId: string, lineNotifyStickerPackageId: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-line-notify/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, lineNotifyAccessToken: $lineNotifyAccessToken, lineNotifyStickerId: $lineNotifyStickerId, lineNotifyStickerPackageId: $lineNotifyStickerPackageId, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-line-notify/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "lineNotifyAccessToken": $line_notify_access_token, "lineNotifyStickerId": $line_notify_sticker_id, "lineNotifyStickerPackageId": $line_notify_sticker_package_id, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5524,15 +5524,15 @@ export def "transport-linked-in collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, linkedInToken: string, linkedInUserId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-linked-in" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5553,17 +5553,17 @@ export def "transport-linked-in post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --linkedInToken: string # The access token for the LinkedIn service. Stored in encrypted format. (nullable)
-  --linkedInUserId: string # The user ID for the LinkedIn service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --linked-in-token: string # The access token for the LinkedIn service. Stored in encrypted format. (nullable)
+  --linked-in-user-id: string # The user ID for the LinkedIn service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, linkedInToken: string, linkedInUserId: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-linked-in")
-  let body = {dataSegmentCode: $dataSegmentCode, linkedInToken: $linkedInToken, linkedInUserId: $linkedInUserId, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "linkedInToken": $linked_in_token, "linkedInUserId": $linked_in_user_id, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5587,7 +5587,7 @@ export def "transport-linked-in delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-linked-in/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-linked-in/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5611,7 +5611,7 @@ export def "transport-linked-in get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, linkedInToken: string, linkedInUserId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-linked-in/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-linked-in/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5632,16 +5632,16 @@ export def "transport-linked-in put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --linkedInToken: string # The access token for the LinkedIn service. Stored in encrypted format. (nullable)
-  --linkedInUserId: string # The user ID for the LinkedIn service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --linked-in-token: string # The access token for the LinkedIn service. Stored in encrypted format. (nullable)
+  --linked-in-user-id: string # The user ID for the LinkedIn service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, linkedInToken: string, linkedInUserId: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-linked-in/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, linkedInToken: $linkedInToken, linkedInUserId: $linkedInUserId, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-linked-in/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "linkedInToken": $linked_in_token, "linkedInUserId": $linked_in_user_id, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5663,15 +5663,15 @@ export def "transport-mailjet collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, mailjetFrom: string, mailjetToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-mailjet" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5692,17 +5692,17 @@ export def "transport-mailjet post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mailjetFrom: string # The alphanumeric sender ID for the MailJet service. (nullable)
-  --mailjetToken: string # The SMS auth token for the MailJet service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --mailjet-from: string # The alphanumeric sender ID for the MailJet service. (nullable)
+  --mailjet-token: string # The SMS auth token for the MailJet service. Stored in encrypted format. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, mailjetFrom: string, mailjetToken: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-mailjet")
-  let body = {dataSegmentCode: $dataSegmentCode, mailjetFrom: $mailjetFrom, mailjetToken: $mailjetToken, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "mailjetFrom": $mailjet_from, "mailjetToken": $mailjet_token, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5726,7 +5726,7 @@ export def "transport-mailjet delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mailjet/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mailjet/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5750,7 +5750,7 @@ export def "transport-mailjet get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, mailjetFrom: string, mailjetToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mailjet/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mailjet/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5771,16 +5771,16 @@ export def "transport-mailjet put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mailjetFrom: string # The alphanumeric sender ID for the MailJet service. (nullable)
-  --mailjetToken: string # The SMS auth token for the MailJet service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --mailjet-from: string # The alphanumeric sender ID for the MailJet service. (nullable)
+  --mailjet-token: string # The SMS auth token for the MailJet service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, mailjetFrom: string, mailjetToken: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mailjet/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, mailjetFrom: $mailjetFrom, mailjetToken: $mailjetToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mailjet/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "mailjetFrom": $mailjet_from, "mailjetToken": $mailjet_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5802,15 +5802,15 @@ export def "transport-mastodon collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, mastodonAccessToken: string, mastodonHost: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-mastodon" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5831,17 +5831,17 @@ export def "transport-mastodon post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mastodonAccessToken: string # The access token for the Mastodon service. Stored in encrypted format. (nullable)
-  --mastodonHost: string # The host name for the Mastodon service (omit the "https://" part). (nullable, format: hostname)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --mastodon-access-token: string # The access token for the Mastodon service. Stored in encrypted format. (nullable)
+  --mastodon-host: string # The host name for the Mastodon service (omit the "https://" part). (nullable, format: hostname)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, mastodonAccessToken: string, mastodonHost: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-mastodon")
-  let body = {dataSegmentCode: $dataSegmentCode, mastodonAccessToken: $mastodonAccessToken, mastodonHost: $mastodonHost, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "mastodonAccessToken": $mastodon_access_token, "mastodonHost": $mastodon_host, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5865,7 +5865,7 @@ export def "transport-mastodon delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mastodon/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mastodon/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5889,7 +5889,7 @@ export def "transport-mastodon get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, mastodonAccessToken: string, mastodonHost: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mastodon/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mastodon/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5910,16 +5910,16 @@ export def "transport-mastodon put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mastodonAccessToken: string # The access token for the Mastodon service. Stored in encrypted format. (nullable)
-  --mastodonHost: string # The host name for the Mastodon service (omit the "https://" part). (nullable, format: hostname)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --mastodon-access-token: string # The access token for the Mastodon service. Stored in encrypted format. (nullable)
+  --mastodon-host: string # The host name for the Mastodon service (omit the "https://" part). (nullable, format: hostname)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, mastodonAccessToken: string, mastodonHost: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mastodon/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, mastodonAccessToken: $mastodonAccessToken, mastodonHost: $mastodonHost, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mastodon/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "mastodonAccessToken": $mastodon_access_token, "mastodonHost": $mastodon_host, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5941,15 +5941,15 @@ export def "transport-mattermost collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, mattermostAccessToken: string, mattermostChannel: string, mattermostHost: string, mattermostPath: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-mattermost" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5970,19 +5970,19 @@ export def "transport-mattermost post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mattermostAccessToken: string # The access token for the Mattermost service. Stored in encrypted format. (nullable)
-  --mattermostChannel: string # The default channel ID for the Mattermost service. (nullable)
-  --mattermostHost: string # The host for the Mattermost service. (nullable)
-  --mattermostPath: string # The optional path for the Mattermost service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --mattermost-access-token: string # The access token for the Mattermost service. Stored in encrypted format. (nullable)
+  --mattermost-channel: string # The default channel ID for the Mattermost service. (nullable)
+  --mattermost-host: string # The host for the Mattermost service. (nullable)
+  --mattermost-path: string # The optional path for the Mattermost service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, mattermostAccessToken: string, mattermostChannel: string, mattermostHost: string, mattermostPath: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-mattermost")
-  let body = {dataSegmentCode: $dataSegmentCode, mattermostAccessToken: $mattermostAccessToken, mattermostChannel: $mattermostChannel, mattermostHost: $mattermostHost, mattermostPath: $mattermostPath, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "mattermostAccessToken": $mattermost_access_token, "mattermostChannel": $mattermost_channel, "mattermostHost": $mattermost_host, "mattermostPath": $mattermost_path, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6006,7 +6006,7 @@ export def "transport-mattermost delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mattermost/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mattermost/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6030,7 +6030,7 @@ export def "transport-mattermost get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, mattermostAccessToken: string, mattermostChannel: string, mattermostHost: string, mattermostPath: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mattermost/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mattermost/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6051,18 +6051,18 @@ export def "transport-mattermost put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mattermostAccessToken: string # The access token for the Mattermost service. Stored in encrypted format. (nullable)
-  --mattermostChannel: string # The default channel ID for the Mattermost service. (nullable)
-  --mattermostHost: string # The host for the Mattermost service. (nullable)
-  --mattermostPath: string # The optional path for the Mattermost service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --mattermost-access-token: string # The access token for the Mattermost service. Stored in encrypted format. (nullable)
+  --mattermost-channel: string # The default channel ID for the Mattermost service. (nullable)
+  --mattermost-host: string # The host for the Mattermost service. (nullable)
+  --mattermost-path: string # The optional path for the Mattermost service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, mattermostAccessToken: string, mattermostChannel: string, mattermostHost: string, mattermostPath: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mattermost/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, mattermostAccessToken: $mattermostAccessToken, mattermostChannel: $mattermostChannel, mattermostHost: $mattermostHost, mattermostPath: $mattermostPath, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mattermost/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "mattermostAccessToken": $mattermost_access_token, "mattermostChannel": $mattermost_channel, "mattermostHost": $mattermost_host, "mattermostPath": $mattermost_path, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6084,15 +6084,15 @@ export def "transport-mercure collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, mercureHubJwtToken: string, mercureHubUrl: string, mercureTopic: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-mercure" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6113,18 +6113,18 @@ export def "transport-mercure post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mercureHubJwtToken: string # The JWT token for the hub for the Mercure service. Stored in encrypted format. (nullable)
-  --mercureHubUrl: string # The URL for the hub for the Mercure service. (nullable, format: uri)
-  --mercureTopic: string # The optional topic for the Mercure service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --mercure-hub-jwt-token: string # The JWT token for the hub for the Mercure service. Stored in encrypted format. (nullable)
+  --mercure-hub-url: string # The URL for the hub for the Mercure service. (nullable, format: uri)
+  --mercure-topic: string # The optional topic for the Mercure service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, mercureHubJwtToken: string, mercureHubUrl: string, mercureTopic: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-mercure")
-  let body = {dataSegmentCode: $dataSegmentCode, mercureHubJwtToken: $mercureHubJwtToken, mercureHubUrl: $mercureHubUrl, mercureTopic: $mercureTopic, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "mercureHubJwtToken": $mercure_hub_jwt_token, "mercureHubUrl": $mercure_hub_url, "mercureTopic": $mercure_topic, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6148,7 +6148,7 @@ export def "transport-mercure delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mercure/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mercure/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6172,7 +6172,7 @@ export def "transport-mercure get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, mercureHubJwtToken: string, mercureHubUrl: string, mercureTopic: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mercure/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mercure/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6193,17 +6193,17 @@ export def "transport-mercure put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mercureHubJwtToken: string # The JWT token for the hub for the Mercure service. Stored in encrypted format. (nullable)
-  --mercureHubUrl: string # The URL for the hub for the Mercure service. (nullable, format: uri)
-  --mercureTopic: string # The optional topic for the Mercure service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --mercure-hub-jwt-token: string # The JWT token for the hub for the Mercure service. Stored in encrypted format. (nullable)
+  --mercure-hub-url: string # The URL for the hub for the Mercure service. (nullable, format: uri)
+  --mercure-topic: string # The optional topic for the Mercure service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, mercureHubJwtToken: string, mercureHubUrl: string, mercureTopic: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mercure/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, mercureHubJwtToken: $mercureHubJwtToken, mercureHubUrl: $mercureHubUrl, mercureTopic: $mercureTopic, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mercure/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "mercureHubJwtToken": $mercure_hub_jwt_token, "mercureHubUrl": $mercure_hub_url, "mercureTopic": $mercure_topic, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6225,15 +6225,15 @@ export def "transport-message-bird collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, messageBirdFrom: string, messageBirdToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-message-bird" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6254,17 +6254,17 @@ export def "transport-message-bird post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --messageBirdFrom: string # The sender value for the MessageBird service. (nullable)
-  --messageBirdToken: string # The token for the MessageBird service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --message-bird-from: string # The sender value for the MessageBird service. (nullable)
+  --message-bird-token: string # The token for the MessageBird service. Stored in encrypted format. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, messageBirdFrom: string, messageBirdToken: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-message-bird")
-  let body = {dataSegmentCode: $dataSegmentCode, messageBirdFrom: $messageBirdFrom, messageBirdToken: $messageBirdToken, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "messageBirdFrom": $message_bird_from, "messageBirdToken": $message_bird_token, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6288,7 +6288,7 @@ export def "transport-message-bird delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-message-bird/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-message-bird/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6312,7 +6312,7 @@ export def "transport-message-bird get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, messageBirdFrom: string, messageBirdToken: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-message-bird/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-message-bird/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6333,16 +6333,16 @@ export def "transport-message-bird put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --messageBirdFrom: string # The sender value for the MessageBird service. (nullable)
-  --messageBirdToken: string # The token for the MessageBird service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --message-bird-from: string # The sender value for the MessageBird service. (nullable)
+  --message-bird-token: string # The token for the MessageBird service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, messageBirdFrom: string, messageBirdToken: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-message-bird/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, messageBirdFrom: $messageBirdFrom, messageBirdToken: $messageBirdToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-message-bird/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "messageBirdFrom": $message_bird_from, "messageBirdToken": $message_bird_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6364,15 +6364,15 @@ export def "transport-message-media collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, messageMediaApiKey: string, messageMediaApiSecret: string, messageMediaFrom: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-message-media" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6393,18 +6393,18 @@ export def "transport-message-media post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --messageMediaApiKey: string # The API key for the MessageMedia service. (nullable)
-  --messageMediaApiSecret: string # The API secret for the MessageMedia service. Stored in encrypted format. (nullable)
-  --messageMediaFrom: string # The optional registered sender ID for the MessageMedia service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --message-media-api-key: string # The API key for the MessageMedia service. (nullable)
+  --message-media-api-secret: string # The API secret for the MessageMedia service. Stored in encrypted format. (nullable)
+  --message-media-from: string # The optional registered sender ID for the MessageMedia service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, messageMediaApiKey: string, messageMediaApiSecret: string, messageMediaFrom: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-message-media")
-  let body = {dataSegmentCode: $dataSegmentCode, messageMediaApiKey: $messageMediaApiKey, messageMediaApiSecret: $messageMediaApiSecret, messageMediaFrom: $messageMediaFrom, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "messageMediaApiKey": $message_media_api_key, "messageMediaApiSecret": $message_media_api_secret, "messageMediaFrom": $message_media_from, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6428,7 +6428,7 @@ export def "transport-message-media delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-message-media/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-message-media/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6452,7 +6452,7 @@ export def "transport-message-media get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, messageMediaApiKey: string, messageMediaApiSecret: string, messageMediaFrom: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-message-media/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-message-media/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6473,17 +6473,17 @@ export def "transport-message-media put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --messageMediaApiKey: string # The API key for the MessageMedia service. (nullable)
-  --messageMediaApiSecret: string # The API secret for the MessageMedia service. Stored in encrypted format. (nullable)
-  --messageMediaFrom: string # The optional registered sender ID for the MessageMedia service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --message-media-api-key: string # The API key for the MessageMedia service. (nullable)
+  --message-media-api-secret: string # The API secret for the MessageMedia service. Stored in encrypted format. (nullable)
+  --message-media-from: string # The optional registered sender ID for the MessageMedia service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, messageMediaApiKey: string, messageMediaApiSecret: string, messageMediaFrom: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-message-media/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, messageMediaApiKey: $messageMediaApiKey, messageMediaApiSecret: $messageMediaApiSecret, messageMediaFrom: $messageMediaFrom, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-message-media/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "messageMediaApiKey": $message_media_api_key, "messageMediaApiSecret": $message_media_api_secret, "messageMediaFrom": $message_media_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6505,15 +6505,15 @@ export def "transport-microsoft-teams collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, microsoftTeamsPath: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-microsoft-teams" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6534,16 +6534,16 @@ export def "transport-microsoft-teams post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --microsoftTeamsPath: string # The path (has the following format: 'webhookb2/{uuid}@{uuid}/IncomingWebhook/{id}/{uuid}') for the Microsoft Teams service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --microsoft-teams-path: string # The path (has the following format: 'webhookb2/{uuid}@{uuid}/IncomingWebhook/{id}/{uuid}') for the Microsoft Teams service. Stored in encrypted format. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, microsoftTeamsPath: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-microsoft-teams")
-  let body = {dataSegmentCode: $dataSegmentCode, microsoftTeamsPath: $microsoftTeamsPath, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "microsoftTeamsPath": $microsoft_teams_path, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6567,7 +6567,7 @@ export def "transport-microsoft-teams delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-microsoft-teams/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-microsoft-teams/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6591,7 +6591,7 @@ export def "transport-microsoft-teams get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, microsoftTeamsPath: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-microsoft-teams/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-microsoft-teams/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6612,15 +6612,15 @@ export def "transport-microsoft-teams put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --microsoftTeamsPath: string # The path (has the following format: 'webhookb2/{uuid}@{uuid}/IncomingWebhook/{id}/{uuid}') for the Microsoft Teams service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --microsoft-teams-path: string # The path (has the following format: 'webhookb2/{uuid}@{uuid}/IncomingWebhook/{id}/{uuid}') for the Microsoft Teams service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, microsoftTeamsPath: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-microsoft-teams/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, microsoftTeamsPath: $microsoftTeamsPath, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-microsoft-teams/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "microsoftTeamsPath": $microsoft_teams_path, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6642,15 +6642,15 @@ export def "transport-mobyt collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, mobytAccessToken: string, mobytFrom: string, mobytTypeQuality: string, mobytUserKey: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-mobyt" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6671,19 +6671,19 @@ export def "transport-mobyt post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mobytAccessToken: string # The access token for the Mobyt service. Stored in encrypted format. (nullable)
-  --mobytFrom: string # The sender for the Mobyt service. (nullable)
-  --mobytTypeQuality: string # The quality of your message: 'N' for high, 'L' for medium, 'LL' for low, for the Mobyt service. (nullable)
-  --mobytUserKey: string # The user key for the Mobyt service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --mobyt-access-token: string # The access token for the Mobyt service. Stored in encrypted format. (nullable)
+  --mobyt-from: string # The sender for the Mobyt service. (nullable)
+  --mobyt-type-quality: string # The quality of your message: 'N' for high, 'L' for medium, 'LL' for low, for the Mobyt service. (nullable)
+  --mobyt-user-key: string # The user key for the Mobyt service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, mobytAccessToken: string, mobytFrom: string, mobytTypeQuality: string, mobytUserKey: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-mobyt")
-  let body = {dataSegmentCode: $dataSegmentCode, mobytAccessToken: $mobytAccessToken, mobytFrom: $mobytFrom, mobytTypeQuality: $mobytTypeQuality, mobytUserKey: $mobytUserKey, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "mobytAccessToken": $mobyt_access_token, "mobytFrom": $mobyt_from, "mobytTypeQuality": $mobyt_type_quality, "mobytUserKey": $mobyt_user_key, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6707,7 +6707,7 @@ export def "transport-mobyt delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mobyt/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mobyt/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6731,7 +6731,7 @@ export def "transport-mobyt get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, mobytAccessToken: string, mobytFrom: string, mobytTypeQuality: string, mobytUserKey: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mobyt/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mobyt/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6752,18 +6752,18 @@ export def "transport-mobyt put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --mobytAccessToken: string # The access token for the Mobyt service. Stored in encrypted format. (nullable)
-  --mobytFrom: string # The sender for the Mobyt service. (nullable)
-  --mobytTypeQuality: string # The quality of your message: 'N' for high, 'L' for medium, 'LL' for low, for the Mobyt service. (nullable)
-  --mobytUserKey: string # The user key for the Mobyt service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --mobyt-access-token: string # The access token for the Mobyt service. Stored in encrypted format. (nullable)
+  --mobyt-from: string # The sender for the Mobyt service. (nullable)
+  --mobyt-type-quality: string # The quality of your message: 'N' for high, 'L' for medium, 'LL' for low, for the Mobyt service. (nullable)
+  --mobyt-user-key: string # The user key for the Mobyt service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, mobytAccessToken: string, mobytFrom: string, mobytTypeQuality: string, mobytUserKey: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-mobyt/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, mobytAccessToken: $mobytAccessToken, mobytFrom: $mobytFrom, mobytTypeQuality: $mobytTypeQuality, mobytUserKey: $mobytUserKey, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-mobyt/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "mobytAccessToken": $mobyt_access_token, "mobytFrom": $mobyt_from, "mobytTypeQuality": $mobyt_type_quality, "mobytUserKey": $mobyt_user_key, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6785,15 +6785,15 @@ export def "transport-octopush collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, octopushApiKey: string, octopushFrom: string, octopushType: string, octopushUserLogin: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-octopush" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6814,19 +6814,19 @@ export def "transport-octopush post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --octopushApiKey: string # The API key for the Octopush service. Stored in encrypted format. (nullable)
-  --octopushFrom: string # The sender value for the Octopush service. (nullable)
-  --octopushType: string # The SMS type ('XXX' = SMS LowCost; 'FR' = SMS Premium; 'WWW' = SMS World) for the Octopush service. (nullable)
-  --octopushUserLogin: string # The user login (email) for the Octopush service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --octopush-api-key: string # The API key for the Octopush service. Stored in encrypted format. (nullable)
+  --octopush-from: string # The sender value for the Octopush service. (nullable)
+  --octopush-type: string # The SMS type ('XXX' = SMS LowCost; 'FR' = SMS Premium; 'WWW' = SMS World) for the Octopush service. (nullable)
+  --octopush-user-login: string # The user login (email) for the Octopush service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, octopushApiKey: string, octopushFrom: string, octopushType: string, octopushUserLogin: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-octopush")
-  let body = {dataSegmentCode: $dataSegmentCode, octopushApiKey: $octopushApiKey, octopushFrom: $octopushFrom, octopushType: $octopushType, octopushUserLogin: $octopushUserLogin, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "octopushApiKey": $octopush_api_key, "octopushFrom": $octopush_from, "octopushType": $octopush_type, "octopushUserLogin": $octopush_user_login, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6850,7 +6850,7 @@ export def "transport-octopush delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-octopush/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-octopush/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6874,7 +6874,7 @@ export def "transport-octopush get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, octopushApiKey: string, octopushFrom: string, octopushType: string, octopushUserLogin: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-octopush/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-octopush/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6895,18 +6895,18 @@ export def "transport-octopush put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --octopushApiKey: string # The API key for the Octopush service. Stored in encrypted format. (nullable)
-  --octopushFrom: string # The sender value for the Octopush service. (nullable)
-  --octopushType: string # The SMS type ('XXX' = SMS LowCost; 'FR' = SMS Premium; 'WWW' = SMS World) for the Octopush service. (nullable)
-  --octopushUserLogin: string # The user login (email) for the Octopush service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --octopush-api-key: string # The API key for the Octopush service. Stored in encrypted format. (nullable)
+  --octopush-from: string # The sender value for the Octopush service. (nullable)
+  --octopush-type: string # The SMS type ('XXX' = SMS LowCost; 'FR' = SMS Premium; 'WWW' = SMS World) for the Octopush service. (nullable)
+  --octopush-user-login: string # The user login (email) for the Octopush service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, octopushApiKey: string, octopushFrom: string, octopushType: string, octopushUserLogin: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-octopush/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, octopushApiKey: $octopushApiKey, octopushFrom: $octopushFrom, octopushType: $octopushType, octopushUserLogin: $octopushUserLogin, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-octopush/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "octopushApiKey": $octopush_api_key, "octopushFrom": $octopush_from, "octopushType": $octopush_type, "octopushUserLogin": $octopush_user_login, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6928,15 +6928,15 @@ export def "transport-one-signal collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, oneSignalApiKey: string, oneSignalAppId: string, oneSignalDefaultRecipientId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-one-signal" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6957,18 +6957,18 @@ export def "transport-one-signal post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --oneSignalApiKey: string # The API (auth) key for the One Signal service. Stored in encrypted format. (nullable)
-  --oneSignalAppId: string # The App ID for the One Signal service. (nullable)
-  --oneSignalDefaultRecipientId: string # The optional default recipient ID for the One Signal service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --one-signal-api-key: string # The API (auth) key for the One Signal service. Stored in encrypted format. (nullable)
+  --one-signal-app-id: string # The App ID for the One Signal service. (nullable)
+  --one-signal-default-recipient-id: string # The optional default recipient ID for the One Signal service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, oneSignalApiKey: string, oneSignalAppId: string, oneSignalDefaultRecipientId: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-one-signal")
-  let body = {dataSegmentCode: $dataSegmentCode, oneSignalApiKey: $oneSignalApiKey, oneSignalAppId: $oneSignalAppId, oneSignalDefaultRecipientId: $oneSignalDefaultRecipientId, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "oneSignalApiKey": $one_signal_api_key, "oneSignalAppId": $one_signal_app_id, "oneSignalDefaultRecipientId": $one_signal_default_recipient_id, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6992,7 +6992,7 @@ export def "transport-one-signal delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-one-signal/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-one-signal/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7016,7 +7016,7 @@ export def "transport-one-signal get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, oneSignalApiKey: string, oneSignalAppId: string, oneSignalDefaultRecipientId: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-one-signal/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-one-signal/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7037,17 +7037,17 @@ export def "transport-one-signal put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --oneSignalApiKey: string # The API (auth) key for the One Signal service. Stored in encrypted format. (nullable)
-  --oneSignalAppId: string # The App ID for the One Signal service. (nullable)
-  --oneSignalDefaultRecipientId: string # The optional default recipient ID for the One Signal service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --one-signal-api-key: string # The API (auth) key for the One Signal service. Stored in encrypted format. (nullable)
+  --one-signal-app-id: string # The App ID for the One Signal service. (nullable)
+  --one-signal-default-recipient-id: string # The optional default recipient ID for the One Signal service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, oneSignalApiKey: string, oneSignalAppId: string, oneSignalDefaultRecipientId: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-one-signal/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, oneSignalApiKey: $oneSignalApiKey, oneSignalAppId: $oneSignalAppId, oneSignalDefaultRecipientId: $oneSignalDefaultRecipientId, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-one-signal/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "oneSignalApiKey": $one_signal_api_key, "oneSignalAppId": $one_signal_app_id, "oneSignalDefaultRecipientId": $one_signal_default_recipient_id, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7069,15 +7069,15 @@ export def "transport-opsgenie collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, opsgenieAlias: string, opsgenieApiKey: string, opsgenieEntity: string, opsgenieNote: string, opsgeniePriority: string, opsgenieUser: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-opsgenie" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7098,21 +7098,21 @@ export def "transport-opsgenie post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --opsgenieAlias: string # The alias for the Opsgenie service. (nullable)
-  --opsgenieApiKey: string # The API key for the Opsgenie service. Stored in encrypted format. (nullable)
-  --opsgenieEntity: string # The entity for the Opsgenie service. (nullable)
-  --opsgenieNote: string # The note for the Opsgenie service. (nullable)
-  --opsgeniePriority: string # The priority for the Opsgenie service. (nullable)
-  --opsgenieUser: string # The user for the Opsgenie service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --opsgenie-alias: string # The alias for the Opsgenie service. (nullable)
+  --opsgenie-api-key: string # The API key for the Opsgenie service. Stored in encrypted format. (nullable)
+  --opsgenie-entity: string # The entity for the Opsgenie service. (nullable)
+  --opsgenie-note: string # The note for the Opsgenie service. (nullable)
+  --opsgenie-priority: string # The priority for the Opsgenie service. (nullable)
+  --opsgenie-user: string # The user for the Opsgenie service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, opsgenieAlias: string, opsgenieApiKey: string, opsgenieEntity: string, opsgenieNote: string, opsgeniePriority: string, opsgenieUser: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-opsgenie")
-  let body = {dataSegmentCode: $dataSegmentCode, opsgenieAlias: $opsgenieAlias, opsgenieApiKey: $opsgenieApiKey, opsgenieEntity: $opsgenieEntity, opsgenieNote: $opsgenieNote, opsgeniePriority: $opsgeniePriority, opsgenieUser: $opsgenieUser, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "opsgenieAlias": $opsgenie_alias, "opsgenieApiKey": $opsgenie_api_key, "opsgenieEntity": $opsgenie_entity, "opsgenieNote": $opsgenie_note, "opsgeniePriority": $opsgenie_priority, "opsgenieUser": $opsgenie_user, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7136,7 +7136,7 @@ export def "transport-opsgenie delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-opsgenie/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-opsgenie/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7160,7 +7160,7 @@ export def "transport-opsgenie get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, opsgenieAlias: string, opsgenieApiKey: string, opsgenieEntity: string, opsgenieNote: string, opsgeniePriority: string, opsgenieUser: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-opsgenie/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-opsgenie/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7181,20 +7181,20 @@ export def "transport-opsgenie put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --opsgenieAlias: string # The alias for the Opsgenie service. (nullable)
-  --opsgenieApiKey: string # The API key for the Opsgenie service. Stored in encrypted format. (nullable)
-  --opsgenieEntity: string # The entity for the Opsgenie service. (nullable)
-  --opsgenieNote: string # The note for the Opsgenie service. (nullable)
-  --opsgeniePriority: string # The priority for the Opsgenie service. (nullable)
-  --opsgenieUser: string # The user for the Opsgenie service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --opsgenie-alias: string # The alias for the Opsgenie service. (nullable)
+  --opsgenie-api-key: string # The API key for the Opsgenie service. Stored in encrypted format. (nullable)
+  --opsgenie-entity: string # The entity for the Opsgenie service. (nullable)
+  --opsgenie-note: string # The note for the Opsgenie service. (nullable)
+  --opsgenie-priority: string # The priority for the Opsgenie service. (nullable)
+  --opsgenie-user: string # The user for the Opsgenie service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, opsgenieAlias: string, opsgenieApiKey: string, opsgenieEntity: string, opsgenieNote: string, opsgeniePriority: string, opsgenieUser: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-opsgenie/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, opsgenieAlias: $opsgenieAlias, opsgenieApiKey: $opsgenieApiKey, opsgenieEntity: $opsgenieEntity, opsgenieNote: $opsgenieNote, opsgeniePriority: $opsgeniePriority, opsgenieUser: $opsgenieUser, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-opsgenie/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "opsgenieAlias": $opsgenie_alias, "opsgenieApiKey": $opsgenie_api_key, "opsgenieEntity": $opsgenie_entity, "opsgenieNote": $opsgenie_note, "opsgeniePriority": $opsgenie_priority, "opsgenieUser": $opsgenie_user, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7216,15 +7216,15 @@ export def "transport-orange-sms collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, orangeSmsClientId: string, orangeSmsClientSecret: string, orangeSmsFrom: string, orangeSmsSenderName: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-orange-sms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7245,19 +7245,19 @@ export def "transport-orange-sms post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --orangeSmsClientId: string # The app client ID for the Orange SMS service. (nullable)
-  --orangeSmsClientSecret: string # The app client secret for the Orange SMS service. Stored in encrypted format. (nullable)
-  --orangeSmsFrom: string # The sender phone number for the Orange SMS service. (nullable)
-  --orangeSmsSenderName: string # The sender name for the Orange SMS service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --orange-sms-client-id: string # The app client ID for the Orange SMS service. (nullable)
+  --orange-sms-client-secret: string # The app client secret for the Orange SMS service. Stored in encrypted format. (nullable)
+  --orange-sms-from: string # The sender phone number for the Orange SMS service. (nullable)
+  --orange-sms-sender-name: string # The sender name for the Orange SMS service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, orangeSmsClientId: string, orangeSmsClientSecret: string, orangeSmsFrom: string, orangeSmsSenderName: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-orange-sms")
-  let body = {dataSegmentCode: $dataSegmentCode, orangeSmsClientId: $orangeSmsClientId, orangeSmsClientSecret: $orangeSmsClientSecret, orangeSmsFrom: $orangeSmsFrom, orangeSmsSenderName: $orangeSmsSenderName, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "orangeSmsClientId": $orange_sms_client_id, "orangeSmsClientSecret": $orange_sms_client_secret, "orangeSmsFrom": $orange_sms_from, "orangeSmsSenderName": $orange_sms_sender_name, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7281,7 +7281,7 @@ export def "transport-orange-sms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-orange-sms/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-orange-sms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7305,7 +7305,7 @@ export def "transport-orange-sms get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, orangeSmsClientId: string, orangeSmsClientSecret: string, orangeSmsFrom: string, orangeSmsSenderName: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-orange-sms/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-orange-sms/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7326,18 +7326,18 @@ export def "transport-orange-sms put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --orangeSmsClientId: string # The app client ID for the Orange SMS service. (nullable)
-  --orangeSmsClientSecret: string # The app client secret for the Orange SMS service. Stored in encrypted format. (nullable)
-  --orangeSmsFrom: string # The sender phone number for the Orange SMS service. (nullable)
-  --orangeSmsSenderName: string # The sender name for the Orange SMS service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --orange-sms-client-id: string # The app client ID for the Orange SMS service. (nullable)
+  --orange-sms-client-secret: string # The app client secret for the Orange SMS service. Stored in encrypted format. (nullable)
+  --orange-sms-from: string # The sender phone number for the Orange SMS service. (nullable)
+  --orange-sms-sender-name: string # The sender name for the Orange SMS service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, orangeSmsClientId: string, orangeSmsClientSecret: string, orangeSmsFrom: string, orangeSmsSenderName: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-orange-sms/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, orangeSmsClientId: $orangeSmsClientId, orangeSmsClientSecret: $orangeSmsClientSecret, orangeSmsFrom: $orangeSmsFrom, orangeSmsSenderName: $orangeSmsSenderName, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-orange-sms/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "orangeSmsClientId": $orange_sms_client_id, "orangeSmsClientSecret": $orange_sms_client_secret, "orangeSmsFrom": $orange_sms_from, "orangeSmsSenderName": $orange_sms_sender_name, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7359,15 +7359,15 @@ export def "transport-ovh-cloud collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, ovhCloudApplicationKey: string, ovhCloudApplicationSecret: string, ovhCloudConsumerKey: string, ovhCloudSender: string, ovhCloudServiceName: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-ovh-cloud" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7388,20 +7388,20 @@ export def "transport-ovh-cloud post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --ovhCloudApplicationKey: string # The application key for the OVHcloud service. (nullable)
-  --ovhCloudApplicationSecret: string # The application secret for the OVHcloud service. Stored in encrypted format. (nullable)
-  --ovhCloudConsumerKey: string # The consumer key for the OVHcloud service. (nullable)
-  --ovhCloudSender: string # The optional sender for the OVHcloud service. (nullable)
-  --ovhCloudServiceName: string # The service name for the OVHcloud service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --ovh-cloud-application-key: string # The application key for the OVHcloud service. (nullable)
+  --ovh-cloud-application-secret: string # The application secret for the OVHcloud service. Stored in encrypted format. (nullable)
+  --ovh-cloud-consumer-key: string # The consumer key for the OVHcloud service. (nullable)
+  --ovh-cloud-sender: string # The optional sender for the OVHcloud service. (nullable)
+  --ovh-cloud-service-name: string # The service name for the OVHcloud service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, ovhCloudApplicationKey: string, ovhCloudApplicationSecret: string, ovhCloudConsumerKey: string, ovhCloudSender: string, ovhCloudServiceName: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-ovh-cloud")
-  let body = {dataSegmentCode: $dataSegmentCode, ovhCloudApplicationKey: $ovhCloudApplicationKey, ovhCloudApplicationSecret: $ovhCloudApplicationSecret, ovhCloudConsumerKey: $ovhCloudConsumerKey, ovhCloudSender: $ovhCloudSender, ovhCloudServiceName: $ovhCloudServiceName, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "ovhCloudApplicationKey": $ovh_cloud_application_key, "ovhCloudApplicationSecret": $ovh_cloud_application_secret, "ovhCloudConsumerKey": $ovh_cloud_consumer_key, "ovhCloudSender": $ovh_cloud_sender, "ovhCloudServiceName": $ovh_cloud_service_name, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7425,7 +7425,7 @@ export def "transport-ovh-cloud delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-ovh-cloud/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-ovh-cloud/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7449,7 +7449,7 @@ export def "transport-ovh-cloud get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, ovhCloudApplicationKey: string, ovhCloudApplicationSecret: string, ovhCloudConsumerKey: string, ovhCloudSender: string, ovhCloudServiceName: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-ovh-cloud/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-ovh-cloud/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7470,19 +7470,19 @@ export def "transport-ovh-cloud put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --ovhCloudApplicationKey: string # The application key for the OVHcloud service. (nullable)
-  --ovhCloudApplicationSecret: string # The application secret for the OVHcloud service. Stored in encrypted format. (nullable)
-  --ovhCloudConsumerKey: string # The consumer key for the OVHcloud service. (nullable)
-  --ovhCloudSender: string # The optional sender for the OVHcloud service. (nullable)
-  --ovhCloudServiceName: string # The service name for the OVHcloud service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --ovh-cloud-application-key: string # The application key for the OVHcloud service. (nullable)
+  --ovh-cloud-application-secret: string # The application secret for the OVHcloud service. Stored in encrypted format. (nullable)
+  --ovh-cloud-consumer-key: string # The consumer key for the OVHcloud service. (nullable)
+  --ovh-cloud-sender: string # The optional sender for the OVHcloud service. (nullable)
+  --ovh-cloud-service-name: string # The service name for the OVHcloud service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, ovhCloudApplicationKey: string, ovhCloudApplicationSecret: string, ovhCloudConsumerKey: string, ovhCloudSender: string, ovhCloudServiceName: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-ovh-cloud/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, ovhCloudApplicationKey: $ovhCloudApplicationKey, ovhCloudApplicationSecret: $ovhCloudApplicationSecret, ovhCloudConsumerKey: $ovhCloudConsumerKey, ovhCloudSender: $ovhCloudSender, ovhCloudServiceName: $ovhCloudServiceName, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-ovh-cloud/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "ovhCloudApplicationKey": $ovh_cloud_application_key, "ovhCloudApplicationSecret": $ovh_cloud_application_secret, "ovhCloudConsumerKey": $ovh_cloud_consumer_key, "ovhCloudSender": $ovh_cloud_sender, "ovhCloudServiceName": $ovh_cloud_service_name, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7504,15 +7504,15 @@ export def "transport-pager-duty collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, pagerDutyApiToken: string, pagerDutyDedupKey: string, pagerDutyEventAction: string, pagerDutyPayloadClass: string, pagerDutyPayloadComponent: string, pagerDutyPayloadGroup: string, pagerDutyPayloadSeverity: string, pagerDutyPayloadSource: string, pagerDutyRoutingKey: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-pager-duty" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7533,24 +7533,24 @@ export def "transport-pager-duty post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --pagerDutyApiToken: string # The API token for the Pager Duty service. Stored in encrypted format. (nullable)
-  --pagerDutyDedupKey: string # The dedup key for the Pager Duty service. (nullable)
-  --pagerDutyEventAction: string # The event action for the Pager Duty service. (nullable)
-  --pagerDutyPayloadClass: string # The payload class for the Pager Duty service. (nullable)
-  --pagerDutyPayloadComponent: string # The payload component for the Pager Duty service. (nullable)
-  --pagerDutyPayloadGroup: string # The payload group for the Pager Duty service. (nullable)
-  --pagerDutyPayloadSeverity: string # The payload severity for the Pager Duty service. (nullable)
-  --pagerDutyPayloadSource: string # The payload source for the Pager Duty service. (nullable)
-  --pagerDutyRoutingKey: string # The routing key for the Pager Duty service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --pager-duty-api-token: string # The API token for the Pager Duty service. Stored in encrypted format. (nullable)
+  --pager-duty-dedup-key: string # The dedup key for the Pager Duty service. (nullable)
+  --pager-duty-event-action: string # The event action for the Pager Duty service. (nullable)
+  --pager-duty-payload-class: string # The payload class for the Pager Duty service. (nullable)
+  --pager-duty-payload-component: string # The payload component for the Pager Duty service. (nullable)
+  --pager-duty-payload-group: string # The payload group for the Pager Duty service. (nullable)
+  --pager-duty-payload-severity: string # The payload severity for the Pager Duty service. (nullable)
+  --pager-duty-payload-source: string # The payload source for the Pager Duty service. (nullable)
+  --pager-duty-routing-key: string # The routing key for the Pager Duty service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, pagerDutyApiToken: string, pagerDutyDedupKey: string, pagerDutyEventAction: string, pagerDutyPayloadClass: string, pagerDutyPayloadComponent: string, pagerDutyPayloadGroup: string, pagerDutyPayloadSeverity: string, pagerDutyPayloadSource: string, pagerDutyRoutingKey: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-pager-duty")
-  let body = {dataSegmentCode: $dataSegmentCode, pagerDutyApiToken: $pagerDutyApiToken, pagerDutyDedupKey: $pagerDutyDedupKey, pagerDutyEventAction: $pagerDutyEventAction, pagerDutyPayloadClass: $pagerDutyPayloadClass, pagerDutyPayloadComponent: $pagerDutyPayloadComponent, pagerDutyPayloadGroup: $pagerDutyPayloadGroup, pagerDutyPayloadSeverity: $pagerDutyPayloadSeverity, pagerDutyPayloadSource: $pagerDutyPayloadSource, pagerDutyRoutingKey: $pagerDutyRoutingKey, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "pagerDutyApiToken": $pager_duty_api_token, "pagerDutyDedupKey": $pager_duty_dedup_key, "pagerDutyEventAction": $pager_duty_event_action, "pagerDutyPayloadClass": $pager_duty_payload_class, "pagerDutyPayloadComponent": $pager_duty_payload_component, "pagerDutyPayloadGroup": $pager_duty_payload_group, "pagerDutyPayloadSeverity": $pager_duty_payload_severity, "pagerDutyPayloadSource": $pager_duty_payload_source, "pagerDutyRoutingKey": $pager_duty_routing_key, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7574,7 +7574,7 @@ export def "transport-pager-duty delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pager-duty/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pager-duty/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7598,7 +7598,7 @@ export def "transport-pager-duty get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, pagerDutyApiToken: string, pagerDutyDedupKey: string, pagerDutyEventAction: string, pagerDutyPayloadClass: string, pagerDutyPayloadComponent: string, pagerDutyPayloadGroup: string, pagerDutyPayloadSeverity: string, pagerDutyPayloadSource: string, pagerDutyRoutingKey: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pager-duty/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pager-duty/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7619,23 +7619,23 @@ export def "transport-pager-duty put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --pagerDutyApiToken: string # The API token for the Pager Duty service. Stored in encrypted format. (nullable)
-  --pagerDutyDedupKey: string # The dedup key for the Pager Duty service. (nullable)
-  --pagerDutyEventAction: string # The event action for the Pager Duty service. (nullable)
-  --pagerDutyPayloadClass: string # The payload class for the Pager Duty service. (nullable)
-  --pagerDutyPayloadComponent: string # The payload component for the Pager Duty service. (nullable)
-  --pagerDutyPayloadGroup: string # The payload group for the Pager Duty service. (nullable)
-  --pagerDutyPayloadSeverity: string # The payload severity for the Pager Duty service. (nullable)
-  --pagerDutyPayloadSource: string # The payload source for the Pager Duty service. (nullable)
-  --pagerDutyRoutingKey: string # The routing key for the Pager Duty service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --pager-duty-api-token: string # The API token for the Pager Duty service. Stored in encrypted format. (nullable)
+  --pager-duty-dedup-key: string # The dedup key for the Pager Duty service. (nullable)
+  --pager-duty-event-action: string # The event action for the Pager Duty service. (nullable)
+  --pager-duty-payload-class: string # The payload class for the Pager Duty service. (nullable)
+  --pager-duty-payload-component: string # The payload component for the Pager Duty service. (nullable)
+  --pager-duty-payload-group: string # The payload group for the Pager Duty service. (nullable)
+  --pager-duty-payload-severity: string # The payload severity for the Pager Duty service. (nullable)
+  --pager-duty-payload-source: string # The payload source for the Pager Duty service. (nullable)
+  --pager-duty-routing-key: string # The routing key for the Pager Duty service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, pagerDutyApiToken: string, pagerDutyDedupKey: string, pagerDutyEventAction: string, pagerDutyPayloadClass: string, pagerDutyPayloadComponent: string, pagerDutyPayloadGroup: string, pagerDutyPayloadSeverity: string, pagerDutyPayloadSource: string, pagerDutyRoutingKey: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pager-duty/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, pagerDutyApiToken: $pagerDutyApiToken, pagerDutyDedupKey: $pagerDutyDedupKey, pagerDutyEventAction: $pagerDutyEventAction, pagerDutyPayloadClass: $pagerDutyPayloadClass, pagerDutyPayloadComponent: $pagerDutyPayloadComponent, pagerDutyPayloadGroup: $pagerDutyPayloadGroup, pagerDutyPayloadSeverity: $pagerDutyPayloadSeverity, pagerDutyPayloadSource: $pagerDutyPayloadSource, pagerDutyRoutingKey: $pagerDutyRoutingKey, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pager-duty/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "pagerDutyApiToken": $pager_duty_api_token, "pagerDutyDedupKey": $pager_duty_dedup_key, "pagerDutyEventAction": $pager_duty_event_action, "pagerDutyPayloadClass": $pager_duty_payload_class, "pagerDutyPayloadComponent": $pager_duty_payload_component, "pagerDutyPayloadGroup": $pager_duty_payload_group, "pagerDutyPayloadSeverity": $pager_duty_payload_severity, "pagerDutyPayloadSource": $pager_duty_payload_source, "pagerDutyRoutingKey": $pager_duty_routing_key, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7657,15 +7657,15 @@ export def "transport-pager-tree collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, pagerTreeAccessToken: string, pagerTreeAccountUserId: string, pagerTreeRouterId: string, pagerTreeTeamId: string, pagerTreeUrgency: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-pager-tree" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7686,20 +7686,20 @@ export def "transport-pager-tree post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --pagerTreeAccessToken: string # The access token for the Pager Tree service. Stored in encrypted format. (nullable)
-  --pagerTreeAccountUserId: string # The account user ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
-  --pagerTreeRouterId: string # The router ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
-  --pagerTreeTeamId: string # The team ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
-  --pagerTreeUrgency: string # The urgency for the Pager Tree service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --pager-tree-access-token: string # The access token for the Pager Tree service. Stored in encrypted format. (nullable)
+  --pager-tree-account-user-id: string # The account user ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
+  --pager-tree-router-id: string # The router ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
+  --pager-tree-team-id: string # The team ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
+  --pager-tree-urgency: string # The urgency for the Pager Tree service. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, pagerTreeAccessToken: string, pagerTreeAccountUserId: string, pagerTreeRouterId: string, pagerTreeTeamId: string, pagerTreeUrgency: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-pager-tree")
-  let body = {dataSegmentCode: $dataSegmentCode, pagerTreeAccessToken: $pagerTreeAccessToken, pagerTreeAccountUserId: $pagerTreeAccountUserId, pagerTreeRouterId: $pagerTreeRouterId, pagerTreeTeamId: $pagerTreeTeamId, pagerTreeUrgency: $pagerTreeUrgency, partition: $partition, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "pagerTreeAccessToken": $pager_tree_access_token, "pagerTreeAccountUserId": $pager_tree_account_user_id, "pagerTreeRouterId": $pager_tree_router_id, "pagerTreeTeamId": $pager_tree_team_id, "pagerTreeUrgency": $pager_tree_urgency, "partition": $partition, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7723,7 +7723,7 @@ export def "transport-pager-tree delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pager-tree/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pager-tree/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7747,7 +7747,7 @@ export def "transport-pager-tree get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, pagerTreeAccessToken: string, pagerTreeAccountUserId: string, pagerTreeRouterId: string, pagerTreeTeamId: string, pagerTreeUrgency: string, partition: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pager-tree/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pager-tree/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7768,19 +7768,19 @@ export def "transport-pager-tree put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --pagerTreeAccessToken: string # The access token for the Pager Tree service. Stored in encrypted format. (nullable)
-  --pagerTreeAccountUserId: string # The account user ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
-  --pagerTreeRouterId: string # The router ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
-  --pagerTreeTeamId: string # The team ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
-  --pagerTreeUrgency: string # The urgency for the Pager Tree service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --pager-tree-access-token: string # The access token for the Pager Tree service. Stored in encrypted format. (nullable)
+  --pager-tree-account-user-id: string # The account user ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
+  --pager-tree-router-id: string # The router ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
+  --pager-tree-team-id: string # The team ID for the Pager Tree service. (Must supply either team ID, router ID or account user ID.) (nullable)
+  --pager-tree-urgency: string # The urgency for the Pager Tree service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, pagerTreeAccessToken: string, pagerTreeAccountUserId: string, pagerTreeRouterId: string, pagerTreeTeamId: string, pagerTreeUrgency: string, partition: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pager-tree/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, pagerTreeAccessToken: $pagerTreeAccessToken, pagerTreeAccountUserId: $pagerTreeAccountUserId, pagerTreeRouterId: $pagerTreeRouterId, pagerTreeTeamId: $pagerTreeTeamId, pagerTreeUrgency: $pagerTreeUrgency, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pager-tree/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "pagerTreeAccessToken": $pager_tree_access_token, "pagerTreeAccountUserId": $pager_tree_account_user_id, "pagerTreeRouterId": $pager_tree_router_id, "pagerTreeTeamId": $pager_tree_team_id, "pagerTreeUrgency": $pager_tree_urgency, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7802,15 +7802,15 @@ export def "transport-plivo collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, plivoAuthId: string, plivoAuthToken: string, plivoFrom: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-plivo" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7831,18 +7831,18 @@ export def "transport-plivo post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --plivoAuthId: string # The auth ID for the Plivo service. (nullable)
-  --plivoAuthToken: string # The auth token for the Plivo service. Stored in encrypted format. (nullable)
-  --plivoFrom: string # The sender value for the Plivo service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --plivo-auth-id: string # The auth ID for the Plivo service. (nullable)
+  --plivo-auth-token: string # The auth token for the Plivo service. Stored in encrypted format. (nullable)
+  --plivo-from: string # The sender value for the Plivo service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, plivoAuthId: string, plivoAuthToken: string, plivoFrom: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-plivo")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, plivoAuthId: $plivoAuthId, plivoAuthToken: $plivoAuthToken, plivoFrom: $plivoFrom, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "plivoAuthId": $plivo_auth_id, "plivoAuthToken": $plivo_auth_token, "plivoFrom": $plivo_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7866,7 +7866,7 @@ export def "transport-plivo delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-plivo/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-plivo/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7890,7 +7890,7 @@ export def "transport-plivo get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, plivoAuthId: string, plivoAuthToken: string, plivoFrom: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-plivo/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-plivo/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7911,17 +7911,17 @@ export def "transport-plivo put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --plivoAuthId: string # The auth ID for the Plivo service. (nullable)
-  --plivoAuthToken: string # The auth token for the Plivo service. Stored in encrypted format. (nullable)
-  --plivoFrom: string # The sender value for the Plivo service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --plivo-auth-id: string # The auth ID for the Plivo service. (nullable)
+  --plivo-auth-token: string # The auth token for the Plivo service. Stored in encrypted format. (nullable)
+  --plivo-from: string # The sender value for the Plivo service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, plivoAuthId: string, plivoAuthToken: string, plivoFrom: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-plivo/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, plivoAuthId: $plivoAuthId, plivoAuthToken: $plivoAuthToken, plivoFrom: $plivoFrom, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-plivo/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "plivoAuthId": $plivo_auth_id, "plivoAuthToken": $plivo_auth_token, "plivoFrom": $plivo_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7943,15 +7943,15 @@ export def "transport-pushbullet collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushbulletAccessToken: string, pushbulletEmail: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-pushbullet" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7972,17 +7972,17 @@ export def "transport-pushbullet post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --pushbulletAccessToken: string # The access token for the Pushbullet service. Stored in encrypted format. (nullable)
-  --pushbulletEmail: string # The recipient email for the Pushbullet service. (nullable, format: email)
-  --transportName: string # The name of the transport. (nullable)
+  --pushbullet-access-token: string # The access token for the Pushbullet service. Stored in encrypted format. (nullable)
+  --pushbullet-email: string # The recipient email for the Pushbullet service. (nullable, format: email)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushbulletAccessToken: string, pushbulletEmail: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-pushbullet")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, pushbulletAccessToken: $pushbulletAccessToken, pushbulletEmail: $pushbulletEmail, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "pushbulletAccessToken": $pushbullet_access_token, "pushbulletEmail": $pushbullet_email, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8006,7 +8006,7 @@ export def "transport-pushbullet delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pushbullet/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pushbullet/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8030,7 +8030,7 @@ export def "transport-pushbullet get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushbulletAccessToken: string, pushbulletEmail: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pushbullet/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pushbullet/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8051,16 +8051,16 @@ export def "transport-pushbullet put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --pushbulletAccessToken: string # The access token for the Pushbullet service. Stored in encrypted format. (nullable)
-  --pushbulletEmail: string # The recipient email for the Pushbullet service. (nullable, format: email)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --pushbullet-access-token: string # The access token for the Pushbullet service. Stored in encrypted format. (nullable)
+  --pushbullet-email: string # The recipient email for the Pushbullet service. (nullable, format: email)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushbulletAccessToken: string, pushbulletEmail: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pushbullet/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, pushbulletAccessToken: $pushbulletAccessToken, pushbulletEmail: $pushbulletEmail, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pushbullet/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "pushbulletAccessToken": $pushbullet_access_token, "pushbulletEmail": $pushbullet_email, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8082,15 +8082,15 @@ export def "transport-pushover collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushoverAppToken: string, pushoverUserKey: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-pushover" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8111,17 +8111,17 @@ export def "transport-pushover post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --pushoverAppToken: string # The app token for the Pushover service. Stored in encrypted format. (nullable)
-  --pushoverUserKey: string # The user key for the Pushover service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --pushover-app-token: string # The app token for the Pushover service. Stored in encrypted format. (nullable)
+  --pushover-user-key: string # The user key for the Pushover service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushoverAppToken: string, pushoverUserKey: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-pushover")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, pushoverAppToken: $pushoverAppToken, pushoverUserKey: $pushoverUserKey, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "pushoverAppToken": $pushover_app_token, "pushoverUserKey": $pushover_user_key, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8145,7 +8145,7 @@ export def "transport-pushover delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pushover/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pushover/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8169,7 +8169,7 @@ export def "transport-pushover get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushoverAppToken: string, pushoverUserKey: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pushover/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pushover/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8190,16 +8190,16 @@ export def "transport-pushover put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --pushoverAppToken: string # The app token for the Pushover service. Stored in encrypted format. (nullable)
-  --pushoverUserKey: string # The user key for the Pushover service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --pushover-app-token: string # The app token for the Pushover service. Stored in encrypted format. (nullable)
+  --pushover-user-key: string # The user key for the Pushover service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushoverAppToken: string, pushoverUserKey: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pushover/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, pushoverAppToken: $pushoverAppToken, pushoverUserKey: $pushoverUserKey, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pushover/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "pushoverAppToken": $pushover_app_token, "pushoverUserKey": $pushover_user_key, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8221,15 +8221,15 @@ export def "transport-pushy collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushyApiKey: string, pushyTo: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-pushy" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8250,17 +8250,17 @@ export def "transport-pushy post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --pushyApiKey: string # The API key for the Pushy service. Stored in encrypted format. (nullable)
-  --pushyTo: string # The recipient ID for the Pushy service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --pushy-api-key: string # The API key for the Pushy service. Stored in encrypted format. (nullable)
+  --pushy-to: string # The recipient ID for the Pushy service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushyApiKey: string, pushyTo: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-pushy")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, pushyApiKey: $pushyApiKey, pushyTo: $pushyTo, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "pushyApiKey": $pushy_api_key, "pushyTo": $pushy_to, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8284,7 +8284,7 @@ export def "transport-pushy delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pushy/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pushy/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8308,7 +8308,7 @@ export def "transport-pushy get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushyApiKey: string, pushyTo: string, resourceOwner: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pushy/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pushy/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8329,16 +8329,16 @@ export def "transport-pushy put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --pushyApiKey: string # The API key for the Pushy service. Stored in encrypted format. (nullable)
-  --pushyTo: string # The recipient ID for the Pushy service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --pushy-api-key: string # The API key for the Pushy service. Stored in encrypted format. (nullable)
+  --pushy-to: string # The recipient ID for the Pushy service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, pushyApiKey: string, pushyTo: string, resourceOwner: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-pushy/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, pushyApiKey: $pushyApiKey, pushyTo: $pushyTo, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-pushy/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "pushyApiKey": $pushy_api_key, "pushyTo": $pushy_to, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8360,15 +8360,15 @@ export def "transport-ring-central collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, ringCentralApiToken: string, ringCentralFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-ring-central" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8389,17 +8389,17 @@ export def "transport-ring-central post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --ringCentralApiToken: string # The API token for the Ring Central service. Stored in encrypted format. (nullable)
-  --ringCentralFrom: string # The sender value for the Ring Central service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --ring-central-api-token: string # The API token for the Ring Central service. Stored in encrypted format. (nullable)
+  --ring-central-from: string # The sender value for the Ring Central service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, ringCentralApiToken: string, ringCentralFrom: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-ring-central")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, ringCentralApiToken: $ringCentralApiToken, ringCentralFrom: $ringCentralFrom, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "ringCentralApiToken": $ring_central_api_token, "ringCentralFrom": $ring_central_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8423,7 +8423,7 @@ export def "transport-ring-central delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-ring-central/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-ring-central/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8447,7 +8447,7 @@ export def "transport-ring-central get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, ringCentralApiToken: string, ringCentralFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-ring-central/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-ring-central/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8468,16 +8468,16 @@ export def "transport-ring-central put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --ringCentralApiToken: string # The API token for the Ring Central service. Stored in encrypted format. (nullable)
-  --ringCentralFrom: string # The sender value for the Ring Central service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --ring-central-api-token: string # The API token for the Ring Central service. Stored in encrypted format. (nullable)
+  --ring-central-from: string # The sender value for the Ring Central service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, ringCentralApiToken: string, ringCentralFrom: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-ring-central/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, ringCentralApiToken: $ringCentralApiToken, ringCentralFrom: $ringCentralFrom, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-ring-central/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "ringCentralApiToken": $ring_central_api_token, "ringCentralFrom": $ring_central_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8499,15 +8499,15 @@ export def "transport-rocket-chat collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, rocketChatChannel: string, rocketChatToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-rocket-chat" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8528,17 +8528,17 @@ export def "transport-rocket-chat post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --rocketChatChannel: string # The channel for the Rocket Chat service. (nullable)
-  --rocketChatToken: string # The access token for the Rocket Chat service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --rocket-chat-channel: string # The channel for the Rocket Chat service. (nullable)
+  --rocket-chat-token: string # The access token for the Rocket Chat service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, rocketChatChannel: string, rocketChatToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-rocket-chat")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, rocketChatChannel: $rocketChatChannel, rocketChatToken: $rocketChatToken, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "rocketChatChannel": $rocket_chat_channel, "rocketChatToken": $rocket_chat_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8562,7 +8562,7 @@ export def "transport-rocket-chat delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-rocket-chat/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-rocket-chat/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8586,7 +8586,7 @@ export def "transport-rocket-chat get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, rocketChatChannel: string, rocketChatToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-rocket-chat/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-rocket-chat/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8607,16 +8607,16 @@ export def "transport-rocket-chat put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --rocketChatChannel: string # The channel for the Rocket Chat service. (nullable)
-  --rocketChatToken: string # The access token for the Rocket Chat service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --rocket-chat-channel: string # The channel for the Rocket Chat service. (nullable)
+  --rocket-chat-token: string # The access token for the Rocket Chat service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, rocketChatChannel: string, rocketChatToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-rocket-chat/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, rocketChatChannel: $rocketChatChannel, rocketChatToken: $rocketChatToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-rocket-chat/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "rocketChatChannel": $rocket_chat_channel, "rocketChatToken": $rocket_chat_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8638,15 +8638,15 @@ export def "transport-sendberry collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendberryAuthKey: string, sendberryFrom: string, sendberryPassword: string, sendberryUsername: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sendberry" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8667,19 +8667,19 @@ export def "transport-sendberry post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --sendberryAuthKey: string # The auth key for the Sendberry service. (nullable)
-  --sendberryFrom: string # The sender name or phone number for the Sendberry service. (nullable)
-  --sendberryPassword: string # The password for the Sendberry service. Stored in encrypted format. (nullable)
-  --sendberryUsername: string # The username for the Sendberry service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --sendberry-auth-key: string # The auth key for the Sendberry service. (nullable)
+  --sendberry-from: string # The sender name or phone number for the Sendberry service. (nullable)
+  --sendberry-password: string # The password for the Sendberry service. Stored in encrypted format. (nullable)
+  --sendberry-username: string # The username for the Sendberry service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendberryAuthKey: string, sendberryFrom: string, sendberryPassword: string, sendberryUsername: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-sendberry")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, sendberryAuthKey: $sendberryAuthKey, sendberryFrom: $sendberryFrom, sendberryPassword: $sendberryPassword, sendberryUsername: $sendberryUsername, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "sendberryAuthKey": $sendberry_auth_key, "sendberryFrom": $sendberry_from, "sendberryPassword": $sendberry_password, "sendberryUsername": $sendberry_username, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8703,7 +8703,7 @@ export def "transport-sendberry delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sendberry/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sendberry/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8727,7 +8727,7 @@ export def "transport-sendberry get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendberryAuthKey: string, sendberryFrom: string, sendberryPassword: string, sendberryUsername: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sendberry/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sendberry/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8748,18 +8748,18 @@ export def "transport-sendberry put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --sendberryAuthKey: string # The auth key for the Sendberry service. (nullable)
-  --sendberryFrom: string # The sender name or phone number for the Sendberry service. (nullable)
-  --sendberryPassword: string # The password for the Sendberry service. Stored in encrypted format. (nullable)
-  --sendberryUsername: string # The username for the Sendberry service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --sendberry-auth-key: string # The auth key for the Sendberry service. (nullable)
+  --sendberry-from: string # The sender name or phone number for the Sendberry service. (nullable)
+  --sendberry-password: string # The password for the Sendberry service. Stored in encrypted format. (nullable)
+  --sendberry-username: string # The username for the Sendberry service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendberryAuthKey: string, sendberryFrom: string, sendberryPassword: string, sendberryUsername: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sendberry/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, sendberryAuthKey: $sendberryAuthKey, sendberryFrom: $sendberryFrom, sendberryPassword: $sendberryPassword, sendberryUsername: $sendberryUsername, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sendberry/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "sendberryAuthKey": $sendberry_auth_key, "sendberryFrom": $sendberry_from, "sendberryPassword": $sendberry_password, "sendberryUsername": $sendberry_username, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8781,15 +8781,15 @@ export def "transport-sendinblue collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendinblueApiKey: string, sendinblueSenderPhone: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sendinblue" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8810,17 +8810,17 @@ export def "transport-sendinblue post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --sendinblueApiKey: string # The API key for the Sendinblue service. Stored in encrypted format. (nullable)
-  --sendinblueSenderPhone: string # The sender phone number for the Sendinblue service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --sendinblue-api-key: string # The API key for the Sendinblue service. Stored in encrypted format. (nullable)
+  --sendinblue-sender-phone: string # The sender phone number for the Sendinblue service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendinblueApiKey: string, sendinblueSenderPhone: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-sendinblue")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, sendinblueApiKey: $sendinblueApiKey, sendinblueSenderPhone: $sendinblueSenderPhone, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "sendinblueApiKey": $sendinblue_api_key, "sendinblueSenderPhone": $sendinblue_sender_phone, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8844,7 +8844,7 @@ export def "transport-sendinblue delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sendinblue/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sendinblue/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8868,7 +8868,7 @@ export def "transport-sendinblue get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendinblueApiKey: string, sendinblueSenderPhone: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sendinblue/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sendinblue/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8889,16 +8889,16 @@ export def "transport-sendinblue put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --sendinblueApiKey: string # The API key for the Sendinblue service. Stored in encrypted format. (nullable)
-  --sendinblueSenderPhone: string # The sender phone number for the Sendinblue service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --sendinblue-api-key: string # The API key for the Sendinblue service. Stored in encrypted format. (nullable)
+  --sendinblue-sender-phone: string # The sender phone number for the Sendinblue service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sendinblueApiKey: string, sendinblueSenderPhone: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sendinblue/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, sendinblueApiKey: $sendinblueApiKey, sendinblueSenderPhone: $sendinblueSenderPhone, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sendinblue/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "sendinblueApiKey": $sendinblue_api_key, "sendinblueSenderPhone": $sendinblue_sender_phone, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8920,15 +8920,15 @@ export def "transport-simple-textin collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, simpleTextinApiKey: string, simpleTextinFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-simple-textin" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8949,17 +8949,17 @@ export def "transport-simple-textin post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --simpleTextinApiKey: string # The API key for the SimpleTextin service. Stored in encrypted format. (nullable)
-  --simpleTextinFrom: string # The from value for the SimpleTextin service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --simple-textin-api-key: string # The API key for the SimpleTextin service. Stored in encrypted format. (nullable)
+  --simple-textin-from: string # The from value for the SimpleTextin service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, simpleTextinApiKey: string, simpleTextinFrom: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-simple-textin")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, simpleTextinApiKey: $simpleTextinApiKey, simpleTextinFrom: $simpleTextinFrom, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "simpleTextinApiKey": $simple_textin_api_key, "simpleTextinFrom": $simple_textin_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8983,7 +8983,7 @@ export def "transport-simple-textin delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-simple-textin/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-simple-textin/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9007,7 +9007,7 @@ export def "transport-simple-textin get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, simpleTextinApiKey: string, simpleTextinFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-simple-textin/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-simple-textin/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9028,16 +9028,16 @@ export def "transport-simple-textin put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --simpleTextinApiKey: string # The API key for the SimpleTextin service. Stored in encrypted format. (nullable)
-  --simpleTextinFrom: string # The from value for the SimpleTextin service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --simple-textin-api-key: string # The API key for the SimpleTextin service. Stored in encrypted format. (nullable)
+  --simple-textin-from: string # The from value for the SimpleTextin service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, simpleTextinApiKey: string, simpleTextinFrom: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-simple-textin/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, simpleTextinApiKey: $simpleTextinApiKey, simpleTextinFrom: $simpleTextinFrom, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-simple-textin/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "simpleTextinApiKey": $simple_textin_api_key, "simpleTextinFrom": $simple_textin_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9059,15 +9059,15 @@ export def "transport-sinch collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sinchAuthToken: string, sinchFrom: string, sinchServicePlanId: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sinch" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9088,18 +9088,18 @@ export def "transport-sinch post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --sinchAuthToken: string # The auth token for the Sinch service. Stored in encrypted format. (nullable)
-  --sinchFrom: string # The sender for the Sinch service. (nullable)
-  --sinchServicePlanId: string # The service plan ID for the Sinch service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --sinch-auth-token: string # The auth token for the Sinch service. Stored in encrypted format. (nullable)
+  --sinch-from: string # The sender for the Sinch service. (nullable)
+  --sinch-service-plan-id: string # The service plan ID for the Sinch service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sinchAuthToken: string, sinchFrom: string, sinchServicePlanId: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-sinch")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, sinchAuthToken: $sinchAuthToken, sinchFrom: $sinchFrom, sinchServicePlanId: $sinchServicePlanId, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "sinchAuthToken": $sinch_auth_token, "sinchFrom": $sinch_from, "sinchServicePlanId": $sinch_service_plan_id, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9123,7 +9123,7 @@ export def "transport-sinch delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sinch/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sinch/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9147,7 +9147,7 @@ export def "transport-sinch get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sinchAuthToken: string, sinchFrom: string, sinchServicePlanId: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sinch/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sinch/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9168,17 +9168,17 @@ export def "transport-sinch put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --sinchAuthToken: string # The auth token for the Sinch service. Stored in encrypted format. (nullable)
-  --sinchFrom: string # The sender for the Sinch service. (nullable)
-  --sinchServicePlanId: string # The service plan ID for the Sinch service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --sinch-auth-token: string # The auth token for the Sinch service. Stored in encrypted format. (nullable)
+  --sinch-from: string # The sender for the Sinch service. (nullable)
+  --sinch-service-plan-id: string # The service plan ID for the Sinch service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sinchAuthToken: string, sinchFrom: string, sinchServicePlanId: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sinch/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, sinchAuthToken: $sinchAuthToken, sinchFrom: $sinchFrom, sinchServicePlanId: $sinchServicePlanId, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sinch/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "sinchAuthToken": $sinch_auth_token, "sinchFrom": $sinch_from, "sinchServicePlanId": $sinch_service_plan_id, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9200,15 +9200,15 @@ export def "transport-slack collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, slackChannel: string, slackToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-slack" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9229,17 +9229,17 @@ export def "transport-slack post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --slackChannel: string # The channel (channel, private group, or IM channel to send message to, it can be an encoded ID, or a name) for the Slack service. (nullable)
-  --slackToken: string # The token for the Slack service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --slack-channel: string # The channel (channel, private group, or IM channel to send message to, it can be an encoded ID, or a name) for the Slack service. (nullable)
+  --slack-token: string # The token for the Slack service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, slackChannel: string, slackToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-slack")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, slackChannel: $slackChannel, slackToken: $slackToken, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "slackChannel": $slack_channel, "slackToken": $slack_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9263,7 +9263,7 @@ export def "transport-slack delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-slack/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-slack/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9287,7 +9287,7 @@ export def "transport-slack get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, slackChannel: string, slackToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-slack/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-slack/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9308,16 +9308,16 @@ export def "transport-slack put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --slackChannel: string # The channel (channel, private group, or IM channel to send message to, it can be an encoded ID, or a name) for the Slack service. (nullable)
-  --slackToken: string # The token for the Slack service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --slack-channel: string # The channel (channel, private group, or IM channel to send message to, it can be an encoded ID, or a name) for the Slack service. (nullable)
+  --slack-token: string # The token for the Slack service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, slackChannel: string, slackToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-slack/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, slackChannel: $slackChannel, slackToken: $slackToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-slack/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "slackChannel": $slack_channel, "slackToken": $slack_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9339,15 +9339,15 @@ export def "transport-sms-biuras collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsBiurasApiKey: string, smsBiurasFrom: string, smsBiurasUid: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sms-biuras" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9368,18 +9368,18 @@ export def "transport-sms-biuras post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --smsBiurasApiKey: string # The API key for the SMSBIURAS service. Stored in encrypted format. (nullable)
-  --smsBiurasFrom: string # The sender for the SMSBIURAS service. (nullable)
-  --smsBiurasUid: string # The client code for the SMSBIURAS service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --sms-biuras-api-key: string # The API key for the SMSBIURAS service. Stored in encrypted format. (nullable)
+  --sms-biuras-from: string # The sender for the SMSBIURAS service. (nullable)
+  --sms-biuras-uid: string # The client code for the SMSBIURAS service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsBiurasApiKey: string, smsBiurasFrom: string, smsBiurasUid: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-sms-biuras")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, smsBiurasApiKey: $smsBiurasApiKey, smsBiurasFrom: $smsBiurasFrom, smsBiurasUid: $smsBiurasUid, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "smsBiurasApiKey": $sms_biuras_api_key, "smsBiurasFrom": $sms_biuras_from, "smsBiurasUid": $sms_biuras_uid, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9403,7 +9403,7 @@ export def "transport-sms-biuras delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sms-biuras/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sms-biuras/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9427,7 +9427,7 @@ export def "transport-sms-biuras get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsBiurasApiKey: string, smsBiurasFrom: string, smsBiurasUid: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sms-biuras/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sms-biuras/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9448,17 +9448,17 @@ export def "transport-sms-biuras put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --smsBiurasApiKey: string # The API key for the SMSBIURAS service. Stored in encrypted format. (nullable)
-  --smsBiurasFrom: string # The sender for the SMSBIURAS service. (nullable)
-  --smsBiurasUid: string # The client code for the SMSBIURAS service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --sms-biuras-api-key: string # The API key for the SMSBIURAS service. Stored in encrypted format. (nullable)
+  --sms-biuras-from: string # The sender for the SMSBIURAS service. (nullable)
+  --sms-biuras-uid: string # The client code for the SMSBIURAS service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsBiurasApiKey: string, smsBiurasFrom: string, smsBiurasUid: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sms-biuras/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, smsBiurasApiKey: $smsBiurasApiKey, smsBiurasFrom: $smsBiurasFrom, smsBiurasUid: $smsBiurasUid, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sms-biuras/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "smsBiurasApiKey": $sms_biuras_api_key, "smsBiurasFrom": $sms_biuras_from, "smsBiurasUid": $sms_biuras_uid, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9480,15 +9480,15 @@ export def "transport-sms-factor collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsFactorPushType: string, smsFactorSender: string, smsFactorToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sms-factor" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9509,18 +9509,18 @@ export def "transport-sms-factor post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --smsFactorPushType: string # The push type for the SMSFactor service. (nullable)
-  --smsFactorSender: string # The sender value for the SMSFactor service. (nullable)
-  --smsFactorToken: string # The token for the SMSFactor service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --sms-factor-push-type: string # The push type for the SMSFactor service. (nullable)
+  --sms-factor-sender: string # The sender value for the SMSFactor service. (nullable)
+  --sms-factor-token: string # The token for the SMSFactor service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsFactorPushType: string, smsFactorSender: string, smsFactorToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-sms-factor")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, smsFactorPushType: $smsFactorPushType, smsFactorSender: $smsFactorSender, smsFactorToken: $smsFactorToken, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "smsFactorPushType": $sms_factor_push_type, "smsFactorSender": $sms_factor_sender, "smsFactorToken": $sms_factor_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9544,7 +9544,7 @@ export def "transport-sms-factor delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sms-factor/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sms-factor/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9568,7 +9568,7 @@ export def "transport-sms-factor get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsFactorPushType: string, smsFactorSender: string, smsFactorToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sms-factor/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sms-factor/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9589,17 +9589,17 @@ export def "transport-sms-factor put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --smsFactorPushType: string # The push type for the SMSFactor service. (nullable)
-  --smsFactorSender: string # The sender value for the SMSFactor service. (nullable)
-  --smsFactorToken: string # The token for the SMSFactor service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --sms-factor-push-type: string # The push type for the SMSFactor service. (nullable)
+  --sms-factor-sender: string # The sender value for the SMSFactor service. (nullable)
+  --sms-factor-token: string # The token for the SMSFactor service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsFactorPushType: string, smsFactorSender: string, smsFactorToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sms-factor/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, smsFactorPushType: $smsFactorPushType, smsFactorSender: $smsFactorSender, smsFactorToken: $smsFactorToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sms-factor/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "smsFactorPushType": $sms_factor_push_type, "smsFactorSender": $sms_factor_sender, "smsFactorToken": $sms_factor_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9621,15 +9621,15 @@ export def "transport-sms77 collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sms77ApiKey: string, sms77From: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-sms77" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9650,17 +9650,17 @@ export def "transport-sms77 post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --sms77ApiKey: string # The API key for the Sms77 service. Stored in encrypted format. (nullable)
-  --sms77From: string # The optional sender for the Sms77 service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --sms77-api-key: string # The API key for the Sms77 service. Stored in encrypted format. (nullable)
+  --sms77-from: string # The optional sender for the Sms77 service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sms77ApiKey: string, sms77From: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-sms77")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, sms77ApiKey: $sms77ApiKey, sms77From: $sms77From, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "sms77ApiKey": $sms77_api_key, "sms77From": $sms77_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9684,7 +9684,7 @@ export def "transport-sms77 delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sms77/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sms77/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9708,7 +9708,7 @@ export def "transport-sms77 get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sms77ApiKey: string, sms77From: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sms77/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sms77/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9729,16 +9729,16 @@ export def "transport-sms77 put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --sms77ApiKey: string # The API key for the Sms77 service. Stored in encrypted format. (nullable)
-  --sms77From: string # The optional sender for the Sms77 service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --sms77-api-key: string # The API key for the Sms77 service. Stored in encrypted format. (nullable)
+  --sms77-from: string # The optional sender for the Sms77 service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, sms77ApiKey: string, sms77From: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-sms77/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, sms77ApiKey: $sms77ApiKey, sms77From: $sms77From, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-sms77/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "sms77ApiKey": $sms77_api_key, "sms77From": $sms77_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9760,15 +9760,15 @@ export def "transport-smsapi collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsapiFrom: string, smsapiToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-smsapi" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9789,17 +9789,17 @@ export def "transport-smsapi post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --smsapiFrom: string # The sender name for the SMS API service. (nullable)
-  --smsapiToken: string # The API token for the SMS API service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --smsapi-from: string # The sender name for the SMS API service. (nullable)
+  --smsapi-token: string # The API token for the SMS API service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsapiFrom: string, smsapiToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-smsapi")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, smsapiFrom: $smsapiFrom, smsapiToken: $smsapiToken, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "smsapiFrom": $smsapi_from, "smsapiToken": $smsapi_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9823,7 +9823,7 @@ export def "transport-smsapi delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-smsapi/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-smsapi/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9847,7 +9847,7 @@ export def "transport-smsapi get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsapiFrom: string, smsapiToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-smsapi/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-smsapi/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9868,16 +9868,16 @@ export def "transport-smsapi put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --smsapiFrom: string # The sender name for the SMS API service. (nullable)
-  --smsapiToken: string # The API token for the SMS API service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --smsapi-from: string # The sender name for the SMS API service. (nullable)
+  --smsapi-token: string # The API token for the SMS API service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsapiFrom: string, smsapiToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-smsapi/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, smsapiFrom: $smsapiFrom, smsapiToken: $smsapiToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-smsapi/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "smsapiFrom": $smsapi_from, "smsapiToken": $smsapi_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9899,15 +9899,15 @@ export def "transport-smsc collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smscFrom: string, smscLogin: string, smscPassword: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-smsc" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9928,18 +9928,18 @@ export def "transport-smsc post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --smscFrom: string # The sender (NB: text identity, not a phone number) for the Smsc service. (nullable)
-  --smscLogin: string # The login for the Smsc service. (nullable)
-  --smscPassword: string # The API password for the Smsc service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --smsc-from: string # The sender (NB: text identity, not a phone number) for the Smsc service. (nullable)
+  --smsc-login: string # The login for the Smsc service. (nullable)
+  --smsc-password: string # The API password for the Smsc service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smscFrom: string, smscLogin: string, smscPassword: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-smsc")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, smscFrom: $smscFrom, smscLogin: $smscLogin, smscPassword: $smscPassword, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "smscFrom": $smsc_from, "smscLogin": $smsc_login, "smscPassword": $smsc_password, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9963,7 +9963,7 @@ export def "transport-smsc delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-smsc/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-smsc/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9987,7 +9987,7 @@ export def "transport-smsc get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smscFrom: string, smscLogin: string, smscPassword: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-smsc/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-smsc/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10008,17 +10008,17 @@ export def "transport-smsc put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --smscFrom: string # The sender (NB: text identity, not a phone number) for the Smsc service. (nullable)
-  --smscLogin: string # The login for the Smsc service. (nullable)
-  --smscPassword: string # The API password for the Smsc service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --smsc-from: string # The sender (NB: text identity, not a phone number) for the Smsc service. (nullable)
+  --smsc-login: string # The login for the Smsc service. (nullable)
+  --smsc-password: string # The API password for the Smsc service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smscFrom: string, smscLogin: string, smscPassword: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-smsc/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, smscFrom: $smscFrom, smscLogin: $smscLogin, smscPassword: $smscPassword, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-smsc/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "smscFrom": $smsc_from, "smscLogin": $smsc_login, "smscPassword": $smsc_password, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10040,15 +10040,15 @@ export def "transport-smsmode collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsmodeApiKey: string, smsmodeFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-smsmode" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10069,17 +10069,17 @@ export def "transport-smsmode post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --smsmodeApiKey: string # The API key for the Smsmode service. Stored in encrypted format. (nullable)
-  --smsmodeFrom: string # The from value for the Smsmode service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --smsmode-api-key: string # The API key for the Smsmode service. Stored in encrypted format. (nullable)
+  --smsmode-from: string # The from value for the Smsmode service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsmodeApiKey: string, smsmodeFrom: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-smsmode")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, smsmodeApiKey: $smsmodeApiKey, smsmodeFrom: $smsmodeFrom, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "smsmodeApiKey": $smsmode_api_key, "smsmodeFrom": $smsmode_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10103,7 +10103,7 @@ export def "transport-smsmode delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-smsmode/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-smsmode/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10127,7 +10127,7 @@ export def "transport-smsmode get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsmodeApiKey: string, smsmodeFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-smsmode/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-smsmode/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10148,16 +10148,16 @@ export def "transport-smsmode put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --smsmodeApiKey: string # The API key for the Smsmode service. Stored in encrypted format. (nullable)
-  --smsmodeFrom: string # The from value for the Smsmode service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --smsmode-api-key: string # The API key for the Smsmode service. Stored in encrypted format. (nullable)
+  --smsmode-from: string # The from value for the Smsmode service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, smsmodeApiKey: string, smsmodeFrom: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-smsmode/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, smsmodeApiKey: $smsmodeApiKey, smsmodeFrom: $smsmodeFrom, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-smsmode/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "smsmodeApiKey": $smsmode_api_key, "smsmodeFrom": $smsmode_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10179,15 +10179,15 @@ export def "transport-spot-hit collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, spotHitFrom: string, spotHitToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-spot-hit" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10208,17 +10208,17 @@ export def "transport-spot-hit post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --spotHitFrom: string # The sender (3-11 letters, default is a 5 digits phone number) for the Spot-Hit service. (nullable)
-  --spotHitToken: string # The API token for the Spot-Hit service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --spot-hit-from: string # The sender (3-11 letters, default is a 5 digits phone number) for the Spot-Hit service. (nullable)
+  --spot-hit-token: string # The API token for the Spot-Hit service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, spotHitFrom: string, spotHitToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-spot-hit")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, spotHitFrom: $spotHitFrom, spotHitToken: $spotHitToken, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "spotHitFrom": $spot_hit_from, "spotHitToken": $spot_hit_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10242,7 +10242,7 @@ export def "transport-spot-hit delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-spot-hit/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-spot-hit/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10266,7 +10266,7 @@ export def "transport-spot-hit get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, spotHitFrom: string, spotHitToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-spot-hit/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-spot-hit/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10287,16 +10287,16 @@ export def "transport-spot-hit put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --spotHitFrom: string # The sender (3-11 letters, default is a 5 digits phone number) for the Spot-Hit service. (nullable)
-  --spotHitToken: string # The API token for the Spot-Hit service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --spot-hit-from: string # The sender (3-11 letters, default is a 5 digits phone number) for the Spot-Hit service. (nullable)
+  --spot-hit-token: string # The API token for the Spot-Hit service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, spotHitFrom: string, spotHitToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-spot-hit/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, spotHitFrom: $spotHitFrom, spotHitToken: $spotHitToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-spot-hit/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "spotHitFrom": $spot_hit_from, "spotHitToken": $spot_hit_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10318,15 +10318,15 @@ export def "transport-telegram collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telegramChatId: string, telegramToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-telegram" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10347,17 +10347,17 @@ export def "transport-telegram post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --telegramChatId: string # The chat ID for the Telegram service. (nullable)
-  --telegramToken: string # The token for the Telegram service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --telegram-chat-id: string # The chat ID for the Telegram service. (nullable)
+  --telegram-token: string # The token for the Telegram service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telegramChatId: string, telegramToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-telegram")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, telegramChatId: $telegramChatId, telegramToken: $telegramToken, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "telegramChatId": $telegram_chat_id, "telegramToken": $telegram_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10381,7 +10381,7 @@ export def "transport-telegram delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-telegram/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-telegram/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10405,7 +10405,7 @@ export def "transport-telegram get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telegramChatId: string, telegramToken: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-telegram/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-telegram/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10426,16 +10426,16 @@ export def "transport-telegram put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --telegramChatId: string # The chat ID for the Telegram service. (nullable)
-  --telegramToken: string # The token for the Telegram service. Stored in encrypted format. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --telegram-chat-id: string # The chat ID for the Telegram service. (nullable)
+  --telegram-token: string # The token for the Telegram service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telegramChatId: string, telegramToken: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-telegram/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, telegramChatId: $telegramChatId, telegramToken: $telegramToken, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-telegram/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "telegramChatId": $telegram_chat_id, "telegramToken": $telegram_token, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10457,15 +10457,15 @@ export def "transport-telnyx collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telnyxApiKey: string, telnyxFrom: string, telnyxMessagingProfileId: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-telnyx" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10486,18 +10486,18 @@ export def "transport-telnyx post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --telnyxApiKey: string # The API key for the Telnyx service. Stored in encrypted format. (nullable)
-  --telnyxFrom: string # The from value for the Telnyx service. (nullable)
-  --telnyxMessagingProfileId: string # The messaging profile ID (You need this in order to show a name to the recipient instead of just the phone number) for the Telnyx service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --telnyx-api-key: string # The API key for the Telnyx service. Stored in encrypted format. (nullable)
+  --telnyx-from: string # The from value for the Telnyx service. (nullable)
+  --telnyx-messaging-profile-id: string # The messaging profile ID (You need this in order to show a name to the recipient instead of just the phone number) for the Telnyx service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telnyxApiKey: string, telnyxFrom: string, telnyxMessagingProfileId: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-telnyx")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, telnyxApiKey: $telnyxApiKey, telnyxFrom: $telnyxFrom, telnyxMessagingProfileId: $telnyxMessagingProfileId, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "telnyxApiKey": $telnyx_api_key, "telnyxFrom": $telnyx_from, "telnyxMessagingProfileId": $telnyx_messaging_profile_id, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10521,7 +10521,7 @@ export def "transport-telnyx delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-telnyx/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-telnyx/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10545,7 +10545,7 @@ export def "transport-telnyx get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telnyxApiKey: string, telnyxFrom: string, telnyxMessagingProfileId: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-telnyx/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-telnyx/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10566,17 +10566,17 @@ export def "transport-telnyx put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --telnyxApiKey: string # The API key for the Telnyx service. Stored in encrypted format. (nullable)
-  --telnyxFrom: string # The from value for the Telnyx service. (nullable)
-  --telnyxMessagingProfileId: string # The messaging profile ID (You need this in order to show a name to the recipient instead of just the phone number) for the Telnyx service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --telnyx-api-key: string # The API key for the Telnyx service. Stored in encrypted format. (nullable)
+  --telnyx-from: string # The from value for the Telnyx service. (nullable)
+  --telnyx-messaging-profile-id: string # The messaging profile ID (You need this in order to show a name to the recipient instead of just the phone number) for the Telnyx service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, telnyxApiKey: string, telnyxFrom: string, telnyxMessagingProfileId: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-telnyx/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, telnyxApiKey: $telnyxApiKey, telnyxFrom: $telnyxFrom, telnyxMessagingProfileId: $telnyxMessagingProfileId, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-telnyx/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "telnyxApiKey": $telnyx_api_key, "telnyxFrom": $telnyx_from, "telnyxMessagingProfileId": $telnyx_messaging_profile_id, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10598,15 +10598,15 @@ export def "transport-termii collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, termiiApiKey: string, termiiChannel: string, termiiFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-termii" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10627,18 +10627,18 @@ export def "transport-termii post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --termiiApiKey: string # The API key for the Termii service. Stored in encrypted format. (nullable)
-  --termiiChannel: string # The channel for the Termii service. (nullable)
-  --termiiFrom: string # The sender value for the Termii service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --termii-api-key: string # The API key for the Termii service. Stored in encrypted format. (nullable)
+  --termii-channel: string # The channel for the Termii service. (nullable)
+  --termii-from: string # The sender value for the Termii service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, termiiApiKey: string, termiiChannel: string, termiiFrom: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-termii")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, termiiApiKey: $termiiApiKey, termiiChannel: $termiiChannel, termiiFrom: $termiiFrom, transportName: $transportName} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "termiiApiKey": $termii_api_key, "termiiChannel": $termii_channel, "termiiFrom": $termii_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10662,7 +10662,7 @@ export def "transport-termii delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-termii/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-termii/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10686,7 +10686,7 @@ export def "transport-termii get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, termiiApiKey: string, termiiChannel: string, termiiFrom: string, transportName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-termii/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-termii/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10707,17 +10707,17 @@ export def "transport-termii put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --termiiApiKey: string # The API key for the Termii service. Stored in encrypted format. (nullable)
-  --termiiChannel: string # The channel for the Termii service. (nullable)
-  --termiiFrom: string # The sender value for the Termii service. (nullable)
-  --transportName: string # The name of the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --termii-api-key: string # The API key for the Termii service. Stored in encrypted format. (nullable)
+  --termii-channel: string # The channel for the Termii service. (nullable)
+  --termii-from: string # The sender value for the Termii service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, termiiApiKey: string, termiiChannel: string, termiiFrom: string, transportName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-termii/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, termiiApiKey: $termiiApiKey, termiiChannel: $termiiChannel, termiiFrom: $termiiFrom, transportName: $transportName} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-termii/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "termiiApiKey": $termii_api_key, "termiiChannel": $termii_channel, "termiiFrom": $termii_from, "transportName": $transport_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10739,15 +10739,15 @@ export def "transport-trello collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, trelloApiKey: string, trelloApiToken: string, trelloListId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-trello" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10768,18 +10768,18 @@ export def "transport-trello post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
-  --trelloApiKey: string # The API key for the Trello service. (nullable)
-  --trelloApiToken: string # The API token for the Trello service. Stored in encrypted format. (nullable)
-  --trelloListId: string # The list ID for the Trello service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --trello-api-key: string # The API key for the Trello service. (nullable)
+  --trello-api-token: string # The API token for the Trello service. Stored in encrypted format. (nullable)
+  --trello-list-id: string # The list ID for the Trello service. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, trelloApiKey: string, trelloApiToken: string, trelloListId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-trello")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName, trelloApiKey: $trelloApiKey, trelloApiToken: $trelloApiToken, trelloListId: $trelloListId} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name, "trelloApiKey": $trello_api_key, "trelloApiToken": $trello_api_token, "trelloListId": $trello_list_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10803,7 +10803,7 @@ export def "transport-trello delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-trello/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-trello/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10827,7 +10827,7 @@ export def "transport-trello get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, trelloApiKey: string, trelloApiToken: string, trelloListId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-trello/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-trello/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10848,17 +10848,17 @@ export def "transport-trello put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
-  --trelloApiKey: string # The API key for the Trello service. (nullable)
-  --trelloApiToken: string # The API token for the Trello service. Stored in encrypted format. (nullable)
-  --trelloListId: string # The list ID for the Trello service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --trello-api-key: string # The API key for the Trello service. (nullable)
+  --trello-api-token: string # The API token for the Trello service. Stored in encrypted format. (nullable)
+  --trello-list-id: string # The list ID for the Trello service. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, trelloApiKey: string, trelloApiToken: string, trelloListId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-trello/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, transportName: $transportName, trelloApiKey: $trelloApiKey, trelloApiToken: $trelloApiToken, trelloListId: $trelloListId} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-trello/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "trelloApiKey": $trello_api_key, "trelloApiToken": $trello_api_token, "trelloListId": $trello_list_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10880,15 +10880,15 @@ export def "transport-turbo-sms collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, turboSmsAuthToken: string, turboSmsFrom: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-turbo-sms" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10909,17 +10909,17 @@ export def "transport-turbo-sms post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
-  --turboSmsAuthToken: string # The auth token for the TurboSms service. Stored in encrypted format. (nullable)
-  --turboSmsFrom: string # The sender name (should be alphanumeric, max 20 characters and activated in your TurboSms account) for the TurboSms service. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --turbo-sms-auth-token: string # The auth token for the TurboSms service. Stored in encrypted format. (nullable)
+  --turbo-sms-from: string # The sender name (should be alphanumeric, max 20 characters and activated in your TurboSms account) for the TurboSms service. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, turboSmsAuthToken: string, turboSmsFrom: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-turbo-sms")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName, turboSmsAuthToken: $turboSmsAuthToken, turboSmsFrom: $turboSmsFrom} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name, "turboSmsAuthToken": $turbo_sms_auth_token, "turboSmsFrom": $turbo_sms_from} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10943,7 +10943,7 @@ export def "transport-turbo-sms delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-turbo-sms/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-turbo-sms/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10967,7 +10967,7 @@ export def "transport-turbo-sms get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, turboSmsAuthToken: string, turboSmsFrom: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-turbo-sms/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-turbo-sms/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10988,16 +10988,16 @@ export def "transport-turbo-sms put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
-  --turboSmsAuthToken: string # The auth token for the TurboSms service. Stored in encrypted format. (nullable)
-  --turboSmsFrom: string # The sender name (should be alphanumeric, max 20 characters and activated in your TurboSms account) for the TurboSms service. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --turbo-sms-auth-token: string # The auth token for the TurboSms service. Stored in encrypted format. (nullable)
+  --turbo-sms-from: string # The sender name (should be alphanumeric, max 20 characters and activated in your TurboSms account) for the TurboSms service. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, turboSmsAuthToken: string, turboSmsFrom: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-turbo-sms/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, transportName: $transportName, turboSmsAuthToken: $turboSmsAuthToken, turboSmsFrom: $turboSmsFrom} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-turbo-sms/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "turboSmsAuthToken": $turbo_sms_auth_token, "turboSmsFrom": $turbo_sms_from} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11019,15 +11019,15 @@ export def "transport-twilio collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twilioFrom: string, twilioSid: string, twilioToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-twilio" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11048,18 +11048,18 @@ export def "transport-twilio post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
-  --twilioFrom: string # The sender for the Twilio service. (nullable)
-  --twilioSid: string # The SID for the Twilio service. (nullable)
-  --twilioToken: string # The token for the Twilio service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --twilio-from: string # The sender for the Twilio service. (nullable)
+  --twilio-sid: string # The SID for the Twilio service. (nullable)
+  --twilio-token: string # The token for the Twilio service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twilioFrom: string, twilioSid: string, twilioToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-twilio")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName, twilioFrom: $twilioFrom, twilioSid: $twilioSid, twilioToken: $twilioToken} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name, "twilioFrom": $twilio_from, "twilioSid": $twilio_sid, "twilioToken": $twilio_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11083,7 +11083,7 @@ export def "transport-twilio delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-twilio/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-twilio/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11107,7 +11107,7 @@ export def "transport-twilio get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twilioFrom: string, twilioSid: string, twilioToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-twilio/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-twilio/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11128,17 +11128,17 @@ export def "transport-twilio put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
-  --twilioFrom: string # The sender for the Twilio service. (nullable)
-  --twilioSid: string # The SID for the Twilio service. (nullable)
-  --twilioToken: string # The token for the Twilio service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --twilio-from: string # The sender for the Twilio service. (nullable)
+  --twilio-sid: string # The SID for the Twilio service. (nullable)
+  --twilio-token: string # The token for the Twilio service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twilioFrom: string, twilioSid: string, twilioToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-twilio/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, transportName: $transportName, twilioFrom: $twilioFrom, twilioSid: $twilioSid, twilioToken: $twilioToken} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-twilio/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "twilioFrom": $twilio_from, "twilioSid": $twilio_sid, "twilioToken": $twilio_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11160,15 +11160,15 @@ export def "transport-twitter collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twitterAccessToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-twitter" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11189,16 +11189,16 @@ export def "transport-twitter post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
-  --twitterAccessToken: string # The access token for the Twitter service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --twitter-access-token: string # The access token for the Twitter service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twitterAccessToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-twitter")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName, twitterAccessToken: $twitterAccessToken} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name, "twitterAccessToken": $twitter_access_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11222,7 +11222,7 @@ export def "transport-twitter delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-twitter/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-twitter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11246,7 +11246,7 @@ export def "transport-twitter get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twitterAccessToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-twitter/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-twitter/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11267,15 +11267,15 @@ export def "transport-twitter put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
-  --twitterAccessToken: string # The access token for the Twitter service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --twitter-access-token: string # The access token for the Twitter service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, twitterAccessToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-twitter/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, transportName: $transportName, twitterAccessToken: $twitterAccessToken} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-twitter/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "twitterAccessToken": $twitter_access_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11297,15 +11297,15 @@ export def "transport-vonage collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, vonageFrom: string, vonageKey: string, vonageSecret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-vonage" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11326,18 +11326,18 @@ export def "transport-vonage post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
-  --vonageFrom: string # The sender for the Vonage service. (nullable)
-  --vonageKey: string # The key for the Vonage service. (nullable)
-  --vonageSecret: string # The secret for the Vonage service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --vonage-from: string # The sender for the Vonage service. (nullable)
+  --vonage-key: string # The key for the Vonage service. (nullable)
+  --vonage-secret: string # The secret for the Vonage service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, vonageFrom: string, vonageKey: string, vonageSecret: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-vonage")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName, vonageFrom: $vonageFrom, vonageKey: $vonageKey, vonageSecret: $vonageSecret} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name, "vonageFrom": $vonage_from, "vonageKey": $vonage_key, "vonageSecret": $vonage_secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11361,7 +11361,7 @@ export def "transport-vonage delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-vonage/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-vonage/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11385,7 +11385,7 @@ export def "transport-vonage get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, vonageFrom: string, vonageKey: string, vonageSecret: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-vonage/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-vonage/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11406,17 +11406,17 @@ export def "transport-vonage put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
-  --vonageFrom: string # The sender for the Vonage service. (nullable)
-  --vonageKey: string # The key for the Vonage service. (nullable)
-  --vonageSecret: string # The secret for the Vonage service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --vonage-from: string # The sender for the Vonage service. (nullable)
+  --vonage-key: string # The key for the Vonage service. (nullable)
+  --vonage-secret: string # The secret for the Vonage service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, vonageFrom: string, vonageKey: string, vonageSecret: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-vonage/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, transportName: $transportName, vonageFrom: $vonageFrom, vonageKey: $vonageKey, vonageSecret: $vonageSecret} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-vonage/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "vonageFrom": $vonage_from, "vonageKey": $vonage_key, "vonageSecret": $vonage_secret} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11438,15 +11438,15 @@ export def "transport-webhook collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, httpMethodCode: string, id: string, mustBeEncryptedValue: string, partition: string, resourceOwner: string, transportName: string, webhookHeaders: list<string>, webhookUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-webhook" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11467,19 +11467,19 @@ export def "transport-webhook post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  httpMethodCode: string # The HTTP request method that must be used. (format: iri-reference)
-  --mustBeEncryptedValue: string # An optional and arbitrary secret value that must be stored in encrypted format, such as an access token. In the webhookUrl and/or webhookHeaders fields, use the special ENCRYPTED_VALUE placeholder (must be uppercase), which we will replace with the decrypted secret value when using the transport. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  http_method_code: string # The HTTP request method that must be used. (format: iri-reference)
+  --must-be-encrypted-value: string # An optional and arbitrary secret value that must be stored in encrypted format, such as an access token. In the webhookUrl and/or webhookHeaders fields, use the special ENCRYPTED_VALUE placeholder (must be uppercase), which we will replace with the decrypted secret value when using the transport. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
-  --webhookHeaders: list # The HTTP request headers, if any, for the Webhook service. To use the encrypted value:  E.g., Authorization: Bearer ENCRYPTED_VALUE. (nullable)
-  --webhookUrl: string # The URL for the Webhook service. (nullable, format: uri)
+  --transport-name: string # The name of the transport. (nullable)
+  --webhook-headers: list # The HTTP request headers, if any, for the Webhook service. To use the encrypted value:  E.g., Authorization: Bearer ENCRYPTED_VALUE. (nullable)
+  --webhook-url: string # The URL for the Webhook service. (nullable, format: uri)
 ]: any -> record<createdAt: string, dataSegmentCode: string, httpMethodCode: string, id: string, mustBeEncryptedValue: string, partition: string, resourceOwner: string, transportName: string, webhookHeaders: list<string>, webhookUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-webhook")
-  let body = {dataSegmentCode: $dataSegmentCode, httpMethodCode: $httpMethodCode, mustBeEncryptedValue: $mustBeEncryptedValue, partition: $partition, transportName: $transportName, webhookHeaders: $webhookHeaders, webhookUrl: $webhookUrl} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "httpMethodCode": $http_method_code, "mustBeEncryptedValue": $must_be_encrypted_value, "partition": $partition, "transportName": $transport_name, "webhookHeaders": $webhook_headers, "webhookUrl": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11503,7 +11503,7 @@ export def "transport-webhook delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-webhook/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-webhook/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11527,7 +11527,7 @@ export def "transport-webhook get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, httpMethodCode: string, id: string, mustBeEncryptedValue: string, partition: string, resourceOwner: string, transportName: string, webhookHeaders: list<string>, webhookUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-webhook/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-webhook/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11548,18 +11548,18 @@ export def "transport-webhook put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  httpMethodCode: string # The HTTP request method that must be used. (format: iri-reference)
-  --mustBeEncryptedValue: string # An optional and arbitrary secret value that must be stored in encrypted format, such as an access token. In the webhookUrl and/or webhookHeaders fields, use the special ENCRYPTED_VALUE placeholder (must be uppercase), which we will replace with the decrypted secret value when using the transport. (nullable)
-  --transportName: string # The name of the transport. (nullable)
-  --webhookHeaders: list # The HTTP request headers, if any, for the Webhook service. To use the encrypted value:  E.g., Authorization: Bearer ENCRYPTED_VALUE. (nullable)
-  --webhookUrl: string # The URL for the Webhook service. (nullable, format: uri)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  http_method_code: string # The HTTP request method that must be used. (format: iri-reference)
+  --must-be-encrypted-value: string # An optional and arbitrary secret value that must be stored in encrypted format, such as an access token. In the webhookUrl and/or webhookHeaders fields, use the special ENCRYPTED_VALUE placeholder (must be uppercase), which we will replace with the decrypted secret value when using the transport. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --webhook-headers: list # The HTTP request headers, if any, for the Webhook service. To use the encrypted value:  E.g., Authorization: Bearer ENCRYPTED_VALUE. (nullable)
+  --webhook-url: string # The URL for the Webhook service. (nullable, format: uri)
 ]: any -> record<createdAt: string, dataSegmentCode: string, httpMethodCode: string, id: string, mustBeEncryptedValue: string, partition: string, resourceOwner: string, transportName: string, webhookHeaders: list<string>, webhookUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-webhook/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, httpMethodCode: $httpMethodCode, mustBeEncryptedValue: $mustBeEncryptedValue, transportName: $transportName, webhookHeaders: $webhookHeaders, webhookUrl: $webhookUrl} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-webhook/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "httpMethodCode": $http_method_code, "mustBeEncryptedValue": $must_be_encrypted_value, "transportName": $transport_name, "webhookHeaders": $webhook_headers, "webhookUrl": $webhook_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11581,15 +11581,15 @@ export def "transport-yunpian collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, yunpianApiKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-yunpian" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11610,16 +11610,16 @@ export def "transport-yunpian post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
-  --yunpianApiKey: string # The API key for the Yunpian service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --yunpian-api-key: string # The API key for the Yunpian service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, yunpianApiKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-yunpian")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName, yunpianApiKey: $yunpianApiKey} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name, "yunpianApiKey": $yunpian_api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11643,7 +11643,7 @@ export def "transport-yunpian delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-yunpian/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-yunpian/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11667,7 +11667,7 @@ export def "transport-yunpian get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, yunpianApiKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-yunpian/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-yunpian/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11688,15 +11688,15 @@ export def "transport-yunpian put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
-  --yunpianApiKey: string # The API key for the Yunpian service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --yunpian-api-key: string # The API key for the Yunpian service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, yunpianApiKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-yunpian/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, transportName: $transportName, yunpianApiKey: $yunpianApiKey} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-yunpian/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "yunpianApiKey": $yunpian_api_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11718,15 +11718,15 @@ export def "transport-zendesk collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zendeskEmail: string, zendeskHost: string, zendeskToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-zendesk" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11747,18 +11747,18 @@ export def "transport-zendesk post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
-  --zendeskEmail: string # The login email address for the Zendesk service. (nullable, format: email)
-  --zendeskHost: string # The host name for the Zendesk service (domain.zendesk.com). (nullable, format: hostname)
-  --zendeskToken: string # The token for the Zendesk service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --zendesk-email: string # The login email address for the Zendesk service. (nullable, format: email)
+  --zendesk-host: string # The host name for the Zendesk service (domain.zendesk.com). (nullable, format: hostname)
+  --zendesk-token: string # The token for the Zendesk service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zendeskEmail: string, zendeskHost: string, zendeskToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-zendesk")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName, zendeskEmail: $zendeskEmail, zendeskHost: $zendeskHost, zendeskToken: $zendeskToken} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name, "zendeskEmail": $zendesk_email, "zendeskHost": $zendesk_host, "zendeskToken": $zendesk_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11782,7 +11782,7 @@ export def "transport-zendesk delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-zendesk/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-zendesk/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11806,7 +11806,7 @@ export def "transport-zendesk get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zendeskEmail: string, zendeskHost: string, zendeskToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-zendesk/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-zendesk/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11827,17 +11827,17 @@ export def "transport-zendesk put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
-  --zendeskEmail: string # The login email address for the Zendesk service. (nullable, format: email)
-  --zendeskHost: string # The host name for the Zendesk service (domain.zendesk.com). (nullable, format: hostname)
-  --zendeskToken: string # The token for the Zendesk service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --zendesk-email: string # The login email address for the Zendesk service. (nullable, format: email)
+  --zendesk-host: string # The host name for the Zendesk service (domain.zendesk.com). (nullable, format: hostname)
+  --zendesk-token: string # The token for the Zendesk service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zendeskEmail: string, zendeskHost: string, zendeskToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-zendesk/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, transportName: $transportName, zendeskEmail: $zendeskEmail, zendeskHost: $zendeskHost, zendeskToken: $zendeskToken} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-zendesk/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "zendeskEmail": $zendesk_email, "zendeskHost": $zendesk_host, "zendeskToken": $zendesk_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11859,15 +11859,15 @@ export def "transport-zulip collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --page: int # The collection page number (default: 1, allows empty value)
-  --dataSegmentCode: string # allows empty value
-  --dataSegmentCode: list # allows empty value
+  --data-segment-code: string # allows empty value
+  --data-segment-code: list # allows empty value
   --partition: string # allows empty value
   --partition: list # allows empty value
   --properties: list # allows empty value
 ]: nothing -> table<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zulipChannel: string, zulipEmail: string, zulipHost: string, zulipToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $dataSegmentCode "scalar") (serialize-qp "dataSegmentCode[]" $dataSegmentCode "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "dataSegmentCode" $data_segment_code "scalar") (serialize-qp "dataSegmentCode[]" $data_segment_code "multi") (serialize-qp "partition" $partition "scalar") (serialize-qp "partition[]" $partition "multi") (serialize-qp "properties[]" $properties "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/transport-zulip" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11888,19 +11888,19 @@ export def "transport-zulip post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
   partition: string # The partition that contains this resource instance. The resource cannot be moved to another partition. (format: iri-reference)
-  --transportName: string # The name of the transport. (nullable)
-  --zulipChannel: string # The channel for the Zulip service. (nullable)
-  --zulipEmail: string # The email for the Zulip service. (nullable)
-  --zulipHost: string # The host for the Zulip service. (nullable)
-  --zulipToken: string # The token for the Zulip service. Stored in encrypted format. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --zulip-channel: string # The channel for the Zulip service. (nullable)
+  --zulip-email: string # The email for the Zulip service. (nullable)
+  --zulip-host: string # The host for the Zulip service. (nullable)
+  --zulip-token: string # The token for the Zulip service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zulipChannel: string, zulipEmail: string, zulipHost: string, zulipToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/transport-zulip")
-  let body = {dataSegmentCode: $dataSegmentCode, partition: $partition, transportName: $transportName, zulipChannel: $zulipChannel, zulipEmail: $zulipEmail, zulipHost: $zulipHost, zulipToken: $zulipToken} | compact
+  let body = {"dataSegmentCode": $data_segment_code, "partition": $partition, "transportName": $transport_name, "zulipChannel": $zulip_channel, "zulipEmail": $zulip_email, "zulipHost": $zulip_host, "zulipToken": $zulip_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11924,7 +11924,7 @@ export def "transport-zulip delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-zulip/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-zulip/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11948,7 +11948,7 @@ export def "transport-zulip get" [
 ]: nothing -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zulipChannel: string, zulipEmail: string, zulipHost: string, zulipToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-zulip/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-zulip/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11969,18 +11969,18 @@ export def "transport-zulip put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --dataSegmentCode: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
-  --transportName: string # The name of the transport. (nullable)
-  --zulipChannel: string # The channel for the Zulip service. (nullable)
-  --zulipEmail: string # The email for the Zulip service. (nullable)
-  --zulipHost: string # The host for the Zulip service. (nullable)
-  --zulipToken: string # The token for the Zulip service. Stored in encrypted format. (nullable)
+  --data-segment-code: string # User-provided string on which to segment and filter data. Max 50 characters. (nullable)
+  --transport-name: string # The name of the transport. (nullable)
+  --zulip-channel: string # The channel for the Zulip service. (nullable)
+  --zulip-email: string # The email for the Zulip service. (nullable)
+  --zulip-host: string # The host for the Zulip service. (nullable)
+  --zulip-token: string # The token for the Zulip service. Stored in encrypted format. (nullable)
 ]: any -> record<createdAt: string, dataSegmentCode: string, id: string, partition: string, resourceOwner: string, transportName: string, zulipChannel: string, zulipEmail: string, zulipHost: string, zulipToken: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/transport-zulip/($id)")
-  let body = {dataSegmentCode: $dataSegmentCode, transportName: $transportName, zulipChannel: $zulipChannel, zulipEmail: $zulipEmail, zulipHost: $zulipHost, zulipToken: $zulipToken} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/transport-zulip/{id}"))
+  let body = {"dataSegmentCode": $data_segment_code, "transportName": $transport_name, "zulipChannel": $zulip_channel, "zulipEmail": $zulip_email, "zulipHost": $zulip_host, "zulipToken": $zulip_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12057,7 +12057,7 @@ export def "user-account-level-code get" [
 ]: nothing -> record<codeName: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/user-account-level-code/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/user-account-level-code/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12081,7 +12081,7 @@ export def "user-account get" [
 ]: nothing -> record<accountLevelCode: string, creditsOveragePercentTripSwitch: int, email: string, firstName: string, id: string, isDelinquent: bool, lastName: string, timezoneCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/user-account/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/user-account/{id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12102,13 +12102,13 @@ export def "user-account put" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --creditsOveragePercentTripSwitch: int # If the credits consumed in the billing period are this percentage above the account plan's included credits, cease further consumption of credits until the end of the billing period. Any integer between 1 and 1,000. Optional. Leave blank for no limit. (nullable)
+  --credits-overage-percent-trip-switch: int # If the credits consumed in the billing period are this percentage above the account plan's included credits, cease further consumption of credits until the end of the billing period. Any integer between 1 and 1,000. Optional. Leave blank for no limit. (nullable)
 ]: any -> record<accountLevelCode: string, creditsOveragePercentTripSwitch: int, email: string, firstName: string, id: string, isDelinquent: bool, lastName: string, timezoneCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/user-account/($id)")
-  let body = {creditsOveragePercentTripSwitch: $creditsOveragePercentTripSwitch} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/user-account/{id}"))
+  let body = {"creditsOveragePercentTripSwitch": $credits_overage_percent_trip_switch} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

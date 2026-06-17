@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "conversion-rate get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "conversion-rate get-conversion-detail-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /conversion-rate
 # operationId: getConversionDetailUsingGET
-export def "conversion-rate get" [
+export def "conversion-rate get-conversion-detail-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,15 +101,15 @@ export def "conversion-rate get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fxDate: string # Date of the requested FX rates.
-  --transCurr: string # Currency of the transaction.
-  --crdhldBillCurr: string # Cardholder billing currency.
-  --bankFee: float # Additional fees imposed by the bank. (format: double)
-  --transAmt: float # Amount in the transaction currency. (format: double)
+  --fx-date: string # Date of the requested FX rates.
+  --trans-curr: string # Currency of the transaction.
+  --crdhld-bill-curr: string # Cardholder billing currency.
+  --bank-fee: float # Additional fees imposed by the bank. (format: double)
+  --trans-amt: float # Amount in the transaction currency. (format: double)
 ]: nothing -> record<data: record<bankFee: float, conversionRate: float, crdhldBillAmt: float, crdhldBillCurr: string, errorCode: string, errorMessage: string, fxDate: string, transAmt: float, transCurr: string>, date: string, description: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fxDate" $fxDate "scalar") (serialize-qp "transCurr" $transCurr "scalar") (serialize-qp "crdhldBillCurr" $crdhldBillCurr "scalar") (serialize-qp "bankFee" $bankFee "scalar") (serialize-qp "transAmt" $transAmt "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fxDate" $fx_date "scalar") (serialize-qp "transCurr" $trans_curr "scalar") (serialize-qp "crdhldBillCurr" $crdhld_bill_curr "scalar") (serialize-qp "bankFee" $bank_fee "scalar") (serialize-qp "transAmt" $trans_amt "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/conversion-rate" $qp)
   let accept_val = "application/json;charset=UTF-8"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -144,7 +144,7 @@ export def "conversion-rate-issued isRateIssuedUsingGET" [
 #
 # GET /settlement-currencies
 # operationId: getCurrencyRateDataUsingGET
-export def "settlement-currencies get" [
+export def "settlement-currencies get-currency-rate-data-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

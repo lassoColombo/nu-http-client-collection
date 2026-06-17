@@ -164,7 +164,7 @@ export def "discord post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/discord")
-  let body = {base64_message: $base64_message, channel: $channel, message: $message} | compact
+  let body = {"base64_message": $base64_message, "channel": $channel, "message": $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -224,7 +224,7 @@ export def "slack post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/slack")
-  let body = {base64_message: $base64_message, channel: $channel, message: $message} | compact
+  let body = {"base64_message": $base64_message, "channel": $channel, "message": $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -282,7 +282,7 @@ export def "sns post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sns")
-  let body = {base64_message: $base64_message, message: $message} | compact
+  let body = {"base64_message": $base64_message, "message": $message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -312,7 +312,7 @@ export def "topic get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "message" $message "scalar") (serialize-qp "base64_message" $base64_message "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/topic/($topic_name)" $qp)
+  let full_url = (build-url $base ({topic_name: $topic_name} | format pattern "/topic/{topic_name}") $qp)
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -371,7 +371,7 @@ export def "twilio post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/twilio")
-  let body = {base64_message: $base64_message, message: $message, to: $body_to} | compact
+  let body = {"base64_message": $base64_message, "message": $message, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))

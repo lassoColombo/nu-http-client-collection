@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-seller-portal-brands ListBrand" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-seller-portal-brands list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/catalog-seller-portal/brands
 # operationId: ListBrand
-export def "catalog-seller-portal-brands ListBrand" [
+export def "catalog-seller-portal-brands list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,16 +106,16 @@ export def "catalog-seller-portal-brands ListBrand" [
   --q: string # Search word. (e.g. tshirt)
   --qp-from: string # The first page of the interval of the brand list. (e.g. 1)
   --qp-to: string # The last page of the interval of the brand list. (e.g. 50)
-  --orderBy: string # The order that the list is displayed. You can select `name`, or `updated_at` to select the order criteria. Then you can add `,` , `asc` or `desc` to define the brands order. (e.g. status,asc;name,asc)
+  --order-by: string # The order that the list is displayed. You can select `name`, or `updated_at` to select the order criteria. Then you can add `,` , `asc` or `desc` to define the brands order. (e.g. status,asc;name,asc)
   --name: string # Brand name. (e.g. Zwilling)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<_metadata: record<from: int, orderBy: string, to: int, total: int>, data: table<createdAt: string, id: string, isActive: bool, name: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog-seller-portal/brands" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -126,7 +126,7 @@ export def "catalog-seller-portal-brands ListBrand" [
 #
 # POST /api/catalog-seller-portal/brands
 # operationId: PostBrand
-export def "catalog-seller-portal-brands PostBrand" [
+export def "catalog-seller-portal-brands create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,18 +135,18 @@ export def "catalog-seller-portal-brands PostBrand" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  --isActive: oneof<nothing, bool> # The condition defines if the brand is active (`true`) or inactive (`false`). (e.g. true)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --is-active: oneof<nothing, bool> # The condition defines if the brand is active (`true`) or inactive (`false`). (e.g. true)
   name: string # Brand Name. (e.g. Zwilling)
 ]: any -> record<createdAt: string, id: string, isActive: bool, name: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog-seller-portal/brands")
-  let body = {isActive: $isActive, name: $name} | compact
+  let body = {"isActive": $is_active, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -157,8 +157,8 @@ export def "catalog-seller-portal-brands PostBrand" [
 #
 # GET /api/catalog-seller-portal/brands/{brandId}
 # operationId: GetBrand
-export def "catalog-seller-portal-brands GetBrand" [
-  brandId: string
+export def "catalog-seller-portal-brands get" [
+  brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,13 +167,13 @@ export def "catalog-seller-portal-brands GetBrand" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<createdAt: string, id: string, isActive: bool, name: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog-seller-portal/brands/($brandId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({brand_id: $brand_id} | format pattern "/api/catalog-seller-portal/brands/{brand_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,8 +184,8 @@ export def "catalog-seller-portal-brands GetBrand" [
 #
 # PUT /api/catalog-seller-portal/brands/{brandId}
 # operationId: PutBrand
-export def "catalog-seller-portal-brands PutBrand" [
-  brandId: string
+export def "catalog-seller-portal-brands update" [
+  brand_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,19 +194,19 @@ export def "catalog-seller-portal-brands PutBrand" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   id: string # Brand unique identifier number. (e.g. 20)
-  --isActive: oneof<nothing, bool> # The condition defines if the brand is active (`true`) or inactive (`false`). (e.g. true)
+  --is-active: oneof<nothing, bool> # The condition defines if the brand is active (`true`) or inactive (`false`). (e.g. true)
   name: string # Brand Name. (e.g. Zwilling)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog-seller-portal/brands/($brandId)")
-  let body = {id: $id, isActive: $isActive, name: $name} | compact
+  let full_url = (build-url $base ({brand_id: $brand_id} | format pattern "/api/catalog-seller-portal/brands/{brand_id}"))
+  let body = {"id": $id, "isActive": $is_active, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -217,7 +217,7 @@ export def "catalog-seller-portal-brands PutBrand" [
 #
 # GET /api/catalog-seller-portal/category-tree
 # operationId: GetCategoryTree
-export def "catalog-seller-portal-category-tree GetCategoryTree" [
+export def "catalog-seller-portal-category-tree get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,14 +227,14 @@ export def "catalog-seller-portal-category-tree GetCategoryTree" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --depth: int # Category tree level. (e.g. 1)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<createdAt: string, roots: table<children: list, value: record>, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "depth" $depth "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog-seller-portal/category-tree" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -246,7 +246,7 @@ export def "catalog-seller-portal-category-tree GetCategoryTree" [
 # PUT /api/catalog-seller-portal/category-tree
 # operationId: UpdateCategoryTree
 # --roots item shape: {children: list, value: record}
-export def "catalog-seller-portal-category-tree UpdateCategoryTree" [
+export def "catalog-seller-portal-category-tree update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,17 +255,17 @@ export def "catalog-seller-portal-category-tree UpdateCategoryTree" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   roots: list # List of all categories of the store. (e.g. [{children: [{value: {id: 2, isActive: false, name: Perfumes}}], value: {id: 1, isActive: false, name: sandboxintegracao}}]) — item shape: {children: list, value: record}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog-seller-portal/category-tree")
-  let body = {roots: $roots} | compact
+  let body = {"roots": $roots} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -276,7 +276,7 @@ export def "catalog-seller-portal-category-tree UpdateCategoryTree" [
 #
 # POST /api/catalog-seller-portal/category-tree/categories
 # operationId: CreateCategory
-export def "catalog-seller-portal-category-tree-categories CreateCategory" [
+export def "catalog-seller-portal-category-tree-categories create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,18 +285,18 @@ export def "catalog-seller-portal-category-tree-categories CreateCategory" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-  Name: string # Category name. (e.g. Beauty)
-  parentId: string # Parent category unique identifier number. (e.g. 567)
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  name: string # Category name. (e.g. Beauty)
+  parent_id: string # Parent category unique identifier number. (e.g. 567)
 ]: any -> record<children: table<value: record>, value: record<id: string, isActive: bool, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog-seller-portal/category-tree/categories")
-  let body = {Name: $Name, parentId: $parentId} | compact
+  let body = {"Name": $name, "parentId": $parent_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,8 +307,8 @@ export def "catalog-seller-portal-category-tree-categories CreateCategory" [
 #
 # GET /api/catalog-seller-portal/category-tree/categories/{categoryId}
 # operationId: Getbyid
-export def "catalog-seller-portal-category-tree-categories Getbyid" [
-  categoryId: string
+export def "catalog-seller-portal-category-tree-categories get-byid" [
+  category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,13 +317,13 @@ export def "catalog-seller-portal-category-tree-categories Getbyid" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<children: table<value: record>, value: record<id: string, isActive: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog-seller-portal/category-tree/categories/($categoryId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({category_id: $category_id} | format pattern "/api/catalog-seller-portal/category-tree/categories/{category_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,7 +338,7 @@ export def "catalog-seller-portal-category-tree-categories Getbyid" [
 # --images item shape: {alt?: string, id: string, url: string}
 # --skus item shape: {dimensions: record, ean?: string, externalId?: string, images: list, isActive: bool, manufacturerCode?: string, name: string, specs: list, weight: int}
 # --specs item shape: {name: string, values: list}
-export def "catalog-seller-portal-products PostProduct" [
+export def "catalog-seller-portal-products create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,13 +347,13 @@ export def "catalog-seller-portal-products PostProduct" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   attributes: list # Attributes of the product. Attributes are additional properties used to create site browsing filters. (e.g. [{name: Fabric, value: Cotton}, {name: Gender, value: Feminine}]) — item shape: {name: string, value: string}
-  brandId: string # Product's Brand unique identifier number. (e.g. 1)
-  categoryIds: list # Product's Categories unique identifier numbers. It can have multiples IDs for each Category and Subcategories. (e.g. [732])
+  brand_id: string # Product's Brand unique identifier number. (e.g. 1)
+  category_ids: list # Product's Categories unique identifier numbers. It can have multiples IDs for each Category and Subcategories. (e.g. [732])
   --description: string # Description of the primary information related to the product. A simple and easy-to-understand summary for the customer. (e.g. Descrição camiseta VTEX)
-  --externalId: string # Product reference unique identifier number in the store. (e.g. sandboxintegracao-310117347)
+  --external-id: string # Product reference unique identifier number in the store. (e.g. sandboxintegracao-310117347)
   images: list # Information of the images of the product. (e.g. [{alt: imagem, id: vtex_logo.jpg, url: https://vtxleo7778.vtexassets.com/assets/vtex.catalog-images/products/vtex_logo.jpg}]) — item shape: {alt?: string, id: string, url: string}
   name: string # Product Name. Use simple words and avoid other languages or complex writing. This field is essential for SEO and must respect the 150 character limit. (e.g. VTEX Shirt)
   origin: string # Origin account of the product. It is not possible to alter products where the origin is `marketplace`. (e.g. vtxleo7778)
@@ -361,16 +361,16 @@ export def "catalog-seller-portal-products PostProduct" [
   slug: string # Reference of the product in the URL of the store. (e.g. /vtex-shirt)
   specs: list # Specifications that will differentiate the possible product SKUs. (e.g. [{name: Color, values: [Black, White]}, {name: Size, values: [S, M, L]}]) — item shape: {name: string, values: list}
   status: string # Status of the product. Its values can be `active` or `inactive`. (e.g. active)
-  --taxCode: string # Product tax code. (nullable, e.g. 123)
-  --transportModal: string # Transport modal of the product. (nullable, e.g. 1)
+  --tax-code: string # Product tax code. (nullable, e.g. 123)
+  --transport-modal: string # Transport modal of the product. (nullable, e.g. 1)
 ]: any -> record<attributes: table<name: string, value: string>, brandId: string, brandName: string, categoryIds: list<string>, categoryNames: list<string>, createdAt: string, externalId: string, id: string, images: table<alt: string, id: string, url: string>, name: string, origin: string, skus: table<dimensions: record, ean: string, externalId: string, id: string, images: list, isActive: bool, manufacturerCode: string, name: string, specs: list, weight: int>, slug: string, specs: table<name: string, values: list>, status: string, taxCode: string, transportModal: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/catalog-seller-portal/products")
-  let body = {attributes: $attributes, brandId: $brandId, categoryIds: $categoryIds, description: $description, externalId: $externalId, images: $images, name: $name, origin: $origin, skus: $skus, slug: $slug, specs: $specs, status: $status, taxCode: $taxCode, transportModal: $transportModal} | compact
+  let body = {"attributes": $attributes, "brandId": $brand_id, "categoryIds": $category_ids, "description": $description, "externalId": $external_id, "images": $images, "name": $name, "origin": $origin, "skus": $skus, "slug": $slug, "specs": $specs, "status": $status, "taxCode": $tax_code, "transportModal": $transport_modal} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,7 +381,7 @@ export def "catalog-seller-portal-products PostProduct" [
 #
 # GET /api/catalog-seller-portal/products/{param}
 # operationId: GetProductQuery
-export def "catalog-seller-portal-products GetProductQuery" [
+export def "catalog-seller-portal-products get-product-query" [
   param: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,13 +391,13 @@ export def "catalog-seller-portal-products GetProductQuery" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<attributes: table<name: string, value: string>, brandId: string, brandName: string, categoryIds: list<string>, categoryNames: list<string>, createdAt: string, externalId: string, id: string, images: table<alt: string, id: string, url: string>, name: string, origin: string, skus: table<dimensions: record, ean: string, externalId: string, id: string, images: list, isActive: bool, manufacturerCode: string, specs: list, weight: int>, slug: string, specs: table<name: string, values: list>, status: string, taxCode: string, transportModal: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog-seller-portal/products/($param)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({param: $param} | format pattern "/api/catalog-seller-portal/products/{param}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -408,8 +408,8 @@ export def "catalog-seller-portal-products GetProductQuery" [
 #
 # GET /api/catalog-seller-portal/products/{productId}
 # operationId: GetProduct
-export def "catalog-seller-portal-products GetProduct" [
-  productId: string
+export def "catalog-seller-portal-products get" [
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,13 +418,13 @@ export def "catalog-seller-portal-products GetProduct" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<attributes: table<name: string, value: string>, brandId: string, brandName: string, categoryIds: list<string>, categoryNames: list<string>, createdAt: string, externalId: string, id: string, images: table<alt: string, id: string, url: string>, name: string, origin: string, skus: table<dimensions: record, ean: string, externalId: string, id: string, images: list, isActive: bool, manufacturerCode: string, specs: list, weight: int>, slug: string, specs: table<name: string, values: list>, status: string, taxCode: string, transportModal: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog-seller-portal/products/($productId)")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog-seller-portal/products/{product_id}"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,8 +439,8 @@ export def "catalog-seller-portal-products GetProduct" [
 # --images item shape: {alt?: string, id: string, url: string}
 # --skus item shape: {dimensions: record, ean?: string, externalId?: string, id?: string, images: list, isActive: bool, manufacturerCode?: string, name?: string, specs: list, weight: int}
 # --specs item shape: {name: string, values: list}
-export def "catalog-seller-portal-products PutProduct" [
-  productId: string
+export def "catalog-seller-portal-products update" [
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,12 +449,12 @@ export def "catalog-seller-portal-products PutProduct" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   attributes: list # Attributes of the product. Attributes are additional properties used to create site browsing filters. (e.g. [{name: Fabric, value: Cotton}, {name: Gender, value: Feminine}]) — item shape: {name: string, value: string}
-  brandId: string # Product's Brand unique identifier number. (e.g. 1)
-  categoryIds: list # Product's Categories unique identifier numbers. It can have multiples IDs for each Category and Subcategories. (e.g. [732])
-  --externalId: string # Product reference unique identifier number in the store. (e.g. sandboxintegracao-310117347)
+  brand_id: string # Product's Brand unique identifier number. (e.g. 1)
+  category_ids: list # Product's Categories unique identifier numbers. It can have multiples IDs for each Category and Subcategories. (e.g. [732])
+  --external-id: string # Product reference unique identifier number in the store. (e.g. sandboxintegracao-310117347)
   --id: string # Product's unique identifier number. (e.g. 189371)
   images: list # Information of the images of the product. (e.g. [{alt: imagem, id: vtex_logo.jpg, url: https://vtxleo7778.vtexassets.com/assets/vtex.catalog-images/products/vtex_logo.jpg}]) — item shape: {alt?: string, id: string, url: string}
   name: string # Product Name. Use simple words and avoid other languages or complex writing. This field is essential for SEO and must respect the 150 character limit. (e.g. Camiseta VTEX 10)
@@ -463,16 +463,16 @@ export def "catalog-seller-portal-products PutProduct" [
   slug: string # Reference of the product in the URL of the store. (e.g. /vtex-shirt)
   specs: list # Specifications that will differentiate the possible product SKUs. (e.g. [{name: Color, values: [Black, White]}, {name: Size, values: [S, M, L]}]) — item shape: {name: string, values: list}
   status: string # Status of the product. Its values can be `active` or `inactive`. (e.g. active)
-  --taxCode: string # Product tax code. (nullable, e.g. 123)
-  --transportModal: string # Transport modal of the product. (nullable, e.g. 1)
+  --tax-code: string # Product tax code. (nullable, e.g. 123)
+  --transport-modal: string # Transport modal of the product. (nullable, e.g. 1)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog-seller-portal/products/($productId)")
-  let body = {attributes: $attributes, brandId: $brandId, categoryIds: $categoryIds, externalId: $externalId, id: $id, images: $images, name: $name, origin: $origin, skus: $skus, slug: $slug, specs: $specs, status: $status, taxCode: $taxCode, transportModal: $transportModal} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog-seller-portal/products/{product_id}"))
+  let body = {"attributes": $attributes, "brandId": $brand_id, "categoryIds": $category_ids, "externalId": $external_id, "id": $id, "images": $images, "name": $name, "origin": $origin, "skus": $skus, "slug": $slug, "specs": $specs, "status": $status, "taxCode": $tax_code, "transportModal": $transport_modal} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -483,8 +483,8 @@ export def "catalog-seller-portal-products PutProduct" [
 #
 # GET /api/catalog-seller-portal/products/{productId}/description
 # operationId: GetProductDescription
-export def "catalog-seller-portal-products-description GetProductDescription" [
-  productId: string
+export def "catalog-seller-portal-products-description get" [
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,13 +493,13 @@ export def "catalog-seller-portal-products-description GetProductDescription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<createdAt: string, productId: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog-seller-portal/products/($productId)/description")
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog-seller-portal/products/{product_id}/description"))
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -510,8 +510,8 @@ export def "catalog-seller-portal-products-description GetProductDescription" [
 #
 # PUT /api/catalog-seller-portal/products/{productId}/description
 # operationId: PutProductDescription
-export def "catalog-seller-portal-products-description PutProductDescription" [
-  productId: string
+export def "catalog-seller-portal-products-description update" [
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,18 +520,18 @@ export def "catalog-seller-portal-products-description PutProductDescription" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   description: string # Product description. (e.g. White shirt.)
-  --body-productId: string # Product's unique identifier number. (e.g. 71)
+  --body-product-id: string # Product's unique identifier number. (e.g. 71)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/catalog-seller-portal/products/($productId)/description")
-  let body = {description: $description, productId: $body_productId} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/api/catalog-seller-portal/products/{product_id}/description"))
+  let body = {"description": $description, "productId": $body_product_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -542,7 +542,7 @@ export def "catalog-seller-portal-products-description PutProductDescription" [
 #
 # GET /api/catalog-seller-portal/skus/_search
 # operationId: SearchSKU
-export def "catalog-seller-portal-skus-search SearchSKU" [
+export def "catalog-seller-portal-skus-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,14 +555,14 @@ export def "catalog-seller-portal-skus-search SearchSKU" [
   --qp-to: string # The last page of the interval of the product list. (e.g. 50)
   --id: int # SKU unique idenfier number. (e.g. 1)
   --externalid: int # SKU reference unique identifier number in the store. (e.g. 123456789)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<_metadata: record<from: int, to: int, total: int>, data: table<externalId: string, id: string, productId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "externalid" $externalid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog-seller-portal/skus/_search" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -573,7 +573,7 @@ export def "catalog-seller-portal-skus-search SearchSKU" [
 #
 # GET /api/catalog-seller-portal/skus/ids
 # operationId: ListSKU
-export def "catalog-seller-portal-skus-ids ListSKU" [
+export def "catalog-seller-portal-skus-ids list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,14 +584,14 @@ export def "catalog-seller-portal-skus-ids ListSKU" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-from: string # The first page of the interval of the product list. (e.g. 1)
   --qp-to: string # The last page of the interval of the product list. (e.g. 50)
-  --Content-Type: string # Type of the content being sent.
-  --Accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
+  --content-type: string # Type of the content being sent.
+  --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<_metadata: record<from: int, to: int, total: int>, data: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/catalog-seller-portal/skus/ids" $qp)
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

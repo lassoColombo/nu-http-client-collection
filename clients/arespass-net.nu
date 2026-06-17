@@ -103,11 +103,11 @@ export def "about get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --outputFormat: string # **The format of the returned metadata.**  Allowed values are *json*, *xml* and *yaml*.  The default value is *xml*.
+  --output-format: string # **The format of the returned metadata.**  Allowed values are *json*, *xml* and *yaml*.  The default value is *xml*.
 ]: nothing -> record<apiReleaseDateIso8601: string, apiVersion: record<majorNumber: int, minorNumber: int>, availableLanguagesIso639_1: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "outputFormat" $outputFormat "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "outputFormat" $output_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/about" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,13 +128,13 @@ export def "ec get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --password: string # **The password to be analyzed.**  Minimum length is 4 characters; maximum length is 128 characters.  Beware that certain characters like '&#35;', '&#61;' or '&#63;' must be properly encoded.  For more information about this issue, please refer to RFC 3986 ("*Uniform Resource Identifier (URI): Generic Syntax*"), sections 2.1, 2.2 and 2.4.
-  --outputFormat: string # **The format of the returned analysis.**  Allowed values are *json*, *xml* and *yaml*.  The default value is *xml*.
+  --output-format: string # **The format of the returned analysis.**  Allowed values are *json*, *xml* and *yaml*.  The default value is *xml*.
   --penalty: float # **The penalty applied to each character that is part of a word, number sequence, alphabet sequence, etc.**  The penalty is a float number in the range [0, 1]. Full penalty, 0; no penalty, 1.  The character used as decimal separator is always '&#46;'. Hence, a parameter value like *0,33* would be illegal.  The default value is *0.25*.
-  --reqId: string # **An identifier for this request.**  The request identifier is a string that must match the regular expression */(?i)^[a-z0-9]{8,16}$/*.  This identifier is echoed in the returned response. Its value has no effect on the password analysis.  If this parameter is unset, a randomly generated identifier will be automatically assigned to this request.
+  --req-id: string # **An identifier for this request.**  The request identifier is a string that must match the regular expression */(?i)^[a-z0-9]{8,16}$/*.  This identifier is echoed in the returned response. Its value has no effect on the password analysis.  If this parameter is unset, a randomly generated identifier will be automatically assigned to this request.
 ]: nothing -> record<alphabetSequence: table<char: string, l33tchar: string, penalty: float>, apiVersion: string, detectedKeyboard: string, efficiency: float, entropy: float, entropyDistribution: table<char: string, l33tchar: string, percentage: float>, idealEntropy: float, keyboardSequence: table<char: string, l33tchar: string, penalty: float>, l33tPassword: string, nonUniformEntropyDistributionPenalty: float, numberSequence: table<char: string, l33tchar: string, penalty: float>, password: string, passwordLength: int, penalty: float, repeatedChars: table<char: string, l33tchar: string, penalty: float>, requestId: string, requestTimestamp: float, summary: list<string>, total: table<char: string, l33tchar: string, penalty: float>, words: table<char: string, l33tchar: string, penalty: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "password" $password "scalar") (serialize-qp "outputFormat" $outputFormat "scalar") (serialize-qp "penalty" $penalty "scalar") (serialize-qp "reqId" $reqId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "password" $password "scalar") (serialize-qp "outputFormat" $output_format "scalar") (serialize-qp "penalty" $penalty "scalar") (serialize-qp "reqId" $req_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ec" $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

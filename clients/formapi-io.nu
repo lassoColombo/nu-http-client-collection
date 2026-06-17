@@ -72,7 +72,7 @@ def auth-type-completer [] { ["email_link" "ldap" "none" "oauth" "password" "pho
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authentication testAuthentication" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authentication test" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /authentication
 # operationId: testAuthentication
-export def "authentication testAuthentication" [
+export def "authentication test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -118,7 +118,7 @@ export def "authentication testAuthentication" [
 #
 # GET /combined_submissions
 # operationId: listCombinedSubmissions
-export def "combined-submissions listCombinedSubmissions" [
+export def "combined-submissions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "combined-submissions combineSubmissions" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/combined_submissions")
-  let body = {expires_in: $expires_in, metadata: $metadata, password: $password, submission_ids: $submission_ids, test: $test} | compact
+  let body = {"expires_in": $expires_in, "metadata": $metadata, "password": $password, "submission_ids": $submission_ids, "test": $test} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -186,7 +186,7 @@ export def "combined-submissions expireCombinedSubmission" [
 ]: nothing -> record<actions: table<action_category: string, action_type: string, id: string, integration_id: string, result_data: record, state: string>, download_url: string, error_message: string, expired: bool, expires_at: string, expires_in: int, id: string, metadata: record, password: string, pdf_hash: string, source_pdfs: list<any>, state: string, submission_ids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/combined_submissions/($combined_submission_id)")
+  let full_url = (build-url $base ({combined_submission_id: $combined_submission_id} | format pattern "/combined_submissions/{combined_submission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,7 +209,7 @@ export def "combined-submissions get" [
 ]: nothing -> record<actions: table<action_category: string, action_type: string, id: string, integration_id: string, result_data: record, state: string>, download_url: string, error_message: string, expired: bool, expires_at: string, expires_in: int, id: string, metadata: record, password: string, pdf_hash: string, source_pdfs: list<any>, state: string, submission_ids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/combined_submissions/($combined_submission_id)")
+  let full_url = (build-url $base ({combined_submission_id: $combined_submission_id} | format pattern "/combined_submissions/{combined_submission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,7 +239,7 @@ export def "combined-submissions-v2 combinePdfs" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/combined_submissions?v=2")
-  let body = {delete_custom_files: $delete_custom_files, expires_in: $expires_in, metadata: $metadata, password: $password, source_pdfs: $source_pdfs, test: $test} | compact
+  let body = {"delete_custom_files": $delete_custom_files, "expires_in": $expires_in, "metadata": $metadata, "password": $password, "source_pdfs": $source_pdfs, "test": $test} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,7 +250,7 @@ export def "combined-submissions-v2 combinePdfs" [
 #
 # POST /custom_files
 # operationId: createCustomFileFromUpload
-export def "custom-files createCustomFileFromUpload" [
+export def "custom-files create-custom-file-from-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "custom-files createCustomFileFromUpload" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/custom_files")
-  let body = {cache_id: $cache_id} | compact
+  let body = {"cache_id": $cache_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,7 +289,7 @@ export def "data-requests get" [
 ]: nothing -> record<auth_phone_number_hash: string, auth_provider: string, auth_second_factor_type: string, auth_session_id_hash: string, auth_session_started_at: string, auth_type: string, auth_user_id_hash: string, auth_username_hash: string, completed_at: string, email: string, fields: list<string>, id: string, ip_address: string, metadata: record, name: string, order: int, sort_order: int, state: string, submission_id: string, user_agent: string, viewed_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data_requests/($data_request_id)")
+  let full_url = (build-url $base ({data_request_id: $data_request_id} | format pattern "/data_requests/{data_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -299,7 +299,7 @@ export def "data-requests get" [
 #
 # PUT /data_requests/{data_request_id}
 # operationId: updateDataRequest
-export def "data-requests updateDataRequest" [
+export def "data-requests update" [
   data_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,8 +326,8 @@ export def "data-requests updateDataRequest" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data_requests/($data_request_id)")
-  let body = {auth_phone_number_hash: $auth_phone_number_hash, auth_provider: $auth_provider, auth_second_factor_type: $auth_second_factor_type, auth_session_id_hash: $auth_session_id_hash, auth_session_started_at: $auth_session_started_at, auth_type: $auth_type, auth_user_id_hash: $auth_user_id_hash, auth_username_hash: $auth_username_hash, email: $email, fields: $fields, metadata: $metadata, name: $name, order: $order} | compact
+  let full_url = (build-url $base ({data_request_id: $data_request_id} | format pattern "/data_requests/{data_request_id}"))
+  let body = {"auth_phone_number_hash": $auth_phone_number_hash, "auth_provider": $auth_provider, "auth_second_factor_type": $auth_second_factor_type, "auth_session_id_hash": $auth_session_id_hash, "auth_session_started_at": $auth_session_started_at, "auth_type": $auth_type, "auth_user_id_hash": $auth_user_id_hash, "auth_username_hash": $auth_username_hash, "email": $email, "fields": $fields, "metadata": $metadata, "name": $name, "order": $order} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -338,7 +338,7 @@ export def "data-requests updateDataRequest" [
 #
 # POST /data_requests/{data_request_id}/tokens
 # operationId: createDataRequestToken
-export def "data-requests-tokens createDataRequestToken" [
+export def "data-requests-tokens create" [
   data_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -351,7 +351,7 @@ export def "data-requests-tokens createDataRequestToken" [
 ]: nothing -> record<errors: list<string>, status: string, token: record<data_request_url: string, expires_at: string, id: string, secret: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data_requests/($data_request_id)/tokens")
+  let full_url = (build-url $base ({data_request_id: $data_request_id} | format pattern "/data_requests/{data_request_id}/tokens"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -361,7 +361,7 @@ export def "data-requests-tokens createDataRequestToken" [
 #
 # GET /folders/
 # operationId: listFolders
-export def "folders listFolders" [
+export def "folders list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "folders listFolders" [
 # POST /folders/
 # operationId: createFolder
 # --folder shape: {name: string, parent_folder_id?: string}
-export def "folders createFolder" [
+export def "folders create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "folders createFolder" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/folders/")
-  let body = {folder: $folder} | compact
+  let body = {"folder": $folder} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -425,7 +425,7 @@ export def "folders delete" [
 ]: nothing -> record<id: string, name: string, parent_folder_id: string, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/folders/($folder_id)")
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/folders/{folder_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -435,7 +435,7 @@ export def "folders delete" [
 #
 # POST /folders/{folder_id}/move
 # operationId: moveFolderToFolder
-export def "folders-move moveFolderToFolder" [
+export def "folders-move move-folder-to" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,8 +450,8 @@ export def "folders-move moveFolderToFolder" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/folders/($folder_id)/move")
-  let body = {parent_folder_id: $parent_folder_id} | compact
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/folders/{folder_id}/move"))
+  let body = {"parent_folder_id": $parent_folder_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -462,7 +462,7 @@ export def "folders-move moveFolderToFolder" [
 #
 # POST /folders/{folder_id}/rename
 # operationId: renameFolder
-export def "folders-rename renameFolder" [
+export def "folders-rename rename" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,8 +477,8 @@ export def "folders-rename renameFolder" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/folders/($folder_id)/rename")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({folder_id: $folder_id} | format pattern "/folders/{folder_id}/rename"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -489,7 +489,7 @@ export def "folders-rename renameFolder" [
 #
 # GET /submissions
 # operationId: listSubmissions
-export def "submissions listSubmissions" [
+export def "submissions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "submissions-batches batchGeneratePdfs" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/submissions/batches")
-  let body = {metadata: $metadata, submissions: $submissions, template_id: $template_id, test: $test} | compact
+  let body = {"metadata": $metadata, "submissions": $submissions, "template_id": $template_id, "test": $test} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -548,7 +548,7 @@ export def "submissions-batches batchGeneratePdfs" [
 #
 # GET /submissions/batches/{submission_batch_id}
 # operationId: getSubmissionBatch
-export def "submissions-batches get" [
+export def "submissions-batches get-submission-batch" [
   submission_batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +563,7 @@ export def "submissions-batches get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_submissions" $include_submissions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/submissions/batches/($submission_batch_id)" $qp)
+  let full_url = (build-url $base ({submission_batch_id: $submission_batch_id} | format pattern "/submissions/batches/{submission_batch_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -586,7 +586,7 @@ export def "submissions expireSubmission" [
 ]: nothing -> record<actions: table<action_category: string, action_type: string, id: string, integration_id: string, result_data: record, state: string>, batch_id: string, data: record, data_requests: table<auth_phone_number_hash: string, auth_provider: string, auth_second_factor_type: string, auth_session_id_hash: string, auth_session_started_at: string, auth_type: string, auth_user_id_hash: string, auth_username_hash: string, completed_at: string, email: string, fields: list, id: string, ip_address: string, metadata: record, name: string, order: int, sort_order: int, state: string, submission_id: string, user_agent: string, viewed_at: string>, download_url: string, editable: bool, expired: bool, expires_at: string, id: string, metadata: record, pdf_hash: string, permanent_download_url: string, processed_at: string, referrer: string, source: string, state: string, template_id: string, test: bool, truncated_text: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/submissions/($submission_id)")
+  let full_url = (build-url $base ({submission_id: $submission_id} | format pattern "/submissions/{submission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -611,7 +611,7 @@ export def "submissions get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_data" $include_data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/submissions/($submission_id)" $qp)
+  let full_url = (build-url $base ({submission_id: $submission_id} | format pattern "/submissions/{submission_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -621,7 +621,7 @@ export def "submissions get" [
 #
 # GET /templates
 # operationId: listTemplates
-export def "templates listTemplates" [
+export def "templates list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,7 +648,7 @@ export def "templates listTemplates" [
 #
 # POST /templates
 # operationId: createPDFTemplate
-export def "templates createPDFTemplate" [
+export def "templates create-pdf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,15 +657,15 @@ export def "templates createPDFTemplate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  templatedocument: string # format: binary, e.g. <Uploaded File>
-  templatename: string # e.g. Test Template
-  --templateparent-folder-id: string # e.g. fld_000000000000000001
+  template_document: string # format: binary, e.g. <Uploaded File>
+  template_name: string # e.g. Test Template
+  --template-parent-folder-id: string # e.g. fld_000000000000000001
 ]: any -> record<allow_additional_properties: bool, description: string, editable_submissions: bool, expiration_interval: string, expire_after: float, expire_submissions: bool, id: string, locked: bool, name: string, parent_folder_id: string, path: string, public_submissions: bool, public_web_form: bool, redirect_url: string, slack_webhook_url: string, template_type: string, webhook_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates")
-  let body = {template[document]: $templatedocument, template[name]: $templatename, template[parent_folder_id]: $templateparent_folder_id} | compact
+  let body = {"template[document]": $template_document, "template[name]": $template_name, "template[parent_folder_id]": $template_parent_folder_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -676,7 +676,7 @@ export def "templates createPDFTemplate" [
 #
 # GET /templates/{template_id}
 # operationId: getTemplate
-export def "templates get-by-template_id" [
+export def "templates get" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,7 +689,7 @@ export def "templates get-by-template_id" [
 ]: nothing -> record<allow_additional_properties: bool, description: string, document_url: string, editable_submissions: bool, expiration_interval: string, expire_after: float, expire_submissions: bool, id: string, locked: bool, name: string, page_dimensions: list<list<float>>, parent_folder_id: string, path: string, permanent_document_url: string, public_submissions: bool, public_web_form: bool, redirect_url: string, slack_webhook_url: string, template_type: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)")
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -700,7 +700,7 @@ export def "templates get-by-template_id" [
 # PUT /templates/{template_id}
 # operationId: updateTemplate
 # --template shape: {allow_additional_properties?: bool, description?: string, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name?: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, webhook_url?: string}
-export def "templates updateTemplate" [
+export def "templates update" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,8 +715,8 @@ export def "templates updateTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)")
-  let body = {template: $template} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}"))
+  let body = {"template": $template} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -728,7 +728,7 @@ export def "templates updateTemplate" [
 # PUT /templates/{template_id}/add_fields
 # operationId: addFieldsToTemplate
 # --fields item shape: {alignment?: "left"|"center"|"right", autoCalculateMaxLength?: bool, backgroundColor?: string, backgroundColorFieldName?: string, backgroundColorFieldRequired?: bool, barcodeSymbology?: string, bold?: bool, characterSpacing?: float, checkCharacter?: "&#10003;"|"&#10004;"|"&#10006;"|"&#10007;"|"&#10008;", checkColor?: string, checkColorFieldName?: string, checkColorFieldRequired?: bool, color?: string, colorFieldName?: string, colorFieldRequired?: bool, comb?: bool, combNumberOfCells?: float, combValueOffset?: float, combinedFieldFormat?: string, combinedFieldNames?: string, combinedFieldSeparator?: string, combinedFieldType?: string, condition?: string, currency?: bool, dateTimeFormat?: string, decimalPlaces?: float, default?: string, description?: string, displayType?: "text"|"check"|"qrcode"|"barcode"|"image"|"shape", exclusiveMaximum?: bool, exclusiveMinimum?: bool, falseText?: string, fontSize?: float, height?: float, hidden?: bool, id?: float, imageGravity?: "NorthWest"|"North"|"NorthEast"|"West"|"Center"|"East"|"SouthWest"|"South"|"SouthEast", imageScaleType?: "fit"|"fill"|"stretch", includeTime?: bool, integer?: bool, invertBooleanCondition?: bool, maxLength?: float, maximum?: float, metadata?: string, minLength?: float, minimum?: float, multiline?: bool, multilineLines?: float, name: string, numberConditionRangeExclusiveMax?: bool, numberConditionRangeExclusiveMin?: bool, numberConditionRangeMax?: float, numberConditionRangeMin?: float, numberConditionType?: "equals"|"range"|"gte"|"gt"|"lte"|"lt", opacity?: float, optionList?: string, overflow?: "shrink_to_fit"|"truncate", page: float, placeholder?: string, qrcodeColor?: string, qrcodeColorFieldName?: string, qrcodeColorFieldRequired?: bool, required?: bool, rotation?: float, shapeBorderColor?: string, shapeBorderColorFieldName?: string, shapeBorderColorFieldRequired?: bool, shapeBorderWidth?: float, shapeFillColor?: string, shapeFillColorFieldName?: string, shapeFillColorFieldRequired?: bool, shapeType?: "square"|"rectangle"|"circle"|"ellipse", signatureAllowDraw?: bool, signatureAllowType?: bool, static?: bool, strikethrough?: bool, stringConditionType?: "equals"|"contains"|"starts_with"|"ends_with"|"regex", title?: string, trueText?: string, type?: "string"|"number"|"boolean"|"date"|"address"|"country"|"email"|"url"|"image"|"signature"|"barcode"|"combined", typeface?: string, uppercase?: bool, vAlignment?: "bottom"|"center"|"top", width?: float, x?: float, y?: float}
-export def "templates-add-fields addFieldsToTemplate" [
+export def "templates-add-fields create-fields-to" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -743,8 +743,8 @@ export def "templates-add-fields addFieldsToTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/add_fields")
-  let body = {fields: $fields} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}/add_fields"))
+  let body = {"fields": $fields} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -755,7 +755,7 @@ export def "templates-add-fields addFieldsToTemplate" [
 #
 # POST /templates/{template_id}/copy
 # operationId: copyTemplate
-export def "templates-copy copyTemplate" [
+export def "templates-copy copy" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,8 +771,8 @@ export def "templates-copy copyTemplate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/copy")
-  let body = {name: $name, parent_folder_id: $parent_folder_id} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}/copy"))
+  let body = {"name": $name, "parent_folder_id": $parent_folder_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -783,7 +783,7 @@ export def "templates-copy copyTemplate" [
 #
 # POST /templates/{template_id}/move
 # operationId: moveTemplateToFolder
-export def "templates-move moveTemplateToFolder" [
+export def "templates-move move-template-to-folder" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -798,8 +798,8 @@ export def "templates-move moveTemplateToFolder" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/move")
-  let body = {parent_folder_id: $parent_folder_id} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}/move"))
+  let body = {"parent_folder_id": $parent_folder_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -823,7 +823,7 @@ export def "templates-schema get" [
 ]: nothing -> record<_schema: string, additionalProperties: bool, definitions: record, description: string, id: string, properties: record, required: list<any>, title: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/schema")
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}/schema"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -852,7 +852,7 @@ export def "templates-submissions get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "created_after" $created_after "scalar") (serialize-qp "created_before" $created_before "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "include_data" $include_data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/templates/($template_id)/submissions" $qp)
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}/submissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -886,8 +886,8 @@ export def "templates-submissions generatePDF" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/submissions")
-  let body = {css: $css, data: $data, data_requests: $data_requests, expires_in: $expires_in, field_overrides: $field_overrides, html: $html, metadata: $metadata, password: $password, test: $test} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}/submissions"))
+  let body = {"css": $css, "data": $data, "data_requests": $data_requests, "expires_in": $expires_in, "field_overrides": $field_overrides, "html": $html, "metadata": $metadata, "password": $password, "test": $test} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -919,8 +919,8 @@ export def "templates-submissions-batch batchGeneratePdfV1" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)/submissions/batch")
-  let body = {css: $css, data: $data, data_requests: $data_requests, html: $html, metadata: $metadata, test: $test} | compact
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}/submissions/batch"))
+  let body = {"css": $css, "data": $data, "data_requests": $data_requests, "html": $html, "metadata": $metadata, "test": $test} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -931,7 +931,7 @@ export def "templates-submissions-batch batchGeneratePdfV1" [
 #
 # GET /templates/{template_id}?full=true
 # operationId: getFullTemplate
-export def "templates get-by-template_id-1" [
+export def "templates get-full" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -944,7 +944,7 @@ export def "templates get-by-template_id-1" [
 ]: nothing -> record<allow_additional_properties: bool, defaults: record<color: string, fontSize: float, typeface: string>, demo: bool, description: string, document_filename: string, document_md5: string, document_parse_error: bool, document_processed: bool, document_state: string, document_url: string, editable_submissions: bool, embed_domains: list<string>, encrypt_pdfs: bool, encrypt_pdfs_password: string, expiration_interval: string, expire_after: float, expire_submissions: bool, field_order: list<list<float>>, fields: record, first_template: bool, footer_html: string, header_html: string, html: string, id: string, locked: bool, name: string, page_count: float, page_dimensions: list<list<float>>, parent_folder_id: string, path: string, permanent_document_url: string, public_submissions: bool, public_web_form: bool, redirect_url: string, scss: string, shared_field_data: record, slack_webhook_url: string, template_type: string, webhook_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/templates/($template_id)?full=true")
+  let full_url = (build-url $base ({template_id: $template_id} | format pattern "/templates/{template_id}?full=true"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -955,7 +955,7 @@ export def "templates get-by-template_id-1" [
 # POST /templates?desc=cached_upload
 # operationId: createPDFTemplateFromUpload
 # --template shape: {allow_additional_properties?: bool, description?: string, document?: record, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, template_type?: "pdf"|"html", webhook_url?: string}
-export def "templates-desccached-upload createPDFTemplateFromUpload" [
+export def "templates-desccached-upload create-pdf-template-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "templates-desccached-upload createPDFTemplateFromUpload" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates?desc=cached_upload")
-  let body = {template: $template} | compact
+  let body = {"template": $template} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -982,7 +982,7 @@ export def "templates-desccached-upload createPDFTemplateFromUpload" [
 # POST /templates?desc=html
 # operationId: createHTMLTemplate
 # --template shape: {allow_additional_properties?: bool, description?: string, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, template_type?: "pdf"|"html", webhook_url?: string}
-export def "templates-deschtml createHTMLTemplate" [
+export def "templates-deschtml create-html" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -997,7 +997,7 @@ export def "templates-deschtml createHTMLTemplate" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/templates?desc=html")
-  let body = {template: $template} | compact
+  let body = {"template": $template} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1008,7 +1008,7 @@ export def "templates-deschtml createHTMLTemplate" [
 #
 # GET /uploads/presign
 # operationId: getPresignUrl
-export def "uploads-presign get" [
+export def "uploads-presign get-presign-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

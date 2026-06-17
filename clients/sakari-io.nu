@@ -66,7 +66,7 @@ def base-url-completer [] { ["https://api.sakari.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def mergeStrategy-completer [] { ["append" "core" "remove"] }
+def merge-strategy-completer [] { ["append" "core" "remove"] }
 def type-completer [] { ["MMS" "SMS"] }
 def type-completer-1 [] { ["SMS" "Web"] }
 
@@ -114,7 +114,7 @@ export def "oauth2-token authtoken" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/token")
-  let body = {client_id: $client_id, client_secret: $client_secret, grant_type: $grant_type} | compact
+  let body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -126,7 +126,7 @@ export def "oauth2-token authtoken" [
 # GET /v1/accounts/{accountId}/campaigns
 # operationId: campaigns.fetchAll
 export def "accounts-campaigns campaignsfetchAll" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,7 +142,7 @@ export def "accounts-campaigns campaignsfetchAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/campaigns" $qp)
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/campaigns") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -155,7 +155,7 @@ export def "accounts-campaigns campaignsfetchAll" [
 # --filters shape: {attributes?: list, contacts?: list, tags?: list}
 # --trigger shape: {code?: "M"|"S"|"FU"}
 export def "accounts-campaigns campaignscreate" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,8 +171,8 @@ export def "accounts-campaigns campaignscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/campaigns")
-  let body = {filters: $filters, template: $template, trigger: $trigger} | compact
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/campaigns"))
+  let body = {"filters": $filters, "template": $template, "trigger": $trigger} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,8 +184,8 @@ export def "accounts-campaigns campaignscreate" [
 # DELETE /v1/accounts/{accountId}/campaigns/{campaignId}
 # operationId: campaigns.remove
 export def "accounts-campaigns campaignsremove" [
-  accountId: string
-  campaignId: string
+  account_id: string
+  campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "accounts-campaigns campaignsremove" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/campaigns/($campaignId)")
+  let full_url = (build-url $base ({account_id: $account_id, campaign_id: $campaign_id} | format pattern "/v1/accounts/{account_id}/campaigns/{campaign_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,8 +208,8 @@ export def "accounts-campaigns campaignsremove" [
 # GET /v1/accounts/{accountId}/campaigns/{campaignId}
 # operationId: campaigns.fetch
 export def "accounts-campaigns campaignsfetch" [
-  accountId: string
-  campaignId: string
+  account_id: string
+  campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "accounts-campaigns campaignsfetch" [
 ]: nothing -> record<data: record<id: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/campaigns/($campaignId)")
+  let full_url = (build-url $base ({account_id: $account_id, campaign_id: $campaign_id} | format pattern "/v1/accounts/{account_id}/campaigns/{campaign_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -232,8 +232,8 @@ export def "accounts-campaigns campaignsfetch" [
 # PUT /v1/accounts/{accountId}/campaigns/{campaignId}
 # operationId: campaigns.update
 export def "accounts-campaigns campaignsupdate" [
-  accountId: string
-  campaignId: string
+  account_id: string
+  campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "accounts-campaigns campaignsupdate" [
 ]: nothing -> record<data: record<id: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/campaigns/($campaignId)")
+  let full_url = (build-url $base ({account_id: $account_id, campaign_id: $campaign_id} | format pattern "/v1/accounts/{account_id}/campaigns/{campaign_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +256,7 @@ export def "accounts-campaigns campaignsupdate" [
 # GET /v1/accounts/{accountId}/contacts
 # operationId: contacts.fetchAll
 export def "accounts-contacts contactsfetchAll" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,16 +267,16 @@ export def "accounts-contacts contactsfetchAll" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Results to skip when paginating through a result set (format: int64)
   --limit: int # Maximum number of results to return (format: int64)
-  --firstName: string # Filter by first name or part of
-  --lastName: string # Filter by last name or part of
+  --first-name: string # Filter by first name or part of
+  --last-name: string # Filter by last name or part of
   --mobile: string # Filter by mobile or part of
   --email: string # Filter by email or part of
   --tags: string # Filter by tag(s)
 ]: nothing -> record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<created: record, error: record, updated: record, valid: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "firstName" $firstName "scalar") (serialize-qp "lastName" $lastName "scalar") (serialize-qp "mobile" $mobile "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/contacts" $qp)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "mobile" $mobile "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "tags" $tags "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/contacts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -289,7 +289,7 @@ export def "accounts-contacts contactsfetchAll" [
 # --mobile shape: {country?: string, number?: string}
 # --tags item shape: {tag?: string, visible?: bool}
 export def "accounts-contacts contactscreate" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,11 +298,11 @@ export def "accounts-contacts contactscreate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --mergeStrategy: string@mergeStrategy-completer # Determines how existing contacts with matching mobile numbers are treated
+  --merge-strategy: string@merge-strategy-completer # Determines how existing contacts with matching mobile numbers are treated
   --email: string # e.g. chris@sakari.io
-  --firstName: string # e.g. Chris
+  --first-name: string # e.g. Chris
   --id: string
-  --lastName: string # e.g. Bloggs
+  --last-name: string # e.g. Bloggs
   --mobile: record # shape: {country?: string, number?: string}
   --attributes: record
   --tags: list # item shape: {tag?: string, visible?: bool}
@@ -310,9 +310,9 @@ export def "accounts-contacts contactscreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "mergeStrategy" $mergeStrategy "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/contacts" $qp)
-  let body = {email: $email, firstName: $firstName, id: $id, lastName: $lastName, mobile: $mobile, attributes: $attributes, tags: $tags} | compact
+  let qp = [(serialize-qp "mergeStrategy" $merge_strategy "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/contacts") $qp)
+  let body = {"email": $email, "firstName": $first_name, "id": $id, "lastName": $last_name, "mobile": $mobile, "attributes": $attributes, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -324,8 +324,8 @@ export def "accounts-contacts contactscreate" [
 # DELETE /v1/accounts/{accountId}/contacts/{contactId}
 # operationId: contacts.remove
 export def "accounts-contacts contactsremove" [
-  accountId: string
-  contactId: string
+  account_id: string
+  contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,7 +337,7 @@ export def "accounts-contacts contactsremove" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/contacts/($contactId)")
+  let full_url = (build-url $base ({account_id: $account_id, contact_id: $contact_id} | format pattern "/v1/accounts/{account_id}/contacts/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -348,8 +348,8 @@ export def "accounts-contacts contactsremove" [
 # GET /v1/accounts/{accountId}/contacts/{contactId}
 # operationId: contacts.fetch
 export def "accounts-contacts contactsfetch" [
-  accountId: string
-  contactId: string
+  account_id: string
+  contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "accounts-contacts contactsfetch" [
 ]: nothing -> record<data: record<created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/contacts/($contactId)")
+  let full_url = (build-url $base ({account_id: $account_id, contact_id: $contact_id} | format pattern "/v1/accounts/{account_id}/contacts/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -372,8 +372,8 @@ export def "accounts-contacts contactsfetch" [
 # PUT /v1/accounts/{accountId}/contacts/{contactId}
 # operationId: contacts.update
 export def "accounts-contacts contactsupdate" [
-  accountId: string
-  contactId: string
+  account_id: string
+  contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,7 +385,7 @@ export def "accounts-contacts contactsupdate" [
 ]: nothing -> record<data: record<created: record<at: string, by: record>, error: record<code: string, description: string>, updated: record<at: string, by: record>, valid: bool>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/contacts/($contactId)")
+  let full_url = (build-url $base ({account_id: $account_id, contact_id: $contact_id} | format pattern "/v1/accounts/{account_id}/contacts/{contact_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -396,7 +396,7 @@ export def "accounts-contacts contactsupdate" [
 # GET /v1/accounts/{accountId}/conversations
 # operationId: conversations.fetchAll
 export def "accounts-conversations conversationsfetchAll" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "accounts-conversations conversationsfetchAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/conversations" $qp)
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/conversations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -422,8 +422,8 @@ export def "accounts-conversations conversationsfetchAll" [
 # GET /v1/accounts/{accountId}/conversations/{conversationId}
 # operationId: conversations.fetch
 export def "accounts-conversations conversationsfetch" [
-  accountId: string
-  conversationId: string
+  account_id: string
+  conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,7 +435,7 @@ export def "accounts-conversations conversationsfetch" [
 ]: nothing -> record<data: record<closed: bool, contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, created: record<at: string, by: record>, id: string, lastMessage: record<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>, phoneNumber: record<active: bool, country: string, number: string>, unread: list<string>, updated: record<at: string, by: record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/conversations/($conversationId)")
+  let full_url = (build-url $base ({account_id: $account_id, conversation_id: $conversation_id} | format pattern "/v1/accounts/{account_id}/conversations/{conversation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,8 +446,8 @@ export def "accounts-conversations conversationsfetch" [
 # PUT /v1/accounts/{accountId}/conversations/{conversationId}/close
 # operationId: conversations.close
 export def "accounts-conversations-close conversationsclose" [
-  accountId: string
-  conversationId: string
+  account_id: string
+  conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,7 +459,7 @@ export def "accounts-conversations-close conversationsclose" [
 ]: nothing -> record<data: record<closed: bool, contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, created: record<at: string, by: record>, id: string, lastMessage: record<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>, phoneNumber: record<active: bool, country: string, number: string>, unread: list<string>, updated: record<at: string, by: record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/conversations/($conversationId)/close")
+  let full_url = (build-url $base ({account_id: $account_id, conversation_id: $conversation_id} | format pattern "/v1/accounts/{account_id}/conversations/{conversation_id}/close"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,7 +470,7 @@ export def "accounts-conversations-close conversationsclose" [
 # GET /v1/accounts/{accountId}/messages
 # operationId: messages.fetchAll
 export def "accounts-messages messagesfetchAll" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -481,13 +481,13 @@ export def "accounts-messages messagesfetchAll" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Results to skip when paginating through a result set (format: int64)
   --limit: int # Maximum number of results to return (format: int64)
-  --contactId: string # ID of contact
-  --conversationId: string # ID of conversation
+  --contact-id: string # ID of contact
+  --conversation-id: string # ID of conversation
 ]: nothing -> record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<contact: record, conversation: record, created: record, error: record, id: string, media: list, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "contactId" $contactId "scalar") (serialize-qp "conversationId" $conversationId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/messages" $qp)
+  let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "contactId" $contact_id "scalar") (serialize-qp "conversationId" $conversation_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/messages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -502,7 +502,7 @@ export def "accounts-messages messagesfetchAll" [
 # --media item shape: {url?: string}
 # --phoneNumberFilter shape: {group?: record}
 export def "accounts-messages messagessend" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,19 +512,19 @@ export def "accounts-messages messagessend" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # item shape: {email?: string, firstName?: string, id?: string, lastName?: string, mobile?: record, attributes?: record, tags?: list}
-  --conversationStrategy: string
+  --conversation-strategy: string
   --conversations: list # List of conversation ids to send messages to
   --filters: record # shape: {attributes?: list, tags?: list}
   --media: list # List of media objects to attach to message — item shape: {url?: string}
-  --phoneNumberFilter: record # shape: {group?: record}
+  --phone-number-filter: record # shape: {group?: record}
   --template: string
   --type: string@type-completer
 ]: any -> record<data: record<estimatedPrice: float, invalid: list<record>, jobId: string, messages: list<record>, requested: int, valid: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/messages")
-  let body = {contacts: $contacts, conversationStrategy: $conversationStrategy, conversations: $conversations, filters: $filters, media: $media, phoneNumberFilter: $phoneNumberFilter, template: $template, type: $type} | compact
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/messages"))
+  let body = {"contacts": $contacts, "conversationStrategy": $conversation_strategy, "conversations": $conversations, "filters": $filters, "media": $media, "phoneNumberFilter": $phone_number_filter, "template": $template, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -536,8 +536,8 @@ export def "accounts-messages messagessend" [
 # GET /v1/accounts/{accountId}/messages/{messageId}
 # operationId: messages.fetch
 export def "accounts-messages messagesfetch" [
-  accountId: string
-  messageId: string
+  account_id: string
+  message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "accounts-messages messagesfetch" [
 ]: nothing -> record<data: record<contact: record<email: string, firstName: string, id: string, lastName: string, mobile: record>, conversation: record<id: string>, created: record<at: string, by: record>, error: record<code: string, description: string>, id: string, media: list<record>, message: string, outgoing: bool, phoneNumber: string, price: float, read: bool, segments: float, status: string, template: string, updated: record<at: string, by: record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/messages/($messageId)")
+  let full_url = (build-url $base ({account_id: $account_id, message_id: $message_id} | format pattern "/v1/accounts/{account_id}/messages/{message_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -560,7 +560,7 @@ export def "accounts-messages messagesfetch" [
 # GET /v1/accounts/{accountId}/templates
 # operationId: templates.fetchAll
 export def "accounts-templates templatesfetchAll" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -576,7 +576,7 @@ export def "accounts-templates templatesfetchAll" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/templates" $qp)
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/templates") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -587,7 +587,7 @@ export def "accounts-templates templatesfetchAll" [
 # POST /v1/accounts/{accountId}/templates
 # operationId: templates.create
 export def "accounts-templates templatescreate" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,8 +603,8 @@ export def "accounts-templates templatescreate" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/templates")
-  let body = {name: $name, template: $template, type: $type} | compact
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/templates"))
+  let body = {"name": $name, "template": $template, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -616,8 +616,8 @@ export def "accounts-templates templatescreate" [
 # DELETE /v1/accounts/{accountId}/templates/{templateId}
 # operationId: templates.remove
 export def "accounts-templates templatesremove" [
-  accountId: string
-  templateId: string
+  account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,7 +629,7 @@ export def "accounts-templates templatesremove" [
 ]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/templates/($templateId)")
+  let full_url = (build-url $base ({account_id: $account_id, template_id: $template_id} | format pattern "/v1/accounts/{account_id}/templates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -640,8 +640,8 @@ export def "accounts-templates templatesremove" [
 # GET /v1/accounts/{accountId}/templates/{templateId}
 # operationId: templates.fetch
 export def "accounts-templates templatesfetch" [
-  accountId: string
-  templateId: string
+  account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "accounts-templates templatesfetch" [
 ]: nothing -> record<data: record<name: string, template: string, type: string, id: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/templates/($templateId)")
+  let full_url = (build-url $base ({account_id: $account_id, template_id: $template_id} | format pattern "/v1/accounts/{account_id}/templates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -664,8 +664,8 @@ export def "accounts-templates templatesfetch" [
 # PUT /v1/accounts/{accountId}/templates/{templateId}
 # operationId: templates.update
 export def "accounts-templates templatesupdate" [
-  accountId: string
-  templateId: string
+  account_id: string
+  template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,7 +677,7 @@ export def "accounts-templates templatesupdate" [
 ]: nothing -> record<data: record<name: string, template: string, type: string, id: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/templates/($templateId)")
+  let full_url = (build-url $base ({account_id: $account_id, template_id: $template_id} | format pattern "/v1/accounts/{account_id}/templates/{template_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -688,7 +688,7 @@ export def "accounts-templates templatesupdate" [
 # GET /v1/accounts/{accountId}/webhooks
 # operationId: webhooks.fetchAll
 export def "accounts-webhooks webhooksfetchAll" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,7 +700,7 @@ export def "accounts-webhooks webhooksfetchAll" [
 ]: nothing -> record<error: record<code: string, message: string>, pagination: record<limit: int, offset: int, totalCount: int>, success: bool, data: table<eventTypes: list, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/webhooks")
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/webhooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -711,7 +711,7 @@ export def "accounts-webhooks webhooksfetchAll" [
 # POST /v1/accounts/{accountId}/webhooks
 # operationId: webhooks.subscribe
 export def "accounts-webhooks webhookssubscribe" [
-  accountId: string
+  account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,14 +720,14 @@ export def "accounts-webhooks webhookssubscribe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --eventTypes: list
+  --event-types: list
   --body-url: string # format: uri, e.g. https://myserver.com/send/callback/here
 ]: any -> record<data: record<eventTypes: list<string>, url: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/webhooks")
-  let body = {eventTypes: $eventTypes, url: $body_url} | compact
+  let full_url = (build-url $base ({account_id: $account_id} | format pattern "/v1/accounts/{account_id}/webhooks"))
+  let body = {"eventTypes": $event_types, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -739,7 +739,7 @@ export def "accounts-webhooks webhookssubscribe" [
 # DELETE /v1/accounts/{accountId}/webhooks/{url}
 # operationId: webhooks.unsubscribe
 export def "accounts-webhooks webhooksunsubscribe" [
-  accountId: string
+  account_id: string
   url: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,7 +752,7 @@ export def "accounts-webhooks webhooksunsubscribe" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v1/accounts/($accountId)/webhooks/($url)")
+  let full_url = (build-url $base ({account_id: $account_id, url: $url} | format pattern "/v1/accounts/{account_id}/webhooks/{url}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -777,7 +777,7 @@ export def "tools-sharefile toolsshareFile" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/tools/sharefile")
-  let body = {media: $media} | compact
+  let body = {"media": $media} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

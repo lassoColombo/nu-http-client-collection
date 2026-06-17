@@ -70,7 +70,7 @@ def accept-completer [] { ["application/json" "text/json"] }
 def expand-completer-1 [] { ["RoomTypes"] }
 def inlinecount-completer [] { ["AllPages" "None"] }
 def status-completer [] { ["Cancelled" "Definite" "Tentative"] }
-def dateFilter-completer [] { ["ArrivalDate" "CreationDate" "DepartureDate" "ModificationDate" "StayDate"] }
+def date-filter-completer [] { ["ArrivalDate" "CreationDate" "DepartureDate" "ModificationDate" "StayDate"] }
 def exclude-completer [] { ["Customers"] }
 def payment-method-completer [] { ["Cash" "ChargeToCompany" "Check" "CreditCard" "DebitCard" "DigitalPayment" "Miscellaneous" "None" "Token" "Voucher" "WireTransfer"] }
 def expand-completer-2 [] { ["None" "RoomRates"] }
@@ -80,7 +80,7 @@ def condition-completer [] { ["Any" "Clean" "CleanNotInspected" "Dirty"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "booking-addons Get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "booking-addons get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -104,7 +104,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/booking/v0/addons
 # operationId: Addons_Get
-export def "booking-addons Get" [
+export def "booking-addons get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,23 +114,23 @@ export def "booking-addons Get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotelId: int # Specifies the hotel id to request offers for. (format: int32)
-  --arrivalDate: string # Date from when the addon service will be booked to the reservation in the ISO-8601 format "YYYY-MM-DD". (format: date-time)
-  --departureDate: string # Date until when the addon service will be booked to the reservation in the ISO-8601 format "YYYY-MM-DD".             This is usually the departure date of the reservation. (format: date-time)
-  --channelCode: string # Channel Code the rate plan needs to be configured for.
+  --hotel-id: int # Specifies the hotel id to request offers for. (format: int32)
+  --arrival-date: string # Date from when the addon service will be booked to the reservation in the ISO-8601 format "YYYY-MM-DD". (format: date-time)
+  --departure-date: string # Date until when the addon service will be booked to the reservation in the ISO-8601 format "YYYY-MM-DD".             This is usually the departure date of the reservation. (format: date-time)
+  --channel-code: string # Channel Code the rate plan needs to be configured for.
   --adults: string # Number of adults per room. (format: byte)
   --rooms: string # Number of rooms. (format: byte)
-  --roomType: string # Only return offers for the specified room type code.
-  --ratePlanCode: string # Only return offers for the specified rate plan code.
+  --room-type: string # Only return offers for the specified room type code.
+  --rate-plan-code: string # Only return offers for the specified rate plan code.
   --expand: string@expand-completer # Expand the rates breakdown if required.
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
 ]: nothing -> record<addon_services: table<breakdown: list, code: string, description: string, frequency: string, name: string, rate_mode: string, total_stay: record>, adults: int, arrival_date: string, departure_date: string, hotel_id: int, hotel_name: string, rate_plan: record<code: string, description: string, name: string>, room: record<description: string, name: string, room_number: int, type: string>, rooms: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotelId "scalar") (serialize-qp "arrivalDate" $arrivalDate "scalar") (serialize-qp "departureDate" $departureDate "scalar") (serialize-qp "channelCode" $channelCode "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "rooms" $rooms "scalar") (serialize-qp "roomType" $roomType "scalar") (serialize-qp "ratePlanCode" $ratePlanCode "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "arrivalDate" $arrival_date "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "rooms" $rooms "scalar") (serialize-qp "roomType" $room_type "scalar") (serialize-qp "ratePlanCode" $rate_plan_code "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/addons" $qp)
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -141,7 +141,7 @@ export def "booking-addons Get" [
 #
 # GET /api/booking/v0/availability
 # operationId: Availability_Get
-export def "booking-availability Get" [
+export def "booking-availability get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,21 +151,21 @@ export def "booking-availability Get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotelId: int # Specifies the hotel id to request the availability for. (format: int32)
+  --hotel-id: int # Specifies the hotel id to request the availability for. (format: int32)
   --qp-from: string # Defines the first business day you would like to get availability numbers for. (format: date-time)
   --qp-to: string # Defines the last business day you would like to get availability numbers for. The maximum time span between <i>from</i>´and <i>to</i>             is limited to 365 days. (format: date-time)
   --expand: string@expand-completer-1 # You can expand the room types breakdown per business day for the availibility numbers if need be.
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
 ]: nothing -> record<_count: int, _links: record, daily_availabilities: table<business_day: string, house_level: record, room_types: list>, hotel: record<code: string, id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotelId "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/availability" $qp)
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -177,7 +177,7 @@ export def "booking-availability Get" [
 # GET /api/booking/v0/blocks
 # operationId: Blocks_GetBlocksAsync
 # --WaitHandle shape: {Handle?: record, SafeWaitHandle?: record}
-export def "booking-blocks GetBlocksAsync" [
+export def "booking-blocks get-blocks-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,28 +187,28 @@ export def "booking-blocks GetBlocksAsync" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotelId: int # Only return blocks for this specific hotel. (format: int32)
-  --groupCode: string # Filter the blocks by the specified group code
+  --hotel-id: int # Only return blocks for this specific hotel. (format: int32)
+  --group-code: string # Filter the blocks by the specified group code
   --qp-from: string # Return all blocks where the block's last_departure is greater than specified date. (format: date-time)
   --qp-to: string # Return all blocks where the block's last_departure is less than specified date. (format: date-time)
   --status: string@status-completer # Return all blocks where the block status is one of the specified values.
-  --ratePlanCodes: list # Return all blocks that have related the specified comma-separated rate plans.
-  --countDetails: oneof<nothing, bool> # If true it will include also details of block count per each room type.
+  --rate-plan-codes: list # Return all blocks that have related the specified comma-separated rate plans.
+  --count-details: oneof<nothing, bool> # If true it will include also details of block count per each room type.
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
-  --WaitHandle: record # shape: {Handle?: record, SafeWaitHandle?: record}
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
+  --wait-handle: record # shape: {Handle?: record, SafeWaitHandle?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotelId "scalar") (serialize-qp "groupCode" $groupCode "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "ratePlanCodes" $ratePlanCodes "csv") (serialize-qp "countDetails" $countDetails "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "countDetails" $count_details "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/blocks" $qp)
-  let body = {WaitHandle: $WaitHandle} | compact
+  let body = {"WaitHandle": $wait_handle} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -220,7 +220,7 @@ export def "booking-blocks GetBlocksAsync" [
 # GET /api/booking/v0/blocks/$count
 # operationId: Blocks_GetBlocksCountAsync
 # --WaitHandle shape: {Handle?: record, SafeWaitHandle?: record}
-export def "booking-blocks-count GetBlocksCountAsync" [
+export def "booking-blocks-count get-blocks-count-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,25 +230,25 @@ export def "booking-blocks-count GetBlocksCountAsync" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotelId: int # Only return blocks for this specific hotel. (format: int32)
-  --groupCode: string # Filter the blocks by the specified group code
+  --hotel-id: int # Only return blocks for this specific hotel. (format: int32)
+  --group-code: string # Filter the blocks by the specified group code
   --qp-from: string # Return all blocks where the block's last_departure is greater than specified date. (format: date-time)
   --qp-to: string # Return all blocks where the block's last_departure is less than specified date. (format: date-time)
   --status: string@status-completer # Return all blocks where the block status is one of the specified values.
-  --ratePlanCodes: list # Return all blocks that have related the specified comma-separated rate plans.
-  --countDetails: oneof<nothing, bool> # If true it will include also details of block count per each room type.
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
-  --WaitHandle: record # shape: {Handle?: record, SafeWaitHandle?: record}
+  --rate-plan-codes: list # Return all blocks that have related the specified comma-separated rate plans.
+  --count-details: oneof<nothing, bool> # If true it will include also details of block count per each room type.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
+  --wait-handle: record # shape: {Handle?: record, SafeWaitHandle?: record}
 ]: any -> record<_count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotelId "scalar") (serialize-qp "groupCode" $groupCode "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "ratePlanCodes" $ratePlanCodes "csv") (serialize-qp "countDetails" $countDetails "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "countDetails" $count_details "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/blocks/$count" $qp)
-  let body = {WaitHandle: $WaitHandle} | compact
+  let body = {"WaitHandle": $wait_handle} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -260,8 +260,8 @@ export def "booking-blocks-count GetBlocksCountAsync" [
 # GET /api/booking/v0/blocks/{blockCode}
 # operationId: Blocks_GetSingleBlockAsync
 # --WaitHandle shape: {Handle?: record, SafeWaitHandle?: record}
-export def "booking-blocks GetSingleBlockAsync" [
-  blockCode: string
+export def "booking-blocks get-single-block-async" [
+  block_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,17 +271,17 @@ export def "booking-blocks GetSingleBlockAsync" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
-  --WaitHandle: record # shape: {Handle?: record, SafeWaitHandle?: record}
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
+  --wait-handle: record # shape: {Handle?: record, SafeWaitHandle?: record}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/booking/v0/blocks/($blockCode)")
-  let body = {WaitHandle: $WaitHandle} | compact
+  let full_url = (build-url $base ({block_code: $block_code} | format pattern "/api/booking/v0/blocks/{block_code}"))
+  let body = {"WaitHandle": $wait_handle} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -292,7 +292,7 @@ export def "booking-blocks GetSingleBlockAsync" [
 #
 # GET /api/booking/v0/bookings
 # operationId: Bookings_GetBookings
-export def "booking-bookings GetBookings" [
+export def "booking-bookings list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,40 +302,40 @@ export def "booking-bookings GetBookings" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotelId: int # Only return bookings for this specific hotel. (format: int32)
-  --cancellationId: string # Return bookings for this cancellation id.
-  --reservationNumber: int # Return bookings matching this reservation number. Please note that reservation numbers are only unique within a hotel. If you             don´t specify a hotel filter at the same time you could get back multiple bookings from different hotels. (format: int32)
-  --customerName: string # Return all bookings where the first or lastname of one of the guests or the contact contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
-  --customerEmail: string # Return all bookings where the primary email address of one of the guests or the contact contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
-  --customerId: string # Return all bookings the id of one of the guests or the contact matches the specified value.
-  --roomNumber: string # Return all bookings having the specified room number assigned.
-  --externalId: string # Return all bookings exactly matching the specified external id. This filter is case sensitive.
-  --companyName: string # Return all bookings where the name of the linked company or travel agent profile contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
-  --companyId: string # Return all bookings the id of the company or travel agent profile matches the specified value.
-  --companyEmail: string # Return all bookings where the primary email address of the company or the travel agent profile contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
-  --blockCode: string # Return all bookings where the block code matches the specified value.
-  --reservationStatuses: list # Return all bookings where the reservation status is one of the specified values.
-  --marketCodes: list # Return all bookings where the market code is one of the specified values.
-  --channelCodes: list # Return all bookings where the channel code is one of the specified values.
-  --subChannelCodes: list # Return all bookings where the subchannel code is one of the specified values.
-  --roomTypes: list # Return all bookings where the room type is one of the specified values.
-  --ratePlanCodes: list # Return all bookings where the rate plan code is one of the specified values.
+  --hotel-id: int # Only return bookings for this specific hotel. (format: int32)
+  --cancellation-id: string # Return bookings for this cancellation id.
+  --reservation-number: int # Return bookings matching this reservation number. Please note that reservation numbers are only unique within a hotel. If you             don´t specify a hotel filter at the same time you could get back multiple bookings from different hotels. (format: int32)
+  --customer-name: string # Return all bookings where the first or lastname of one of the guests or the contact contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
+  --customer-email: string # Return all bookings where the primary email address of one of the guests or the contact contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
+  --customer-id: string # Return all bookings the id of one of the guests or the contact matches the specified value.
+  --room-number: string # Return all bookings having the specified room number assigned.
+  --external-id: string # Return all bookings exactly matching the specified external id. This filter is case sensitive.
+  --company-name: string # Return all bookings where the name of the linked company or travel agent profile contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
+  --company-id: string # Return all bookings the id of the company or travel agent profile matches the specified value.
+  --company-email: string # Return all bookings where the primary email address of the company or the travel agent profile contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
+  --block-code: string # Return all bookings where the block code matches the specified value.
+  --reservation-statuses: list # Return all bookings where the reservation status is one of the specified values.
+  --market-codes: list # Return all bookings where the market code is one of the specified values.
+  --channel-codes: list # Return all bookings where the channel code is one of the specified values.
+  --sub-channel-codes: list # Return all bookings where the subchannel code is one of the specified values.
+  --room-types: list # Return all bookings where the room type is one of the specified values.
+  --rate-plan-codes: list # Return all bookings where the rate plan code is one of the specified values.
   --labels: list # Return all reservations with at least one of the specified labels.
   --qp-from: string # Start date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least             one reservation arriving on the specified date or later. (format: date-time)
   --qp-to: string # End date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least             one reservation arriving on the specified date or earlier. (format: date-time)
-  --dateFilter: string@dateFilter-completer # Select a date field you want to filter bookings by. Only one filter at a time can be applied. The to and from dates             will then define the time range.
+  --date-filter: string@date-filter-completer # Select a date field you want to filter bookings by. Only one filter at a time can be applied. The to and from dates             will then define the time range.
   --exclude: string@exclude-completer # To be able to request reservations without personal data based on GDPR.
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
 ]: nothing -> record<_count: int, _links: record, bookings: table<_links: record, confirmation_id: string, created: string, reservations: list, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotelId "scalar") (serialize-qp "cancellationId" $cancellationId "scalar") (serialize-qp "reservationNumber" $reservationNumber "scalar") (serialize-qp "customerName" $customerName "scalar") (serialize-qp "customerEmail" $customerEmail "scalar") (serialize-qp "customerId" $customerId "scalar") (serialize-qp "roomNumber" $roomNumber "scalar") (serialize-qp "externalId" $externalId "scalar") (serialize-qp "companyName" $companyName "scalar") (serialize-qp "companyId" $companyId "scalar") (serialize-qp "companyEmail" $companyEmail "scalar") (serialize-qp "blockCode" $blockCode "scalar") (serialize-qp "reservationStatuses" $reservationStatuses "csv") (serialize-qp "marketCodes" $marketCodes "csv") (serialize-qp "channelCodes" $channelCodes "csv") (serialize-qp "subChannelCodes" $subChannelCodes "csv") (serialize-qp "roomTypes" $roomTypes "csv") (serialize-qp "ratePlanCodes" $ratePlanCodes "csv") (serialize-qp "labels" $labels "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "dateFilter" $dateFilter "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "cancellationId" $cancellation_id "scalar") (serialize-qp "reservationNumber" $reservation_number "scalar") (serialize-qp "customerName" $customer_name "scalar") (serialize-qp "customerEmail" $customer_email "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "roomNumber" $room_number "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "companyId" $company_id "scalar") (serialize-qp "companyEmail" $company_email "scalar") (serialize-qp "blockCode" $block_code "scalar") (serialize-qp "reservationStatuses" $reservation_statuses "csv") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "channelCodes" $channel_codes "csv") (serialize-qp "subChannelCodes" $sub_channel_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "labels" $labels "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "dateFilter" $date_filter "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/bookings" $qp)
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -351,7 +351,7 @@ export def "booking-bookings GetBookings" [
 # --guarantee shape: {guarantee_type?: "PM4Hold"|"PM6Hold"|"GuaranteeToCreditCard"|"GuaranteeToGuestAccount"|"GuaranteeByTravelAgent"|"GuaranteeByCompany"|"Deposit"|"Voucher"|"Prepayment"|"NonGuaranteed"|"Tentative"|"Waitlist", token?: record}
 # --guests item shape: {consent_subscribe?: list, consent_unsubscribe?: list, customer_id?: string, email?: string, first_name?: string, gender?: "Unspecified"|"Male"|"Female", last_name?: string, mailing_address?: record, nationality?: string, phone?: string, primary?: bool, title?: string}
 # --travel_agent shape: {company_id?: string}
-export def "booking-bookings CreateBooking" [
+export def "booking-bookings create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,9 +361,9 @@ export def "booking-bookings CreateBooking" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --sendConfirmation: oneof<nothing, bool> # Whether to send a confirmation email to the primary guest
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --send-confirmation: oneof<nothing, bool> # Whether to send a confirmation email to the primary guest
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
   --addons: list # A list of addon service codes that should be booked for all reservations of this booking
   --adults: int # The number of adults per room (format: int32)
   --arrival-date: string # The arrival date of the guests (format: date-time)
@@ -387,11 +387,11 @@ export def "booking-bookings CreateBooking" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sendConfirmation" $sendConfirmation "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sendConfirmation" $send_confirmation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/bookings" $qp)
-  let body = {addons: $addons, adults: $adults, arrival_date: $arrival_date, channel_code: $channel_code, comment: $comment, company: $company, contact: $contact, departure_date: $departure_date, external_id: $external_id, group_code: $group_code, guarantee: $guarantee, guests: $guests, hotel_id: $hotel_id, payment_method: $payment_method, prepay_discount: $prepay_discount, rate_plan: $rate_plan, room_type: $room_type, rooms: $rooms, travel_agent: $travel_agent} | compact
+  let body = {"addons": $addons, "adults": $adults, "arrival_date": $arrival_date, "channel_code": $channel_code, "comment": $comment, "company": $company, "contact": $contact, "departure_date": $departure_date, "external_id": $external_id, "group_code": $group_code, "guarantee": $guarantee, "guests": $guests, "hotel_id": $hotel_id, "payment_method": $payment_method, "prepay_discount": $prepay_discount, "rate_plan": $rate_plan, "room_type": $room_type, "rooms": $rooms, "travel_agent": $travel_agent} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -402,7 +402,7 @@ export def "booking-bookings CreateBooking" [
 #
 # GET /api/booking/v0/bookings/$count
 # operationId: Bookings_GetBookingsCount
-export def "booking-bookings-count GetBookingsCount" [
+export def "booking-bookings-count get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,37 +412,37 @@ export def "booking-bookings-count GetBookingsCount" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotelId: int # Only return bookings for this specific hotel. (format: int32)
-  --cancellationId: string # Return bookings for this cancellation id.
-  --reservationNumber: int # Return bookings matching this reservation number. Please note that reservation numbers are only unique within a hotel. If you             don´t specify a hotel filter at the same time you could get back multiple bookings from different hotels. (format: int32)
-  --customerName: string # Return all bookings where the first or lastname of one of the guests or the contact contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
-  --customerEmail: string # Return all bookings where the primary email address of one of the guests or the contact contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
-  --customerId: string # Return all bookings the id of one of the guests or the contact matches the specified value.
-  --roomNumber: string # Return all bookings having the specified room number assigned.
-  --externalId: string # Return all bookings exactly matching the specified external id. This filter is case sensitive.
-  --companyName: string # Return all bookings where the name of the linked company or travel agent profile contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
-  --companyId: string # Return all bookings the id of the company or travel agent profile matches the specified value.
-  --companyEmail: string # Return all bookings where the primary email address of the company or the travel agent profile contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
-  --blockCode: string # Return all bookings where the block code matches the specified value.
-  --reservationStatuses: list # Return all bookings where the reservation status is one of the specified values.
-  --marketCodes: list # Return all bookings where the market code is one of the specified values.
-  --channelCodes: list # Return all bookings where the channel code is one of the specified values.
-  --subChannelCodes: list # Return all bookings where the subchannel code is one of the specified values.
-  --roomTypes: list # Return all bookings where the room type is one of the specified values.
-  --ratePlanCodes: list # Return all bookings where the rate plan code is one of the specified values.
+  --hotel-id: int # Only return bookings for this specific hotel. (format: int32)
+  --cancellation-id: string # Return bookings for this cancellation id.
+  --reservation-number: int # Return bookings matching this reservation number. Please note that reservation numbers are only unique within a hotel. If you             don´t specify a hotel filter at the same time you could get back multiple bookings from different hotels. (format: int32)
+  --customer-name: string # Return all bookings where the first or lastname of one of the guests or the contact contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
+  --customer-email: string # Return all bookings where the primary email address of one of the guests or the contact contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
+  --customer-id: string # Return all bookings the id of one of the guests or the contact matches the specified value.
+  --room-number: string # Return all bookings having the specified room number assigned.
+  --external-id: string # Return all bookings exactly matching the specified external id. This filter is case sensitive.
+  --company-name: string # Return all bookings where the name of the linked company or travel agent profile contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
+  --company-id: string # Return all bookings the id of the company or travel agent profile matches the specified value.
+  --company-email: string # Return all bookings where the primary email address of the company or the travel agent profile contains the specified value. The search is executed case insensitive             and also stripping of any whitespaces.
+  --block-code: string # Return all bookings where the block code matches the specified value.
+  --reservation-statuses: list # Return all bookings where the reservation status is one of the specified values.
+  --market-codes: list # Return all bookings where the market code is one of the specified values.
+  --channel-codes: list # Return all bookings where the channel code is one of the specified values.
+  --sub-channel-codes: list # Return all bookings where the subchannel code is one of the specified values.
+  --room-types: list # Return all bookings where the room type is one of the specified values.
+  --rate-plan-codes: list # Return all bookings where the rate plan code is one of the specified values.
   --labels: list # Return all reservations with at least one of the specified labels.
   --qp-from: string # Start date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least             one reservation arriving on the specified date or later. (format: date-time)
   --qp-to: string # End date for the selected date filter. If you select arrival date as date filter the bookings returned will have at least             one reservation arriving on the specified date or earlier. (format: date-time)
-  --dateFilter: string@dateFilter-completer # Select a date field you want to filter bookings by. Only one filter at a time can be applied. The to and from dates             will then define the time range.
+  --date-filter: string@date-filter-completer # Select a date field you want to filter bookings by. Only one filter at a time can be applied. The to and from dates             will then define the time range.
   --exclude: string@exclude-completer # To be able to request reservations without personal data based on GDPR.
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
 ]: nothing -> record<_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotelId "scalar") (serialize-qp "cancellationId" $cancellationId "scalar") (serialize-qp "reservationNumber" $reservationNumber "scalar") (serialize-qp "customerName" $customerName "scalar") (serialize-qp "customerEmail" $customerEmail "scalar") (serialize-qp "customerId" $customerId "scalar") (serialize-qp "roomNumber" $roomNumber "scalar") (serialize-qp "externalId" $externalId "scalar") (serialize-qp "companyName" $companyName "scalar") (serialize-qp "companyId" $companyId "scalar") (serialize-qp "companyEmail" $companyEmail "scalar") (serialize-qp "blockCode" $blockCode "scalar") (serialize-qp "reservationStatuses" $reservationStatuses "csv") (serialize-qp "marketCodes" $marketCodes "csv") (serialize-qp "channelCodes" $channelCodes "csv") (serialize-qp "subChannelCodes" $subChannelCodes "csv") (serialize-qp "roomTypes" $roomTypes "csv") (serialize-qp "ratePlanCodes" $ratePlanCodes "csv") (serialize-qp "labels" $labels "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "dateFilter" $dateFilter "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "cancellationId" $cancellation_id "scalar") (serialize-qp "reservationNumber" $reservation_number "scalar") (serialize-qp "customerName" $customer_name "scalar") (serialize-qp "customerEmail" $customer_email "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "roomNumber" $room_number "scalar") (serialize-qp "externalId" $external_id "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "companyId" $company_id "scalar") (serialize-qp "companyEmail" $company_email "scalar") (serialize-qp "blockCode" $block_code "scalar") (serialize-qp "reservationStatuses" $reservation_statuses "csv") (serialize-qp "marketCodes" $market_codes "csv") (serialize-qp "channelCodes" $channel_codes "csv") (serialize-qp "subChannelCodes" $sub_channel_codes "csv") (serialize-qp "roomTypes" $room_types "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "labels" $labels "csv") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "dateFilter" $date_filter "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/bookings/$count" $qp)
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -453,8 +453,8 @@ export def "booking-bookings-count GetBookingsCount" [
 #
 # GET /api/booking/v0/bookings/{confirmationId}
 # operationId: Bookings_GetBooking
-export def "booking-bookings GetBooking" [
-  confirmationId: string
+export def "booking-bookings get" [
+  confirmation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,14 +466,14 @@ export def "booking-bookings GetBooking" [
   --accept: string@accept-completer # Response content type
   --expand: string@expand-completer-2 # Specifies the expand type.
   --exclude: string@exclude-completer-1 # Specifies the exclude type.
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
 ]: nothing -> record<reservations: table<_warnings: list, addon_services: list, adults: int, arrival_date: string, balance: float, block: record, cancellation_id: string, cancellation_policies: list, channel_code: string, checkin_time: string, checkout_time: string, comment: string, company: record, confirmation_id: string, contact: record, created: string, currency: string, departure_date: string, external_id: string, general_policies: list, guarantee: record, guests: list, hotel_id: int, labels: list, market_code: string, noshow_policy: record, payment_method: string, rate_plan: record, reservation_number: int, reservation_status: string, room: record, room_rates: list, rooms: int, services: list, subchannel_code: string, total_stay: record, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/booking/v0/bookings/($confirmationId)" $qp)
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let full_url = (build-url $base ({confirmation_id: $confirmation_id} | format pattern "/api/booking/v0/bookings/{confirmation_id}") $qp)
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -484,9 +484,9 @@ export def "booking-bookings GetBooking" [
 #
 # GET /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}
 # operationId: Bookings_GetReservation
-export def "booking-bookings-reservations GetReservation" [
-  confirmationId: string
-  reservationNumber: int
+export def "booking-bookings-reservations get" [
+  confirmation_id: string
+  reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,14 +498,14 @@ export def "booking-bookings-reservations GetReservation" [
   --accept: string@accept-completer # Response content type
   --expand: string@expand-completer-2 # Specifies the expand type.
   --exclude: string@exclude-completer-1 # Specifies the exclude type.
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
 ]: nothing -> record<_warnings: list<string>, addon_services: list<string>, adults: int, arrival_date: string, balance: float, block: record<_links: record, code: string, name: string>, cancellation_id: string, cancellation_policies: table<description: string, fee: float, fee_date: string>, channel_code: string, checkin_time: string, checkout_time: string, comment: string, company: record<company_id: string>, confirmation_id: string, contact: record<_links: record, customer_id: string>, created: string, currency: string, departure_date: string, external_id: string, general_policies: table<description: string, name: string>, guarantee: record<guarantee_type: string, valid_token: bool>, guests: table<_links: record, customer_id: string, email: string, first_name: string, gender: string, last_name: string, mailing_address: record, nationality: string, phone: string, primary: bool, subscribed_consents: list, title: string>, hotel_id: int, labels: list<string>, market_code: string, noshow_policy: record<description: string, fee: float>, payment_method: string, rate_plan: record<code: string, description: string, name: string>, reservation_number: int, reservation_status: string, room: record<_links: record, description: string, name: string, number: string, room_type: record<_links: record, code: string, description: string, name: string>>, room_rates: table<addon_services: list, date: string, excluded_tax: float, included_services: list, included_tax: float, rate: float, room_type: string>, rooms: int, services: table<code: string, description: string, frequency: string, is_addon: bool, name: string>, subchannel_code: string, total_stay: record<addon_services: list<record>, excluded_tax: float, included_services: list<string>, included_tax: float, rate: float>, updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/booking/v0/bookings/($confirmationId)/reservations/($reservationNumber)" $qp)
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let full_url = (build-url $base ({confirmation_id: $confirmation_id, reservation_number: $reservation_number} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}") $qp)
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -516,9 +516,9 @@ export def "booking-bookings-reservations GetReservation" [
 #
 # PATCH /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}
 # operationId: Bookings_Patch
-export def "booking-bookings-reservations Patch" [
-  confirmationId: string
-  reservationNumber: int
+export def "booking-bookings-reservations update" [
+  confirmation_id: string
+  reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,16 +528,16 @@ export def "booking-bookings-reservations Patch" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
   --body: record
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/booking/v0/bookings/($confirmationId)/reservations/($reservationNumber)")
+  let full_url = (build-url $base ({confirmation_id: $confirmation_id, reservation_number: $reservation_number} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -548,9 +548,9 @@ export def "booking-bookings-reservations Patch" [
 #
 # POST /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/assign_room
 # operationId: Bookings_PostRoomAssignment
-export def "booking-bookings-reservations-assign-room PostRoomAssignment" [
-  confirmationId: string
-  reservationNumber: int
+export def "booking-bookings-reservations-assign-room create-room-assignment" [
+  confirmation_id: string
+  reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,8 +560,8 @@ export def "booking-bookings-reservations-assign-room PostRoomAssignment" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
   --amenities: list # Ensure the assigned room will have all the amenities specified. You can provide a comma seperated list of amenity codes.
   --condition: string@condition-completer # Here you can define to limit the list of assignable rooms based on their current condition. This is only applicable if the underlying reservation             is due to arrive on the current business day. If not set by default only clean rooms will be assigned.
   --include-out-of-service: oneof<nothing, bool> # Sometimes you might want to assign rooms which are out of service (small repair needed) if no other rooms are available anymore. If you set             include_out_of_service to true even those rooms will be considered. The default is false.
@@ -573,10 +573,10 @@ export def "booking-bookings-reservations-assign-room PostRoomAssignment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/booking/v0/bookings/($confirmationId)/reservations/($reservationNumber)/assign_room")
-  let body = {amenities: $amenities, condition: $condition, include_out_of_service: $include_out_of_service, locations: $locations, respect_guest_preferences: $respect_guest_preferences, room_number: $room_number, views: $views} | compact
+  let full_url = (build-url $base ({confirmation_id: $confirmation_id, reservation_number: $reservation_number} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/assign_room"))
+  let body = {"amenities": $amenities, "condition": $condition, "include_out_of_service": $include_out_of_service, "locations": $locations, "respect_guest_preferences": $respect_guest_preferences, "room_number": $room_number, "views": $views} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -587,9 +587,9 @@ export def "booking-bookings-reservations-assign-room PostRoomAssignment" [
 #
 # POST /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/cancel
 # operationId: Bookings_CancelReservation
-export def "booking-bookings-reservations-cancel CancelReservation" [
-  confirmationId: string
-  reservationNumber: int
+export def "booking-bookings-reservations-cancel cancel" [
+  confirmation_id: string
+  reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,15 +599,15 @@ export def "booking-bookings-reservations-cancel CancelReservation" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --sendConfirmation: oneof<nothing, bool> # Whether to send a confirmation email to the primary guest
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --send-confirmation: oneof<nothing, bool> # Whether to send a confirmation email to the primary guest
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
 ]: nothing -> record<_warnings: list<string>, balance: float, cancellation_fee: float, cancellation_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sendConfirmation" $sendConfirmation "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/booking/v0/bookings/($confirmationId)/reservations/($reservationNumber)/cancel" $qp)
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let qp = [(serialize-qp "sendConfirmation" $send_confirmation "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({confirmation_id: $confirmation_id, reservation_number: $reservation_number} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/cancel") $qp)
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -618,9 +618,9 @@ export def "booking-bookings-reservations-cancel CancelReservation" [
 #
 # POST /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/check_in
 # operationId: Bookings_CheckIn
-export def "booking-bookings-reservations-check-in CheckIn" [
-  confirmationId: string
-  reservationNumber: int
+export def "booking-bookings-reservations-check-in check" [
+  confirmation_id: string
+  reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,17 +630,17 @@ export def "booking-bookings-reservations-check-in CheckIn" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
   --client-identity: string # Client identity
 ]: any -> record<_warnings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/booking/v0/bookings/($confirmationId)/reservations/($reservationNumber)/check_in")
-  let body = {client_identity: $client_identity} | compact
+  let full_url = (build-url $base ({confirmation_id: $confirmation_id, reservation_number: $reservation_number} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/check_in"))
+  let body = {"client_identity": $client_identity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -651,9 +651,9 @@ export def "booking-bookings-reservations-check-in CheckIn" [
 #
 # POST /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/check_out
 # operationId: Bookings_CheckOut
-export def "booking-bookings-reservations-check-out CheckOut" [
-  confirmationId: string
-  reservationNumber: int
+export def "booking-bookings-reservations-check-out check" [
+  confirmation_id: string
+  reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,13 +663,13 @@ export def "booking-bookings-reservations-check-out CheckOut" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
 ]: nothing -> record<_warnings: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/booking/v0/bookings/($confirmationId)/reservations/($reservationNumber)/check_out")
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let full_url = (build-url $base ({confirmation_id: $confirmation_id, reservation_number: $reservation_number} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/check_out"))
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -681,9 +681,9 @@ export def "booking-bookings-reservations-check-out CheckOut" [
 # PUT /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/payment_token
 # operationId: Bookings_PaymentToken
 # --authorization shape: {amount?: float, expiry_date?: string, merchant_reference: string, reference: string, shopper_reference: string}
-export def "booking-bookings-reservations-payment-token PaymentToken" [
-  confirmationId: string
-  reservationNumber: int
+export def "booking-bookings-reservations-payment-token put" [
+  confirmation_id: string
+  reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,8 +693,8 @@ export def "booking-bookings-reservations-payment-token PaymentToken" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
   --authorization: record # shape: {amount?: float, expiry_date?: string, merchant_reference: string, reference: string, shopper_reference: string}
   --no-authorization-required: oneof<nothing, bool> # Whether hetras should skip authorization using the provided token when no authorization details are supplied.             Optional flag, defaults to false.
   payment_token: string # The token you get from the payment service provider
@@ -702,10 +702,10 @@ export def "booking-bookings-reservations-payment-token PaymentToken" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/booking/v0/bookings/($confirmationId)/reservations/($reservationNumber)/payment_token")
-  let body = {authorization: $authorization, no_authorization_required: $no_authorization_required, payment_token: $payment_token} | compact
+  let full_url = (build-url $base ({confirmation_id: $confirmation_id, reservation_number: $reservation_number} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/payment_token"))
+  let body = {"authorization": $authorization, "no_authorization_required": $no_authorization_required, "payment_token": $payment_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -716,9 +716,9 @@ export def "booking-bookings-reservations-payment-token PaymentToken" [
 #
 # POST /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/pre_authorize
 # operationId: Bookings_TerminalAuthorization
-export def "booking-bookings-reservations-pre-authorize TerminalAuthorization" [
-  confirmationId: string
-  reservationNumber: int
+export def "booking-bookings-reservations-pre-authorize post" [
+  confirmation_id: string
+  reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,18 +728,18 @@ export def "booking-bookings-reservations-pre-authorize TerminalAuthorization" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
   --amount-to-authorize: float # The amount to authorize (format: double)
   --client-identity: string # Client identity
 ]: any -> record<_warnings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/booking/v0/bookings/($confirmationId)/reservations/($reservationNumber)/pre_authorize")
-  let body = {amount_to_authorize: $amount_to_authorize, client_identity: $client_identity} | compact
+  let full_url = (build-url $base ({confirmation_id: $confirmation_id, reservation_number: $reservation_number} | format pattern "/api/booking/v0/bookings/{confirmation_id}/reservations/{reservation_number}/pre_authorize"))
+  let body = {"amount_to_authorize": $amount_to_authorize, "client_identity": $client_identity} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -750,7 +750,7 @@ export def "booking-bookings-reservations-pre-authorize TerminalAuthorization" [
 #
 # GET /api/booking/v0/daily_rates
 # operationId: DailyRates_GetDailyRates
-export def "booking-daily-rates GetDailyRates" [
+export def "booking-daily-rates get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,23 +760,23 @@ export def "booking-daily-rates GetDailyRates" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotelId: int # Define the hotel id to request the availability for. (format: int32)
+  --hotel-id: int # Define the hotel id to request the availability for. (format: int32)
   --qp-from: string # Define the first business day you would like to get availability numbers for. The day should not be in the past. (format: date-time)
   --qp-to: string # Define the last business day you would like to get rates for (inclusive). The maximum time span between <i>'From'</i> and <i>'To'</i>             is limited to 365 days. This can't be less than the 'From' date. (format: date-time)
-  --channelCode: string # Define the channel code in order to look up the rates for.
+  --channel-code: string # Define the channel code in order to look up the rates for.
   --expand: list # Define the sections you want to expand and get informed about rates for.
-  --ratePlanCodes: list # Define the codes of rate plans to show in the response. A list of comma ',' separated rate plan codes.
+  --rate-plan-codes: list # Define the codes of rate plans to show in the response. A list of comma ',' separated rate plan codes.
   --skip: int # Amount of items to skip. (format: int32)
   --top: int # Amount of items to select. (format: int32)
   --inlinecount: string@inlinecount-completer # Return total number of items for a given filter criteria.
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
 ]: nothing -> record<_count: int, _links: record, daily_rates: table<business_day: string, offers: list>, hotel: record<_links: record, code: string, id: int, name: string>, policies: record<cancellation_policies: list<record>, guarantee_types: list<record>, noshow_policies: list<record>>, rateplans: table<_links: record, code: string, currency: string, name: string>, room_types: table<_links: record, code: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotelId "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "channelCode" $channelCode "scalar") (serialize-qp "expand" $expand "csv") (serialize-qp "ratePlanCodes" $ratePlanCodes "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "expand" $expand "csv") (serialize-qp "ratePlanCodes" $rate_plan_codes "csv") (serialize-qp "skip" $skip "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "inlinecount" $inlinecount "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/daily_rates" $qp)
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -787,7 +787,7 @@ export def "booking-daily-rates GetDailyRates" [
 #
 # GET /api/booking/v0/rates
 # operationId: Rates_Get
-export def "booking-rates Get" [
+export def "booking-rates get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,24 +797,24 @@ export def "booking-rates Get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --hotelId: int # Specifies the hotel id to request offers for. (format: int32)
-  --arrivalDate: string # Date of arrival for the guest in the ISO-8601 format "YYYY-MM-DD". (format: date-time)
-  --departureDate: string # Date of departure for the guest in the ISO-8601 format "YYYY-MM-DD". (format: date-time)
-  --channelCode: string # Channel Code the rate plan needs to be configured for.
+  --hotel-id: int # Specifies the hotel id to request offers for. (format: int32)
+  --arrival-date: string # Date of arrival for the guest in the ISO-8601 format "YYYY-MM-DD". (format: date-time)
+  --departure-date: string # Date of departure for the guest in the ISO-8601 format "YYYY-MM-DD". (format: date-time)
+  --channel-code: string # Channel Code the rate plan needs to be configured for.
   --adults: string # Number of adults per room. (format: byte)
   --rooms: string # Number of rooms (default is 1). (format: byte)
-  --roomType: string # Only return offers with rates for the specified room type code.
-  --ratePlanCode: string # Only return offers for the specified room type code.
-  --groupCode: string # Only return offers for the specified group code.
+  --room-type: string # Only return offers with rates for the specified room type code.
+  --rate-plan-code: string # Only return offers for the specified room type code.
+  --group-code: string # Only return offers for the specified group code.
   --expand: string@expand-completer # Expand the rates breakdown if required.
-  --App-Id: string # Application identifier
-  --App-Key: string # Application key.
+  --app-id: string # Application identifier
+  --app-key: string # Application key.
 ]: nothing -> record<arrival_date: string, departure_date: string, hotel_id: int, hotel_name: string, rate_plans: table<code: string, description: string, name: string>, room_offers: table<offers: list, room_type: string>, rooms: table<description: string, name: string, room_number: int, type: string>, services: table<code: string, description: string, frequency: string, is_addon: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hotelId" $hotelId "scalar") (serialize-qp "arrivalDate" $arrivalDate "scalar") (serialize-qp "departureDate" $departureDate "scalar") (serialize-qp "channelCode" $channelCode "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "rooms" $rooms "scalar") (serialize-qp "roomType" $roomType "scalar") (serialize-qp "ratePlanCode" $ratePlanCode "scalar") (serialize-qp "groupCode" $groupCode "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hotelId" $hotel_id "scalar") (serialize-qp "arrivalDate" $arrival_date "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "channelCode" $channel_code "scalar") (serialize-qp "adults" $adults "scalar") (serialize-qp "rooms" $rooms "scalar") (serialize-qp "roomType" $room_type "scalar") (serialize-qp "ratePlanCode" $rate_plan_code "scalar") (serialize-qp "groupCode" $group_code "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/booking/v0/rates" $qp)
-  let extra_headers = {"App-Id": $App_Id, "App-Key": $App_Key} | compact
+  let extra_headers = {"App-Id": $app_id, "App-Key": $app_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

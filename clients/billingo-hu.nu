@@ -79,7 +79,7 @@ def vat-completer [] { ["0%" "1%" "10%" "11%" "12%" "13%" "14%" "15%" "16%" "17%
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bank-accounts ListBankAccount" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bank-accounts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -103,7 +103,7 @@ export def commands []: nothing -> table {
 #
 # GET /bank-accounts
 # operationId: ListBankAccount
-export def "bank-accounts ListBankAccount" [
+export def "bank-accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "bank-accounts ListBankAccount" [
 #
 # POST /bank-accounts
 # operationId: CreateBankAccount
-export def "bank-accounts CreateBankAccount" [
+export def "bank-accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -148,7 +148,7 @@ export def "bank-accounts CreateBankAccount" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank-accounts")
-  let body = {account_number: $account_number, account_number_iban: $account_number_iban, currency: $currency, name: $name, need_qr: $need_qr, swift: $swift} | compact
+  let body = {"account_number": $account_number, "account_number_iban": $account_number_iban, "currency": $currency, "name": $name, "need_qr": $need_qr, "swift": $swift} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -159,7 +159,7 @@ export def "bank-accounts CreateBankAccount" [
 #
 # DELETE /bank-accounts/{id}
 # operationId: DeleteBankAccount
-export def "bank-accounts DeleteBankAccount" [
+export def "bank-accounts delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "bank-accounts DeleteBankAccount" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bank-accounts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/bank-accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,7 +182,7 @@ export def "bank-accounts DeleteBankAccount" [
 #
 # GET /bank-accounts/{id}
 # operationId: GetBankAccount
-export def "bank-accounts GetBankAccount" [
+export def "bank-accounts get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +195,7 @@ export def "bank-accounts GetBankAccount" [
 ]: nothing -> record<account_number: string, account_number_iban: string, currency: string, id: int, name: string, need_qr: bool, swift: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bank-accounts/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/bank-accounts/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,7 +205,7 @@ export def "bank-accounts GetBankAccount" [
 #
 # PUT /bank-accounts/{id}
 # operationId: UpdateBankAccount
-export def "bank-accounts UpdateBankAccount" [
+export def "bank-accounts update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,8 +225,8 @@ export def "bank-accounts UpdateBankAccount" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bank-accounts/($id)")
-  let body = {account_number: $account_number, account_number_iban: $account_number_iban, currency: $currency, name: $name, need_qr: $need_qr, swift: $swift} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/bank-accounts/{id}"))
+  let body = {"account_number": $account_number, "account_number_iban": $account_number_iban, "currency": $currency, "name": $name, "need_qr": $need_qr, "swift": $swift} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -237,7 +237,7 @@ export def "bank-accounts UpdateBankAccount" [
 #
 # GET /currencies
 # operationId: GetConversionRate
-export def "currencies GetConversionRate" [
+export def "currencies get-conversion-rate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "currencies GetConversionRate" [
 #
 # GET /document-blocks
 # operationId: ListDocumentBlock
-export def "document-blocks ListDocumentBlock" [
+export def "document-blocks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "document-blocks ListDocumentBlock" [
 #
 # GET /documents
 # operationId: ListDocument
-export def "documents ListDocument" [
+export def "documents list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "documents ListDocument" [
 # POST /documents
 # operationId: CreateDocument
 # --settings shape: {mediated_service?: bool, online_payment?: ""|"Barion"|"SimplePay"|"no", place_id?: int, round?: "five"|"none"|"one"|"ten", without_financial_fulfillment?: bool}
-export def "documents CreateDocument" [
+export def "documents create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "documents CreateDocument" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/documents")
-  let body = {bank_account_id: $bank_account_id, block_id: $block_id, comment: $comment, conversion_rate: $conversion_rate, currency: $currency, due_date: $due_date, electronic: $electronic, fulfillment_date: $fulfillment_date, items: $items, language: $language, paid: $paid, partner_id: $partner_id, payment_method: $payment_method, settings: $settings, type: $type, vendor_id: $vendor_id} | compact
+  let body = {"bank_account_id": $bank_account_id, "block_id": $block_id, "comment": $comment, "conversion_rate": $conversion_rate, "currency": $currency, "due_date": $due_date, "electronic": $electronic, "fulfillment_date": $fulfillment_date, "items": $items, "language": $language, "paid": $paid, "partner_id": $partner_id, "payment_method": $payment_method, "settings": $settings, "type": $type, "vendor_id": $vendor_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -364,7 +364,7 @@ export def "documents CreateDocument" [
 #
 # GET /documents/{id}
 # operationId: GetDocument
-export def "documents GetDocument" [
+export def "documents get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +377,7 @@ export def "documents GetDocument" [
 ]: nothing -> record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -387,7 +387,7 @@ export def "documents GetDocument" [
 #
 # POST /documents/{id}/cancel
 # operationId: CancelDocument
-export def "documents-cancel CancelDocument" [
+export def "documents-cancel cancel" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +400,7 @@ export def "documents-cancel CancelDocument" [
 ]: nothing -> record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)/cancel")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -410,7 +410,7 @@ export def "documents-cancel CancelDocument" [
 #
 # POST /documents/{id}/create-from-proforma
 # operationId: CreateDocumentFromProforma
-export def "documents-create-from-proforma CreateDocumentFromProforma" [
+export def "documents-create-from-proforma create" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -423,7 +423,7 @@ export def "documents-create-from-proforma CreateDocumentFromProforma" [
 ]: nothing -> record<block_id: int, cancelled: bool, comment: string, conversion_rate: float, currency: string, due_date: string, electronic: bool, fulfillment_date: string, gross_total: float, id: int, invoice_date: string, invoice_number: string, items: table<gross_amount: float, name: string, net_amount: float, net_unit_amount: float, product_id: int, quantity: float, vat: string, vat_amount: float>, language: string, notification_status: string, organization: record<address: record<address: string, city: string, country_code: string, post_code: string>, bank_account: record<account_number: string, account_number_iban: string, id: int, name: string, swift: string>, cash_settled: bool, eu_tax_number: string, ev_number: string, name: string, small_taxpayer: bool, tax_number: string>, paid_date: string, partner: record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int>, payment_method: string, payment_status: string, settings: record<mediated_service: bool, online_payment: string, place_id: int, round: string, without_financial_fulfillment: bool>, summary: record<gross_amount_local: float, net_amount: float, net_amount_local: float, vat_amount: float, vat_amount_local: float, vat_rate_summary: list<record>>, tags: list<string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)/create-from-proforma")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/create-from-proforma"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -433,7 +433,7 @@ export def "documents-create-from-proforma CreateDocumentFromProforma" [
 #
 # GET /documents/{id}/download
 # operationId: DownloadDocument
-export def "documents-download DownloadDocument" [
+export def "documents-download download" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,7 +447,7 @@ export def "documents-download DownloadDocument" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)/download")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/download"))
   let accept_val = ($accept | default "application/pdf")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -457,7 +457,7 @@ export def "documents-download DownloadDocument" [
 #
 # GET /documents/{id}/online-szamla
 # operationId: GetOnlineSzamlaStatus
-export def "documents-online-szamla GetOnlineSzamlaStatus" [
+export def "documents-online-szamla get-online-szamla-status" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "documents-online-szamla GetOnlineSzamlaStatus" [
 ]: nothing -> record<messages: table<human_readable_message: string, validation_error_code: string, validation_result_code: string>, status: string, transaction_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)/online-szamla")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/online-szamla"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,7 +480,7 @@ export def "documents-online-szamla GetOnlineSzamlaStatus" [
 #
 # DELETE /documents/{id}/payments
 # operationId: DeletePayment
-export def "documents-payments DeletePayment" [
+export def "documents-payments delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -493,7 +493,7 @@ export def "documents-payments DeletePayment" [
 ]: nothing -> table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)/payments")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/payments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -503,7 +503,7 @@ export def "documents-payments DeletePayment" [
 #
 # GET /documents/{id}/payments
 # operationId: GetPayment
-export def "documents-payments GetPayment" [
+export def "documents-payments get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -516,7 +516,7 @@ export def "documents-payments GetPayment" [
 ]: nothing -> table<conversion_rate: float, date: string, payment_method: string, price: float, voucher_number: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)/payments")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/payments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -526,7 +526,7 @@ export def "documents-payments GetPayment" [
 #
 # PUT /documents/{id}/payments
 # operationId: UpdatePayment
-export def "documents-payments UpdatePayment" [
+export def "documents-payments update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -541,7 +541,7 @@ export def "documents-payments UpdatePayment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)/payments")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/payments"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -552,7 +552,7 @@ export def "documents-payments UpdatePayment" [
 #
 # GET /documents/{id}/public-url
 # operationId: GetPublicUrl
-export def "documents-public-url GetPublicUrl" [
+export def "documents-public-url get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -565,7 +565,7 @@ export def "documents-public-url GetPublicUrl" [
 ]: nothing -> record<public_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)/public-url")
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/public-url"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -575,7 +575,7 @@ export def "documents-public-url GetPublicUrl" [
 #
 # POST /documents/{id}/send
 # operationId: SendDocument
-export def "documents-send SendDocument" [
+export def "documents-send send" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,8 +590,8 @@ export def "documents-send SendDocument" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/documents/($id)/send")
-  let body = {emails: $emails} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/documents/{id}/send"))
+  let body = {"emails": $emails} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -602,7 +602,7 @@ export def "documents-send SendDocument" [
 #
 # GET /organization
 # operationId: GetOrganizationData
-export def "organization GetOrganizationData" [
+export def "organization get-organization-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,7 +624,7 @@ export def "organization GetOrganizationData" [
 #
 # GET /partners
 # operationId: ListPartner
-export def "partners ListPartner" [
+export def "partners list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "partners ListPartner" [
 # POST /partners
 # operationId: CreatePartner
 # --address shape: {address: string, city: string, country_code: ""|"AC"|"AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AO"|"AQ"|"AR"|"AS"|"AT"|"AU"|"AW"|"AX"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BL"|"BM"|"BN"|"BO"|"BQ"|"BR"|"BS"|"BT"|"BW"|"BY"|"BZ"|"CA"|"CC"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CW"|"CX"|"CY"|"CZ"|"DE"|"DG"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EA"|"EC"|"EE"|"EG"|"EH"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GS"|"GT"|"GU"|"GW"|"GY"|"HK"|"HN"|"HR"|"HT"|"HU"|"IC"|"ID"|"IE"|"IL"|"IM"|"IN"|"IO"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MF"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NF"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PM"|"PN"|"PR"|"PS"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SJ"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SX"|"SY"|"SZ"|"TA"|"TC"|"TD"|"TF"|"TG"|"TH"|"TJ"|"TK"|"TL"|"TM"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"UM"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WF"|"WS"|"XA"|"XB"|"XK"|"YE"|"YT"|"ZA"|"ZM"|"ZW", post_code: string}
-export def "partners CreatePartner" [
+export def "partners create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -673,7 +673,7 @@ export def "partners CreatePartner" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partners")
-  let body = {account_number: $account_number, address: $address, emails: $emails, general_ledger_number: $general_ledger_number, iban: $iban, name: $name, phone: $phone, swift: $swift, taxcode: $taxcode} | compact
+  let body = {"account_number": $account_number, "address": $address, "emails": $emails, "general_ledger_number": $general_ledger_number, "iban": $iban, "name": $name, "phone": $phone, "swift": $swift, "taxcode": $taxcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -684,7 +684,7 @@ export def "partners CreatePartner" [
 #
 # DELETE /partners/{id}
 # operationId: DeletePartner
-export def "partners DeletePartner" [
+export def "partners delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -697,7 +697,7 @@ export def "partners DeletePartner" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/partners/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/partners/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -707,7 +707,7 @@ export def "partners DeletePartner" [
 #
 # GET /partners/{id}
 # operationId: GetPartner
-export def "partners GetPartner" [
+export def "partners get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +720,7 @@ export def "partners GetPartner" [
 ]: nothing -> record<account_number: string, address: record<address: string, city: string, country_code: string, post_code: string>, emails: list<string>, general_ledger_number: string, iban: string, name: string, phone: string, swift: string, taxcode: string, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/partners/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/partners/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -731,7 +731,7 @@ export def "partners GetPartner" [
 # PUT /partners/{id}
 # operationId: UpdatePartner
 # --address shape: {address: string, city: string, country_code: ""|"AC"|"AD"|"AE"|"AF"|"AG"|"AI"|"AL"|"AM"|"AO"|"AQ"|"AR"|"AS"|"AT"|"AU"|"AW"|"AX"|"AZ"|"BA"|"BB"|"BD"|"BE"|"BF"|"BG"|"BH"|"BI"|"BJ"|"BL"|"BM"|"BN"|"BO"|"BQ"|"BR"|"BS"|"BT"|"BW"|"BY"|"BZ"|"CA"|"CC"|"CD"|"CF"|"CG"|"CH"|"CI"|"CK"|"CL"|"CM"|"CN"|"CO"|"CR"|"CU"|"CV"|"CW"|"CX"|"CY"|"CZ"|"DE"|"DG"|"DJ"|"DK"|"DM"|"DO"|"DZ"|"EA"|"EC"|"EE"|"EG"|"EH"|"ER"|"ES"|"ET"|"FI"|"FJ"|"FK"|"FM"|"FO"|"FR"|"GA"|"GB"|"GD"|"GE"|"GF"|"GG"|"GH"|"GI"|"GL"|"GM"|"GN"|"GP"|"GQ"|"GR"|"GS"|"GT"|"GU"|"GW"|"GY"|"HK"|"HN"|"HR"|"HT"|"HU"|"IC"|"ID"|"IE"|"IL"|"IM"|"IN"|"IO"|"IQ"|"IR"|"IS"|"IT"|"JE"|"JM"|"JO"|"JP"|"KE"|"KG"|"KH"|"KI"|"KM"|"KN"|"KP"|"KR"|"KW"|"KY"|"KZ"|"LA"|"LB"|"LC"|"LI"|"LK"|"LR"|"LS"|"LT"|"LU"|"LV"|"LY"|"MA"|"MC"|"MD"|"ME"|"MF"|"MG"|"MH"|"MK"|"ML"|"MM"|"MN"|"MO"|"MP"|"MQ"|"MR"|"MS"|"MT"|"MU"|"MV"|"MW"|"MX"|"MY"|"MZ"|"NA"|"NC"|"NE"|"NF"|"NG"|"NI"|"NL"|"NO"|"NP"|"NR"|"NU"|"NZ"|"OM"|"PA"|"PE"|"PF"|"PG"|"PH"|"PK"|"PL"|"PM"|"PN"|"PR"|"PS"|"PT"|"PW"|"PY"|"QA"|"RE"|"RO"|"RS"|"RU"|"RW"|"SA"|"SB"|"SC"|"SD"|"SE"|"SG"|"SH"|"SI"|"SJ"|"SK"|"SL"|"SM"|"SN"|"SO"|"SR"|"SS"|"ST"|"SV"|"SX"|"SY"|"SZ"|"TA"|"TC"|"TD"|"TF"|"TG"|"TH"|"TJ"|"TK"|"TL"|"TM"|"TN"|"TO"|"TR"|"TT"|"TV"|"TW"|"TZ"|"UA"|"UG"|"UM"|"US"|"UY"|"UZ"|"VA"|"VC"|"VE"|"VG"|"VI"|"VN"|"VU"|"WF"|"WS"|"XA"|"XB"|"XK"|"YE"|"YT"|"ZA"|"ZM"|"ZW", post_code: string}
-export def "partners UpdatePartner" [
+export def "partners update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -754,8 +754,8 @@ export def "partners UpdatePartner" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/partners/($id)")
-  let body = {account_number: $account_number, address: $address, emails: $emails, general_ledger_number: $general_ledger_number, iban: $iban, name: $name, phone: $phone, swift: $swift, taxcode: $taxcode} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/partners/{id}"))
+  let body = {"account_number": $account_number, "address": $address, "emails": $emails, "general_ledger_number": $general_ledger_number, "iban": $iban, "name": $name, "phone": $phone, "swift": $swift, "taxcode": $taxcode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -766,7 +766,7 @@ export def "partners UpdatePartner" [
 #
 # GET /products
 # operationId: ListProduct
-export def "products ListProduct" [
+export def "products list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,7 +791,7 @@ export def "products ListProduct" [
 #
 # POST /products
 # operationId: CreateProduct
-export def "products CreateProduct" [
+export def "products create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -813,7 +813,7 @@ export def "products CreateProduct" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/products")
-  let body = {comment: $comment, currency: $currency, general_ledger_number: $general_ledger_number, general_ledger_taxcode: $general_ledger_taxcode, name: $name, net_unit_price: $net_unit_price, unit: $unit, vat: $vat} | compact
+  let body = {"comment": $comment, "currency": $currency, "general_ledger_number": $general_ledger_number, "general_ledger_taxcode": $general_ledger_taxcode, "name": $name, "net_unit_price": $net_unit_price, "unit": $unit, "vat": $vat} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -824,7 +824,7 @@ export def "products CreateProduct" [
 #
 # DELETE /products/{id}
 # operationId: DeleteProduct
-export def "products DeleteProduct" [
+export def "products delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -837,7 +837,7 @@ export def "products DeleteProduct" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/products/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -847,7 +847,7 @@ export def "products DeleteProduct" [
 #
 # GET /products/{id}
 # operationId: GetProduct
-export def "products GetProduct" [
+export def "products get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,7 +860,7 @@ export def "products GetProduct" [
 ]: nothing -> record<comment: string, currency: string, general_ledger_number: string, general_ledger_taxcode: string, id: int, name: string, net_unit_price: float, unit: string, vat: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/products/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,7 +870,7 @@ export def "products GetProduct" [
 #
 # PUT /products/{id}
 # operationId: UpdateProduct
-export def "products UpdateProduct" [
+export def "products update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -892,8 +892,8 @@ export def "products UpdateProduct" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($id)")
-  let body = {comment: $comment, currency: $currency, general_ledger_number: $general_ledger_number, general_ledger_taxcode: $general_ledger_taxcode, name: $name, net_unit_price: $net_unit_price, unit: $unit, vat: $vat} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/products/{id}"))
+  let body = {"comment": $comment, "currency": $currency, "general_ledger_number": $general_ledger_number, "general_ledger_taxcode": $general_ledger_taxcode, "name": $name, "net_unit_price": $net_unit_price, "unit": $unit, "vat": $vat} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -904,7 +904,7 @@ export def "products UpdateProduct" [
 #
 # GET /utils/convert-legacy-id/{id}
 # operationId: GetId
-export def "utils-convert-legacy-id GetId" [
+export def "utils-convert-legacy-id get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -917,7 +917,7 @@ export def "utils-convert-legacy-id GetId" [
 ]: nothing -> record<id: int, legacy_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/utils/convert-legacy-id/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/utils/convert-legacy-id/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -125,7 +125,7 @@ export def "x-open-banking-v22-atms-country get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/x-open-banking/v2.2/atms/country/($country)")
+  let full_url = (build-url $base ({country: $country} | format pattern "/x-open-banking/v2.2/atms/country/{country}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,7 +148,7 @@ export def "x-open-banking-v22-atms-country-town get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/x-open-banking/v2.2/atms/country/($country)/town/($town)")
+  let full_url = (build-url $base ({country: $country, town: $town} | format pattern "/x-open-banking/v2.2/atms/country/{country}/town/{town}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +173,7 @@ export def "x-open-banking-v22-atms-geo-location-lat-long get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "radius" $radius "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/x-open-banking/v2.2/atms/geo-location/lat/($latitude)/long/($longitude)" $qp)
+  let full_url = (build-url $base ({latitude: $latitude, longitude: $longitude} | format pattern "/x-open-banking/v2.2/atms/geo-location/lat/{latitude}/long/{longitude}") $qp)
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,7 +195,7 @@ export def "x-open-banking-v22-atms-postcode get" [
 ]: nothing -> record<data: table<Brand: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/x-open-banking/v2.2/atms/postcode/($postcode)")
+  let full_url = (build-url $base ({postcode: $postcode} | format pattern "/x-open-banking/v2.2/atms/postcode/{postcode}"))
   let accept_val = "application/prs.openbanking.opendata.v2.2+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/customerSubscriptions
 # operationId: CustomerSubscriptions_List
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions List" [
-  subscriptionId: string
-  resourceGroup: string
-  registrationName: string
+export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions list" [
+  subscription_id: string
+  resource_group: string
+  registration_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.AzureStack/registrations/($registrationName)/customerSubscriptions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, registration_name: $registration_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.AzureStack/registrations/{registration_name}/customerSubscriptions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,11 +120,11 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/customerSubscriptions/{customerSubscriptionName}
 # operationId: CustomerSubscriptions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions Delete" [
-  subscriptionId: string
-  resourceGroup: string
-  registrationName: string
-  customerSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions delete" [
+  subscription_id: string
+  resource_group: string
+  registration_name: string
+  customer_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.AzureStack/registrations/($registrationName)/customerSubscriptions/($customerSubscriptionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, registration_name: $registration_name, customer_subscription_name: $customer_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.AzureStack/registrations/{registration_name}/customerSubscriptions/{customer_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,11 +148,11 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/customerSubscriptions/{customerSubscriptionName}
 # operationId: CustomerSubscriptions_Get
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions Get" [
-  subscriptionId: string
-  resourceGroup: string
-  registrationName: string
-  customerSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions get" [
+  subscription_id: string
+  resource_group: string
+  registration_name: string
+  customer_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.AzureStack/registrations/($registrationName)/customerSubscriptions/($customerSubscriptionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, registration_name: $registration_name, customer_subscription_name: $customer_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.AzureStack/registrations/{registration_name}/customerSubscriptions/{customer_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -176,11 +176,11 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/customerSubscriptions/{customerSubscriptionName}
 # operationId: CustomerSubscriptions_Create
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions Create" [
-  subscriptionId: string
-  resourceGroup: string
-  registrationName: string
-  customerSubscriptionName: string
+export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-customer-subscriptions create" [
+  subscription_id: string
+  resource_group: string
+  registration_name: string
+  customer_subscription_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.AzureStack/registrations/($registrationName)/customerSubscriptions/($customerSubscriptionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group, registration_name: $registration_name, customer_subscription_name: $customer_subscription_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.AzureStack/registrations/{registration_name}/customerSubscriptions/{customer_subscription_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

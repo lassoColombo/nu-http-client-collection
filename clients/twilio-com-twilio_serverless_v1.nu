@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "services ListService" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "services list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Services
 # operationId: ListService
-export def "services ListService" [
+export def "services list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -102,13 +102,13 @@ export def "services ListService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, services: table<account_sid: string, date_created: string, date_updated: string, domain_base: string, friendly_name: string, include_credentials: bool, links: record, sid: string, ui_editable: bool, unique_name: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/Services" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -119,7 +119,7 @@ export def "services ListService" [
 #
 # POST /v1/Services
 # operationId: CreateService
-export def "services CreateService" [
+export def "services create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,16 +128,16 @@ export def "services CreateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  FriendlyName: string # A descriptive string that you create to describe the Service resource. It can be a maximum of 255 characters.
-  --IncludeCredentials: oneof<nothing, bool> # Whether to inject Account credentials into a function invocation context. The default value is `true`.
-  --UiEditable: oneof<nothing, bool> # Whether the Service's properties and subresources can be edited via the UI. The default value is `false`.
-  UniqueName: string # A user-defined string that uniquely identifies the Service resource. It can be used as an alternative to the `sid` in the URL path to address the Service resource. This value must be 50 characters or less in length and be unique.
+  friendly_name: string # A descriptive string that you create to describe the Service resource. It can be a maximum of 255 characters.
+  --include-credentials: oneof<nothing, bool> # Whether to inject Account credentials into a function invocation context. The default value is `true`.
+  --ui-editable: oneof<nothing, bool> # Whether the Service's properties and subresources can be edited via the UI. The default value is `false`.
+  unique_name: string # A user-defined string that uniquely identifies the Service resource. It can be used as an alternative to the `sid` in the URL path to address the Service resource. This value must be 50 characters or less in length and be unique.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, domain_base: string, friendly_name: string, include_credentials: bool, links: record, sid: string, ui_editable: bool, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
   let full_url = (build-url $base "/v1/Services")
-  let body = {FriendlyName: $FriendlyName, IncludeCredentials: $IncludeCredentials, UiEditable: $UiEditable, UniqueName: $UniqueName} | compact
+  let body = {"FriendlyName": $friendly_name, "IncludeCredentials": $include_credentials, "UiEditable": $ui_editable, "UniqueName": $unique_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,8 +148,8 @@ export def "services CreateService" [
 #
 # GET /v1/Services/{ServiceSid}/Assets
 # operationId: ListAsset
-export def "services-assets ListAsset" [
-  ServiceSid: string
+export def "services-assets list" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,14 +158,14 @@ export def "services-assets ListAsset" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<assets: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Assets" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Assets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,8 +175,8 @@ export def "services-assets ListAsset" [
 #
 # POST /v1/Services/{ServiceSid}/Assets
 # operationId: CreateAsset
-export def "services-assets CreateAsset" [
-  ServiceSid: string
+export def "services-assets create" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,13 +185,13 @@ export def "services-assets CreateAsset" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  FriendlyName: string # A descriptive string that you create to describe the Asset resource. It can be a maximum of 255 characters.
+  friendly_name: string # A descriptive string that you create to describe the Asset resource. It can be a maximum of 255 characters.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Assets")
-  let body = {FriendlyName: $FriendlyName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Assets"))
+  let body = {"FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -202,9 +202,9 @@ export def "services-assets CreateAsset" [
 #
 # GET /v1/Services/{ServiceSid}/Assets/{AssetSid}/Versions
 # operationId: ListAssetVersion
-export def "services-assets-versions ListAssetVersion" [
-  ServiceSid: string
-  AssetSid: string
+export def "services-assets-versions list" [
+  service_sid: string
+  asset_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,14 +213,14 @@ export def "services-assets-versions ListAssetVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<asset_versions: table<account_sid: string, asset_sid: string, date_created: string, path: string, service_sid: string, sid: string, url: string, visibility: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Assets/($AssetSid)/Versions" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, asset_sid: $asset_sid} | format pattern "/v1/Services/{service_sid}/Assets/{asset_sid}/Versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -230,10 +230,10 @@ export def "services-assets-versions ListAssetVersion" [
 #
 # GET /v1/Services/{ServiceSid}/Assets/{AssetSid}/Versions/{Sid}
 # operationId: FetchAssetVersion
-export def "services-assets-versions FetchAssetVersion" [
-  ServiceSid: string
-  AssetSid: string
-  Sid: string
+export def "services-assets-versions get" [
+  service_sid: string
+  asset_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "services-assets-versions FetchAssetVersion" [
 ]: nothing -> record<account_sid: string, asset_sid: string, date_created: string, path: string, service_sid: string, sid: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Assets/($AssetSid)/Versions/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, asset_sid: $asset_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Assets/{asset_sid}/Versions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -255,9 +255,9 @@ export def "services-assets-versions FetchAssetVersion" [
 #
 # DELETE /v1/Services/{ServiceSid}/Assets/{Sid}
 # operationId: DeleteAsset
-export def "services-assets DeleteAsset" [
-  ServiceSid: string
-  Sid: string
+export def "services-assets delete" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "services-assets DeleteAsset" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Assets/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Assets/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -279,9 +279,9 @@ export def "services-assets DeleteAsset" [
 #
 # GET /v1/Services/{ServiceSid}/Assets/{Sid}
 # operationId: FetchAsset
-export def "services-assets FetchAsset" [
-  ServiceSid: string
-  Sid: string
+export def "services-assets get" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "services-assets FetchAsset" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Assets/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Assets/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,9 +303,9 @@ export def "services-assets FetchAsset" [
 #
 # POST /v1/Services/{ServiceSid}/Assets/{Sid}
 # operationId: UpdateAsset
-export def "services-assets UpdateAsset" [
-  ServiceSid: string
-  Sid: string
+export def "services-assets update" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,13 +314,13 @@ export def "services-assets UpdateAsset" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  FriendlyName: string # A descriptive string that you create to describe the Asset resource. It can be a maximum of 255 characters.
+  friendly_name: string # A descriptive string that you create to describe the Asset resource. It can be a maximum of 255 characters.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Assets/($Sid)")
-  let body = {FriendlyName: $FriendlyName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Assets/{sid}"))
+  let body = {"FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -331,8 +331,8 @@ export def "services-assets UpdateAsset" [
 #
 # GET /v1/Services/{ServiceSid}/Builds
 # operationId: ListBuild
-export def "services-builds ListBuild" [
-  ServiceSid: string
+export def "services-builds list" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,14 +341,14 @@ export def "services-builds ListBuild" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<builds: table<account_sid: string, asset_versions: list, date_created: string, date_updated: string, dependencies: list, function_versions: list, links: record, runtime: string, service_sid: string, sid: string, status: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Builds" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Builds") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -358,8 +358,8 @@ export def "services-builds ListBuild" [
 #
 # POST /v1/Services/{ServiceSid}/Builds
 # operationId: CreateBuild
-export def "services-builds CreateBuild" [
-  ServiceSid: string
+export def "services-builds create" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,16 +368,16 @@ export def "services-builds CreateBuild" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --AssetVersions: list # The list of Asset Version resource SIDs to include in the Build.
-  --Dependencies: string # A list of objects that describe the Dependencies included in the Build. Each object contains the `name` and `version` of the dependency.
-  --FunctionVersions: list # The list of the Function Version resource SIDs to include in the Build.
-  --Runtime: string # The Runtime version that will be used to run the Build resource when it is deployed.
+  --asset-versions: list # The list of Asset Version resource SIDs to include in the Build.
+  --dependencies: string # A list of objects that describe the Dependencies included in the Build. Each object contains the `name` and `version` of the dependency.
+  --function-versions: list # The list of the Function Version resource SIDs to include in the Build.
+  --runtime: string # The Runtime version that will be used to run the Build resource when it is deployed.
 ]: any -> record<account_sid: string, asset_versions: list<any>, date_created: string, date_updated: string, dependencies: list<any>, function_versions: list<any>, links: record, runtime: string, service_sid: string, sid: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Builds")
-  let body = {AssetVersions: $AssetVersions, Dependencies: $Dependencies, FunctionVersions: $FunctionVersions, Runtime: $Runtime} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Builds"))
+  let body = {"AssetVersions": $asset_versions, "Dependencies": $dependencies, "FunctionVersions": $function_versions, "Runtime": $runtime} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -388,9 +388,9 @@ export def "services-builds CreateBuild" [
 #
 # DELETE /v1/Services/{ServiceSid}/Builds/{Sid}
 # operationId: DeleteBuild
-export def "services-builds DeleteBuild" [
-  ServiceSid: string
-  Sid: string
+export def "services-builds delete" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "services-builds DeleteBuild" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Builds/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Builds/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -412,9 +412,9 @@ export def "services-builds DeleteBuild" [
 #
 # GET /v1/Services/{ServiceSid}/Builds/{Sid}
 # operationId: FetchBuild
-export def "services-builds FetchBuild" [
-  ServiceSid: string
-  Sid: string
+export def "services-builds get" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "services-builds FetchBuild" [
 ]: nothing -> record<account_sid: string, asset_versions: list<any>, date_created: string, date_updated: string, dependencies: list<any>, function_versions: list<any>, links: record, runtime: string, service_sid: string, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Builds/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Builds/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -436,9 +436,9 @@ export def "services-builds FetchBuild" [
 #
 # GET /v1/Services/{ServiceSid}/Builds/{Sid}/Status
 # operationId: FetchBuildStatus
-export def "services-builds-status FetchBuildStatus" [
-  ServiceSid: string
-  Sid: string
+export def "services-builds-status get" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "services-builds-status FetchBuildStatus" [
 ]: nothing -> record<account_sid: string, service_sid: string, sid: string, status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Builds/($Sid)/Status")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Builds/{sid}/Status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -460,8 +460,8 @@ export def "services-builds-status FetchBuildStatus" [
 #
 # GET /v1/Services/{ServiceSid}/Environments
 # operationId: ListEnvironment
-export def "services-environments ListEnvironment" [
-  ServiceSid: string
+export def "services-environments list" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,14 +470,14 @@ export def "services-environments ListEnvironment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<environments: table<account_sid: string, build_sid: string, date_created: string, date_updated: string, domain_name: string, domain_suffix: string, links: record, service_sid: string, sid: string, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Environments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -487,8 +487,8 @@ export def "services-environments ListEnvironment" [
 #
 # POST /v1/Services/{ServiceSid}/Environments
 # operationId: CreateEnvironment
-export def "services-environments CreateEnvironment" [
-  ServiceSid: string
+export def "services-environments create" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -497,14 +497,14 @@ export def "services-environments CreateEnvironment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --DomainSuffix: string # A URL-friendly name that represents the environment and forms part of the domain name. It can be a maximum of 16 characters.
-  UniqueName: string # A user-defined string that uniquely identifies the Environment resource. It can be a maximum of 100 characters.
+  --domain-suffix: string # A URL-friendly name that represents the environment and forms part of the domain name. It can be a maximum of 16 characters.
+  unique_name: string # A user-defined string that uniquely identifies the Environment resource. It can be a maximum of 100 characters.
 ]: any -> record<account_sid: string, build_sid: string, date_created: string, date_updated: string, domain_name: string, domain_suffix: string, links: record, service_sid: string, sid: string, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments")
-  let body = {DomainSuffix: $DomainSuffix, UniqueName: $UniqueName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Environments"))
+  let body = {"DomainSuffix": $domain_suffix, "UniqueName": $unique_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -515,9 +515,9 @@ export def "services-environments CreateEnvironment" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Deployments
 # operationId: ListDeployment
-export def "services-environments-deployments ListDeployment" [
-  ServiceSid: string
-  EnvironmentSid: string
+export def "services-environments-deployments list" [
+  service_sid: string
+  environment_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -526,14 +526,14 @@ export def "services-environments-deployments ListDeployment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<deployments: table<account_sid: string, build_sid: string, date_created: string, date_updated: string, environment_sid: string, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($EnvironmentSid)/Deployments" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Deployments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -543,9 +543,9 @@ export def "services-environments-deployments ListDeployment" [
 #
 # POST /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Deployments
 # operationId: CreateDeployment
-export def "services-environments-deployments CreateDeployment" [
-  ServiceSid: string
-  EnvironmentSid: string
+export def "services-environments-deployments create" [
+  service_sid: string
+  environment_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,13 +554,13 @@ export def "services-environments-deployments CreateDeployment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --BuildSid: string # The SID of the Build for the Deployment.
+  --build-sid: string # The SID of the Build for the Deployment.
 ]: any -> record<account_sid: string, build_sid: string, date_created: string, date_updated: string, environment_sid: string, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($EnvironmentSid)/Deployments")
-  let body = {BuildSid: $BuildSid} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Deployments"))
+  let body = {"BuildSid": $build_sid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -571,10 +571,10 @@ export def "services-environments-deployments CreateDeployment" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Deployments/{Sid}
 # operationId: FetchDeployment
-export def "services-environments-deployments FetchDeployment" [
-  ServiceSid: string
-  EnvironmentSid: string
-  Sid: string
+export def "services-environments-deployments get" [
+  service_sid: string
+  environment_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -586,7 +586,7 @@ export def "services-environments-deployments FetchDeployment" [
 ]: nothing -> record<account_sid: string, build_sid: string, date_created: string, date_updated: string, environment_sid: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($EnvironmentSid)/Deployments/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Deployments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -596,9 +596,9 @@ export def "services-environments-deployments FetchDeployment" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Logs
 # operationId: ListLog
-export def "services-environments-logs ListLog" [
-  ServiceSid: string
-  EnvironmentSid: string
+export def "services-environments-logs list" [
+  service_sid: string
+  environment_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,17 +607,17 @@ export def "services-environments-logs ListLog" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FunctionSid: string # The SID of the function whose invocation produced the Log resources to read.
-  --StartDate: string # The date/time (in GMT, ISO 8601) after which the Log resources must have been created. Defaults to 1 day prior to current date/time. (format: date-time)
-  --EndDate: string # The date/time (in GMT, ISO 8601) before which the Log resources must have been created. Defaults to current date/time. (format: date-time)
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --function-sid: string # The SID of the function whose invocation produced the Log resources to read.
+  --start-date: string # The date/time (in GMT, ISO 8601) after which the Log resources must have been created. Defaults to 1 day prior to current date/time. (format: date-time)
+  --end-date: string # The date/time (in GMT, ISO 8601) before which the Log resources must have been created. Defaults to current date/time. (format: date-time)
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<logs: table<account_sid: string, build_sid: string, date_created: string, deployment_sid: string, environment_sid: string, function_sid: string, level: string, message: string, request_sid: string, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let qp = [(serialize-qp "FunctionSid" $FunctionSid "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($EnvironmentSid)/Logs" $qp)
+  let qp = [(serialize-qp "FunctionSid" $function_sid "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Logs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -627,10 +627,10 @@ export def "services-environments-logs ListLog" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Logs/{Sid}
 # operationId: FetchLog
-export def "services-environments-logs FetchLog" [
-  ServiceSid: string
-  EnvironmentSid: string
-  Sid: string
+export def "services-environments-logs get" [
+  service_sid: string
+  environment_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,7 +642,7 @@ export def "services-environments-logs FetchLog" [
 ]: nothing -> record<account_sid: string, build_sid: string, date_created: string, deployment_sid: string, environment_sid: string, function_sid: string, level: string, message: string, request_sid: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($EnvironmentSid)/Logs/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Logs/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -652,9 +652,9 @@ export def "services-environments-logs FetchLog" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Variables
 # operationId: ListVariable
-export def "services-environments-variables ListVariable" [
-  ServiceSid: string
-  EnvironmentSid: string
+export def "services-environments-variables list" [
+  service_sid: string
+  environment_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,14 +663,14 @@ export def "services-environments-variables ListVariable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, variables: table<account_sid: string, date_created: string, date_updated: string, environment_sid: string, key: string, service_sid: string, sid: string, url: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($EnvironmentSid)/Variables" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -680,9 +680,9 @@ export def "services-environments-variables ListVariable" [
 #
 # POST /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Variables
 # operationId: CreateVariable
-export def "services-environments-variables CreateVariable" [
-  ServiceSid: string
-  EnvironmentSid: string
+export def "services-environments-variables create" [
+  service_sid: string
+  environment_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,14 +691,14 @@ export def "services-environments-variables CreateVariable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  Key: string # A string by which the Variable resource can be referenced. It can be a maximum of 128 characters.
-  Value: string # A string that contains the actual value of the Variable. It can be a maximum of 450 bytes in size.
+  key: string # A string by which the Variable resource can be referenced. It can be a maximum of 128 characters.
+  value: string # A string that contains the actual value of the Variable. It can be a maximum of 450 bytes in size.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, environment_sid: string, key: string, service_sid: string, sid: string, url: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($EnvironmentSid)/Variables")
-  let body = {Key: $Key, Value: $Value} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables"))
+  let body = {"Key": $key, "Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -709,10 +709,10 @@ export def "services-environments-variables CreateVariable" [
 #
 # DELETE /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Variables/{Sid}
 # operationId: DeleteVariable
-export def "services-environments-variables DeleteVariable" [
-  ServiceSid: string
-  EnvironmentSid: string
-  Sid: string
+export def "services-environments-variables delete" [
+  service_sid: string
+  environment_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -724,7 +724,7 @@ export def "services-environments-variables DeleteVariable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($EnvironmentSid)/Variables/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -734,10 +734,10 @@ export def "services-environments-variables DeleteVariable" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Variables/{Sid}
 # operationId: FetchVariable
-export def "services-environments-variables FetchVariable" [
-  ServiceSid: string
-  EnvironmentSid: string
-  Sid: string
+export def "services-environments-variables get" [
+  service_sid: string
+  environment_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +749,7 @@ export def "services-environments-variables FetchVariable" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, environment_sid: string, key: string, service_sid: string, sid: string, url: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($EnvironmentSid)/Variables/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -759,10 +759,10 @@ export def "services-environments-variables FetchVariable" [
 #
 # POST /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Variables/{Sid}
 # operationId: UpdateVariable
-export def "services-environments-variables UpdateVariable" [
-  ServiceSid: string
-  EnvironmentSid: string
-  Sid: string
+export def "services-environments-variables update" [
+  service_sid: string
+  environment_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,14 +771,14 @@ export def "services-environments-variables UpdateVariable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Key: string # A string by which the Variable resource can be referenced. It can be a maximum of 128 characters.
-  --Value: string # A string that contains the actual value of the Variable. It can be a maximum of 450 bytes in size.
+  --key: string # A string by which the Variable resource can be referenced. It can be a maximum of 128 characters.
+  --value: string # A string that contains the actual value of the Variable. It can be a maximum of 450 bytes in size.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, environment_sid: string, key: string, service_sid: string, sid: string, url: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($EnvironmentSid)/Variables/($Sid)")
-  let body = {Key: $Key, Value: $Value} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, environment_sid: $environment_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{environment_sid}/Variables/{sid}"))
+  let body = {"Key": $key, "Value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -789,9 +789,9 @@ export def "services-environments-variables UpdateVariable" [
 #
 # DELETE /v1/Services/{ServiceSid}/Environments/{Sid}
 # operationId: DeleteEnvironment
-export def "services-environments DeleteEnvironment" [
-  ServiceSid: string
-  Sid: string
+export def "services-environments delete" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -803,7 +803,7 @@ export def "services-environments DeleteEnvironment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -813,9 +813,9 @@ export def "services-environments DeleteEnvironment" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{Sid}
 # operationId: FetchEnvironment
-export def "services-environments FetchEnvironment" [
-  ServiceSid: string
-  Sid: string
+export def "services-environments get" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "services-environments FetchEnvironment" [
 ]: nothing -> record<account_sid: string, build_sid: string, date_created: string, date_updated: string, domain_name: string, domain_suffix: string, links: record, service_sid: string, sid: string, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Environments/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Environments/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -837,8 +837,8 @@ export def "services-environments FetchEnvironment" [
 #
 # GET /v1/Services/{ServiceSid}/Functions
 # operationId: ListFunction
-export def "services-functions ListFunction" [
-  ServiceSid: string
+export def "services-functions list" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -847,14 +847,14 @@ export def "services-functions ListFunction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<functions: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Functions" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Functions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -864,8 +864,8 @@ export def "services-functions ListFunction" [
 #
 # POST /v1/Services/{ServiceSid}/Functions
 # operationId: CreateFunction
-export def "services-functions CreateFunction" [
-  ServiceSid: string
+export def "services-functions create" [
+  service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -874,13 +874,13 @@ export def "services-functions CreateFunction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  FriendlyName: string # A descriptive string that you create to describe the Function resource. It can be a maximum of 255 characters.
+  friendly_name: string # A descriptive string that you create to describe the Function resource. It can be a maximum of 255 characters.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Functions")
-  let body = {FriendlyName: $FriendlyName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid} | format pattern "/v1/Services/{service_sid}/Functions"))
+  let body = {"FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -891,9 +891,9 @@ export def "services-functions CreateFunction" [
 #
 # GET /v1/Services/{ServiceSid}/Functions/{FunctionSid}/Versions
 # operationId: ListFunctionVersion
-export def "services-functions-versions ListFunctionVersion" [
-  ServiceSid: string
-  FunctionSid: string
+export def "services-functions-versions list" [
+  service_sid: string
+  function_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,14 +902,14 @@ export def "services-functions-versions ListFunctionVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
-  --Page: int # The page index. This value is simply for client state.
-  --PageToken: string # The page token. This is provided by the API.
+  --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
+  --page: int # The page index. This value is simply for client state.
+  --page-token: string # The page token. This is provided by the API.
 ]: nothing -> record<function_versions: table<account_sid: string, date_created: string, function_sid: string, links: record, path: string, service_sid: string, sid: string, url: string, visibility: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Functions/($FunctionSid)/Versions" $qp)
+  let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({service_sid: $service_sid, function_sid: $function_sid} | format pattern "/v1/Services/{service_sid}/Functions/{function_sid}/Versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -919,10 +919,10 @@ export def "services-functions-versions ListFunctionVersion" [
 #
 # GET /v1/Services/{ServiceSid}/Functions/{FunctionSid}/Versions/{Sid}
 # operationId: FetchFunctionVersion
-export def "services-functions-versions FetchFunctionVersion" [
-  ServiceSid: string
-  FunctionSid: string
-  Sid: string
+export def "services-functions-versions get" [
+  service_sid: string
+  function_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,7 +934,7 @@ export def "services-functions-versions FetchFunctionVersion" [
 ]: nothing -> record<account_sid: string, date_created: string, function_sid: string, links: record, path: string, service_sid: string, sid: string, url: string, visibility: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Functions/($FunctionSid)/Versions/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, function_sid: $function_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Functions/{function_sid}/Versions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -944,10 +944,10 @@ export def "services-functions-versions FetchFunctionVersion" [
 #
 # GET /v1/Services/{ServiceSid}/Functions/{FunctionSid}/Versions/{Sid}/Content
 # operationId: FetchFunctionVersionContent
-export def "services-functions-versions-content FetchFunctionVersionContent" [
-  ServiceSid: string
-  FunctionSid: string
-  Sid: string
+export def "services-functions-versions-content get" [
+  service_sid: string
+  function_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,7 +959,7 @@ export def "services-functions-versions-content FetchFunctionVersionContent" [
 ]: nothing -> record<account_sid: string, content: string, function_sid: string, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Functions/($FunctionSid)/Versions/($Sid)/Content")
+  let full_url = (build-url $base ({service_sid: $service_sid, function_sid: $function_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Functions/{function_sid}/Versions/{sid}/Content"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -969,9 +969,9 @@ export def "services-functions-versions-content FetchFunctionVersionContent" [
 #
 # DELETE /v1/Services/{ServiceSid}/Functions/{Sid}
 # operationId: DeleteFunction
-export def "services-functions DeleteFunction" [
-  ServiceSid: string
-  Sid: string
+export def "services-functions delete" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,7 +983,7 @@ export def "services-functions DeleteFunction" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Functions/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Functions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -993,9 +993,9 @@ export def "services-functions DeleteFunction" [
 #
 # GET /v1/Services/{ServiceSid}/Functions/{Sid}
 # operationId: FetchFunction
-export def "services-functions FetchFunction" [
-  ServiceSid: string
-  Sid: string
+export def "services-functions get" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,7 +1007,7 @@ export def "services-functions FetchFunction" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, service_sid: string, sid: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Functions/($Sid)")
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Functions/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1017,9 +1017,9 @@ export def "services-functions FetchFunction" [
 #
 # POST /v1/Services/{ServiceSid}/Functions/{Sid}
 # operationId: UpdateFunction
-export def "services-functions UpdateFunction" [
-  ServiceSid: string
-  Sid: string
+export def "services-functions update" [
+  service_sid: string
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,13 +1028,13 @@ export def "services-functions UpdateFunction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  FriendlyName: string # A descriptive string that you create to describe the Function resource. It can be a maximum of 255 characters.
+  friendly_name: string # A descriptive string that you create to describe the Function resource. It can be a maximum of 255 characters.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, service_sid: string, sid: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($ServiceSid)/Functions/($Sid)")
-  let body = {FriendlyName: $FriendlyName} | compact
+  let full_url = (build-url $base ({service_sid: $service_sid, sid: $sid} | format pattern "/v1/Services/{service_sid}/Functions/{sid}"))
+  let body = {"FriendlyName": $friendly_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1045,8 +1045,8 @@ export def "services-functions UpdateFunction" [
 #
 # DELETE /v1/Services/{Sid}
 # operationId: DeleteService
-export def "services DeleteService" [
-  Sid: string
+export def "services delete" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1058,7 +1058,7 @@ export def "services DeleteService" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1068,8 +1068,8 @@ export def "services DeleteService" [
 #
 # GET /v1/Services/{Sid}
 # operationId: FetchService
-export def "services FetchService" [
-  Sid: string
+export def "services get" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1081,7 +1081,7 @@ export def "services FetchService" [
 ]: nothing -> record<account_sid: string, date_created: string, date_updated: string, domain_base: string, friendly_name: string, include_credentials: bool, links: record, sid: string, ui_editable: bool, unique_name: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($Sid)")
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1091,8 +1091,8 @@ export def "services FetchService" [
 #
 # POST /v1/Services/{Sid}
 # operationId: UpdateService
-export def "services UpdateService" [
-  Sid: string
+export def "services update" [
+  sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1101,15 +1101,15 @@ export def "services UpdateService" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --FriendlyName: string # A descriptive string that you create to describe the Service resource. It can be a maximum of 255 characters.
-  --IncludeCredentials: oneof<nothing, bool> # Whether to inject Account credentials into a function invocation context.
-  --UiEditable: oneof<nothing, bool> # Whether the Service resource's properties and subresources can be edited via the UI. The default value is `false`.
+  --friendly-name: string # A descriptive string that you create to describe the Service resource. It can be a maximum of 255 characters.
+  --include-credentials: oneof<nothing, bool> # Whether to inject Account credentials into a function invocation context.
+  --ui-editable: oneof<nothing, bool> # Whether the Service resource's properties and subresources can be edited via the UI. The default value is `false`.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, domain_base: string, friendly_name: string, include_credentials: bool, links: record, sid: string, ui_editable: bool, unique_name: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://serverless.twilio.com")
-  let full_url = (build-url $base $"/v1/Services/($Sid)")
-  let body = {FriendlyName: $FriendlyName, IncludeCredentials: $IncludeCredentials, UiEditable: $UiEditable} | compact
+  let full_url = (build-url $base ({sid: $sid} | format pattern "/v1/Services/{sid}"))
+  let body = {"FriendlyName": $friendly_name, "IncludeCredentials": $include_credentials, "UiEditable": $ui_editable} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

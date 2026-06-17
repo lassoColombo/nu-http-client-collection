@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-advisor-metadata List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-advisor-metadata list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Advisor/metadata
 # operationId: RecommendationMetadata_List
-export def "providers-microsoft-advisor-metadata List" [
+export def "providers-microsoft-advisor-metadata list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -117,7 +117,7 @@ export def "providers-microsoft-advisor-metadata List" [
 #
 # GET /providers/Microsoft.Advisor/metadata/{name}
 # operationId: RecommendationMetadata_Get
-export def "providers-microsoft-advisor-metadata Get" [
+export def "providers-microsoft-advisor-metadata get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -132,7 +132,7 @@ export def "providers-microsoft-advisor-metadata Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.Advisor/metadata/($name)" $qp)
+  let full_url = (build-url $base ({name: $name} | format pattern "/providers/Microsoft.Advisor/metadata/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +142,7 @@ export def "providers-microsoft-advisor-metadata Get" [
 #
 # GET /providers/Microsoft.Advisor/operations
 # operationId: Operations_List
-export def "providers-microsoft-advisor-operations List" [
+export def "providers-microsoft-advisor-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,8 +166,8 @@ export def "providers-microsoft-advisor-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/configurations
 # operationId: Configurations_ListBySubscription
-export def "subscriptions-providers-microsoft-advisor-configurations ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-advisor-configurations list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "subscriptions-providers-microsoft-advisor-configurations ListBySubsc
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Advisor/configurations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/configurations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -192,8 +192,8 @@ export def "subscriptions-providers-microsoft-advisor-configurations ListBySubsc
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/configurations
 # operationId: Configurations_CreateInSubscription
 # --properties shape: {exclude?: bool, low_cpu_threshold?: string}
-export def "subscriptions-providers-microsoft-advisor-configurations CreateInSubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-advisor-configurations create-in" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,8 +212,8 @@ export def "subscriptions-providers-microsoft-advisor-configurations CreateInSub
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Advisor/configurations" $qp)
-  let body = {id: $id, name: $name, properties: $properties, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/configurations") $qp)
+  let body = {"id": $id, "name": $name, "properties": $properties, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -224,8 +224,8 @@ export def "subscriptions-providers-microsoft-advisor-configurations CreateInSub
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/generateRecommendations
 # operationId: Recommendations_Generate
-export def "subscriptions-providers-microsoft-advisor-generate-recommendations Generate" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-advisor-generate-recommendations post" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "subscriptions-providers-microsoft-advisor-generate-recommendations G
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Advisor/generateRecommendations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/generateRecommendations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -249,9 +249,9 @@ export def "subscriptions-providers-microsoft-advisor-generate-recommendations G
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/generateRecommendations/{operationId}
 # operationId: Recommendations_GetGenerateStatus
-export def "subscriptions-providers-microsoft-advisor-generate-recommendations GetGenerateStatus" [
-  subscriptionId: string
-  operationId: string
+export def "subscriptions-providers-microsoft-advisor-generate-recommendations get-generate-status" [
+  subscription_id: string
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "subscriptions-providers-microsoft-advisor-generate-recommendations G
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Advisor/generateRecommendations/($operationId)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, operation_id: $operation_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/generateRecommendations/{operation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -275,8 +275,8 @@ export def "subscriptions-providers-microsoft-advisor-generate-recommendations G
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/recommendations
 # operationId: Recommendations_List
-export def "subscriptions-providers-microsoft-advisor-recommendations List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-advisor-recommendations list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,12 +288,12 @@ export def "subscriptions-providers-microsoft-advisor-recommendations List" [
   --api-version: string # The version of the API to be used with the client request.
   --filter: string # The filter to apply to the recommendations.
   --top: int # The number of recommendations per page if a paged version of this API is being used.
-  --skipToken: string # The page-continuation token to use with a paged version of this API.
+  --skip-token: string # The page-continuation token to use with a paged version of this API.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Advisor/recommendations" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/recommendations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,8 +303,8 @@ export def "subscriptions-providers-microsoft-advisor-recommendations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Advisor/suppressions
 # operationId: Suppressions_List
-export def "subscriptions-providers-microsoft-advisor-suppressions List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-advisor-suppressions list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,12 +315,12 @@ export def "subscriptions-providers-microsoft-advisor-suppressions List" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The version of the API to be used with the client request.
   --top: int # The number of suppressions per page if a paged version of this API is being used. (format: int32)
-  --skipToken: string # The page-continuation token to use with a paged version of this API.
+  --skip-token: string # The page-continuation token to use with a paged version of this API.
 ]: nothing -> record<nextLink: string, value: table<properties: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skipToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Advisor/suppressions" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skipToken" $skip_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Advisor/suppressions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -330,9 +330,9 @@ export def "subscriptions-providers-microsoft-advisor-suppressions List" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Advisor/configurations
 # operationId: Configurations_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-advisor-configurations ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroup: string
+export def "subscriptions-resource-groups-providers-microsoft-advisor-configurations list-by" [
+  subscription_id: string
+  resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-advisor-configurat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Advisor/configurations" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Advisor/configurations") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -357,9 +357,9 @@ export def "subscriptions-resource-groups-providers-microsoft-advisor-configurat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Advisor/configurations
 # operationId: Configurations_CreateInResourceGroup
 # --properties shape: {exclude?: bool, low_cpu_threshold?: string}
-export def "subscriptions-resource-groups-providers-microsoft-advisor-configurations CreateInResourceGroup" [
-  subscriptionId: string
-  resourceGroup: string
+export def "subscriptions-resource-groups-providers-microsoft-advisor-configurations create-in" [
+  subscription_id: string
+  resource_group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,8 +378,8 @@ export def "subscriptions-resource-groups-providers-microsoft-advisor-configurat
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroup)/providers/Microsoft.Advisor/configurations" $qp)
-  let body = {id: $id, name: $name, properties: $properties, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group: $resource_group} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.Advisor/configurations") $qp)
+  let body = {"id": $id, "name": $name, "properties": $properties, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -390,9 +390,9 @@ export def "subscriptions-resource-groups-providers-microsoft-advisor-configurat
 #
 # GET /{resourceUri}/providers/Microsoft.Advisor/recommendations/{recommendationId}
 # operationId: Recommendations_Get
-export def "providers-microsoft-advisor-recommendations Get" [
-  resourceUri: string
-  recommendationId: string
+export def "providers-microsoft-advisor-recommendations get" [
+  resource_uri: string
+  recommendation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +406,7 @@ export def "providers-microsoft-advisor-recommendations Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/Microsoft.Advisor/recommendations/($recommendationId)" $qp)
+  let full_url = (build-url $base ({resource_uri: $resource_uri, recommendation_id: $recommendation_id} | format pattern "/{resource_uri}/providers/Microsoft.Advisor/recommendations/{recommendation_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -416,9 +416,9 @@ export def "providers-microsoft-advisor-recommendations Get" [
 #
 # DELETE /{resourceUri}/providers/Microsoft.Advisor/recommendations/{recommendationId}/suppressions/{name}
 # operationId: Suppressions_Delete
-export def "providers-microsoft-advisor-recommendations-suppressions Delete" [
-  resourceUri: string
-  recommendationId: string
+export def "providers-microsoft-advisor-recommendations-suppressions delete" [
+  resource_uri: string
+  recommendation_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +433,7 @@ export def "providers-microsoft-advisor-recommendations-suppressions Delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/Microsoft.Advisor/recommendations/($recommendationId)/suppressions/($name)" $qp)
+  let full_url = (build-url $base ({resource_uri: $resource_uri, recommendation_id: $recommendation_id, name: $name} | format pattern "/{resource_uri}/providers/Microsoft.Advisor/recommendations/{recommendation_id}/suppressions/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -443,9 +443,9 @@ export def "providers-microsoft-advisor-recommendations-suppressions Delete" [
 #
 # GET /{resourceUri}/providers/Microsoft.Advisor/recommendations/{recommendationId}/suppressions/{name}
 # operationId: Suppressions_Get
-export def "providers-microsoft-advisor-recommendations-suppressions Get" [
-  resourceUri: string
-  recommendationId: string
+export def "providers-microsoft-advisor-recommendations-suppressions get" [
+  resource_uri: string
+  recommendation_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +460,7 @@ export def "providers-microsoft-advisor-recommendations-suppressions Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/Microsoft.Advisor/recommendations/($recommendationId)/suppressions/($name)" $qp)
+  let full_url = (build-url $base ({resource_uri: $resource_uri, recommendation_id: $recommendation_id, name: $name} | format pattern "/{resource_uri}/providers/Microsoft.Advisor/recommendations/{recommendation_id}/suppressions/{name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -471,9 +471,9 @@ export def "providers-microsoft-advisor-recommendations-suppressions Get" [
 # PUT /{resourceUri}/providers/Microsoft.Advisor/recommendations/{recommendationId}/suppressions/{name}
 # operationId: Suppressions_Create
 # --properties shape: {suppressionId?: string, ttl?: string}
-export def "providers-microsoft-advisor-recommendations-suppressions Create" [
-  resourceUri: string
-  recommendationId: string
+export def "providers-microsoft-advisor-recommendations-suppressions create" [
+  resource_uri: string
+  recommendation_id: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,8 +490,8 @@ export def "providers-microsoft-advisor-recommendations-suppressions Create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/($resourceUri)/providers/Microsoft.Advisor/recommendations/($recommendationId)/suppressions/($name)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({resource_uri: $resource_uri, recommendation_id: $recommendation_id, name: $name} | format pattern "/{resource_uri}/providers/Microsoft.Advisor/recommendations/{recommendation_id}/suppressions/{name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

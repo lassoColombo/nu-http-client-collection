@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-usql-acl ListAcls" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "catalog-usql-acl list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /catalog/usql/acl
 # operationId: Catalog_ListAcls
-export def "catalog-usql-acl ListAcls" [
+export def "catalog-usql-acl list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -122,7 +122,7 @@ export def "catalog-usql-acl ListAcls" [
 #
 # GET /catalog/usql/databases
 # operationId: Catalog_ListDatabases
-export def "catalog-usql-databases ListDatabases" [
+export def "catalog-usql-databases list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,8 +152,8 @@ export def "catalog-usql-databases ListDatabases" [
 #
 # GET /catalog/usql/databases/{databaseName}
 # operationId: Catalog_GetDatabase
-export def "catalog-usql-databases GetDatabase" [
-  databaseName: string
+export def "catalog-usql-databases get" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "catalog-usql-databases GetDatabase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,8 +177,8 @@ export def "catalog-usql-databases GetDatabase" [
 #
 # GET /catalog/usql/databases/{databaseName}/acl
 # operationId: Catalog_ListAclsByDatabase
-export def "catalog-usql-databases-acl ListAclsByDatabase" [
-  databaseName: string
+export def "catalog-usql-databases-acl list" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "catalog-usql-databases-acl ListAclsByDatabase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/acl" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}/acl") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -208,8 +208,8 @@ export def "catalog-usql-databases-acl ListAclsByDatabase" [
 #
 # GET /catalog/usql/databases/{databaseName}/assemblies
 # operationId: Catalog_ListAssemblies
-export def "catalog-usql-databases-assemblies ListAssemblies" [
-  databaseName: string
+export def "catalog-usql-databases-assemblies list" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "catalog-usql-databases-assemblies ListAssemblies" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/assemblies" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}/assemblies") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -239,9 +239,9 @@ export def "catalog-usql-databases-assemblies ListAssemblies" [
 #
 # GET /catalog/usql/databases/{databaseName}/assemblies/{assemblyName}
 # operationId: Catalog_GetAssembly
-export def "catalog-usql-databases-assemblies GetAssembly" [
-  databaseName: string
-  assemblyName: string
+export def "catalog-usql-databases-assemblies get-assembly" [
+  database_name: string
+  assembly_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "catalog-usql-databases-assemblies GetAssembly" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/assemblies/($assemblyName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, assembly_name: $assembly_name} | format pattern "/catalog/usql/databases/{database_name}/assemblies/{assembly_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -265,8 +265,8 @@ export def "catalog-usql-databases-assemblies GetAssembly" [
 #
 # GET /catalog/usql/databases/{databaseName}/credentials
 # operationId: Catalog_ListCredentials
-export def "catalog-usql-databases-credentials ListCredentials" [
-  databaseName: string
+export def "catalog-usql-databases-credentials list" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "catalog-usql-databases-credentials ListCredentials" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/credentials" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}/credentials") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -296,9 +296,9 @@ export def "catalog-usql-databases-credentials ListCredentials" [
 #
 # GET /catalog/usql/databases/{databaseName}/credentials/{credentialName}
 # operationId: Catalog_GetCredential
-export def "catalog-usql-databases-credentials GetCredential" [
-  databaseName: string
-  credentialName: string
+export def "catalog-usql-databases-credentials get" [
+  database_name: string
+  credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "catalog-usql-databases-credentials GetCredential" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/credentials/($credentialName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, credential_name: $credential_name} | format pattern "/catalog/usql/databases/{database_name}/credentials/{credential_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -322,9 +322,9 @@ export def "catalog-usql-databases-credentials GetCredential" [
 #
 # PATCH /catalog/usql/databases/{databaseName}/credentials/{credentialName}
 # operationId: Catalog_UpdateCredential
-export def "catalog-usql-databases-credentials UpdateCredential" [
-  databaseName: string
-  credentialName: string
+export def "catalog-usql-databases-credentials update" [
+  database_name: string
+  credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,17 +334,17 @@ export def "catalog-usql-databases-credentials UpdateCredential" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
-  --newPassword: string # the new password for the credential and user with access to the data source.
+  --new-password: string # the new password for the credential and user with access to the data source.
   --password: string # the current password for the credential and user with access to the data source. This is required if the requester is not the account owner.
   --uri: string # the URI identifier for the data source this credential can connect to in the format <hostname>:<port>
-  --userId: string # the object identifier for the user associated with this credential with access to the data source.
+  --user-id: string # the object identifier for the user associated with this credential with access to the data source.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/credentials/($credentialName)" $qp)
-  let body = {newPassword: $newPassword, password: $password, uri: $uri, userId: $userId} | compact
+  let full_url = (build-url $base ({database_name: $database_name, credential_name: $credential_name} | format pattern "/catalog/usql/databases/{database_name}/credentials/{credential_name}") $qp)
+  let body = {"newPassword": $new_password, "password": $password, "uri": $uri, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -355,9 +355,9 @@ export def "catalog-usql-databases-credentials UpdateCredential" [
 #
 # POST /catalog/usql/databases/{databaseName}/credentials/{credentialName}
 # operationId: Catalog_DeleteCredential
-export def "catalog-usql-databases-credentials DeleteCredential" [
-  databaseName: string
-  credentialName: string
+export def "catalog-usql-databases-credentials delete" [
+  database_name: string
+  credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,8 +374,8 @@ export def "catalog-usql-databases-credentials DeleteCredential" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cascade" $cascade "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/credentials/($credentialName)" $qp)
-  let body = {password: $password} | compact
+  let full_url = (build-url $base ({database_name: $database_name, credential_name: $credential_name} | format pattern "/catalog/usql/databases/{database_name}/credentials/{credential_name}") $qp)
+  let body = {"password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -386,9 +386,9 @@ export def "catalog-usql-databases-credentials DeleteCredential" [
 #
 # PUT /catalog/usql/databases/{databaseName}/credentials/{credentialName}
 # operationId: Catalog_CreateCredential
-export def "catalog-usql-databases-credentials CreateCredential" [
-  databaseName: string
-  credentialName: string
+export def "catalog-usql-databases-credentials create" [
+  database_name: string
+  credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,14 +400,14 @@ export def "catalog-usql-databases-credentials CreateCredential" [
   --api-version: string # Client Api Version.
   password: string # the password for the credential and user with access to the data source.
   uri: string # the URI identifier for the data source this credential can connect to in the format <hostname>:<port>
-  userId: string # the object identifier for the user associated with this credential with access to the data source.
+  user_id: string # the object identifier for the user associated with this credential with access to the data source.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/credentials/($credentialName)" $qp)
-  let body = {password: $password, uri: $uri, userId: $userId} | compact
+  let full_url = (build-url $base ({database_name: $database_name, credential_name: $credential_name} | format pattern "/catalog/usql/databases/{database_name}/credentials/{credential_name}") $qp)
+  let body = {"password": $password, "uri": $uri, "userId": $user_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -418,8 +418,8 @@ export def "catalog-usql-databases-credentials CreateCredential" [
 #
 # GET /catalog/usql/databases/{databaseName}/externaldatasources
 # operationId: Catalog_ListExternalDataSources
-export def "catalog-usql-databases-externaldatasources ListExternalDataSources" [
-  databaseName: string
+export def "catalog-usql-databases-externaldatasources list-external-data-sources" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "catalog-usql-databases-externaldatasources ListExternalDataSources" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/externaldatasources" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}/externaldatasources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -449,9 +449,9 @@ export def "catalog-usql-databases-externaldatasources ListExternalDataSources" 
 #
 # GET /catalog/usql/databases/{databaseName}/externaldatasources/{externalDataSourceName}
 # operationId: Catalog_GetExternalDataSource
-export def "catalog-usql-databases-externaldatasources GetExternalDataSource" [
-  databaseName: string
-  externalDataSourceName: string
+export def "catalog-usql-databases-externaldatasources get-external-data-source" [
+  database_name: string
+  external_data_source_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "catalog-usql-databases-externaldatasources GetExternalDataSource" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/externaldatasources/($externalDataSourceName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, external_data_source_name: $external_data_source_name} | format pattern "/catalog/usql/databases/{database_name}/externaldatasources/{external_data_source_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,8 +475,8 @@ export def "catalog-usql-databases-externaldatasources GetExternalDataSource" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas
 # operationId: Catalog_ListSchemas
-export def "catalog-usql-databases-schemas ListSchemas" [
-  databaseName: string
+export def "catalog-usql-databases-schemas list" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,7 +496,7 @@ export def "catalog-usql-databases-schemas ListSchemas" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}/schemas") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -506,9 +506,9 @@ export def "catalog-usql-databases-schemas ListSchemas" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}
 # operationId: Catalog_GetSchema
-export def "catalog-usql-databases-schemas GetSchema" [
-  databaseName: string
-  schemaName: string
+export def "catalog-usql-databases-schemas get" [
+  database_name: string
+  schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "catalog-usql-databases-schemas GetSchema" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -532,9 +532,9 @@ export def "catalog-usql-databases-schemas GetSchema" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/packages
 # operationId: Catalog_ListPackages
-export def "catalog-usql-databases-schemas-packages ListPackages" [
-  databaseName: string
-  schemaName: string
+export def "catalog-usql-databases-schemas-packages list" [
+  database_name: string
+  schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,7 +554,7 @@ export def "catalog-usql-databases-schemas-packages ListPackages" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/packages" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/packages") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -564,10 +564,10 @@ export def "catalog-usql-databases-schemas-packages ListPackages" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/packages/{packageName}
 # operationId: Catalog_GetPackage
-export def "catalog-usql-databases-schemas-packages GetPackage" [
-  databaseName: string
-  schemaName: string
-  packageName: string
+export def "catalog-usql-databases-schemas-packages get" [
+  database_name: string
+  schema_name: string
+  package_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,7 +581,7 @@ export def "catalog-usql-databases-schemas-packages GetPackage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/packages/($packageName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, package_name: $package_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/packages/{package_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -591,9 +591,9 @@ export def "catalog-usql-databases-schemas-packages GetPackage" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/procedures
 # operationId: Catalog_ListProcedures
-export def "catalog-usql-databases-schemas-procedures ListProcedures" [
-  databaseName: string
-  schemaName: string
+export def "catalog-usql-databases-schemas-procedures list" [
+  database_name: string
+  schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,7 +613,7 @@ export def "catalog-usql-databases-schemas-procedures ListProcedures" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/procedures" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/procedures") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -623,10 +623,10 @@ export def "catalog-usql-databases-schemas-procedures ListProcedures" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/procedures/{procedureName}
 # operationId: Catalog_GetProcedure
-export def "catalog-usql-databases-schemas-procedures GetProcedure" [
-  databaseName: string
-  schemaName: string
-  procedureName: string
+export def "catalog-usql-databases-schemas-procedures get" [
+  database_name: string
+  schema_name: string
+  procedure_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "catalog-usql-databases-schemas-procedures GetProcedure" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/procedures/($procedureName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, procedure_name: $procedure_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/procedures/{procedure_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -650,9 +650,9 @@ export def "catalog-usql-databases-schemas-procedures GetProcedure" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/statistics
 # operationId: Catalog_ListTableStatisticsByDatabaseAndSchema
-export def "catalog-usql-databases-schemas-statistics ListTableStatisticsByDatabaseAndSchema" [
-  databaseName: string
-  schemaName: string
+export def "catalog-usql-databases-schemas-statistics list-table" [
+  database_name: string
+  schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -672,7 +672,7 @@ export def "catalog-usql-databases-schemas-statistics ListTableStatisticsByDatab
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/statistics" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -682,9 +682,9 @@ export def "catalog-usql-databases-schemas-statistics ListTableStatisticsByDatab
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables
 # operationId: Catalog_ListTables
-export def "catalog-usql-databases-schemas-tables ListTables" [
-  databaseName: string
-  schemaName: string
+export def "catalog-usql-databases-schemas-tables list" [
+  database_name: string
+  schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "catalog-usql-databases-schemas-tables ListTables" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "basic" $basic "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -715,10 +715,10 @@ export def "catalog-usql-databases-schemas-tables ListTables" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}
 # operationId: Catalog_GetTable
-export def "catalog-usql-databases-schemas-tables GetTable" [
-  databaseName: string
-  schemaName: string
-  tableName: string
+export def "catalog-usql-databases-schemas-tables get" [
+  database_name: string
+  schema_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,7 +732,7 @@ export def "catalog-usql-databases-schemas-tables GetTable" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, table_name: $table_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -742,10 +742,10 @@ export def "catalog-usql-databases-schemas-tables GetTable" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/partitions
 # operationId: Catalog_ListTablePartitions
-export def "catalog-usql-databases-schemas-tables-partitions ListTablePartitions" [
-  databaseName: string
-  schemaName: string
-  tableName: string
+export def "catalog-usql-databases-schemas-tables-partitions list" [
+  database_name: string
+  schema_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -765,7 +765,7 @@ export def "catalog-usql-databases-schemas-tables-partitions ListTablePartitions
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/partitions" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, table_name: $table_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/partitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -775,11 +775,11 @@ export def "catalog-usql-databases-schemas-tables-partitions ListTablePartitions
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/partitions/{partitionName}
 # operationId: Catalog_GetTablePartition
-export def "catalog-usql-databases-schemas-tables-partitions GetTablePartition" [
-  databaseName: string
-  schemaName: string
-  tableName: string
-  partitionName: string
+export def "catalog-usql-databases-schemas-tables-partitions get" [
+  database_name: string
+  schema_name: string
+  table_name: string
+  partition_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -793,7 +793,7 @@ export def "catalog-usql-databases-schemas-tables-partitions GetTablePartition" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/partitions/($partitionName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, table_name: $table_name, partition_name: $partition_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/partitions/{partition_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -803,11 +803,11 @@ export def "catalog-usql-databases-schemas-tables-partitions GetTablePartition" 
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/partitions/{partitionName}/previewrows
 # operationId: Catalog_PreviewTablePartition
-export def "catalog-usql-databases-schemas-tables-partitions-previewrows PreviewTablePartition" [
-  databaseName: string
-  schemaName: string
-  tableName: string
-  partitionName: string
+export def "catalog-usql-databases-schemas-tables-partitions-previewrows get" [
+  database_name: string
+  schema_name: string
+  table_name: string
+  partition_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,14 +816,14 @@ export def "catalog-usql-databases-schemas-tables-partitions-previewrows Preview
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxRows: int # The maximum number of preview rows to be retrieved.Rows returned may be less than or equal to this number depending on row sizes and number of rows in the partition. (format: int64)
-  --maxColumns: int # The maximum number of columns to be retrieved. (format: int64)
+  --max-rows: int # The maximum number of preview rows to be retrieved.Rows returned may be less than or equal to this number depending on row sizes and number of rows in the partition. (format: int64)
+  --max-columns: int # The maximum number of columns to be retrieved. (format: int64)
   --api-version: string # Client Api Version.
 ]: nothing -> record<rows: list<list<string>>, schema: table<name: string, type: string>, totalColumnCount: int, totalRowCount: int, truncated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxRows" $maxRows "scalar") (serialize-qp "maxColumns" $maxColumns "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/partitions/($partitionName)/previewrows" $qp)
+  let qp = [(serialize-qp "maxRows" $max_rows "scalar") (serialize-qp "maxColumns" $max_columns "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, table_name: $table_name, partition_name: $partition_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/partitions/{partition_name}/previewrows") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -833,10 +833,10 @@ export def "catalog-usql-databases-schemas-tables-partitions-previewrows Preview
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/previewrows
 # operationId: Catalog_PreviewTable
-export def "catalog-usql-databases-schemas-tables-previewrows PreviewTable" [
-  databaseName: string
-  schemaName: string
-  tableName: string
+export def "catalog-usql-databases-schemas-tables-previewrows get" [
+  database_name: string
+  schema_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,14 +845,14 @@ export def "catalog-usql-databases-schemas-tables-previewrows PreviewTable" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxRows: int # The maximum number of preview rows to be retrieved. Rows returned may be less than or equal to this number depending on row sizes and number of rows in the table. (format: int64)
-  --maxColumns: int # The maximum number of columns to be retrieved. (format: int64)
+  --max-rows: int # The maximum number of preview rows to be retrieved. Rows returned may be less than or equal to this number depending on row sizes and number of rows in the table. (format: int64)
+  --max-columns: int # The maximum number of columns to be retrieved. (format: int64)
   --api-version: string # Client Api Version.
 ]: nothing -> record<rows: list<list<string>>, schema: table<name: string, type: string>, totalColumnCount: int, totalRowCount: int, truncated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxRows" $maxRows "scalar") (serialize-qp "maxColumns" $maxColumns "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/previewrows" $qp)
+  let qp = [(serialize-qp "maxRows" $max_rows "scalar") (serialize-qp "maxColumns" $max_columns "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, table_name: $table_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/previewrows") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -862,10 +862,10 @@ export def "catalog-usql-databases-schemas-tables-previewrows PreviewTable" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/statistics
 # operationId: Catalog_ListTableStatistics
-export def "catalog-usql-databases-schemas-tables-statistics ListTableStatistics" [
-  databaseName: string
-  schemaName: string
-  tableName: string
+export def "catalog-usql-databases-schemas-tables-statistics list" [
+  database_name: string
+  schema_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -885,7 +885,7 @@ export def "catalog-usql-databases-schemas-tables-statistics ListTableStatistics
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/statistics" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, table_name: $table_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -895,11 +895,11 @@ export def "catalog-usql-databases-schemas-tables-statistics ListTableStatistics
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/statistics/{statisticsName}
 # operationId: Catalog_GetTableStatistic
-export def "catalog-usql-databases-schemas-tables-statistics GetTableStatistic" [
-  databaseName: string
-  schemaName: string
-  tableName: string
-  statisticsName: string
+export def "catalog-usql-databases-schemas-tables-statistics get" [
+  database_name: string
+  schema_name: string
+  table_name: string
+  statistics_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "catalog-usql-databases-schemas-tables-statistics GetTableStatistic" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/statistics/($statisticsName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, table_name: $table_name, statistics_name: $statistics_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/statistics/{statistics_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -923,10 +923,10 @@ export def "catalog-usql-databases-schemas-tables-statistics GetTableStatistic" 
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/tablefragments
 # operationId: Catalog_ListTableFragments
-export def "catalog-usql-databases-schemas-tables-tablefragments ListTableFragments" [
-  databaseName: string
-  schemaName: string
-  tableName: string
+export def "catalog-usql-databases-schemas-tables-tablefragments list" [
+  database_name: string
+  schema_name: string
+  table_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -946,7 +946,7 @@ export def "catalog-usql-databases-schemas-tables-tablefragments ListTableFragme
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tables/($tableName)/tablefragments" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, table_name: $table_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tables/{table_name}/tablefragments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -956,9 +956,9 @@ export def "catalog-usql-databases-schemas-tables-tablefragments ListTableFragme
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tabletypes
 # operationId: Catalog_ListTableTypes
-export def "catalog-usql-databases-schemas-tabletypes ListTableTypes" [
-  databaseName: string
-  schemaName: string
+export def "catalog-usql-databases-schemas-tabletypes list" [
+  database_name: string
+  schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -978,7 +978,7 @@ export def "catalog-usql-databases-schemas-tabletypes ListTableTypes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tabletypes" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tabletypes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -988,10 +988,10 @@ export def "catalog-usql-databases-schemas-tabletypes ListTableTypes" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tabletypes/{tableTypeName}
 # operationId: Catalog_GetTableType
-export def "catalog-usql-databases-schemas-tabletypes GetTableType" [
-  databaseName: string
-  schemaName: string
-  tableTypeName: string
+export def "catalog-usql-databases-schemas-tabletypes get" [
+  database_name: string
+  schema_name: string
+  table_type_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,7 +1005,7 @@ export def "catalog-usql-databases-schemas-tabletypes GetTableType" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tabletypes/($tableTypeName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, table_type_name: $table_type_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tabletypes/{table_type_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1015,9 +1015,9 @@ export def "catalog-usql-databases-schemas-tabletypes GetTableType" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tablevaluedfunctions
 # operationId: Catalog_ListTableValuedFunctions
-export def "catalog-usql-databases-schemas-tablevaluedfunctions ListTableValuedFunctions" [
-  databaseName: string
-  schemaName: string
+export def "catalog-usql-databases-schemas-tablevaluedfunctions list-table-valued-functions" [
+  database_name: string
+  schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "catalog-usql-databases-schemas-tablevaluedfunctions ListTableValuedF
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tablevaluedfunctions" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tablevaluedfunctions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1047,10 +1047,10 @@ export def "catalog-usql-databases-schemas-tablevaluedfunctions ListTableValuedF
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/tablevaluedfunctions/{tableValuedFunctionName}
 # operationId: Catalog_GetTableValuedFunction
-export def "catalog-usql-databases-schemas-tablevaluedfunctions GetTableValuedFunction" [
-  databaseName: string
-  schemaName: string
-  tableValuedFunctionName: string
+export def "catalog-usql-databases-schemas-tablevaluedfunctions get-table-valued-function" [
+  database_name: string
+  schema_name: string
+  table_valued_function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1064,7 +1064,7 @@ export def "catalog-usql-databases-schemas-tablevaluedfunctions GetTableValuedFu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/tablevaluedfunctions/($tableValuedFunctionName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, table_valued_function_name: $table_valued_function_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/tablevaluedfunctions/{table_valued_function_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1074,9 +1074,9 @@ export def "catalog-usql-databases-schemas-tablevaluedfunctions GetTableValuedFu
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/types
 # operationId: Catalog_ListTypes
-export def "catalog-usql-databases-schemas-types ListTypes" [
-  databaseName: string
-  schemaName: string
+export def "catalog-usql-databases-schemas-types list" [
+  database_name: string
+  schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,7 +1096,7 @@ export def "catalog-usql-databases-schemas-types ListTypes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/types" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/types") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1106,9 +1106,9 @@ export def "catalog-usql-databases-schemas-types ListTypes" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/views
 # operationId: Catalog_ListViews
-export def "catalog-usql-databases-schemas-views ListViews" [
-  databaseName: string
-  schemaName: string
+export def "catalog-usql-databases-schemas-views list" [
+  database_name: string
+  schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,7 +1128,7 @@ export def "catalog-usql-databases-schemas-views ListViews" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/views" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/views") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1138,10 +1138,10 @@ export def "catalog-usql-databases-schemas-views ListViews" [
 #
 # GET /catalog/usql/databases/{databaseName}/schemas/{schemaName}/views/{viewName}
 # operationId: Catalog_GetView
-export def "catalog-usql-databases-schemas-views GetView" [
-  databaseName: string
-  schemaName: string
-  viewName: string
+export def "catalog-usql-databases-schemas-views get" [
+  database_name: string
+  schema_name: string
+  view_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,7 +1155,7 @@ export def "catalog-usql-databases-schemas-views GetView" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/schemas/($schemaName)/views/($viewName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, schema_name: $schema_name, view_name: $view_name} | format pattern "/catalog/usql/databases/{database_name}/schemas/{schema_name}/views/{view_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1167,8 +1167,8 @@ export def "catalog-usql-databases-schemas-views GetView" [
 # DEPRECATED
 # operationId: Catalog_DeleteAllSecrets
 @deprecated
-export def "catalog-usql-databases-secrets DeleteAllSecrets" [
-  databaseName: string
+export def "catalog-usql-databases-secrets delete-all" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1182,7 +1182,7 @@ export def "catalog-usql-databases-secrets DeleteAllSecrets" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/secrets" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}/secrets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1194,9 +1194,9 @@ export def "catalog-usql-databases-secrets DeleteAllSecrets" [
 # DEPRECATED
 # operationId: Catalog_DeleteSecret
 @deprecated
-export def "catalog-usql-databases-secrets DeleteSecret" [
-  databaseName: string
-  secretName: string
+export def "catalog-usql-databases-secrets delete" [
+  database_name: string
+  secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1210,7 +1210,7 @@ export def "catalog-usql-databases-secrets DeleteSecret" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/secrets/($secretName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, secret_name: $secret_name} | format pattern "/catalog/usql/databases/{database_name}/secrets/{secret_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1222,9 +1222,9 @@ export def "catalog-usql-databases-secrets DeleteSecret" [
 # DEPRECATED
 # operationId: Catalog_GetSecret
 @deprecated
-export def "catalog-usql-databases-secrets GetSecret" [
-  databaseName: string
-  secretName: string
+export def "catalog-usql-databases-secrets get" [
+  database_name: string
+  secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,7 +1238,7 @@ export def "catalog-usql-databases-secrets GetSecret" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/secrets/($secretName)" $qp)
+  let full_url = (build-url $base ({database_name: $database_name, secret_name: $secret_name} | format pattern "/catalog/usql/databases/{database_name}/secrets/{secret_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1250,9 +1250,9 @@ export def "catalog-usql-databases-secrets GetSecret" [
 # DEPRECATED
 # operationId: Catalog_UpdateSecret
 @deprecated
-export def "catalog-usql-databases-secrets UpdateSecret" [
-  databaseName: string
-  secretName: string
+export def "catalog-usql-databases-secrets update" [
+  database_name: string
+  secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,8 +1269,8 @@ export def "catalog-usql-databases-secrets UpdateSecret" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/secrets/($secretName)" $qp)
-  let body = {password: $password, uri: $uri} | compact
+  let full_url = (build-url $base ({database_name: $database_name, secret_name: $secret_name} | format pattern "/catalog/usql/databases/{database_name}/secrets/{secret_name}") $qp)
+  let body = {"password": $password, "uri": $uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1283,9 +1283,9 @@ export def "catalog-usql-databases-secrets UpdateSecret" [
 # DEPRECATED
 # operationId: Catalog_CreateSecret
 @deprecated
-export def "catalog-usql-databases-secrets CreateSecret" [
-  databaseName: string
-  secretName: string
+export def "catalog-usql-databases-secrets create" [
+  database_name: string
+  secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1302,8 +1302,8 @@ export def "catalog-usql-databases-secrets CreateSecret" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/secrets/($secretName)" $qp)
-  let body = {password: $password, uri: $uri} | compact
+  let full_url = (build-url $base ({database_name: $database_name, secret_name: $secret_name} | format pattern "/catalog/usql/databases/{database_name}/secrets/{secret_name}") $qp)
+  let body = {"password": $password, "uri": $uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1314,8 +1314,8 @@ export def "catalog-usql-databases-secrets CreateSecret" [
 #
 # GET /catalog/usql/databases/{databaseName}/statistics
 # operationId: Catalog_ListTableStatisticsByDatabase
-export def "catalog-usql-databases-statistics ListTableStatisticsByDatabase" [
-  databaseName: string
+export def "catalog-usql-databases-statistics list-table" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1335,7 +1335,7 @@ export def "catalog-usql-databases-statistics ListTableStatisticsByDatabase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/statistics" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}/statistics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1345,8 +1345,8 @@ export def "catalog-usql-databases-statistics ListTableStatisticsByDatabase" [
 #
 # GET /catalog/usql/databases/{databaseName}/tables
 # operationId: Catalog_ListTablesByDatabase
-export def "catalog-usql-databases-tables ListTablesByDatabase" [
-  databaseName: string
+export def "catalog-usql-databases-tables list" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1367,7 +1367,7 @@ export def "catalog-usql-databases-tables ListTablesByDatabase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "basic" $basic "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/tables" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}/tables") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1377,8 +1377,8 @@ export def "catalog-usql-databases-tables ListTablesByDatabase" [
 #
 # GET /catalog/usql/databases/{databaseName}/tablevaluedfunctions
 # operationId: Catalog_ListTableValuedFunctionsByDatabase
-export def "catalog-usql-databases-tablevaluedfunctions ListTableValuedFunctionsByDatabase" [
-  databaseName: string
+export def "catalog-usql-databases-tablevaluedfunctions list-table-valued-functions" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "catalog-usql-databases-tablevaluedfunctions ListTableValuedFunctions
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/tablevaluedfunctions" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}/tablevaluedfunctions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1408,8 +1408,8 @@ export def "catalog-usql-databases-tablevaluedfunctions ListTableValuedFunctions
 #
 # GET /catalog/usql/databases/{databaseName}/views
 # operationId: Catalog_ListViewsByDatabase
-export def "catalog-usql-databases-views ListViewsByDatabase" [
-  databaseName: string
+export def "catalog-usql-databases-views list" [
+  database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,7 +1429,7 @@ export def "catalog-usql-databases-views ListViewsByDatabase" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$filter" $filter "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$select" $select "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$count" $count "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/catalog/usql/databases/($databaseName)/views" $qp)
+  let full_url = (build-url $base ({database_name: $database_name} | format pattern "/catalog/usql/databases/{database_name}/views") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

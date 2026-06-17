@@ -138,7 +138,7 @@ export def "improve post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/improve")
-  let body = {image_file_b64: $image_file_b64, image_filename: $image_filename, image_url: $image_url, tag: $tag} | compact
+  let body = {"image_file_b64": $image_file_b64, "image_filename": $image_filename, "image_url": $image_url, "tag": $tag} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,7 +179,7 @@ export def "removebg post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/removebg")
-  let body = {add_shadow: $add_shadow, bg_color: $bg_color, bg_image_url: $bg_image_url, channels: $channels, crop: $crop, crop_margin: $crop_margin, format: $format, image_file_b64: $image_file_b64, image_url: $image_url, position: $position, roi: $roi, scale: $scale, semitransparency: $semitransparency, size: $size, type: $type, type_level: $type_level} | compact
+  let body = {"add_shadow": $add_shadow, "bg_color": $bg_color, "bg_image_url": $bg_image_url, "channels": $channels, "crop": $crop, "crop_margin": $crop_margin, "format": $format, "image_file_b64": $image_file_b64, "image_url": $image_url, "position": $position, "roi": $roi, "scale": $scale, "semitransparency": $semitransparency, "size": $size, "type": $type, "type_level": $type_level} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

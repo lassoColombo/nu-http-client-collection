@@ -115,7 +115,7 @@ export def "cluster solveClusteringProblem" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cluster")
-  let body = {configuration: $configuration, customers: $customers} | compact
+  let body = {"configuration": $configuration, "customers": $customers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -144,7 +144,7 @@ export def "cluster-calculate asyncClusteringProblem" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cluster/calculate")
-  let body = {configuration: $configuration, customers: $customers} | compact
+  let body = {"configuration": $configuration, "customers": $customers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -156,7 +156,7 @@ export def "cluster-calculate asyncClusteringProblem" [
 # GET /cluster/solution/{jobId}
 # operationId: getClusterSolution
 export def "cluster-solution get" [
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "cluster-solution get" [
 ]: nothing -> record<clusters: table<ids: list, quantity: float>, copyrights: list<string>, processing_time: float, status: string, waiting_time_in_queue: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/cluster/solution/($jobId)")
+  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/cluster/solution/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -238,7 +238,7 @@ export def "isochrone get" [
 #
 # POST /match
 # operationId: postGPX
-export def "match post" [
+export def "match create-gpx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "matrix get" [
 #
 # POST /matrix
 # operationId: postMatrix
-export def "matrix post" [
+export def "matrix create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "matrix post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/matrix")
-  let body = {fail_fast: $fail_fast, from_curbsides: $from_curbsides, from_point_hints: $from_point_hints, from_points: $from_points, out_arrays: $out_arrays, snap_preventions: $snap_preventions, to_curbsides: $to_curbsides, to_point_hints: $to_point_hints, to_points: $to_points, turn_costs: $turn_costs, vehicle: $vehicle, curbsides: $curbsides, point_hints: $point_hints, points: $points} | compact
+  let body = {"fail_fast": $fail_fast, "from_curbsides": $from_curbsides, "from_point_hints": $from_point_hints, "from_points": $from_points, "out_arrays": $out_arrays, "snap_preventions": $snap_preventions, "to_curbsides": $to_curbsides, "to_point_hints": $to_point_hints, "to_points": $to_points, "turn_costs": $turn_costs, "vehicle": $vehicle, "curbsides": $curbsides, "point_hints": $point_hints, "points": $points} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -367,7 +367,7 @@ export def "matrix-calculate calculateMatrix" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/matrix/calculate")
-  let body = {fail_fast: $fail_fast, from_curbsides: $from_curbsides, from_point_hints: $from_point_hints, from_points: $from_points, out_arrays: $out_arrays, snap_preventions: $snap_preventions, to_curbsides: $to_curbsides, to_point_hints: $to_point_hints, to_points: $to_points, turn_costs: $turn_costs, vehicle: $vehicle, curbsides: $curbsides, point_hints: $point_hints, points: $points} | compact
+  let body = {"fail_fast": $fail_fast, "from_curbsides": $from_curbsides, "from_point_hints": $from_point_hints, "from_points": $from_points, "out_arrays": $out_arrays, "snap_preventions": $snap_preventions, "to_curbsides": $to_curbsides, "to_point_hints": $to_point_hints, "to_points": $to_points, "turn_costs": $turn_costs, "vehicle": $vehicle, "curbsides": $curbsides, "point_hints": $point_hints, "points": $points} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -379,7 +379,7 @@ export def "matrix-calculate calculateMatrix" [
 # GET /matrix/solution/{jobId}
 # operationId: getMatrixSolution
 export def "matrix-solution get" [
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -391,7 +391,7 @@ export def "matrix-solution get" [
 ]: nothing -> record<distances: list<list<float>>, hints: table<details: string, invalid_from_points: list, invalid_to_points: list, message: string, point_pairs: list>, info: record<copyrights: list<string>, took: float>, times: list<list<float>>, weights: list<list<float>>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/matrix/solution/($jobId)")
+  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/matrix/solution/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -424,7 +424,7 @@ export def "route get" [
   --calc-points: oneof<nothing, bool> # If the points for the route should be calculated at all.  (default: true)
   --debug: oneof<nothing, bool> # If `true`, the output will be formatted.  (default: false)
   --points-encoded: oneof<nothing, bool> # Allows changing the encoding of location data in the response. The default is polyline encoding, which is compact but requires special client code to unpack. (We provide it in our JavaScript client library!) Set this parameter to `false` to switch the encoding to simple coordinate pairs like `[lon,lat]`, or `[lon,lat,elevation]`. See the description of the response format for more information.  (default: true)
-  --chdisable: oneof<nothing, bool> # Use this parameter in combination with one or more parameters from below.  (default: false)
+  --ch-disable: oneof<nothing, bool> # Use this parameter in combination with one or more parameters from below.  (default: false)
   --weighting: string # Determines the way the "best" route is calculated. Besides `fastest` you can use `short_fastest` which finds a reasonable balance between the distance influence (`shortest`) and the time (`fastest`). You could also use `shortest` but is deprecated and not recommended for motor vehicles. All except `fastest` require `ch.disable=true`.  (default: fastest)
   --heading: list # Favour a heading direction for a certain point. Specify either one heading for the start point or as many as there are points. In this case headings are associated by their order to the specific points. Headings are given as north based clockwise angle between 0 and 360 degree. This parameter also influences the tour generated with `algorithm=round_trip` and forces the initial direction.  Requires `ch.disable=true`.
   --heading-penalty: int # Time penalty in seconds for not obeying a specified heading. Requires `ch.disable=true`.  (format: int32, default: 120)
@@ -432,15 +432,15 @@ export def "route get" [
   --block-area: string # Block road access by specifying a point close to the road segment to be blocked, with the format `lat,lon`. You can also block all road segments crossing a geometric shape. Specify a circle using the format `lat,lon,radius`, or a polygon using the format `lat1,lon1,lat2,lon2,...,latN,lonN`. You can specify several shapes, separating them with `;`. Requires `ch.disable=true`.
   --avoid: string # Specify which road classes and environments you would like to avoid.  Possible values are `motorway`, `steps`, `track`, `toll`, `ferry`, `tunnel` and `bridge`. Separate several values with `;`. Obviously not all the values make sense for all vehicle profiles e.g. `bike` is already forbidden on a `motorway`. Requires `ch.disable=true`.
   --algorithm: string@algorithm-completer # Rather than looking for the shortest or fastest path, this parameter lets you solve two different problems related to routing: With `alternative_route`, we give you not one but several routes that are close to optimal, but not too similar to each other.  With `round_trip`, the route will get you back to where you started. This is meant for fun (think of a bike trip), so we will add some randomness. The `round_trip` option requires `ch.disable=true`. You can control both of these features with additional parameters, see below. 
-  --round-tripdistance: int # If `algorithm=round_trip`, this parameter configures approximative length of the resulting round trip. Requires `ch.disable=true`.  (format: int32, default: 10000)
-  --round-tripseed: int # If `algorithm=round_trip`, this sets the random seed. Change this to get a different tour for each value.  (format: int64)
-  --alternative-routemax-paths: int # If `algorithm=alternative_route`, this parameter sets the number of maximum paths which should be calculated. Increasing can lead to worse alternatives.  (format: int32, default: 2)
-  --alternative-routemax-weight-factor: float # If `algorithm=alternative_route`, this parameter sets the factor by which the alternatives routes can be longer than the optimal route. Increasing can lead to worse alternatives.  (default: 1.4)
-  --alternative-routemax-share-factor: float # If `algorithm=alternative_route`, this parameter specifies how similar an alternative route can be to the optimal route. Increasing can lead to worse alternatives.  (default: 0.6)
+  --round-trip-distance: int # If `algorithm=round_trip`, this parameter configures approximative length of the resulting round trip. Requires `ch.disable=true`.  (format: int32, default: 10000)
+  --round-trip-seed: int # If `algorithm=round_trip`, this sets the random seed. Change this to get a different tour for each value.  (format: int64)
+  --alternative-route-max-paths: int # If `algorithm=alternative_route`, this parameter sets the number of maximum paths which should be calculated. Increasing can lead to worse alternatives.  (format: int32, default: 2)
+  --alternative-route-max-weight-factor: float # If `algorithm=alternative_route`, this parameter sets the factor by which the alternatives routes can be longer than the optimal route. Increasing can lead to worse alternatives.  (default: 1.4)
+  --alternative-route-max-share-factor: float # If `algorithm=alternative_route`, this parameter specifies how similar an alternative route can be to the optimal route. Increasing can lead to worse alternatives.  (default: 0.6)
 ]: nothing -> record<info: record<copyrights: list<string>, took: float>, paths: table<ascend: float, bbox: list, descend: float, details: record, distance: float, instructions: list, points: record, points_encoded: bool, points_order: list, snapped_waypoints: record, time: int>> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "point" $point "multi") (serialize-qp "point_hint" $point_hint "multi") (serialize-qp "snap_prevention" $snap_prevention "multi") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "curbside" $curbside "multi") (serialize-qp "turn_costs" $turn_costs "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "elevation" $elevation "scalar") (serialize-qp "details" $details "multi") (serialize-qp "optimize" $optimize "scalar") (serialize-qp "instructions" $instructions "scalar") (serialize-qp "calc_points" $calc_points "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "points_encoded" $points_encoded "scalar") (serialize-qp "ch.disable" $chdisable "scalar") (serialize-qp "weighting" $weighting "scalar") (serialize-qp "heading" $heading "multi") (serialize-qp "heading_penalty" $heading_penalty "scalar") (serialize-qp "pass_through" $pass_through "scalar") (serialize-qp "block_area" $block_area "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "algorithm" $algorithm "scalar") (serialize-qp "round_trip.distance" $round_tripdistance "scalar") (serialize-qp "round_trip.seed" $round_tripseed "scalar") (serialize-qp "alternative_route.max_paths" $alternative_routemax_paths "scalar") (serialize-qp "alternative_route.max_weight_factor" $alternative_routemax_weight_factor "scalar") (serialize-qp "alternative_route.max_share_factor" $alternative_routemax_share_factor "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "point" $point "multi") (serialize-qp "point_hint" $point_hint "multi") (serialize-qp "snap_prevention" $snap_prevention "multi") (serialize-qp "vehicle" $vehicle "scalar") (serialize-qp "curbside" $curbside "multi") (serialize-qp "turn_costs" $turn_costs "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "elevation" $elevation "scalar") (serialize-qp "details" $details "multi") (serialize-qp "optimize" $optimize "scalar") (serialize-qp "instructions" $instructions "scalar") (serialize-qp "calc_points" $calc_points "scalar") (serialize-qp "debug" $debug "scalar") (serialize-qp "points_encoded" $points_encoded "scalar") (serialize-qp "ch.disable" $ch_disable "scalar") (serialize-qp "weighting" $weighting "scalar") (serialize-qp "heading" $heading "multi") (serialize-qp "heading_penalty" $heading_penalty "scalar") (serialize-qp "pass_through" $pass_through "scalar") (serialize-qp "block_area" $block_area "scalar") (serialize-qp "avoid" $avoid "scalar") (serialize-qp "algorithm" $algorithm "scalar") (serialize-qp "round_trip.distance" $round_trip_distance "scalar") (serialize-qp "round_trip.seed" $round_trip_seed "scalar") (serialize-qp "alternative_route.max_paths" $alternative_route_max_paths "scalar") (serialize-qp "alternative_route.max_weight_factor" $alternative_route_max_weight_factor "scalar") (serialize-qp "alternative_route.max_share_factor" $alternative_route_max_share_factor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/route" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -451,7 +451,7 @@ export def "route get" [
 #
 # POST /route
 # operationId: postRoute
-export def "route post" [
+export def "route create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,13 +461,13 @@ export def "route post" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --algorithm: string@algorithm-completer # Rather than looking for the shortest or fastest path, this lets you solve two different problems related to routing: With `round_trip`, the route will get you back to where you started. This is meant for fun (think of a bike trip), so we will add some randomness. This requires `ch.disable=true`. With `alternative_route`, we give you not one but several routes that are close to optimal, but not too similar to each other. You can control both of these features with additional parameters, see below.
-  --alternative-routemax-paths: int # If `algorithm=alternative_route`, this parameter sets the number of maximum paths which should be calculated. Increasing can lead to worse alternatives.  (format: int32, default: 2)
-  --alternative-routemax-share-factor: float # If `algorithm=alternative_route`, this parameter specifies how similar an alternative route can be to the optimal route. Increasing can lead to worse alternatives.  (default: 0.6)
-  --alternative-routemax-weight-factor: float # If `algorithm=alternative_route`, this parameter sets the factor by which the alternatives routes can be longer than the optimal route. Increasing can lead to worse alternatives.  (default: 1.4)
+  --alternative-route-max-paths: int # If `algorithm=alternative_route`, this parameter sets the number of maximum paths which should be calculated. Increasing can lead to worse alternatives.  (format: int32, default: 2)
+  --alternative-route-max-share-factor: float # If `algorithm=alternative_route`, this parameter specifies how similar an alternative route can be to the optimal route. Increasing can lead to worse alternatives.  (default: 0.6)
+  --alternative-route-max-weight-factor: float # If `algorithm=alternative_route`, this parameter sets the factor by which the alternatives routes can be longer than the optimal route. Increasing can lead to worse alternatives.  (default: 1.4)
   --avoid: string # Specify which road classes and environments you would like to avoid. Possible values are `motorway`, `steps`, `track`, `toll`, `ferry`, `tunnel` and `bridge`. Separate several values with `;`. Obviously not all the values make sense for all vehicle profiles e.g. `bike` is already forbidden on a `motorway`. Requires `ch.disable=true`.
   --block-area: string # Block road access via a point with the format `latitude,longitude` or an area defined by a circle `lat,lon,radius` or a rectangle `lat1,lon1,lat2,lon2`. Separate several values with `;`. Requires `ch.disable=true`.
   --calc-points: oneof<nothing, bool> # If the points for the route should be calculated at all.  (default: true)
-  --chdisable: oneof<nothing, bool> # Use this parameter in combination with one or more parameters from below.  (default: false)
+  --ch-disable: oneof<nothing, bool> # Use this parameter in combination with one or more parameters from below.  (default: false)
   --curbsides: list # Optional parameter. It specifies on which side a point should be relative to the driver when she leaves/arrives at a start/target/via point. You need to specify this parameter for either none or all points. Only supported for motor vehicles and OpenStreetMap. (e.g. [any, right])
   --debug: oneof<nothing, bool> # If `true`, the output will be formatted.  (default: false)
   --details: list # Optional parameter to retrieve path details. You can request additional details for the route: `street_name`, `time`, `distance`, `max_speed`, `toll`, `road_class`, `road_class_link`, `road_access`, `road_environment`, `lanes`, and `surface`. Read more about the usage of path details [here](https://discuss.graphhopper.com/t/2539).
@@ -481,8 +481,8 @@ export def "route post" [
   --point-hints: list # Optional parameter. Specifies a hint for each point in the `points` array to prefer a certain street for the closest location lookup. E.g. if there is an address or house with two or more neighboring streets you can control for which street the closest location is looked up. (e.g. [Lindenschmitstraße, Thalkirchener Str.])
   --points: list # The points for the route in an array of `[longitude,latitude]`. For instance, if you want to calculate a route from point A to B to C then you specify `points: [ [A_longitude, A_latitude], [B_longitude, B_latitude], [C_longitude, C_latitude]]  (e.g. [[11.539421, 48.118477], [11.559023, 48.12228]])
   --points-encoded: oneof<nothing, bool> # Allows changing the encoding of location data in the response. The default is polyline encoding, which is compact but requires special client code to unpack. (We provide it in our JavaScript client library!) Set this parameter to `false` to switch the encoding to simple coordinate pairs like `[lon,lat]`, or `[lon,lat,elevation]`. See the description of the response format for more information.  (default: true)
-  --round-tripdistance: int # If `algorithm=round_trip`, this parameter configures approximative length of the resulting round trip. Requires `ch.disable=true`.  (format: int32, default: 10000)
-  --round-tripseed: int # If `algorithm=round_trip`, this sets the random seed. Change this to get a different tour for each value.  (format: int64)
+  --round-trip-distance: int # If `algorithm=round_trip`, this parameter configures approximative length of the resulting round trip. Requires `ch.disable=true`.  (format: int32, default: 10000)
+  --round-trip-seed: int # If `algorithm=round_trip`, this sets the random seed. Change this to get a different tour for each value.  (format: int64)
   --snap-preventions: list # Optional parameter to avoid snapping to a certain road class or road environment. Current supported values `motorway`, `trunk`, `ferry`, `tunnel`, `bridge` and `ford` (e.g. [motorway, ferry, tunnel])
   --vehicle: any # e.g. bike
   --weighting: string # Determines the way the ''best'' route is calculated. Default is `fastest`. Other options are `shortest` (e.g. for `vehicle=foot` or `bike`) and `short_fastest` which finds a reasonable balance between `shortest` and `fastest`. Requires `ch.disable=true`.  (default: fastest)
@@ -491,7 +491,7 @@ export def "route post" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/route")
-  let body = {algorithm: $algorithm, alternative_route.max_paths: $alternative_routemax_paths, alternative_route.max_share_factor: $alternative_routemax_share_factor, alternative_route.max_weight_factor: $alternative_routemax_weight_factor, avoid: $avoid, block_area: $block_area, calc_points: $calc_points, ch.disable: $chdisable, curbsides: $curbsides, debug: $debug, details: $details, elevation: $elevation, heading_penalty: $heading_penalty, headings: $headings, instructions: $instructions, locale: $locale, optimize: $optimize, pass_through: $pass_through, point_hints: $point_hints, points: $points, points_encoded: $points_encoded, round_trip.distance: $round_tripdistance, round_trip.seed: $round_tripseed, snap_preventions: $snap_preventions, vehicle: $vehicle, weighting: $weighting} | compact
+  let body = {"algorithm": $algorithm, "alternative_route.max_paths": $alternative_route_max_paths, "alternative_route.max_share_factor": $alternative_route_max_share_factor, "alternative_route.max_weight_factor": $alternative_route_max_weight_factor, "avoid": $avoid, "block_area": $block_area, "calc_points": $calc_points, "ch.disable": $ch_disable, "curbsides": $curbsides, "debug": $debug, "details": $details, "elevation": $elevation, "heading_penalty": $heading_penalty, "headings": $headings, "instructions": $instructions, "locale": $locale, "optimize": $optimize, "pass_through": $pass_through, "point_hints": $point_hints, "points": $points, "points_encoded": $points_encoded, "round_trip.distance": $round_trip_distance, "round_trip.seed": $round_trip_seed, "snap_preventions": $snap_preventions, "vehicle": $vehicle, "weighting": $weighting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -555,7 +555,7 @@ export def "vrp solveVRP" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vrp")
-  let body = {algorithm: $algorithm, configuration: $configuration, cost_matrices: $cost_matrices, objectives: $objectives, relations: $relations, services: $services, shipments: $shipments, vehicle_types: $vehicle_types, vehicles: $vehicles} | compact
+  let body = {"algorithm": $algorithm, "configuration": $configuration, "cost_matrices": $cost_matrices, "objectives": $objectives, "relations": $relations, "services": $services, "shipments": $shipments, "vehicle_types": $vehicle_types, "vehicles": $vehicles} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -598,7 +598,7 @@ export def "vrp-optimize asyncVRP" [
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/vrp/optimize")
-  let body = {algorithm: $algorithm, configuration: $configuration, cost_matrices: $cost_matrices, objectives: $objectives, relations: $relations, services: $services, shipments: $shipments, vehicle_types: $vehicle_types, vehicles: $vehicles} | compact
+  let body = {"algorithm": $algorithm, "configuration": $configuration, "cost_matrices": $cost_matrices, "objectives": $objectives, "relations": $relations, "services": $services, "shipments": $shipments, "vehicle_types": $vehicle_types, "vehicles": $vehicles} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -610,7 +610,7 @@ export def "vrp-optimize asyncVRP" [
 # GET /vrp/solution/{jobId}
 # operationId: getSolution
 export def "vrp-solution get" [
-  jobId: string
+  job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,7 +622,7 @@ export def "vrp-solution get" [
 ]: nothing -> record<copyrights: list<string>, processing_time: int, solution: record<completion_time: int, costs: int, distance: int, max_operation_time: int, no_unassigned: int, no_vehicles: int, preparation_time: int, routes: list<record>, service_duration: int, time: int, transport_time: int, unassigned: record<breaks: list, details: list, services: list, shipments: list>, waiting_time: int>, status: string, waiting_time_in_queue: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/vrp/solution/($jobId)")
+  let full_url = (build-url $base ({job_id: $job_id} | format pattern "/vrp/solution/{job_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

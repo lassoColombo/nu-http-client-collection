@@ -72,7 +72,7 @@ def type-completer [] { ["Microsoft.DigitalTwins/digitalTwinsInstances"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-digital-twins-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-digital-twins-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DigitalTwins/operations
 # operationId: Operations_List
-export def "providers-microsoft-digital-twins-operations List" [
+export def "providers-microsoft-digital-twins-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -120,8 +120,8 @@ export def "providers-microsoft-digital-twins-operations List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DigitalTwins/digitalTwinsInstances
 # operationId: DigitalTwins_List
-export def "subscriptions-providers-microsoft-digital-twins-digital-twins-instances List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-digital-twins-digital-twins-instances list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +135,7 @@ export def "subscriptions-providers-microsoft-digital-twins-digital-twins-instan
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DigitalTwins/digitalTwinsInstances" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DigitalTwins/digitalTwinsInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -145,8 +145,8 @@ export def "subscriptions-providers-microsoft-digital-twins-digital-twins-instan
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DigitalTwins/locations/{location}/checkNameAvailability
 # operationId: DigitalTwins_CheckNameAvailability
-export def "subscriptions-providers-microsoft-digital-twins-locations-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-digital-twins-locations-check-name-availability check" [
+  subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,8 +164,8 @@ export def "subscriptions-providers-microsoft-digital-twins-locations-check-name
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.DigitalTwins/locations/($location)/checkNameAvailability" $qp)
-  let body = {name: $name, type: $type} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, location: $location} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.DigitalTwins/locations/{location}/checkNameAvailability") $qp)
+  let body = {"name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -176,9 +176,9 @@ export def "subscriptions-providers-microsoft-digital-twins-locations-check-name
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances
 # operationId: DigitalTwins_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DigitalTwins/digitalTwinsInstances" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DigitalTwins/digitalTwinsInstances") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -202,10 +202,10 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}
 # operationId: DigitalTwins_Delete
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DigitalTwins/digitalTwinsInstances/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -229,10 +229,10 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}
 # operationId: DigitalTwins_Get
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DigitalTwins/digitalTwinsInstances/($resourceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resource_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,10 +256,10 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}
 # operationId: DigitalTwins_Update
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances Update" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -275,8 +275,8 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DigitalTwins/digitalTwinsInstances/($resourceName)" $qp)
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resource_name}") $qp)
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -288,10 +288,10 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}
 # operationId: DigitalTwins_CreateOrUpdate
 # --sku shape: {name: "F1"}
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,8 +310,8 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DigitalTwins/digitalTwinsInstances/($resourceName)" $qp)
-  let body = {properties: $properties, location: $location, sku: $sku, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resource_name}") $qp)
+  let body = {"properties": $properties, "location": $location, "sku": $sku, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -322,10 +322,10 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}/endpoints
 # operationId: DigitalTwinsEndpoint_List
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints List" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DigitalTwins/digitalTwinsInstances/($resourceName)/endpoints" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resource_name}/endpoints") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -349,11 +349,11 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}/endpoints/{endpointName}
 # operationId: DigitalTwinsEndpoint_Delete
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  endpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DigitalTwins/digitalTwinsInstances/($resourceName)/endpoints/($endpointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resource_name}/endpoints/{endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -377,11 +377,11 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}/endpoints/{endpointName}
 # operationId: DigitalTwinsEndpoint_Get
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  endpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DigitalTwins/digitalTwinsInstances/($resourceName)/endpoints/($endpointName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resource_name}/endpoints/{endpoint_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -406,11 +406,11 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}/endpoints/{endpointName}
 # operationId: DigitalTwinsEndpoint_CreateOrUpdate
 # --properties shape: {endpointType: "EventHub"|"EventGrid"|"ServiceBus", tags?: record}
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  endpointName: string
+export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-endpoints create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  endpoint_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,8 +426,8 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DigitalTwins/digitalTwinsInstances/($resourceName)/endpoints/($endpointName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, endpoint_name: $endpoint_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resource_name}/endpoints/{endpoint_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -438,10 +438,10 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resourceName}/integrationResources
 # operationId: DigitalTwinsIoTHubs_List
-export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-integration-resources List" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
+export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digital-twins-instances-integration-resources list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.DigitalTwins/digitalTwinsInstances/($resourceName)/integrationResources" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.DigitalTwins/digitalTwinsInstances/{resource_name}/integrationResources") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -465,9 +465,9 @@ export def "subscriptions-resource-groups-providers-microsoft-digital-twins-digi
 #
 # DELETE /{scope}/providers/Microsoft.DigitalTwins/integrationResources/{integrationResourceName}
 # operationId: IoTHub_Delete
-export def "providers-microsoft-digital-twins-integration-resources Delete" [
+export def "providers-microsoft-digital-twins-integration-resources delete" [
   scope: string
-  integrationResourceName: string
+  integration_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "providers-microsoft-digital-twins-integration-resources Delete" [
 ]: nothing -> record<properties: record<createdTime: string, resourceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.DigitalTwins/integrationResources/($integrationResourceName)")
+  let full_url = (build-url $base ({scope: $scope, integration_resource_name: $integration_resource_name} | format pattern "/{scope}/providers/Microsoft.DigitalTwins/integrationResources/{integration_resource_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -489,9 +489,9 @@ export def "providers-microsoft-digital-twins-integration-resources Delete" [
 #
 # GET /{scope}/providers/Microsoft.DigitalTwins/integrationResources/{integrationResourceName}
 # operationId: IoTHub_Get
-export def "providers-microsoft-digital-twins-integration-resources Get" [
+export def "providers-microsoft-digital-twins-integration-resources get" [
   scope: string
-  integrationResourceName: string
+  integration_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +503,7 @@ export def "providers-microsoft-digital-twins-integration-resources Get" [
 ]: nothing -> record<properties: record<createdTime: string, resourceId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.DigitalTwins/integrationResources/($integrationResourceName)")
+  let full_url = (build-url $base ({scope: $scope, integration_resource_name: $integration_resource_name} | format pattern "/{scope}/providers/Microsoft.DigitalTwins/integrationResources/{integration_resource_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -514,9 +514,9 @@ export def "providers-microsoft-digital-twins-integration-resources Get" [
 # PUT /{scope}/providers/Microsoft.DigitalTwins/integrationResources/{integrationResourceName}
 # operationId: IoTHub_CreateOrUpdate
 # --properties shape: {resourceId?: string}
-export def "providers-microsoft-digital-twins-integration-resources CreateOrUpdate" [
+export def "providers-microsoft-digital-twins-integration-resources create-or-update" [
   scope: string
-  integrationResourceName: string
+  integration_resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,8 +530,8 @@ export def "providers-microsoft-digital-twins-integration-resources CreateOrUpda
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($scope)/providers/Microsoft.DigitalTwins/integrationResources/($integrationResourceName)")
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({scope: $scope, integration_resource_name: $integration_resource_name} | format pattern "/{scope}/providers/Microsoft.DigitalTwins/integrationResources/{integration_resource_name}"))
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

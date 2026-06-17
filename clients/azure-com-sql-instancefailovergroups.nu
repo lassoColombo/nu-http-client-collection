@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups ListByLocation" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups
 # operationId: InstanceFailoverGroups_ListByLocation
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups ListByLocation" [
-  resourceGroupName: string
-  locationName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups list-by" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/instanceFailoverGroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/instanceFailoverGroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,11 +120,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups/{failoverGroupName}
 # operationId: InstanceFailoverGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups Delete" [
-  resourceGroupName: string
-  locationName: string
-  failoverGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups delete" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
+  failover_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,7 +138,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/instanceFailoverGroups/($failoverGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name, failover_group_name: $failover_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/instanceFailoverGroups/{failover_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -148,11 +148,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups/{failoverGroupName}
 # operationId: InstanceFailoverGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups Get" [
-  resourceGroupName: string
-  locationName: string
-  failoverGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups get" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
+  failover_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/instanceFailoverGroups/($failoverGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name, failover_group_name: $failover_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/instanceFailoverGroups/{failover_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -177,11 +177,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups/{failoverGroupName}
 # operationId: InstanceFailoverGroups_CreateOrUpdate
 # --properties shape: {managedInstancePairs: list, partnerRegions: list, readOnlyEndpoint?: record, readWriteEndpoint: record}
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups CreateOrUpdate" [
-  resourceGroupName: string
-  locationName: string
-  failoverGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
+  failover_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,8 +197,8 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/instanceFailoverGroups/($failoverGroupName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name, failover_group_name: $failover_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/instanceFailoverGroups/{failover_group_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -209,11 +209,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups/{failoverGroupName}/failover
 # operationId: InstanceFailoverGroups_Failover
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups-failover Failover" [
-  resourceGroupName: string
-  locationName: string
-  failoverGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups-failover post" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
+  failover_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/instanceFailoverGroups/($failoverGroupName)/failover" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name, failover_group_name: $failover_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/instanceFailoverGroups/{failover_group_name}/failover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -237,11 +237,11 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/locations/{locationName}/instanceFailoverGroups/{failoverGroupName}/forceFailoverAllowDataLoss
 # operationId: InstanceFailoverGroups_ForceFailoverAllowDataLoss
-export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups-force-failover-allow-data-loss ForceFailoverAllowDataLoss" [
-  resourceGroupName: string
-  locationName: string
-  failoverGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-sql-locations-instance-failover-groups-force-failover-allow-data-loss post" [
+  subscription_id: string
+  resource_group_name: string
+  location_name: string
+  failover_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-locations-inst
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Sql/locations/($locationName)/instanceFailoverGroups/($failoverGroupName)/forceFailoverAllowDataLoss" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, location_name: $location_name, failover_group_name: $failover_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Sql/locations/{location_name}/instanceFailoverGroups/{failover_group_name}/forceFailoverAllowDataLoss") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

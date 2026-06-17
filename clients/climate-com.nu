@@ -67,13 +67,13 @@ def base-url-completer [] { ["https://platform.climate.com"] }
 def auth-scheme-completer [] { ["x-api-key" "bearer"] }
 
 # Completers for enum parameters
-def contentType-completer [] { ["application/vnd.climate.acrsi.geojson" "application/vnd.climate.harvest.geojson"] }
-def contentType-completer-1 [] { ["application/vnd.climate.as-applied.zip" "application/vnd.climate.as-harvested.zip" "application/vnd.climate.as-planted.zip" "application/vnd.climate.field.geojson" "application/vnd.climate.modus.xml" "application/vnd.climate.prescription.zones.shp" "application/vnd.climate.rx.planting.shp" "application/vnd.climate.stand-count.geojson" "application/vnd.climate.weed-count.geojson" "image/vnd.climate.elevation.geotiff" "image/vnd.climate.ndvi.geotiff" "image/vnd.climate.raw.geotiff" "image/vnd.climate.rgb-cir.geotiff" "image/vnd.climate.rgb-nir.geotiff" "image/vnd.climate.rgb.geotiff" "image/vnd.climate.thermal.geotiff" "image/vnd.climate.waterstress.geotiff"] }
+def content-type-completer [] { ["application/vnd.climate.acrsi.geojson" "application/vnd.climate.harvest.geojson"] }
+def content-type-completer-1 [] { ["application/vnd.climate.as-applied.zip" "application/vnd.climate.as-harvested.zip" "application/vnd.climate.as-planted.zip" "application/vnd.climate.field.geojson" "application/vnd.climate.modus.xml" "application/vnd.climate.prescription.zones.shp" "application/vnd.climate.rx.planting.shp" "application/vnd.climate.stand-count.geojson" "application/vnd.climate.weed-count.geojson" "image/vnd.climate.elevation.geotiff" "image/vnd.climate.ndvi.geotiff" "image/vnd.climate.raw.geotiff" "image/vnd.climate.rgb-cir.geotiff" "image/vnd.climate.rgb-nir.geotiff" "image/vnd.climate.rgb.geotiff" "image/vnd.climate.thermal.geotiff" "image/vnd.climate.waterstress.geotiff"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "boundaries uploadBoundary" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "boundaries upload-boundary" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,7 +98,7 @@ export def commands []: nothing -> table {
 # POST /v4/boundaries
 # operationId: uploadBoundary
 # --geometry shape: {coordinates: list, type: "Point"|"Polygon"|"MultiPolygon"}
-export def "boundaries uploadBoundary" [
+export def "boundaries upload-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -113,7 +113,7 @@ export def "boundaries uploadBoundary" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/boundaries")
-  let body = {geometry: $geometry} | compact
+  let body = {"geometry": $geometry} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -124,7 +124,7 @@ export def "boundaries uploadBoundary" [
 #
 # POST /v4/boundaries/query
 # operationId: fetchBoundaries
-export def "boundaries-query fetchBoundaries" [
+export def "boundaries-query get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "boundaries-query fetchBoundaries" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/boundaries/query")
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -150,8 +150,8 @@ export def "boundaries-query fetchBoundaries" [
 #
 # GET /v4/boundaries/{boundaryId}
 # operationId: fetchBoundaryById
-export def "boundaries fetchBoundaryById" [
-  boundaryId: string
+export def "boundaries get-boundary" [
+  boundary_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "boundaries fetchBoundaryById" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/boundaries/($boundaryId)")
+  let full_url = (build-url $base ({boundary_id: $boundary_id} | format pattern "/v4/boundaries/{boundary_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +173,7 @@ export def "boundaries fetchBoundaryById" [
 #
 # POST /v4/exports
 # operationId: postExport
-export def "exports post" [
+export def "exports create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,14 +182,14 @@ export def "exports post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  contentType: string@contentType-completer # Content type representing data being exported (e.g. application/vnd.climate.acrsi.geojson). (format: mime-type)
+  content_type: string@content-type-completer # Content type representing data being exported (e.g. application/vnd.climate.acrsi.geojson). (format: mime-type)
   --definition: record # Additional specifications for a client's data export request, dependent on the content type.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/exports")
-  let body = {contentType: $contentType, definition: $definition} | compact
+  let body = {"contentType": $content_type, "definition": $definition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -200,8 +200,8 @@ export def "exports post" [
 #
 # GET /v4/exports/{exportId}/contents
 # operationId: fetchExportContentsById
-export def "exports-contents fetchExportContentsById" [
-  exportId: string
+export def "exports-contents get" [
+  export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,13 +210,13 @@ export def "exports-contents fetchExportContentsById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Must be either \*/* or application/octet-stream,application/json
-  --Range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB.
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
+  --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/exports/($exportId)/contents")
-  let extra_headers = {"Accept": $Accept, "Range": $Range} | compact
+  let full_url = (build-url $base ({export_id: $export_id} | format pattern "/v4/exports/{export_id}/contents"))
+  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -227,8 +227,8 @@ export def "exports-contents fetchExportContentsById" [
 #
 # GET /v4/exports/{exportId}/status
 # operationId: fetchExportStatusById
-export def "exports-status fetchExportStatusById" [
-  exportId: string
+export def "exports-status get" [
+  export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "exports-status fetchExportStatusById" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/exports/($exportId)/status")
+  let full_url = (build-url $base ({export_id: $export_id} | format pattern "/v4/exports/{export_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -250,9 +250,9 @@ export def "exports-status fetchExportStatusById" [
 #
 # GET /v4/farmOrganizations/{farmOrganizationType}/{farmOrganizationId}
 # operationId: fetchFarmOrganizationByTypeAndId
-export def "farm-organizations fetchFarmOrganizationByTypeAndId" [
-  farmOrganizationType: string
-  farmOrganizationId: string
+export def "farm-organizations get" [
+  farm_organization_type: string
+  farm_organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "farm-organizations fetchFarmOrganizationByTypeAndId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/farmOrganizations/($farmOrganizationType)/($farmOrganizationId)")
+  let full_url = (build-url $base ({farm_organization_type: $farm_organization_type, farm_organization_id: $farm_organization_id} | format pattern "/v4/farmOrganizations/{farm_organization_type}/{farm_organization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -274,7 +274,7 @@ export def "farm-organizations fetchFarmOrganizationByTypeAndId" [
 #
 # GET /v4/fields
 # operationId: fetchFields
-export def "fields fetchFields" [
+export def "fields list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,15 +283,15 @@ export def "fields fetchFields" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldName: string # Optional prefix filter for field name. Must be at least 3 characters.
-  --X-Next-Token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --X-Limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --field-name: string # Optional prefix filter for field name. Must be at least 3 characters.
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldName" $fieldName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fieldName" $field_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/fields" $qp)
-  let extra_headers = {"X-Next-Token": $X_Next_Token, "X-Limit": $X_Limit} | compact
+  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -302,7 +302,7 @@ export def "fields fetchFields" [
 #
 # GET /v4/fields/all
 # operationId: fetchAllFields
-export def "fields-all fetchAllFields" [
+export def "fields-all get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,15 +311,15 @@ export def "fields-all fetchAllFields" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldName: string # Optional prefix filter for field name. Must be at least 3 characters.
-  --X-Next-Token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --X-Limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --field-name: string # Optional prefix filter for field name. Must be at least 3 characters.
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldName" $fieldName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fieldName" $field_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/fields/all" $qp)
-  let extra_headers = {"X-Next-Token": $X_Next_Token, "X-Limit": $X_Limit} | compact
+  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -330,8 +330,8 @@ export def "fields-all fetchAllFields" [
 #
 # GET /v4/fields/{fieldId}
 # operationId: fetchFieldById
-export def "fields fetchFieldById" [
-  fieldId: string
+export def "fields get" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +343,7 @@ export def "fields fetchFieldById" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/fields/($fieldId)")
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/v4/fields/{field_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -361,19 +361,19 @@ export def "layers-as-applied get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resourceOwnerId: string # Optional unique identifier of the resource owner.  If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
-  --occurredAfter: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
-  --occurredBefore: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
-  --updatedAfter: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
-  --Accept: string # Must be either \*/* or application/octet-stream,application/json
-  --X-Next-Token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --X-Limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --resource-owner-id: string # Optional unique identifier of the resource owner.  If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
+  --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
+  --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
+  --updated-after: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resourceOwnerId" $resourceOwnerId "scalar") (serialize-qp "occurredAfter" $occurredAfter "scalar") (serialize-qp "occurredBefore" $occurredBefore "scalar") (serialize-qp "updatedAfter" $updatedAfter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/asApplied" $qp)
-  let extra_headers = {"Accept": $Accept, "X-Next-Token": $X_Next_Token, "X-Limit": $X_Limit} | compact
+  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -384,7 +384,7 @@ export def "layers-as-applied get" [
 #
 # GET /v4/layers/asApplied/{activityId}/contents
 export def "layers-as-applied-contents get" [
-  activityId: string
+  activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,13 +393,13 @@ export def "layers-as-applied-contents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Must be either \*/* or application/octet-stream,application/json
-  --Range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB.
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
+  --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/layers/asApplied/($activityId)/contents")
-  let extra_headers = {"Accept": $Accept, "Range": $Range} | compact
+  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/v4/layers/asApplied/{activity_id}/contents"))
+  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -418,19 +418,19 @@ export def "layers-as-harvested get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resourceOwnerId: string # Optional unique identifier of the resource owner.  If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
-  --occurredAfter: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
-  --occurredBefore: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
-  --updatedAfter: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
-  --Accept: string # Must be either \*/* or application/octet-stream,application/json
-  --X-Next-Token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --X-Limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --resource-owner-id: string # Optional unique identifier of the resource owner.  If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
+  --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
+  --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
+  --updated-after: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resourceOwnerId" $resourceOwnerId "scalar") (serialize-qp "occurredAfter" $occurredAfter "scalar") (serialize-qp "occurredBefore" $occurredBefore "scalar") (serialize-qp "updatedAfter" $updatedAfter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/asHarvested" $qp)
-  let extra_headers = {"Accept": $Accept, "X-Next-Token": $X_Next_Token, "X-Limit": $X_Limit} | compact
+  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -441,7 +441,7 @@ export def "layers-as-harvested get" [
 #
 # GET /v4/layers/asHarvested/{activityId}/contents
 export def "layers-as-harvested-contents get" [
-  activityId: string
+  activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,13 +450,13 @@ export def "layers-as-harvested-contents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Must be either \*/* or application/octet-stream,application/json
-  --Range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB.
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
+  --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/layers/asHarvested/($activityId)/contents")
-  let extra_headers = {"Accept": $Accept, "Range": $Range} | compact
+  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/v4/layers/asHarvested/{activity_id}/contents"))
+  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -475,19 +475,19 @@ export def "layers-as-planted get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resourceOwnerId: string # Optional unique identifier of the resource owner.  If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
-  --occurredAfter: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
-  --occurredBefore: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
-  --updatedAfter: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
-  --Accept: string # Must be either \*/* or application/octet-stream,application/json
-  --X-Next-Token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --X-Limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --resource-owner-id: string # Optional unique identifier of the resource owner.  If resourceOwnerId is not specified, it defaults to the x-authenticated-user-uuid. (format: uuid)
+  --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
+  --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
+  --updated-after: string # Optional updated time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a modification time at or after (inclusive) the specified time. (format: date-time)
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resourceOwnerId" $resourceOwnerId "scalar") (serialize-qp "occurredAfter" $occurredAfter "scalar") (serialize-qp "occurredBefore" $occurredBefore "scalar") (serialize-qp "updatedAfter" $updatedAfter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar") (serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar") (serialize-qp "updatedAfter" $updated_after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/asPlanted" $qp)
-  let extra_headers = {"Accept": $Accept, "X-Next-Token": $X_Next_Token, "X-Limit": $X_Limit} | compact
+  let extra_headers = {"Accept": $hdr_accept, "X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -498,7 +498,7 @@ export def "layers-as-planted get" [
 #
 # GET /v4/layers/asPlanted/{activityId}/contents
 export def "layers-as-planted-contents get" [
-  activityId: string
+  activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,13 +507,13 @@ export def "layers-as-planted-contents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Must be either \*/* or application/octet-stream,application/json
-  --Range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB.
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
+  --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/layers/asPlanted/($activityId)/contents")
-  let extra_headers = {"Accept": $Accept, "Range": $Range} | compact
+  let full_url = (build-url $base ({activity_id: $activity_id} | format pattern "/v4/layers/asPlanted/{activity_id}/contents"))
+  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -532,16 +532,16 @@ export def "layers-scouting-observations list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --occurredAfter: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
-  --occurredBefore: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
-  --X-Next-Token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --X-Limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --occurred-after: string # Optional start time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with an end time at or after (inclusive) the specified time will match this filter. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
+  --occurred-before: string # Optional end time by which to filter layer results. Time must be in ISO 8601 format with time zone, e.g. 2016-05-13T00:00:00Z (https://tools.ietf.org/html/rfc3339). Layers with a start time at or before (inclusive) the specified time. If both occurredAfter and occurredBefore are populated, occurredAfter must be <= occurredBefore. (format: date-time)
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "occurredAfter" $occurredAfter "scalar") (serialize-qp "occurredBefore" $occurredBefore "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "occurredAfter" $occurred_after "scalar") (serialize-qp "occurredBefore" $occurred_before "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/layers/scoutingObservations" $qp)
-  let extra_headers = {"X-Next-Token": $X_Next_Token, "X-Limit": $X_Limit} | compact
+  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -552,7 +552,7 @@ export def "layers-scouting-observations list" [
 #
 # GET /v4/layers/scoutingObservations/{scoutingObservationId}
 export def "layers-scouting-observations get" [
-  scoutingObservationId: string
+  scouting_observation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "layers-scouting-observations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/layers/scoutingObservations/($scoutingObservationId)")
+  let full_url = (build-url $base ({scouting_observation_id: $scouting_observation_id} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -574,7 +574,7 @@ export def "layers-scouting-observations get" [
 #
 # GET /v4/layers/scoutingObservations/{scoutingObservationId}/attachments
 export def "layers-scouting-observations-attachments get" [
-  scoutingObservationId: string
+  scouting_observation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,13 +583,13 @@ export def "layers-scouting-observations-attachments get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Next-Token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
-  --X-Limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
+  --x-next-token: string # Opaque string which allows for fetching the next batch of results.  Can be used to poll for changes.
+  --x-limit: int # Max number of results to return per batch.  Must be between 1 and 100 inclusive.  Defaults to 100.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/layers/scoutingObservations/($scoutingObservationId)/attachments")
-  let extra_headers = {"X-Next-Token": $X_Next_Token, "X-Limit": $X_Limit} | compact
+  let full_url = (build-url $base ({scouting_observation_id: $scouting_observation_id} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}/attachments"))
+  let extra_headers = {"X-Next-Token": $x_next_token, "X-Limit": $x_limit} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -600,8 +600,8 @@ export def "layers-scouting-observations-attachments get" [
 #
 # GET /v4/layers/scoutingObservations/{scoutingObservationId}/attachments/{attachmentId}/contents
 export def "layers-scouting-observations-attachments-contents get" [
-  scoutingObservationId: string
-  attachmentId: string
+  scouting_observation_id: string
+  attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,13 +610,13 @@ export def "layers-scouting-observations-attachments-contents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Must be either \*/* or application/octet-stream,application/json
-  --Range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB.
+  --hdr-accept: string # Must be either \*/* or application/octet-stream,application/json
+  --range: string # Byte range `bytes=start-end` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35.1). e.g. bytes=0-1048576. Currently only single range value is supported. Both start and end need to be specified, end value should be greater than start and end - start should not be greater than 5MiB.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/layers/scoutingObservations/($scoutingObservationId)/attachments/($attachmentId)/contents")
-  let extra_headers = {"Accept": $Accept, "Range": $Range} | compact
+  let full_url = (build-url $base ({scouting_observation_id: $scouting_observation_id, attachment_id: $attachment_id} | format pattern "/v4/layers/scoutingObservations/{scouting_observation_id}/attachments/{attachment_id}/contents"))
+  let extra_headers = {"Accept": $hdr_accept, "Range": $range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -627,7 +627,7 @@ export def "layers-scouting-observations-attachments-contents get" [
 #
 # GET /v4/operations/all
 # operationId: fetchOperations
-export def "operations-all fetchOperations" [
+export def "operations-all get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,11 +636,11 @@ export def "operations-all fetchOperations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --resourceOwnerId: string # Optional comma-separated list of resource owner unique identifiers by which to filter results.
+  --resource-owner-id: string # Optional comma-separated list of resource owner unique identifiers by which to filter results.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "resourceOwnerId" $resourceOwnerId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "resourceOwnerId" $resource_owner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/operations/all" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -652,7 +652,7 @@ export def "operations-all fetchOperations" [
 # GET /v4/resourceOwners/{resourceOwnerId}
 # operationId: getResourceOwner
 export def "resource-owners get" [
-  resourceOwnerId: string
+  resource_owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "resource-owners get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/resourceOwners/($resourceOwnerId)")
+  let full_url = (build-url $base ({resource_owner_id: $resource_owner_id} | format pattern "/v4/resourceOwners/{resource_owner_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -674,7 +674,7 @@ export def "resource-owners get" [
 #
 # POST /v4/uploads
 # operationId: postUpload
-export def "uploads post" [
+export def "uploads create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,8 +683,8 @@ export def "uploads post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Recipient-Email: string # Email address associated with a Climate account, used when to sending to another user.
-  contentType: string@contentType-completer-1 # Content type representing data being uploaded (e.g. image/vnd.climate.rgb.geotiff) (format: mime-type)
+  --x-recipient-email: string # Email address associated with a Climate account, used when to sending to another user.
+  content_type: string@content-type-completer-1 # Content type representing data being uploaded (e.g. image/vnd.climate.rgb.geotiff) (format: mime-type)
   length: int # Content size in bytes (format: int64)
   md5: string # Base64 encoded md5 hash of the content
   --metadata: record
@@ -693,9 +693,9 @@ export def "uploads post" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/uploads")
-  let body = {contentType: $contentType, length: $length, md5: $md5, metadata: $metadata} | compact
+  let body = {"contentType": $content_type, "length": $length, "md5": $md5, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Recipient-Email": $X_Recipient_Email} | compact
+  let extra_headers = {"X-Recipient-Email": $x_recipient_email} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -706,7 +706,7 @@ export def "uploads post" [
 #
 # POST /v4/uploads/status/query
 # operationId: fetchUploadStatuses
-export def "uploads-status-query fetchUploadStatuses" [
+export def "uploads-status-query get-upload-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,7 +721,7 @@ export def "uploads-status-query fetchUploadStatuses" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/uploads/status/query")
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -733,7 +733,7 @@ export def "uploads-status-query fetchUploadStatuses" [
 # PUT /v4/uploads/{uploadId}
 # operationId: chunkedUpload
 export def "uploads chunkedUpload" [
-  uploadId: string
+  upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,13 +742,13 @@ export def "uploads chunkedUpload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Range: string # Byte range `bytes start-end/total` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.16). e.g. bytes 0-5242880/10242880. Downloads larger than 5MiB (5242880 bytes) in size must be downloaded in chunks no larger than 5MiB (5242880 bytes) and no smaller than 1MiB (1048576 bytes). The last chunk could be less than 1MiB (1048576 bytes).
-  --Content-Type: string # Must be `application/octet-stream`
+  --content-range: string # Byte range `bytes start-end/total` (https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.16). e.g. bytes 0-5242880/10242880. Downloads larger than 5MiB (5242880 bytes) in size must be downloaded in chunks no larger than 5MiB (5242880 bytes) and no smaller than 1MiB (1048576 bytes). The last chunk could be less than 1MiB (1048576 bytes).
+  --content-type: string # Must be `application/octet-stream`
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/uploads/($uploadId)")
-  let extra_headers = {"Content-Range": $Content_Range, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({upload_id: $upload_id} | format pattern "/v4/uploads/{upload_id}"))
+  let extra_headers = {"Content-Range": $content_range, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -759,8 +759,8 @@ export def "uploads chunkedUpload" [
 #
 # GET /v4/uploads/{uploadId}/status
 # operationId: fetchUploadStatusById
-export def "uploads-status fetchUploadStatusById" [
-  uploadId: string
+export def "uploads-status get" [
+  upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "uploads-status fetchUploadStatusById" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/v4/uploads/($uploadId)/status")
+  let full_url = (build-url $base ({upload_id: $upload_id} | format pattern "/v4/uploads/{upload_id}/status"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -105,16 +105,16 @@ export def "configuration extensionConfiguration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-applecloudextension-session-id: string
   --x-applecloudextension-retry-count: float
-  --Request-Timeout: float
-  --User-Agent: string
-  --Accept-Language: string
-  --If-None-Match: string
-  --Cache-Control: string
+  --request-timeout: float
+  --user-agent: string
+  --accept-language: string
+  --if-none-match: string
+  --cache-control: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration")
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $Request_Timeout, "User-Agent": $User_Agent, "Accept-Language": $Accept_Language, "If-None-Match": $If_None_Match, "Cache-Control": $Cache_Control} | compact
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language, "If-None-Match": $if_none_match, "Cache-Control": $cache_control} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/jose"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -125,7 +125,7 @@ export def "configuration extensionConfiguration" [
 #
 # POST /intent/addMedia
 # operationId: addMediaIntentHandling
-export def "intent-add-media addMediaIntentHandling" [
+export def "intent-add-media create-media-intent-handling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,9 +136,9 @@ export def "intent-add-media addMediaIntentHandling" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-applecloudextension-session-id: string
   --x-applecloudextension-retry-count: float
-  --Request-Timeout: float
-  --User-Agent: string
-  --Accept-Language: string
+  --request-timeout: float
+  --user-agent: string
+  --accept-language: string
   --body: record
 ]: any -> list<any> {
   let input = $in
@@ -146,7 +146,7 @@ export def "intent-add-media addMediaIntentHandling" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/intent/addMedia")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $Request_Timeout, "User-Agent": $User_Agent, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -168,9 +168,9 @@ export def "intent-play-media playMediaIntentHandling" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-applecloudextension-session-id: string
   --x-applecloudextension-retry-count: float
-  --Request-Timeout: float
-  --User-Agent: string
-  --Accept-Language: string
+  --request-timeout: float
+  --user-agent: string
+  --accept-language: string
   --body: record
 ]: any -> list<any> {
   let input = $in
@@ -178,7 +178,7 @@ export def "intent-play-media playMediaIntentHandling" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/intent/playMedia")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $Request_Timeout, "User-Agent": $User_Agent, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -189,7 +189,7 @@ export def "intent-play-media playMediaIntentHandling" [
 #
 # POST /intent/updateMediaAffinity
 # operationId: updateMediaAffinityIntentHandling
-export def "intent-update-media-affinity updateMediaAffinityIntentHandling" [
+export def "intent-update-media-affinity update-media-affinity-intent-handling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,9 +200,9 @@ export def "intent-update-media-affinity updateMediaAffinityIntentHandling" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-applecloudextension-session-id: string
   --x-applecloudextension-retry-count: float
-  --Request-Timeout: float
-  --User-Agent: string
-  --Accept-Language: string
+  --request-timeout: float
+  --user-agent: string
+  --accept-language: string
   --body: record
 ]: any -> list<any> {
   let input = $in
@@ -210,7 +210,7 @@ export def "intent-update-media-affinity updateMediaAffinityIntentHandling" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/intent/updateMediaAffinity")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $Request_Timeout, "User-Agent": $User_Agent, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "Request-Timeout": $request_timeout, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -234,19 +234,19 @@ export def "queues-play-media playMediaOnQueue" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-applecloudextension-session-id: string
   --x-applecloudextension-retry-count: float
-  --User-Agent: string
-  --Accept-Language: string
+  --user-agent: string
+  --accept-language: string
   constraints: record # shape: {allowExplicitContent?: bool, maximumQueueSegmentItemCount?: int, updateUserTasteProfile?: bool}
-  --userActivity: record # nullable — shape: {activityType: string, persistentIdentifier?: string, title?: string, userInfo?: record, version: string}
+  --user-activity: record # nullable — shape: {activityType: string, persistentIdentifier?: string, title?: string, userInfo?: record, version: string}
   version: string
 ]: any -> record<content: table<attributes: record, control: string, identifier: string, isLive: bool, playIndex: int, url: string>, contentItemsCount: int, controls: record<default: record<activity: record, commands: record, scheme: string>>, identifier: string, insertPointer: record<afterIdentifier: string, replace: bool>, nextContentUrl: string, playPointer: record<contentIdentifier: string, offsetInMillis: int>, prerollSeconds: float, previousContentUrl: string, skipsRemaining: int, version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/queues/playMedia")
-  let body = {constraints: $constraints, userActivity: $userActivity, version: $version} | compact
+  let body = {"constraints": $constraints, "userActivity": $user_activity, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "User-Agent": $User_Agent, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,7 +261,7 @@ export def "queues-play-media playMediaOnQueue" [
 # --nowPlaying shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
 # --previouslyPlaying shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
 # --userActivity shape: {activityType: string, persistentIdentifier?: string, title?: string, userInfo?: record, version: string}
-export def "queues-update-activity updateActivityOnQueue" [
+export def "queues-update-activity update-activity-on" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,23 +272,23 @@ export def "queues-update-activity updateActivityOnQueue" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-applecloudextension-session-id: string
   --x-applecloudextension-retry-count: float
-  --User-Agent: string
-  --Accept-Language: string
+  --user-agent: string
+  --accept-language: string
   --constraints: record # shape: {allowExplicitContent?: bool, maximumQueueSegmentItemCount?: int, updateUserTasteProfile?: bool}
-  --nowPlaying: record # shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
-  --previouslyPlaying: record # shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
+  --now-playing: record # shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
+  --previously-playing: record # shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
   report: string@report-completer
   timestamp: string # format: date-time
-  --userActivity: record # nullable — shape: {activityType: string, persistentIdentifier?: string, title?: string, userInfo?: record, version: string}
+  --user-activity: record # nullable — shape: {activityType: string, persistentIdentifier?: string, title?: string, userInfo?: record, version: string}
   version: string
 ]: any -> record<queue: record<content: list<record>, contentItemsCount: int, controls: record<default: record>, identifier: string, insertPointer: record<afterIdentifier: string, replace: bool>, nextContentUrl: string, playPointer: record<contentIdentifier: string, offsetInMillis: int>, prerollSeconds: float, previousContentUrl: string, skipsRemaining: int, version: string>, userActivity: record<activityType: string, persistentIdentifier: string, title: string, userInfo: record, version: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/queues/updateActivity")
-  let body = {constraints: $constraints, nowPlaying: $nowPlaying, previouslyPlaying: $previouslyPlaying, report: $report, timestamp: $timestamp, userActivity: $userActivity, version: $version} | compact
+  let body = {"constraints": $constraints, "nowPlaying": $now_playing, "previouslyPlaying": $previously_playing, "report": $report, "timestamp": $timestamp, "userActivity": $user_activity, "version": $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "User-Agent": $User_Agent, "Accept-Language": $Accept_Language} | compact
+  let extra_headers = {"x-applecloudextension-session-id": $x_applecloudextension_session_id, "x-applecloudextension-retry-count": $x_applecloudextension_retry_count, "User-Agent": $user_agent, "Accept-Language": $accept_language} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

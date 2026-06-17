@@ -83,7 +83,7 @@ def type-completer-3 [] { ["option_type_checkbox" "option_type_date" "option_typ
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accountcartaddjson AccountCartAdd" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accountcartaddjson post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -108,7 +108,7 @@ export def commands []: nothing -> table {
 # POST /account.cart.add.json
 # operationId: AccountCartAdd
 # --hybris_websites item shape: {storeIds: list, uid: string, url: string}
-export def "accountcartaddjson AccountCartAdd" [
+export def "accountcartaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "accountcartaddjson AccountCartAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account.cart.add.json")
-  let body = {3dcart_access_token: $3dcart_access_token, 3dcart_private_key: $3dcart_private_key, 3dcartapi_api_key: $3dcartapi_api_key, amazon_access_key_id: $amazon_access_key_id, amazon_access_token: $amazon_access_token, amazon_marketplaces_ids: $amazon_marketplaces_ids, amazon_secret_key: $amazon_secret_key, amazon_seller_id: $amazon_seller_id, amazon_sp_api_environment: $amazon_sp_api_environment, amazon_sp_aws_region: $amazon_sp_aws_region, amazon_sp_aws_role_arn: $amazon_sp_aws_role_arn, amazon_sp_aws_user_key_id: $amazon_sp_aws_user_key_id, amazon_sp_aws_user_secret: $amazon_sp_aws_user_secret, amazon_sp_client_id: $amazon_sp_client_id, amazon_sp_client_secret: $amazon_sp_client_secret, amazon_sp_refresh_token: $amazon_sp_refresh_token, aspdotnetstorefront_api_pass: $aspdotnetstorefront_api_pass, aspdotnetstorefront_api_user: $aspdotnetstorefront_api_user, bigcommerceapi_access_token: $bigcommerceapi_access_token, bigcommerceapi_admin_account: $bigcommerceapi_admin_account, bigcommerceapi_api_key: $bigcommerceapi_api_key, bigcommerceapi_api_path: $bigcommerceapi_api_path, bigcommerceapi_client_id: $bigcommerceapi_client_id, bigcommerceapi_context: $bigcommerceapi_context, bridge_url: $bridge_url, cart_id: $cart_id, commercehq_api_key: $commercehq_api_key, commercehq_api_password: $commercehq_api_password, db_tables_prefix: $db_tables_prefix, demandware_api_password: $demandware_api_password, demandware_client_id: $demandware_client_id, demandware_user_name: $demandware_user_name, demandware_user_password: $demandware_user_password, ebay_access_token: $ebay_access_token, ebay_client_id: $ebay_client_id, ebay_client_secret: $ebay_client_secret, ebay_environment: $ebay_environment, ebay_refresh_token: $ebay_refresh_token, ebay_runame: $ebay_runame, ebay_site_id: $ebay_site_id, ecwid_acess_token: $ecwid_acess_token, ecwid_store_id: $ecwid_store_id, etsy_access_token: $etsy_access_token, etsy_client_id: $etsy_client_id, etsy_keystring: $etsy_keystring, etsy_refresh_token: $etsy_refresh_token, etsy_shared_secret: $etsy_shared_secret, etsy_token_secret: $etsy_token_secret, ftp_host: $ftp_host, ftp_password: $ftp_password, ftp_port: $ftp_port, ftp_store_dir: $ftp_store_dir, ftp_user: $ftp_user, hybris_client_id: $hybris_client_id, hybris_client_secret: $hybris_client_secret, hybris_password: $hybris_password, hybris_username: $hybris_username, hybris_websites: $hybris_websites, lightspeed_api_key: $lightspeed_api_key, lightspeed_api_secret: $lightspeed_api_secret, magento_access_token: $magento_access_token, magento_consumer_key: $magento_consumer_key, magento_consumer_secret: $magento_consumer_secret, magento_token_secret: $magento_token_secret, mercado_libre_app_id: $mercado_libre_app_id, mercado_libre_app_secret_key: $mercado_libre_app_secret_key, mercado_libre_refresh_token: $mercado_libre_refresh_token, neto_api_key: $neto_api_key, neto_api_username: $neto_api_username, prestashop_webservice_key: $prestashop_webservice_key, shopify_access_token: $shopify_access_token, shopify_api_key: $shopify_api_key, shopify_api_password: $shopify_api_password, shopify_shared_secret: $shopify_shared_secret, shopware_access_key: $shopware_access_key, shopware_api_key: $shopware_api_key, shopware_api_secret: $shopware_api_secret, squarespace_api_key: $squarespace_api_key, store_key: $store_key, store_root: $store_root, store_url: $store_url, validate_version: $validate_version, verify: $verify, volusion_login: $volusion_login, volusion_password: $volusion_password, walmart_channel_type: $walmart_channel_type, walmart_client_id: $walmart_client_id, walmart_client_secret: $walmart_client_secret, walmart_environment: $walmart_environment, wc_consumer_key: $wc_consumer_key, wc_consumer_secret: $wc_consumer_secret, wix_app_id: $wix_app_id, wix_app_secret_key: $wix_app_secret_key, wix_refresh_token: $wix_refresh_token, zid_access_token: $zid_access_token, zid_authorization: $zid_authorization, zid_client_id: $zid_client_id, zid_client_secret: $zid_client_secret, zid_refresh_token: $zid_refresh_token} | compact
+  let body = {"3dcart_access_token": $3dcart_access_token, "3dcart_private_key": $3dcart_private_key, "3dcartapi_api_key": $3dcartapi_api_key, "amazon_access_key_id": $amazon_access_key_id, "amazon_access_token": $amazon_access_token, "amazon_marketplaces_ids": $amazon_marketplaces_ids, "amazon_secret_key": $amazon_secret_key, "amazon_seller_id": $amazon_seller_id, "amazon_sp_api_environment": $amazon_sp_api_environment, "amazon_sp_aws_region": $amazon_sp_aws_region, "amazon_sp_aws_role_arn": $amazon_sp_aws_role_arn, "amazon_sp_aws_user_key_id": $amazon_sp_aws_user_key_id, "amazon_sp_aws_user_secret": $amazon_sp_aws_user_secret, "amazon_sp_client_id": $amazon_sp_client_id, "amazon_sp_client_secret": $amazon_sp_client_secret, "amazon_sp_refresh_token": $amazon_sp_refresh_token, "aspdotnetstorefront_api_pass": $aspdotnetstorefront_api_pass, "aspdotnetstorefront_api_user": $aspdotnetstorefront_api_user, "bigcommerceapi_access_token": $bigcommerceapi_access_token, "bigcommerceapi_admin_account": $bigcommerceapi_admin_account, "bigcommerceapi_api_key": $bigcommerceapi_api_key, "bigcommerceapi_api_path": $bigcommerceapi_api_path, "bigcommerceapi_client_id": $bigcommerceapi_client_id, "bigcommerceapi_context": $bigcommerceapi_context, "bridge_url": $bridge_url, "cart_id": $cart_id, "commercehq_api_key": $commercehq_api_key, "commercehq_api_password": $commercehq_api_password, "db_tables_prefix": $db_tables_prefix, "demandware_api_password": $demandware_api_password, "demandware_client_id": $demandware_client_id, "demandware_user_name": $demandware_user_name, "demandware_user_password": $demandware_user_password, "ebay_access_token": $ebay_access_token, "ebay_client_id": $ebay_client_id, "ebay_client_secret": $ebay_client_secret, "ebay_environment": $ebay_environment, "ebay_refresh_token": $ebay_refresh_token, "ebay_runame": $ebay_runame, "ebay_site_id": $ebay_site_id, "ecwid_acess_token": $ecwid_acess_token, "ecwid_store_id": $ecwid_store_id, "etsy_access_token": $etsy_access_token, "etsy_client_id": $etsy_client_id, "etsy_keystring": $etsy_keystring, "etsy_refresh_token": $etsy_refresh_token, "etsy_shared_secret": $etsy_shared_secret, "etsy_token_secret": $etsy_token_secret, "ftp_host": $ftp_host, "ftp_password": $ftp_password, "ftp_port": $ftp_port, "ftp_store_dir": $ftp_store_dir, "ftp_user": $ftp_user, "hybris_client_id": $hybris_client_id, "hybris_client_secret": $hybris_client_secret, "hybris_password": $hybris_password, "hybris_username": $hybris_username, "hybris_websites": $hybris_websites, "lightspeed_api_key": $lightspeed_api_key, "lightspeed_api_secret": $lightspeed_api_secret, "magento_access_token": $magento_access_token, "magento_consumer_key": $magento_consumer_key, "magento_consumer_secret": $magento_consumer_secret, "magento_token_secret": $magento_token_secret, "mercado_libre_app_id": $mercado_libre_app_id, "mercado_libre_app_secret_key": $mercado_libre_app_secret_key, "mercado_libre_refresh_token": $mercado_libre_refresh_token, "neto_api_key": $neto_api_key, "neto_api_username": $neto_api_username, "prestashop_webservice_key": $prestashop_webservice_key, "shopify_access_token": $shopify_access_token, "shopify_api_key": $shopify_api_key, "shopify_api_password": $shopify_api_password, "shopify_shared_secret": $shopify_shared_secret, "shopware_access_key": $shopware_access_key, "shopware_api_key": $shopware_api_key, "shopware_api_secret": $shopware_api_secret, "squarespace_api_key": $squarespace_api_key, "store_key": $store_key, "store_root": $store_root, "store_url": $store_url, "validate_version": $validate_version, "verify": $verify, "volusion_login": $volusion_login, "volusion_password": $volusion_password, "walmart_channel_type": $walmart_channel_type, "walmart_client_id": $walmart_client_id, "walmart_client_secret": $walmart_client_secret, "walmart_environment": $walmart_environment, "wc_consumer_key": $wc_consumer_key, "wc_consumer_secret": $wc_consumer_secret, "wix_app_id": $wix_app_id, "wix_app_secret_key": $wix_app_secret_key, "wix_refresh_token": $wix_refresh_token, "zid_access_token": $zid_access_token, "zid_authorization": $zid_authorization, "zid_client_id": $zid_client_id, "zid_client_secret": $zid_client_secret, "zid_refresh_token": $zid_refresh_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,7 +232,7 @@ export def "accountcartaddjson AccountCartAdd" [
 #
 # GET /account.cart.list.json
 # operationId: AccountCartList
-export def "accountcartlistjson AccountCartList" [
+export def "accountcartlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "accountcartlistjson AccountCartList" [
 #
 # PUT /account.config.update.json
 # operationId: AccountConfigUpdate
-export def "accountconfigupdatejson AccountConfigUpdate" [
+export def "accountconfigupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "accountconfigupdatejson AccountConfigUpdate" [
 #
 # GET /account.failed_webhooks.json
 # operationId: AccountFailedWebhooks
-export def "accountfailed-webhooksjson AccountFailedWebhooks" [
+export def "accountfailed-webhooksjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "accountfailed-webhooksjson AccountFailedWebhooks" [
 #
 # GET /account.supported_platforms.json
 # operationId: AccountSupportedPlatforms
-export def "accountsupported-platformsjson AccountSupportedPlatforms" [
+export def "accountsupported-platformsjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "accountsupported-platformsjson AccountSupportedPlatforms" [
 #
 # POST /attribute.add.json
 # operationId: AttributeAdd
-export def "attributeaddjson AttributeAdd" [
+export def "attributeaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "attributeaddjson AttributeAdd" [
 #
 # POST /attribute.assign.group.json
 # operationId: AttributeAssignGroup
-export def "attributeassigngroupjson AttributeAssignGroup" [
+export def "attributeassigngroupjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +492,7 @@ export def "attributeassigngroupjson AttributeAssignGroup" [
 #
 # POST /attribute.assign.set.json
 # operationId: AttributeAssignSet
-export def "attributeassignsetjson AttributeAssignSet" [
+export def "attributeassignsetjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "attributeassignsetjson AttributeAssignSet" [
 #
 # GET /attribute.attributeset.list.json
 # operationId: AttributeAttributesetList
-export def "attributeattributesetlistjson AttributeAttributesetList" [
+export def "attributeattributesetlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -546,7 +546,7 @@ export def "attributeattributesetlistjson AttributeAttributesetList" [
 #
 # GET /attribute.count.json
 # operationId: AttributeCount
-export def "attributecountjson AttributeCount" [
+export def "attributecountjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,7 +575,7 @@ export def "attributecountjson AttributeCount" [
 #
 # DELETE /attribute.delete.json
 # operationId: AttributeDelete
-export def "attributedeletejson AttributeDelete" [
+export def "attributedeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "attributedeletejson AttributeDelete" [
 #
 # GET /attribute.group.list.json
 # operationId: AttributeGroupList
-export def "attributegrouplistjson AttributeGroupList" [
+export def "attributegrouplistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +630,7 @@ export def "attributegrouplistjson AttributeGroupList" [
 #
 # GET /attribute.info.json
 # operationId: AttributeInfo
-export def "attributeinfojson AttributeInfo" [
+export def "attributeinfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +659,7 @@ export def "attributeinfojson AttributeInfo" [
 #
 # GET /attribute.list.json
 # operationId: AttributeList
-export def "attributelistjson AttributeList" [
+export def "attributelistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,7 +694,7 @@ export def "attributelistjson AttributeList" [
 #
 # GET /attribute.type.list.json
 # operationId: AttributeTypeList
-export def "attributetypelistjson AttributeTypeList" [
+export def "attributetypelistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "attributetypelistjson AttributeTypeList" [
 #
 # POST /attribute.unassign.group.json
 # operationId: AttributeUnassignGroup
-export def "attributeunassigngroupjson AttributeUnassignGroup" [
+export def "attributeunassigngroupjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "attributeunassigngroupjson AttributeUnassignGroup" [
 #
 # POST /attribute.unassign.set.json
 # operationId: AttributeUnassignSet
-export def "attributeunassignsetjson AttributeUnassignSet" [
+export def "attributeunassignsetjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,7 +766,7 @@ export def "attributeunassignsetjson AttributeUnassignSet" [
 #
 # POST /attribute.update.json
 # operationId: AttributeUpdate
-export def "attributeupdatejson AttributeUpdate" [
+export def "attributeupdatejson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -793,7 +793,7 @@ export def "attributeupdatejson AttributeUpdate" [
 #
 # GET /basket.info.json
 # operationId: BasketInfo
-export def "basketinfojson BasketInfo" [
+export def "basketinfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,7 +821,7 @@ export def "basketinfojson BasketInfo" [
 #
 # POST /basket.item.add.json
 # operationId: BasketItemAdd
-export def "basketitemaddjson BasketItemAdd" [
+export def "basketitemaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,7 +849,7 @@ export def "basketitemaddjson BasketItemAdd" [
 #
 # POST /basket.live_shipping_service.create.json
 # operationId: BasketLiveShippingServiceCreate
-export def "basketlive-shipping-servicecreatejson BasketLiveShippingServiceCreate" [
+export def "basketlive-shipping-servicecreatejson create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -875,7 +875,7 @@ export def "basketlive-shipping-servicecreatejson BasketLiveShippingServiceCreat
 #
 # DELETE /basket.live_shipping_service.delete.json
 # operationId: BasketLiveShippingServiceDelete
-export def "basketlive-shipping-servicedeletejson BasketLiveShippingServiceDelete" [
+export def "basketlive-shipping-servicedeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -899,7 +899,7 @@ export def "basketlive-shipping-servicedeletejson BasketLiveShippingServiceDelet
 #
 # GET /basket.live_shipping_service.list.json
 # operationId: BasketLiveShippingServiceList
-export def "basketlive-shipping-servicelistjson BasketLiveShippingServiceList" [
+export def "basketlive-shipping-servicelistjson list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "basketlive-shipping-servicelistjson BasketLiveShippingServiceList" [
 #
 # POST /bridge.delete.json
 # operationId: BridgeDelete
-export def "bridgedeletejson BridgeDelete" [
+export def "bridgedeletejson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,7 +947,7 @@ export def "bridgedeletejson BridgeDelete" [
 #
 # GET /bridge.download.file
 # operationId: BridgeDownload
-export def "bridgedownloadfile BridgeDownload" [
+export def "bridgedownloadfile get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -971,7 +971,7 @@ export def "bridgedownloadfile BridgeDownload" [
 #
 # POST /bridge.update.json
 # operationId: BridgeUpdate
-export def "bridgeupdatejson BridgeUpdate" [
+export def "bridgeupdatejson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "bridgeupdatejson BridgeUpdate" [
 #
 # GET /cart.bridge.json
 # operationId: CartBridge
-export def "cartbridgejson CartBridge" [
+export def "cartbridgejson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1015,7 +1015,7 @@ export def "cartbridgejson CartBridge" [
 #
 # GET /cart.catalog_price_rules.count.json
 # operationId: CartCatalogPriceRulesCount
-export def "cartcatalog-price-rulescountjson CartCatalogPriceRulesCount" [
+export def "cartcatalog-price-rulescountjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "cartcatalog-price-rulescountjson CartCatalogPriceRulesCount" [
 #
 # GET /cart.catalog_price_rules.list.json
 # operationId: CartCatalogPriceRulesList
-export def "cartcatalog-price-ruleslistjson CartCatalogPriceRulesList" [
+export def "cartcatalog-price-ruleslistjson list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1067,7 +1067,7 @@ export def "cartcatalog-price-ruleslistjson CartCatalogPriceRulesList" [
 #
 # POST /cart.clear_cache.json
 # operationId: CartClearCache
-export def "cartclear-cachejson CartClearCache" [
+export def "cartclear-cachejson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1091,7 +1091,7 @@ export def "cartclear-cachejson CartClearCache" [
 #
 # GET /cart.config.json
 # operationId: CartConfig
-export def "cartconfigjson CartConfig" [
+export def "cartconfigjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1118,7 @@ export def "cartconfigjson CartConfig" [
 # DEPRECATED
 # operationId: CartConfigUpdate
 @deprecated
-export def "cartconfigupdatejson CartConfigUpdate" [
+export def "cartconfigupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1135,7 +1135,7 @@ export def "cartconfigupdatejson CartConfigUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.config.update.json")
-  let body = {custom_fields: $custom_fields, db_tables_prefix: $db_tables_prefix, store_id: $store_id} | compact
+  let body = {"custom_fields": $custom_fields, "db_tables_prefix": $db_tables_prefix, "store_id": $store_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1146,7 +1146,7 @@ export def "cartconfigupdatejson CartConfigUpdate" [
 #
 # POST /cart.coupon.add.json
 # operationId: CartCouponAdd
-export def "cartcouponaddjson CartCouponAdd" [
+export def "cartcouponaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1176,7 +1176,7 @@ export def "cartcouponaddjson CartCouponAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.coupon.add.json")
-  let body = {action_amount: $action_amount, action_apply_to: $action_apply_to, action_condition_entity: $action_condition_entity, action_condition_key: $action_condition_key, action_condition_operator: $action_condition_operator, action_condition_value: $action_condition_value, action_scope: $action_scope, action_type: $action_type, code: $code, codes: $codes, date_end: $date_end, date_start: $date_start, name: $name, store_id: $store_id, usage_limit: $usage_limit, usage_limit_per_customer: $usage_limit_per_customer} | compact
+  let body = {"action_amount": $action_amount, "action_apply_to": $action_apply_to, "action_condition_entity": $action_condition_entity, "action_condition_key": $action_condition_key, "action_condition_operator": $action_condition_operator, "action_condition_value": $action_condition_value, "action_scope": $action_scope, "action_type": $action_type, "code": $code, "codes": $codes, "date_end": $date_end, "date_start": $date_start, "name": $name, "store_id": $store_id, "usage_limit": $usage_limit, "usage_limit_per_customer": $usage_limit_per_customer} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1187,7 +1187,7 @@ export def "cartcouponaddjson CartCouponAdd" [
 #
 # POST /cart.coupon.condition.add.json
 # operationId: CartCouponConditionAdd
-export def "cartcouponconditionaddjson CartCouponConditionAdd" [
+export def "cartcouponconditionaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,7 +1217,7 @@ export def "cartcouponconditionaddjson CartCouponConditionAdd" [
 #
 # GET /cart.coupon.count.json
 # operationId: CartCouponCount
-export def "cartcouponcountjson CartCouponCount" [
+export def "cartcouponcountjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1246,7 +1246,7 @@ export def "cartcouponcountjson CartCouponCount" [
 #
 # DELETE /cart.coupon.delete.json
 # operationId: CartCouponDelete
-export def "cartcoupondeletejson CartCouponDelete" [
+export def "cartcoupondeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,7 +1271,7 @@ export def "cartcoupondeletejson CartCouponDelete" [
 #
 # GET /cart.coupon.list.json
 # operationId: CartCouponList
-export def "cartcouponlistjson CartCouponList" [
+export def "cartcouponlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,7 +1310,7 @@ export def "cartcouponlistjson CartCouponList" [
 # DEPRECATED
 # operationId: CartCreate
 @deprecated
-export def "cartcreatejson CartCreate" [
+export def "cartcreatejson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1333,31 +1333,31 @@ export def "cartcreatejson CartCreate" [
   --ftp-password: string # FTP Password
   --ftp-port: int # FTP Port
   --ftp-store-dir: string # FTP Store dir
-  --apiKey-3dcart: string # 3DCart API Key
-  --AdminAccount: string # It's a BigCommerce account for which API is enabled
-  --ApiPath: string # BigCommerce API URL
-  --ApiKey: string # Bigcommerce API Key
+  --api-key-3dcart: string # 3DCart API Key
+  --admin-account: string # It's a BigCommerce account for which API is enabled
+  --api-path: string # BigCommerce API URL
+  --api-key: string # Bigcommerce API Key
   --client-id: string # Client ID of the requesting app
-  --accessToken: string # Access token authorizing the app to access resources on behalf of a user
+  --access-token: string # Access token authorizing the app to access resources on behalf of a user
   --context: string # API Path section unique to the store
   --access-token: string # Access token authorizing the app to access resources on behalf of a user
-  --apiKey-shopify: string # Shopify API Key
-  --apiPassword: string # Shopify API Password
-  --accessToken-shopify: string # Access token authorizing the app to access resources on behalf of a user
-  --apiKey: string # Neto API Key
-  --apiUsername: string # Neto User Name
-  --EncryptedPassword: string # Volusion API Password
-  --Login: string # It's a Volusion account for which API is enabled
-  --apiUser-adnsf: string # It's a AspDotNetStorefront account for which API is available
-  --apiPass: string # AspDotNetStorefront API Password
-  --accessKey-scelite: string # Shopping Cart Elite Access Key
-  --apiKey-scelite: string # Shopping Cart Elite API Key
-  --apiSecretKey-scelite: string # Shopping Cart Elite API Secret Key
-  --privateKey: string # 3DCart Application Private Key
-  --appToken: string # 3DCart Token from Application
+  --api-key-shopify: string # Shopify API Key
+  --api-password: string # Shopify API Password
+  --access-token-shopify: string # Access token authorizing the app to access resources on behalf of a user
+  --api-key: string # Neto API Key
+  --api-username: string # Neto User Name
+  --encrypted-password: string # Volusion API Password
+  --login: string # It's a Volusion account for which API is enabled
+  --api-user-adnsf: string # It's a AspDotNetStorefront account for which API is available
+  --api-pass: string # AspDotNetStorefront API Password
+  --access-key-scelite: string # Shopping Cart Elite Access Key
+  --api-key-scelite: string # Shopping Cart Elite API Key
+  --api-secret-key-scelite: string # Shopping Cart Elite API Secret Key
+  --private-key: string # 3DCart Application Private Key
+  --app-token: string # 3DCart Token from Application
   --etsy-keystring: string # Etsy keystring
   --etsy-shared-secret: string # Etsy shared secret
-  --tokenSecret: string # Secret token authorizing the app to access resources on behalf of a user
+  --token-secret: string # Secret token authorizing the app to access resources on behalf of a user
   --etsy-client-id: string # Etsy Client Id
   --etsy-refresh-token: string # Etsy Refresh token
   --ebay-client-id: string # Application ID (AppID).
@@ -1416,7 +1416,7 @@ export def "cartcreatejson CartCreate" [
 ]: nothing -> record<result: record<store_key: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cart_id" $cart_id "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "store_key" $store_key "scalar") (serialize-qp "shared_secret" $shared_secret "scalar") (serialize-qp "validate_version" $validate_version "scalar") (serialize-qp "verify" $verify "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "ftp_host" $ftp_host "scalar") (serialize-qp "ftp_user" $ftp_user "scalar") (serialize-qp "ftp_password" $ftp_password "scalar") (serialize-qp "ftp_port" $ftp_port "scalar") (serialize-qp "ftp_store_dir" $ftp_store_dir "scalar") (serialize-qp "apiKey_3dcart" $apiKey_3dcart "scalar") (serialize-qp "AdminAccount" $AdminAccount "scalar") (serialize-qp "ApiPath" $ApiPath "scalar") (serialize-qp "ApiKey" $ApiKey "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "accessToken" $accessToken "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "apiKey_shopify" $apiKey_shopify "scalar") (serialize-qp "apiPassword" $apiPassword "scalar") (serialize-qp "accessToken_shopify" $accessToken_shopify "scalar") (serialize-qp "apiKey" $apiKey "scalar") (serialize-qp "apiUsername" $apiUsername "scalar") (serialize-qp "EncryptedPassword" $EncryptedPassword "scalar") (serialize-qp "Login" $Login "scalar") (serialize-qp "apiUser_adnsf" $apiUser_adnsf "scalar") (serialize-qp "apiPass" $apiPass "scalar") (serialize-qp "accessKey_scelite" $accessKey_scelite "scalar") (serialize-qp "apiKey_scelite" $apiKey_scelite "scalar") (serialize-qp "apiSecretKey_scelite" $apiSecretKey_scelite "scalar") (serialize-qp "privateKey" $privateKey "scalar") (serialize-qp "appToken" $appToken "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "tokenSecret" $tokenSecret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "dw_client_id" $dw_client_id "scalar") (serialize-qp "dw_api_pass" $dw_api_pass "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "seller_id" $seller_id "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "marketplaces_ids" $marketplaces_ids "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cart_id" $cart_id "scalar") (serialize-qp "store_url" $store_url "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "store_key" $store_key "scalar") (serialize-qp "shared_secret" $shared_secret "scalar") (serialize-qp "validate_version" $validate_version "scalar") (serialize-qp "verify" $verify "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "ftp_host" $ftp_host "scalar") (serialize-qp "ftp_user" $ftp_user "scalar") (serialize-qp "ftp_password" $ftp_password "scalar") (serialize-qp "ftp_port" $ftp_port "scalar") (serialize-qp "ftp_store_dir" $ftp_store_dir "scalar") (serialize-qp "apiKey_3dcart" $api_key_3dcart "scalar") (serialize-qp "AdminAccount" $admin_account "scalar") (serialize-qp "ApiPath" $api_path "scalar") (serialize-qp "ApiKey" $api_key "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "accessToken" $access_token "scalar") (serialize-qp "context" $context "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "apiKey_shopify" $api_key_shopify "scalar") (serialize-qp "apiPassword" $api_password "scalar") (serialize-qp "accessToken_shopify" $access_token_shopify "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "apiUsername" $api_username "scalar") (serialize-qp "EncryptedPassword" $encrypted_password "scalar") (serialize-qp "Login" $login "scalar") (serialize-qp "apiUser_adnsf" $api_user_adnsf "scalar") (serialize-qp "apiPass" $api_pass "scalar") (serialize-qp "accessKey_scelite" $access_key_scelite "scalar") (serialize-qp "apiKey_scelite" $api_key_scelite "scalar") (serialize-qp "apiSecretKey_scelite" $api_secret_key_scelite "scalar") (serialize-qp "privateKey" $private_key "scalar") (serialize-qp "appToken" $app_token "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "tokenSecret" $token_secret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "dw_client_id" $dw_client_id "scalar") (serialize-qp "dw_api_pass" $dw_api_pass "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "seller_id" $seller_id "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "marketplaces_ids" $marketplaces_ids "scalar") (serialize-qp "environment" $environment "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.create.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1427,7 +1427,7 @@ export def "cartcreatejson CartCreate" [
 #
 # DELETE /cart.delete.json
 # operationId: CartDelete
-export def "cartdeletejson CartDelete" [
+export def "cartdeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1453,7 +1453,7 @@ export def "cartdeletejson CartDelete" [
 # DEPRECATED
 # operationId: CartDisconnect
 @deprecated
-export def "cartdisconnectjson CartDisconnect" [
+export def "cartdisconnectjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "cartdisconnectjson CartDisconnect" [
 #
 # POST /cart.giftcard.add.json
 # operationId: CartGiftcardAdd
-export def "cartgiftcardaddjson CartGiftcardAdd" [
+export def "cartgiftcardaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,7 +1504,7 @@ export def "cartgiftcardaddjson CartGiftcardAdd" [
 #
 # GET /cart.giftcard.count.json
 # operationId: CartGiftcardCount
-export def "cartgiftcardcountjson CartGiftcardCount" [
+export def "cartgiftcardcountjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1528,7 +1528,7 @@ export def "cartgiftcardcountjson CartGiftcardCount" [
 #
 # GET /cart.giftcard.list.json
 # operationId: CartGiftcardList
-export def "cartgiftcardlistjson CartGiftcardList" [
+export def "cartgiftcardlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1558,7 +1558,7 @@ export def "cartgiftcardlistjson CartGiftcardList" [
 #
 # GET /cart.info.json
 # operationId: CartInfo
-export def "cartinfojson CartInfo" [
+export def "cartinfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1587,7 @@ export def "cartinfojson CartInfo" [
 # DEPRECATED
 # operationId: CartList
 @deprecated
-export def "cartlistjson CartList" [
+export def "cartlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1609,7 +1609,7 @@ export def "cartlistjson CartList" [
 #
 # GET /cart.meta_data.list.json
 # operationId: CartMetaDataList
-export def "cartmeta-datalistjson CartMetaDataList" [
+export def "cartmeta-datalistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1641,7 +1641,7 @@ export def "cartmeta-datalistjson CartMetaDataList" [
 #
 # POST /cart.meta_data.set.json
 # operationId: CartMetaDataSet
-export def "cartmeta-datasetjson CartMetaDataSet" [
+export def "cartmeta-datasetjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1670,7 +1670,7 @@ export def "cartmeta-datasetjson CartMetaDataSet" [
 #
 # DELETE /cart.meta_data.unset.json
 # operationId: CartMetaDataUnset
-export def "cartmeta-dataunsetjson CartMetaDataUnset" [
+export def "cartmeta-dataunsetjson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1698,7 +1698,7 @@ export def "cartmeta-dataunsetjson CartMetaDataUnset" [
 #
 # GET /cart.methods.json
 # operationId: CartMethods
-export def "cartmethodsjson CartMethods" [
+export def "cartmethodsjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1720,7 +1720,7 @@ export def "cartmethodsjson CartMethods" [
 #
 # GET /cart.plugin.list.json
 # operationId: CartPluginList
-export def "cartpluginlistjson CartPluginList" [
+export def "cartpluginlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1747,7 +1747,7 @@ export def "cartpluginlistjson CartPluginList" [
 #
 # POST /cart.script.add.json
 # operationId: CartScriptAdd
-export def "cartscriptaddjson CartScriptAdd" [
+export def "cartscriptaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,7 +1777,7 @@ export def "cartscriptaddjson CartScriptAdd" [
 #
 # DELETE /cart.script.delete.json
 # operationId: CartScriptDelete
-export def "cartscriptdeletejson CartScriptDelete" [
+export def "cartscriptdeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1802,7 +1802,7 @@ export def "cartscriptdeletejson CartScriptDelete" [
 #
 # GET /cart.script.list.json
 # operationId: CartScriptList
-export def "cartscriptlistjson CartScriptList" [
+export def "cartscriptlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1837,7 +1837,7 @@ export def "cartscriptlistjson CartScriptList" [
 #
 # GET /cart.shipping_zones.list.json
 # operationId: CartShippingZonesList
-export def "cartshipping-zoneslistjson CartShippingZonesList" [
+export def "cartshipping-zoneslistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1866,7 +1866,7 @@ export def "cartshipping-zoneslistjson CartShippingZonesList" [
 #
 # GET /cart.validate.json
 # operationId: CartValidate
-export def "cartvalidatejson CartValidate" [
+export def "cartvalidatejson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1890,7 +1890,7 @@ export def "cartvalidatejson CartValidate" [
 #
 # POST /category.add.json
 # operationId: CategoryAdd
-export def "categoryaddjson CategoryAdd" [
+export def "categoryaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1927,7 +1927,7 @@ export def "categoryaddjson CategoryAdd" [
 #
 # POST /category.assign.json
 # operationId: CategoryAssign
-export def "categoryassignjson CategoryAssign" [
+export def "categoryassignjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1953,7 +1953,7 @@ export def "categoryassignjson CategoryAssign" [
 #
 # GET /category.count.json
 # operationId: CategoryCount
-export def "categorycountjson CategoryCount" [
+export def "categorycountjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1984,7 +1984,7 @@ export def "categorycountjson CategoryCount" [
 #
 # DELETE /category.delete.json
 # operationId: CategoryDelete
-export def "categorydeletejson CategoryDelete" [
+export def "categorydeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,7 +2008,7 @@ export def "categorydeletejson CategoryDelete" [
 #
 # GET /category.find.json
 # operationId: CategoryFind
-export def "categoryfindjson CategoryFind" [
+export def "categoryfindjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2036,7 +2036,7 @@ export def "categoryfindjson CategoryFind" [
 #
 # POST /category.image.add.json
 # operationId: CategoryImageAdd
-export def "categoryimageaddjson CategoryImageAdd" [
+export def "categoryimageaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2067,7 +2067,7 @@ export def "categoryimageaddjson CategoryImageAdd" [
 #
 # DELETE /category.image.delete.json
 # operationId: CategoryImageDelete
-export def "categoryimagedeletejson CategoryImageDelete" [
+export def "categoryimagedeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2093,7 +2093,7 @@ export def "categoryimagedeletejson CategoryImageDelete" [
 #
 # GET /category.info.json
 # operationId: CategoryInfo
-export def "categoryinfojson CategoryInfo" [
+export def "categoryinfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2122,7 +2122,7 @@ export def "categoryinfojson CategoryInfo" [
 #
 # GET /category.list.json
 # operationId: CategoryList
-export def "categorylistjson CategoryList" [
+export def "categorylistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2159,7 +2159,7 @@ export def "categorylistjson CategoryList" [
 #
 # POST /category.unassign.json
 # operationId: CategoryUnassign
-export def "categoryunassignjson CategoryUnassign" [
+export def "categoryunassignjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2185,7 +2185,7 @@ export def "categoryunassignjson CategoryUnassign" [
 #
 # PUT /category.update.json
 # operationId: CategoryUpdate
-export def "categoryupdatejson CategoryUpdate" [
+export def "categoryupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2223,7 +2223,7 @@ export def "categoryupdatejson CategoryUpdate" [
 # POST /customer.add.json
 # operationId: CustomerAdd
 # --address item shape: {address_book_address1?: string, address_book_address2?: string, address_book_city?: string, address_book_company?: string, address_book_country?: string, address_book_default?: bool, address_book_fax?: string, address_book_first_name?: string, address_book_gender?: string, address_book_last_name?: string, address_book_phone?: string, address_book_postcode?: string, address_book_region?: string, address_book_state?: string, address_book_type?: string, address_book_website?: string}
-export def "customeraddjson CustomerAdd" [
+export def "customeraddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2256,7 +2256,7 @@ export def "customeraddjson CustomerAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/customer.add.json")
-  let body = {address: $address, birth_day: $birth_day, company: $company, created_time: $created_time, email: $email, fax: $fax, first_name: $first_name, gender: $gender, group: $group, last_login: $last_login, last_name: $last_name, login: $login, modified_time: $modified_time, news_letter_subscription: $news_letter_subscription, password: $password, phone: $phone, status: $status, store_id: $store_id, website: $website} | compact
+  let body = {"address": $address, "birth_day": $birth_day, "company": $company, "created_time": $created_time, "email": $email, "fax": $fax, "first_name": $first_name, "gender": $gender, "group": $group, "last_login": $last_login, "last_name": $last_name, "login": $login, "modified_time": $modified_time, "news_letter_subscription": $news_letter_subscription, "password": $password, "phone": $phone, "status": $status, "store_id": $store_id, "website": $website} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2267,7 +2267,7 @@ export def "customeraddjson CustomerAdd" [
 #
 # GET /customer.attribute.list.json
 # operationId: CustomerAttributeList
-export def "customerattributelistjson CustomerAttributeList" [
+export def "customerattributelistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2298,7 +2298,7 @@ export def "customerattributelistjson CustomerAttributeList" [
 #
 # GET /customer.count.json
 # operationId: CustomerCount
-export def "customercountjson CustomerCount" [
+export def "customercountjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2329,7 +2329,7 @@ export def "customercountjson CustomerCount" [
 #
 # GET /customer.find.json
 # operationId: CustomerFind
-export def "customerfindjson CustomerFind" [
+export def "customerfindjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2356,7 +2356,7 @@ export def "customerfindjson CustomerFind" [
 #
 # POST /customer.group.add.json
 # operationId: CustomerGroupAdd
-export def "customergroupaddjson CustomerGroupAdd" [
+export def "customergroupaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2382,7 +2382,7 @@ export def "customergroupaddjson CustomerGroupAdd" [
 #
 # GET /customer.group.list.json
 # operationId: CustomerGroupList
-export def "customergrouplistjson CustomerGroupList" [
+export def "customergrouplistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2414,7 +2414,7 @@ export def "customergrouplistjson CustomerGroupList" [
 #
 # GET /customer.info.json
 # operationId: CustomerInfo
-export def "customerinfojson CustomerInfo" [
+export def "customerinfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2442,7 +2442,7 @@ export def "customerinfojson CustomerInfo" [
 #
 # GET /customer.list.json
 # operationId: CustomerList
-export def "customerlistjson CustomerList" [
+export def "customerlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2479,7 +2479,7 @@ export def "customerlistjson CustomerList" [
 #
 # PUT /customer.update.json
 # operationId: CustomerUpdate
-export def "customerupdatejson CustomerUpdate" [
+export def "customerupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2495,21 +2495,21 @@ export def "customerupdatejson CustomerUpdate" [
   --last-name: string # Defines customer's last name
   --news-letter-subscription: oneof<nothing, bool> # Defines whether the newsletter subscription is available for the user
   --tags: string # Customer tags
-  --address-book-id-{x}: string # The ID of the address.
-  --address-book-first-name-{x}: string # Specifies customer's first name in the address book
-  --address-book-last-name-{x}: string # Specifies customer's last name in the address book
-  --address-book-company-{x}: string # Specifies customer's company name in the address book
-  --address-book-phone-{x}: string # Specifies customer's phone number in the address book
-  --address-book-address1-{x}: string # Specifies customer's first address in the address book
-  --address-book-address2-{x}: string # Specifies customer's second address in the address book
-  --address-book-city-{x}: string # Specifies customer's city in the address book
-  --address-book-country-{x}: string # ISO code or name of country
-  --address-book-state-{x}: string # ISO code or name of state.
-  --address-book-postcode-{x}: string # Specifies customer's postcode
+  --address-book-id-x: string # The ID of the address.
+  --address-book-first-name-x: string # Specifies customer's first name in the address book
+  --address-book-last-name-x: string # Specifies customer's last name in the address book
+  --address-book-company-x: string # Specifies customer's company name in the address book
+  --address-book-phone-x: string # Specifies customer's phone number in the address book
+  --address-book-address1-x: string # Specifies customer's first address in the address book
+  --address-book-address2-x: string # Specifies customer's second address in the address book
+  --address-book-city-x: string # Specifies customer's city in the address book
+  --address-book-country-x: string # ISO code or name of country
+  --address-book-state-x: string # ISO code or name of state.
+  --address-book-postcode-x: string # Specifies customer's postcode
 ]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "news_letter_subscription" $news_letter_subscription "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "address_book_id_{x}" $address_book_id_{x} "scalar") (serialize-qp "address_book_first_name_{x}" $address_book_first_name_{x} "scalar") (serialize-qp "address_book_last_name_{x}" $address_book_last_name_{x} "scalar") (serialize-qp "address_book_company_{x}" $address_book_company_{x} "scalar") (serialize-qp "address_book_phone_{x}" $address_book_phone_{x} "scalar") (serialize-qp "address_book_address1_{x}" $address_book_address1_{x} "scalar") (serialize-qp "address_book_address2_{x}" $address_book_address2_{x} "scalar") (serialize-qp "address_book_city_{x}" $address_book_city_{x} "scalar") (serialize-qp "address_book_country_{x}" $address_book_country_{x} "scalar") (serialize-qp "address_book_state_{x}" $address_book_state_{x} "scalar") (serialize-qp "address_book_postcode_{x}" $address_book_postcode_{x} "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "news_letter_subscription" $news_letter_subscription "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "address_book_id_{x}" $address_book_id_x "scalar") (serialize-qp "address_book_first_name_{x}" $address_book_first_name_x "scalar") (serialize-qp "address_book_last_name_{x}" $address_book_last_name_x "scalar") (serialize-qp "address_book_company_{x}" $address_book_company_x "scalar") (serialize-qp "address_book_phone_{x}" $address_book_phone_x "scalar") (serialize-qp "address_book_address1_{x}" $address_book_address1_x "scalar") (serialize-qp "address_book_address2_{x}" $address_book_address2_x "scalar") (serialize-qp "address_book_city_{x}" $address_book_city_x "scalar") (serialize-qp "address_book_country_{x}" $address_book_country_x "scalar") (serialize-qp "address_book_state_{x}" $address_book_state_x "scalar") (serialize-qp "address_book_postcode_{x}" $address_book_postcode_x "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2520,7 +2520,7 @@ export def "customerupdatejson CustomerUpdate" [
 #
 # GET /order.abandoned.list.json
 # operationId: OrderAbandonedList
-export def "orderabandonedlistjson OrderAbandonedList" [
+export def "orderabandonedlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2559,7 +2559,7 @@ export def "orderabandonedlistjson OrderAbandonedList" [
 # operationId: OrderAdd
 # --note_attributes item shape: {name?: string, value?: string}
 # --order_item item shape: {order_item_allow_refund_items_separately?: bool, order_item_allow_ship_items_separately?: bool, order_item_id: string, order_item_model?: string, order_item_name: string, order_item_option?: list, order_item_parent?: int, order_item_parent_option_name?: string, order_item_price: float, order_item_price_includes_tax?: bool, order_item_property?: list, order_item_quantity: int, order_item_tax?: float, order_item_variant_id?: string, order_item_weight?: float}
-export def "orderaddjson OrderAdd" [
+export def "orderaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2639,7 +2639,7 @@ export def "orderaddjson OrderAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.add.json")
-  let body = {admin_comment: $admin_comment, admin_private_comment: $admin_private_comment, bill_address_1: $bill_address_1, bill_address_2: $bill_address_2, bill_city: $bill_city, bill_company: $bill_company, bill_country: $bill_country, bill_fax: $bill_fax, bill_first_name: $bill_first_name, bill_last_name: $bill_last_name, bill_phone: $bill_phone, bill_postcode: $bill_postcode, bill_state: $bill_state, channel_id: $channel_id, clear_cache: $clear_cache, comment: $comment, coupon_discount: $coupon_discount, coupons: $coupons, create_invoice: $create_invoice, currency: $currency, customer_birthday: $customer_birthday, customer_email: $customer_email, customer_fax: $customer_fax, customer_first_name: $customer_first_name, customer_last_name: $customer_last_name, customer_phone: $customer_phone, date: $date, date_finished: $date_finished, date_modified: $date_modified, discount: $discount, external_source: $external_source, financial_status: $financial_status, fulfillment_status: $fulfillment_status, gift_certificate_discount: $gift_certificate_discount, id: $id, inventory_behaviour: $inventory_behaviour, note_attributes: $note_attributes, order_id: $order_id, order_item: $order_item, order_payment_method: $order_payment_method, order_shipping_method: $order_shipping_method, order_status: $order_status, prices_inc_tax: $prices_inc_tax, send_admin_notifications: $send_admin_notifications, send_notifications: $send_notifications, shipp_address_1: $shipp_address_1, shipp_address_2: $shipp_address_2, shipp_city: $shipp_city, shipp_company: $shipp_company, shipp_country: $shipp_country, shipp_fax: $shipp_fax, shipp_first_name: $shipp_first_name, shipp_last_name: $shipp_last_name, shipp_phone: $shipp_phone, shipp_postcode: $shipp_postcode, shipp_state: $shipp_state, shipping_price: $shipping_price, shipping_tax: $shipping_tax, store_id: $store_id, subtotal_price: $subtotal_price, tags: $tags, tax_price: $tax_price, total_paid: $total_paid, total_price: $total_price, total_weight: $total_weight, transaction_id: $transaction_id} | compact
+  let body = {"admin_comment": $admin_comment, "admin_private_comment": $admin_private_comment, "bill_address_1": $bill_address_1, "bill_address_2": $bill_address_2, "bill_city": $bill_city, "bill_company": $bill_company, "bill_country": $bill_country, "bill_fax": $bill_fax, "bill_first_name": $bill_first_name, "bill_last_name": $bill_last_name, "bill_phone": $bill_phone, "bill_postcode": $bill_postcode, "bill_state": $bill_state, "channel_id": $channel_id, "clear_cache": $clear_cache, "comment": $comment, "coupon_discount": $coupon_discount, "coupons": $coupons, "create_invoice": $create_invoice, "currency": $currency, "customer_birthday": $customer_birthday, "customer_email": $customer_email, "customer_fax": $customer_fax, "customer_first_name": $customer_first_name, "customer_last_name": $customer_last_name, "customer_phone": $customer_phone, "date": $date, "date_finished": $date_finished, "date_modified": $date_modified, "discount": $discount, "external_source": $external_source, "financial_status": $financial_status, "fulfillment_status": $fulfillment_status, "gift_certificate_discount": $gift_certificate_discount, "id": $id, "inventory_behaviour": $inventory_behaviour, "note_attributes": $note_attributes, "order_id": $order_id, "order_item": $order_item, "order_payment_method": $order_payment_method, "order_shipping_method": $order_shipping_method, "order_status": $order_status, "prices_inc_tax": $prices_inc_tax, "send_admin_notifications": $send_admin_notifications, "send_notifications": $send_notifications, "shipp_address_1": $shipp_address_1, "shipp_address_2": $shipp_address_2, "shipp_city": $shipp_city, "shipp_company": $shipp_company, "shipp_country": $shipp_country, "shipp_fax": $shipp_fax, "shipp_first_name": $shipp_first_name, "shipp_last_name": $shipp_last_name, "shipp_phone": $shipp_phone, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "shipping_price": $shipping_price, "shipping_tax": $shipping_tax, "store_id": $store_id, "subtotal_price": $subtotal_price, "tags": $tags, "tax_price": $tax_price, "total_paid": $total_paid, "total_price": $total_price, "total_weight": $total_weight, "transaction_id": $transaction_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2650,7 +2650,7 @@ export def "orderaddjson OrderAdd" [
 #
 # GET /order.count.json
 # operationId: OrderCount
-export def "ordercountjson OrderCount" [
+export def "ordercountjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2690,7 +2690,7 @@ export def "ordercountjson OrderCount" [
 #
 # GET /order.financial_status.list.json
 # operationId: OrderFinancialStatusList
-export def "orderfinancial-statuslistjson OrderFinancialStatusList" [
+export def "orderfinancial-statuslistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2714,7 +2714,7 @@ export def "orderfinancial-statuslistjson OrderFinancialStatusList" [
 # DEPRECATED
 # operationId: OrderFind
 @deprecated
-export def "orderfindjson OrderFind" [
+export def "orderfindjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2749,7 +2749,7 @@ export def "orderfindjson OrderFind" [
 #
 # GET /order.fulfillment_status.list.json
 # operationId: OrderFulfillmentStatusList
-export def "orderfulfillment-statuslistjson OrderFulfillmentStatusList" [
+export def "orderfulfillment-statuslistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2771,7 +2771,7 @@ export def "orderfulfillment-statuslistjson OrderFulfillmentStatusList" [
 #
 # GET /order.info.json
 # operationId: OrderInfo
-export def "orderinfojson OrderInfo" [
+export def "orderinfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2801,7 +2801,7 @@ export def "orderinfojson OrderInfo" [
 #
 # GET /order.list.json
 # operationId: OrderList
-export def "orderlistjson OrderList" [
+export def "orderlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2858,7 +2858,7 @@ export def "orderlistjson OrderList" [
 # POST /order.preestimate_shipping.list.json
 # operationId: OrderPreestimateShippingList
 # --order_item item shape: {order_item_id: string, order_item_model?: string, order_item_option?: list, order_item_quantity: int, order_item_variant_id?: string, order_item_weight?: float}
-export def "orderpreestimate-shippinglistjson OrderPreestimateShippingList" [
+export def "orderpreestimate-shippinglistjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2884,7 +2884,7 @@ export def "orderpreestimate-shippinglistjson OrderPreestimateShippingList" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.preestimate_shipping.list.json")
-  let body = {customer_email: $customer_email, customer_id: $customer_id, exclude: $exclude, order_item: $order_item, params: $params, shipp_address_1: $shipp_address_1, shipp_city: $shipp_city, shipp_country: $shipp_country, shipp_postcode: $shipp_postcode, shipp_state: $shipp_state, store_id: $store_id, warehouse_id: $warehouse_id} | compact
+  let body = {"customer_email": $customer_email, "customer_id": $customer_id, "exclude": $exclude, "order_item": $order_item, "params": $params, "shipp_address_1": $shipp_address_1, "shipp_city": $shipp_city, "shipp_country": $shipp_country, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "store_id": $store_id, "warehouse_id": $warehouse_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2896,7 +2896,7 @@ export def "orderpreestimate-shippinglistjson OrderPreestimateShippingList" [
 # POST /order.refund.add.json
 # operationId: OrderRefundAdd
 # --items item shape: {order_product_id?: string, price?: float, quantity?: int}
-export def "orderrefundaddjson OrderRefundAdd" [
+export def "orderrefundaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2920,7 +2920,7 @@ export def "orderrefundaddjson OrderRefundAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.refund.add.json")
-  let body = {date: $date, fee_price: $fee_price, is_online: $is_online, item_restock: $item_restock, items: $items, message: $message, order_id: $order_id, send_notifications: $send_notifications, shipping_price: $shipping_price, total_price: $total_price} | compact
+  let body = {"date": $date, "fee_price": $fee_price, "is_online": $is_online, "item_restock": $item_restock, "items": $items, "message": $message, "order_id": $order_id, "send_notifications": $send_notifications, "shipping_price": $shipping_price, "total_price": $total_price} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2933,7 +2933,7 @@ export def "orderrefundaddjson OrderRefundAdd" [
 # operationId: OrderShipmentAdd
 # --items item shape: {order_product_id?: string, quantity?: float}
 # --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
-export def "ordershipmentaddjson OrderShipmentAdd" [
+export def "ordershipmentaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2959,7 +2959,7 @@ export def "ordershipmentaddjson OrderShipmentAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.add.json")
-  let body = {adjust_stock: $adjust_stock, enable_cache: $enable_cache, is_shipped: $is_shipped, items: $items, order_id: $order_id, send_notifications: $send_notifications, shipment_provider: $shipment_provider, shipping_method: $shipping_method, store_id: $store_id, tracking_link: $tracking_link, tracking_numbers: $tracking_numbers, warehouse_id: $warehouse_id} | compact
+  let body = {"adjust_stock": $adjust_stock, "enable_cache": $enable_cache, "is_shipped": $is_shipped, "items": $items, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_provider": $shipment_provider, "shipping_method": $shipping_method, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers, "warehouse_id": $warehouse_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2970,7 +2970,7 @@ export def "ordershipmentaddjson OrderShipmentAdd" [
 #
 # DELETE /order.shipment.delete.json
 # operationId: OrderShipmentDelete
-export def "ordershipmentdeletejson OrderShipmentDelete" [
+export def "ordershipmentdeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2996,7 +2996,7 @@ export def "ordershipmentdeletejson OrderShipmentDelete" [
 #
 # GET /order.shipment.info.json
 # operationId: OrderShipmentInfo
-export def "ordershipmentinfojson OrderShipmentInfo" [
+export def "ordershipmentinfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3026,7 +3026,7 @@ export def "ordershipmentinfojson OrderShipmentInfo" [
 #
 # GET /order.shipment.list.json
 # operationId: OrderShipmentList
-export def "ordershipmentlistjson OrderShipmentList" [
+export def "ordershipmentlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3061,7 +3061,7 @@ export def "ordershipmentlistjson OrderShipmentList" [
 #
 # POST /order.shipment.tracking.add.json
 # operationId: OrderShipmentTrackingAdd
-export def "ordershipmenttrackingaddjson OrderShipmentTrackingAdd" [
+export def "ordershipmenttrackingaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3083,7 +3083,7 @@ export def "ordershipmenttrackingaddjson OrderShipmentTrackingAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.tracking.add.json")
-  let body = {carrier_id: $carrier_id, order_id: $order_id, send_notifications: $send_notifications, shipment_id: $shipment_id, store_id: $store_id, tracking_link: $tracking_link, tracking_number: $tracking_number, tracking_provider: $tracking_provider} | compact
+  let body = {"carrier_id": $carrier_id, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_number": $tracking_number, "tracking_provider": $tracking_provider} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3095,7 +3095,7 @@ export def "ordershipmenttrackingaddjson OrderShipmentTrackingAdd" [
 # PUT /order.shipment.update.json
 # operationId: OrderShipmentUpdate
 # --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
-export def "ordershipmentupdatejson OrderShipmentUpdate" [
+export def "ordershipmentupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3116,7 +3116,7 @@ export def "ordershipmentupdatejson OrderShipmentUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.update.json")
-  let body = {is_shipped: $is_shipped, order_id: $order_id, replace: $replace, shipment_id: $shipment_id, store_id: $store_id, tracking_link: $tracking_link, tracking_numbers: $tracking_numbers} | compact
+  let body = {"is_shipped": $is_shipped, "order_id": $order_id, "replace": $replace, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3127,7 +3127,7 @@ export def "ordershipmentupdatejson OrderShipmentUpdate" [
 #
 # GET /order.status.list.json
 # operationId: OrderStatusList
-export def "orderstatuslistjson OrderStatusList" [
+export def "orderstatuslistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3151,7 +3151,7 @@ export def "orderstatuslistjson OrderStatusList" [
 #
 # GET /order.transaction.list.json
 # operationId: OrderTransactionList
-export def "ordertransactionlistjson OrderTransactionList" [
+export def "ordertransactionlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3181,7 +3181,7 @@ export def "ordertransactionlistjson OrderTransactionList" [
 #
 # PUT /order.update.json
 # operationId: OrderUpdate
-export def "orderupdatejson OrderUpdate" [
+export def "orderupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3221,7 +3221,7 @@ export def "orderupdatejson OrderUpdate" [
 # --seller_profiles shape: {payment_profile_id?: string, return_profile_id?: string, shipping_profile_id?: string}
 # --shipping_details item shape: {shipping_cost?: float, shipping_service?: string, shipping_type?: string}
 # --tier_prices item shape: {price?: float, quantity?: float}
-export def "productaddjson ProductAdd" [
+export def "productaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3314,7 +3314,7 @@ export def "productaddjson ProductAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.add.json")
-  let body = {attribute_name: $attribute_name, attribute_set_name: $attribute_set_name, avail_from: $avail_from, available_for_sale: $available_for_sale, available_for_view: $available_for_view, backorder_status: $backorder_status, barcode: $barcode, best_offer: $best_offer, brand_name: $brand_name, categories_ids: $categories_ids, category_id: $category_id, clear_cache: $clear_cache, condition: $condition, cost_price: $cost_price, country_of_origin: $country_of_origin, created_at: $created_at, description: $description, downloadable: $downloadable, ean: $ean, files: $files, group_prices: $group_prices, gtin: $gtin, harmonized_system_code: $harmonized_system_code, height: $height, image_name: $image_name, image_url: $image_url, isbn: $isbn, lang_id: $lang_id, length: $length, listing_duration: $listing_duration, listing_type: $listing_type, manage_stock: $manage_stock, manufacturer: $manufacturer, marketplace_item_properties: $marketplace_item_properties, meta_description: $meta_description, meta_keywords: $meta_keywords, meta_title: $meta_title, model: $model, mpn: $mpn, name: $name, old_price: $old_price, ordered_count: $ordered_count, package_details: $package_details, payment_methods: $payment_methods, paypal_email: $paypal_email, price: $price, product_class: $product_class, quantity: $quantity, return_accepted: $return_accepted, sales_tax: $sales_tax, search_keywords: $search_keywords, seller_profiles: $seller_profiles, seo_url: $seo_url, shipping_details: $shipping_details, shipping_template_id: $shipping_template_id, short_description: $short_description, sku: $sku, special_price: $special_price, specifics: $specifics, sprice_create: $sprice_create, sprice_expire: $sprice_expire, sprice_modified: $sprice_modified, status: $status, store_id: $store_id, stores_ids: $stores_ids, tags: $tags, tax_class_id: $tax_class_id, taxable: $taxable, tier_prices: $tier_prices, type: $type, upc: $upc, url: $body_url, viewed_count: $viewed_count, visible: $visible, warehouse_id: $warehouse_id, weight: $weight, weight_unit: $weight_unit, wholesale_price: $wholesale_price, width: $width} | compact
+  let body = {"attribute_name": $attribute_name, "attribute_set_name": $attribute_set_name, "avail_from": $avail_from, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "backorder_status": $backorder_status, "barcode": $barcode, "best_offer": $best_offer, "brand_name": $brand_name, "categories_ids": $categories_ids, "category_id": $category_id, "clear_cache": $clear_cache, "condition": $condition, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "downloadable": $downloadable, "ean": $ean, "files": $files, "group_prices": $group_prices, "gtin": $gtin, "harmonized_system_code": $harmonized_system_code, "height": $height, "image_name": $image_name, "image_url": $image_url, "isbn": $isbn, "lang_id": $lang_id, "length": $length, "listing_duration": $listing_duration, "listing_type": $listing_type, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "marketplace_item_properties": $marketplace_item_properties, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "mpn": $mpn, "name": $name, "old_price": $old_price, "ordered_count": $ordered_count, "package_details": $package_details, "payment_methods": $payment_methods, "paypal_email": $paypal_email, "price": $price, "product_class": $product_class, "quantity": $quantity, "return_accepted": $return_accepted, "sales_tax": $sales_tax, "search_keywords": $search_keywords, "seller_profiles": $seller_profiles, "seo_url": $seo_url, "shipping_details": $shipping_details, "shipping_template_id": $shipping_template_id, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "specifics": $specifics, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "status": $status, "store_id": $store_id, "stores_ids": $stores_ids, "tags": $tags, "tax_class_id": $tax_class_id, "taxable": $taxable, "tier_prices": $tier_prices, "type": $type, "upc": $upc, "url": $body_url, "viewed_count": $viewed_count, "visible": $visible, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "wholesale_price": $wholesale_price, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3325,7 +3325,7 @@ export def "productaddjson ProductAdd" [
 #
 # GET /product.attribute.list.json
 # operationId: ProductAttributeList
-export def "productattributelistjson ProductAttributeList" [
+export def "productattributelistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3363,7 +3363,7 @@ export def "productattributelistjson ProductAttributeList" [
 #
 # POST /product.attribute.value.set.json
 # operationId: ProductAttributeValueSet
-export def "productattributevaluesetjson ProductAttributeValueSet" [
+export def "productattributevaluesetjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3394,7 +3394,7 @@ export def "productattributevaluesetjson ProductAttributeValueSet" [
 #
 # POST /product.attribute.value.unset.json
 # operationId: ProductAttributeValueUnset
-export def "productattributevalueunsetjson ProductAttributeValueUnset" [
+export def "productattributevalueunsetjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3423,7 +3423,7 @@ export def "productattributevalueunsetjson ProductAttributeValueUnset" [
 #
 # GET /product.brand.list.json
 # operationId: ProductBrandList
-export def "productbrandlistjson ProductBrandList" [
+export def "productbrandlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3458,7 +3458,7 @@ export def "productbrandlistjson ProductBrandList" [
 #
 # GET /product.child_item.find.json
 # operationId: ProductChildItemFind
-export def "productchild-itemfindjson ProductChildItemFind" [
+export def "productchild-itemfindjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3485,7 +3485,7 @@ export def "productchild-itemfindjson ProductChildItemFind" [
 #
 # GET /product.child_item.info.json
 # operationId: ProductChildItemInfo
-export def "productchild-iteminfojson ProductChildItemInfo" [
+export def "productchild-iteminfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3516,7 +3516,7 @@ export def "productchild-iteminfojson ProductChildItemInfo" [
 #
 # GET /product.child_item.list.json
 # operationId: ProductChildItemList
-export def "productchild-itemlistjson ProductChildItemList" [
+export def "productchild-itemlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3557,7 +3557,7 @@ export def "productchild-itemlistjson ProductChildItemList" [
 #
 # GET /product.count.json
 # operationId: ProductCount
-export def "productcountjson ProductCount" [
+export def "productcountjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3596,7 +3596,7 @@ export def "productcountjson ProductCount" [
 #
 # POST /product.currency.add.json
 # operationId: ProductCurrencyAdd
-export def "productcurrencyaddjson ProductCurrencyAdd" [
+export def "productcurrencyaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3626,7 +3626,7 @@ export def "productcurrencyaddjson ProductCurrencyAdd" [
 #
 # GET /product.currency.list.json
 # operationId: ProductCurrencyList
-export def "productcurrencylistjson ProductCurrencyList" [
+export def "productcurrencylistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3657,7 +3657,7 @@ export def "productcurrencylistjson ProductCurrencyList" [
 #
 # DELETE /product.delete.json
 # operationId: ProductDelete
-export def "productdeletejson ProductDelete" [
+export def "productdeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3681,7 +3681,7 @@ export def "productdeletejson ProductDelete" [
 #
 # GET /product.fields.json
 # operationId: ProductFields
-export def "productfieldsjson ProductFields" [
+export def "productfieldsjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3703,7 +3703,7 @@ export def "productfieldsjson ProductFields" [
 #
 # GET /product.find.json
 # operationId: ProductFind
-export def "productfindjson ProductFind" [
+export def "productfindjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3732,7 +3732,7 @@ export def "productfindjson ProductFind" [
 #
 # POST /product.image.add.json
 # operationId: ProductImageAdd
-export def "productimageaddjson ProductImageAdd" [
+export def "productimageaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3758,7 +3758,7 @@ export def "productimageaddjson ProductImageAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.image.add.json")
-  let body = {content: $content, image_name: $image_name, label: $label, lang_id: $lang_id, mime: $mime, position: $position, product_id: $product_id, product_variant_id: $product_variant_id, store_id: $store_id, type: $type, url: $body_url, variant_ids: $variant_ids} | compact
+  let body = {"content": $content, "image_name": $image_name, "label": $label, "lang_id": $lang_id, "mime": $mime, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $body_url, "variant_ids": $variant_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3769,7 +3769,7 @@ export def "productimageaddjson ProductImageAdd" [
 #
 # DELETE /product.image.delete.json
 # operationId: ProductImageDelete
-export def "productimagedeletejson ProductImageDelete" [
+export def "productimagedeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3795,7 +3795,7 @@ export def "productimagedeletejson ProductImageDelete" [
 #
 # PUT /product.image.update.json
 # operationId: ProductImageUpdate
-export def "productimageupdatejson ProductImageUpdate" [
+export def "productimageupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3827,7 +3827,7 @@ export def "productimageupdatejson ProductImageUpdate" [
 #
 # GET /product.info.json
 # operationId: ProductInfo
-export def "productinfojson ProductInfo" [
+export def "productinfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3859,7 +3859,7 @@ export def "productinfojson ProductInfo" [
 #
 # GET /product.list.json
 # operationId: ProductList
-export def "productlistjson ProductList" [
+export def "productlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3910,7 +3910,7 @@ export def "productlistjson ProductList" [
 #
 # POST /product.manufacturer.add.json
 # operationId: ProductManufacturerAdd
-export def "productmanufactureraddjson ProductManufacturerAdd" [
+export def "productmanufactureraddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3935,7 +3935,7 @@ export def "productmanufactureraddjson ProductManufacturerAdd" [
 #
 # POST /product.option.add.json
 # operationId: ProductOptionAdd
-export def "productoptionaddjson ProductOptionAdd" [
+export def "productoptionaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3968,7 +3968,7 @@ export def "productoptionaddjson ProductOptionAdd" [
 #
 # POST /product.option.assign.json
 # operationId: ProductOptionAssign
-export def "productoptionassignjson ProductOptionAssign" [
+export def "productoptionassignjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3997,7 +3997,7 @@ export def "productoptionassignjson ProductOptionAssign" [
 #
 # GET /product.option.list.json
 # operationId: ProductOptionList
-export def "productoptionlistjson ProductOptionList" [
+export def "productoptionlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4028,7 +4028,7 @@ export def "productoptionlistjson ProductOptionList" [
 #
 # POST /product.option.value.add.json
 # operationId: ProductOptionValueAdd
-export def "productoptionvalueaddjson ProductOptionValueAdd" [
+export def "productoptionvalueaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4056,7 +4056,7 @@ export def "productoptionvalueaddjson ProductOptionValueAdd" [
 #
 # POST /product.option.value.assign.json
 # operationId: ProductOptionValueAssign
-export def "productoptionvalueassignjson ProductOptionValueAssign" [
+export def "productoptionvalueassignjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4082,7 +4082,7 @@ export def "productoptionvalueassignjson ProductOptionValueAssign" [
 #
 # PUT /product.option.value.update.json
 # operationId: ProductOptionValueUpdate
-export def "productoptionvalueupdatejson ProductOptionValueUpdate" [
+export def "productoptionvalueupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4113,7 +4113,7 @@ export def "productoptionvalueupdatejson ProductOptionValueUpdate" [
 # POST /product.price.add.json
 # operationId: ProductPriceAdd
 # --group_prices item shape: {group_id?: string, price?: float}
-export def "productpriceaddjson ProductPriceAdd" [
+export def "productpriceaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4129,7 +4129,7 @@ export def "productpriceaddjson ProductPriceAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.price.add.json")
-  let body = {group_prices: $group_prices, product_id: $product_id} | compact
+  let body = {"group_prices": $group_prices, "product_id": $product_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4140,7 +4140,7 @@ export def "productpriceaddjson ProductPriceAdd" [
 #
 # DELETE /product.price.delete.json
 # operationId: ProductPriceDelete
-export def "productpricedeletejson ProductPriceDelete" [
+export def "productpricedeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4166,7 +4166,7 @@ export def "productpricedeletejson ProductPriceDelete" [
 # PUT /product.price.update.json
 # operationId: ProductPriceUpdate
 # --group_prices item shape: {group_id?: string, id?: int, price?: float}
-export def "productpriceupdatejson ProductPriceUpdate" [
+export def "productpriceupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4182,7 +4182,7 @@ export def "productpriceupdatejson ProductPriceUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.price.update.json")
-  let body = {group_prices: $group_prices, product_id: $product_id} | compact
+  let body = {"group_prices": $group_prices, "product_id": $product_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4193,7 +4193,7 @@ export def "productpriceupdatejson ProductPriceUpdate" [
 #
 # GET /product.review.list.json
 # operationId: ProductReviewList
-export def "productreviewlistjson ProductReviewList" [
+export def "productreviewlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4226,7 +4226,7 @@ export def "productreviewlistjson ProductReviewList" [
 #
 # POST /product.store.assign.json
 # operationId: ProductStoreAssign
-export def "productstoreassignjson ProductStoreAssign" [
+export def "productstoreassignjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4252,7 +4252,7 @@ export def "productstoreassignjson ProductStoreAssign" [
 # POST /product.tax.add.json
 # operationId: ProductTaxAdd
 # --tax_rates item shape: {name?: string, type?: string, value?: float}
-export def "producttaxaddjson ProductTaxAdd" [
+export def "producttaxaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4269,7 +4269,7 @@ export def "producttaxaddjson ProductTaxAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.tax.add.json")
-  let body = {name: $name, product_id: $product_id, tax_rates: $tax_rates} | compact
+  let body = {"name": $name, "product_id": $product_id, "tax_rates": $tax_rates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4280,7 +4280,7 @@ export def "producttaxaddjson ProductTaxAdd" [
 #
 # PUT /product.update.json
 # operationId: ProductUpdate
-export def "productupdatejson ProductUpdate" [
+export def "productupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4352,7 +4352,7 @@ export def "productupdatejson ProductUpdate" [
 # POST /product.variant.add.json
 # operationId: ProductVariantAdd
 # --attributes item shape: {attribute_name?: string, attribute_price?: float, attribute_value?: string}
-export def "productvariantaddjson ProductVariantAdd" [
+export def "productvariantaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4403,7 +4403,7 @@ export def "productvariantaddjson ProductVariantAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.add.json")
-  let body = {attributes: $attributes, available_for_sale: $available_for_sale, available_for_view: $available_for_view, barcode: $barcode, clear_cache: $clear_cache, cost_price: $cost_price, country_of_origin: $country_of_origin, created_at: $created_at, description: $description, harmonized_system_code: $harmonized_system_code, height: $height, lang_id: $lang_id, length: $length, manage_stock: $manage_stock, manufacturer: $manufacturer, meta_description: $meta_description, meta_keywords: $meta_keywords, meta_title: $meta_title, model: $model, name: $name, price: $price, product_id: $product_id, quantity: $quantity, short_description: $short_description, sku: $sku, special_price: $special_price, sprice_create: $sprice_create, sprice_expire: $sprice_expire, sprice_modified: $sprice_modified, store_id: $store_id, tax_class_id: $tax_class_id, taxable: $taxable, url: $body_url, warehouse_id: $warehouse_id, weight: $weight, weight_unit: $weight_unit, width: $width} | compact
+  let body = {"attributes": $attributes, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "barcode": $barcode, "clear_cache": $clear_cache, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "harmonized_system_code": $harmonized_system_code, "height": $height, "lang_id": $lang_id, "length": $length, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "name": $name, "price": $price, "product_id": $product_id, "quantity": $quantity, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "store_id": $store_id, "tax_class_id": $tax_class_id, "taxable": $taxable, "url": $body_url, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "width": $width} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4414,7 +4414,7 @@ export def "productvariantaddjson ProductVariantAdd" [
 #
 # GET /product.variant.count.json
 # operationId: ProductVariantCount
-export def "productvariantcountjson ProductVariantCount" [
+export def "productvariantcountjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4444,7 +4444,7 @@ export def "productvariantcountjson ProductVariantCount" [
 #
 # DELETE /product.variant.delete.json
 # operationId: ProductVariantDelete
-export def "productvariantdeletejson ProductVariantDelete" [
+export def "productvariantdeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4469,7 +4469,7 @@ export def "productvariantdeletejson ProductVariantDelete" [
 #
 # POST /product.variant.image.add.json
 # operationId: ProductVariantImageAdd
-export def "productvariantimageaddjson ProductVariantImageAdd" [
+export def "productvariantimageaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4494,7 +4494,7 @@ export def "productvariantimageaddjson ProductVariantImageAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.image.add.json")
-  let body = {content: $content, image_name: $image_name, label: $label, mime: $mime, option_id: $option_id, position: $position, product_id: $product_id, product_variant_id: $product_variant_id, store_id: $store_id, type: $type, url: $body_url} | compact
+  let body = {"content": $content, "image_name": $image_name, "label": $label, "mime": $mime, "option_id": $option_id, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4505,7 +4505,7 @@ export def "productvariantimageaddjson ProductVariantImageAdd" [
 #
 # DELETE /product.variant.image.delete.json
 # operationId: ProductVariantImageDelete
-export def "productvariantimagedeletejson ProductVariantImageDelete" [
+export def "productvariantimagedeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4532,7 +4532,7 @@ export def "productvariantimagedeletejson ProductVariantImageDelete" [
 #
 # GET /product.variant.info.json
 # operationId: ProductVariantInfo
-export def "productvariantinfojson ProductVariantInfo" [
+export def "productvariantinfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4559,7 +4559,7 @@ export def "productvariantinfojson ProductVariantInfo" [
 #
 # GET /product.variant.list.json
 # operationId: ProductVariantList
-export def "productvariantlistjson ProductVariantList" [
+export def "productvariantlistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4594,7 +4594,7 @@ export def "productvariantlistjson ProductVariantList" [
 # POST /product.variant.price.add.json
 # operationId: ProductVariantPriceAdd
 # --group_prices item shape: {group_id?: string, price?: float}
-export def "productvariantpriceaddjson ProductVariantPriceAdd" [
+export def "productvariantpriceaddjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4610,7 +4610,7 @@ export def "productvariantpriceaddjson ProductVariantPriceAdd" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.price.add.json")
-  let body = {group_prices: $group_prices, id: $id} | compact
+  let body = {"group_prices": $group_prices, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4621,7 +4621,7 @@ export def "productvariantpriceaddjson ProductVariantPriceAdd" [
 #
 # DELETE /product.variant.price.delete.json
 # operationId: ProductVariantPriceDelete
-export def "productvariantpricedeletejson ProductVariantPriceDelete" [
+export def "productvariantpricedeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4647,7 +4647,7 @@ export def "productvariantpricedeletejson ProductVariantPriceDelete" [
 # PUT /product.variant.price.update.json
 # operationId: ProductVariantPriceUpdate
 # --group_prices item shape: {group_id?: string, id?: int, price?: float}
-export def "productvariantpriceupdatejson ProductVariantPriceUpdate" [
+export def "productvariantpriceupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4663,7 +4663,7 @@ export def "productvariantpriceupdatejson ProductVariantPriceUpdate" [
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.price.update.json")
-  let body = {group_prices: $group_prices, id: $id} | compact
+  let body = {"group_prices": $group_prices, "id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4674,7 +4674,7 @@ export def "productvariantpriceupdatejson ProductVariantPriceUpdate" [
 #
 # PUT /product.variant.update.json
 # operationId: ProductVariantUpdate
-export def "productvariantupdatejson ProductVariantUpdate" [
+export def "productvariantupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4739,7 +4739,7 @@ export def "productvariantupdatejson ProductVariantUpdate" [
 #
 # GET /subscriber.list.json
 # operationId: SubscriberList
-export def "subscriberlistjson SubscriberList" [
+export def "subscriberlistjson subscribe-r-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4775,7 +4775,7 @@ export def "subscriberlistjson SubscriberList" [
 #
 # GET /tax.class.info.json
 # operationId: TaxClassInfo
-export def "taxclassinfojson TaxClassInfo" [
+export def "taxclassinfojson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4804,7 +4804,7 @@ export def "taxclassinfojson TaxClassInfo" [
 #
 # GET /webhook.count.json
 # operationId: WebhookCount
-export def "webhookcountjson WebhookCount" [
+export def "webhookcountjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4830,7 +4830,7 @@ export def "webhookcountjson WebhookCount" [
 #
 # POST /webhook.create.json
 # operationId: WebhookCreate
-export def "webhookcreatejson WebhookCreate" [
+export def "webhookcreatejson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4860,7 +4860,7 @@ export def "webhookcreatejson WebhookCreate" [
 #
 # DELETE /webhook.delete.json
 # operationId: WebhookDelete
-export def "webhookdeletejson WebhookDelete" [
+export def "webhookdeletejson delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4884,7 +4884,7 @@ export def "webhookdeletejson WebhookDelete" [
 #
 # GET /webhook.events.json
 # operationId: WebhookEvents
-export def "webhookeventsjson WebhookEvents" [
+export def "webhookeventsjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4906,7 +4906,7 @@ export def "webhookeventsjson WebhookEvents" [
 #
 # GET /webhook.list.json
 # operationId: WebhookList
-export def "webhooklistjson WebhookList" [
+export def "webhooklistjson get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4936,7 +4936,7 @@ export def "webhooklistjson WebhookList" [
 #
 # PUT /webhook.update.json
 # operationId: WebhookUpdate
-export def "webhookupdatejson WebhookUpdate" [
+export def "webhookupdatejson put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -133,7 +133,7 @@ export def "api spec" [
 # GET /__heartbeat__
 #
 # operationId: __heartbeat__
-export def "heartbeat " [
+export def "heartbeat get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,7 +154,7 @@ export def "heartbeat " [
 # GET /__lbheartbeat__
 #
 # operationId: __lbheartbeat__
-export def "lbheartbeat " [
+export def "lbheartbeat get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "lbheartbeat " [
 # GET /__version__
 #
 # operationId: __version__
-export def "version " [
+export def "version get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "version " [
 # operationId: batch
 # --defaults shape: {body?: record, headers?: record, method?: "GET"|"HEAD"|"DELETE"|"TRACE"|"POST"|"PUT"|"PATCH", path?: string}
 # --requests item shape: {body?: record, headers?: record, method?: "GET"|"HEAD"|"DELETE"|"TRACE"|"POST"|"PUT"|"PATCH", path: string}
-export def "batch batch" [
+export def "batch post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "batch batch" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch")
-  let body = {defaults: $defaults, requests: $requests} | compact
+  let body = {"defaults": $defaults, "requests": $requests} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -224,7 +224,7 @@ export def "batch batch" [
 # GET /buckets
 #
 # operationId: get_buckets
-export def "buckets buckets" [
+export def "buckets get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,14 +242,14 @@ export def "buckets buckets" [
   --id: string
   --last-modified: int
   --fields: list
-  --If-Match: string
-  --If-None-Match: string
+  --if-match: string
+  --if-none-match: string
 ]: nothing -> record<data: table<collection_schema: record, group_schema: record, record_schema: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets" $qp)
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -259,7 +259,7 @@ export def "buckets buckets" [
 # GET /buckets/monitor/collections/changes/records
 #
 # operationId: get_changess
-export def "buckets-monitor-collections-changes-records changess" [
+export def "buckets-monitor-collections-changes-records changes-s" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,14 +277,14 @@ export def "buckets-monitor-collections-changes-records changess" [
   --id: string
   --last-modified: int
   --fields: list
-  --If-Match: string
-  --If-None-Match: string
+  --if-match: string
+  --if-none-match: string
 ]: nothing -> record<data: table<bucket: string, collection: string, host: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets/monitor/collections/changes/records" $qp)
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -314,7 +314,7 @@ export def "buckets-collections-changeset collection-changeset" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_since" $since "scalar") (serialize-qp "_expected" $expected "scalar") (serialize-qp "_limit" $limit "scalar") (serialize-qp "bucket" $bucket "scalar") (serialize-qp "collection" $collection "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/buckets/($bid)/collections/($cid)/changeset" $qp)
+  let full_url = (build-url $base ({bid: $bid, cid: $cid} | format pattern "/buckets/{bid}/collections/{cid}/changeset") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -342,14 +342,14 @@ export def "buckets-collections collections" [
   --id: string
   --last-modified: int
   --fields: list
-  --If-Match: string
-  --If-None-Match: string
+  --if-match: string
+  --if-none-match: string
 ]: nothing -> record<data: table<cache_expires: int, schema: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/buckets/($bucket_id)/collections" $qp)
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/collections") $qp)
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -379,14 +379,14 @@ export def "buckets-collections-records records" [
   --id: string
   --last-modified: int
   --fields: list
-  --If-Match: string
-  --If-None-Match: string
+  --if-match: string
+  --if-none-match: string
 ]: nothing -> record<data: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/buckets/($bucket_id)/collections/($collection_id)/records" $qp)
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id, collection_id: $collection_id} | format pattern "/buckets/{bucket_id}/collections/{collection_id}/records") $qp)
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -409,14 +409,14 @@ export def "buckets-collections-records record" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list
-  --If-Match: string
-  --If-None-Match: string
+  --if-match: string
+  --if-none-match: string
 ]: nothing -> record<data: record, permissions: record<read: list<string>, write: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/buckets/($bucket_id)/collections/($collection_id)/records/($id)" $qp)
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id, collection_id: $collection_id, id: $id} | format pattern "/buckets/{bucket_id}/collections/{collection_id}/records/{id}") $qp)
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -426,7 +426,7 @@ export def "buckets-collections-records record" [
 # DELETE /buckets/{bucket_id}/collections/{collection_id}/records/{id}/attachment
 #
 # operationId: delete_attachment
-export def "buckets-collections-records-attachment attachment-by-bucket_id-collection_id-id" [
+export def "buckets-collections-records-attachment attach-ment-by-bucket_id-collection_id-id" [
   bucket_id: string
   collection_id: string
   id: string
@@ -441,7 +441,7 @@ export def "buckets-collections-records-attachment attachment-by-bucket_id-colle
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucket_id)/collections/($collection_id)/records/($id)/attachment")
+  let full_url = (build-url $base ({bucket_id: $bucket_id, collection_id: $collection_id, id: $id} | format pattern "/buckets/{bucket_id}/collections/{collection_id}/records/{id}/attachment"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,7 +450,7 @@ export def "buckets-collections-records-attachment attachment-by-bucket_id-colle
 # POST /buckets/{bucket_id}/collections/{collection_id}/records/{id}/attachment
 #
 # operationId: create_attachment
-export def "buckets-collections-records-attachment attachment-by-bucket_id-collection_id-id-1" [
+export def "buckets-collections-records-attachment attach-ment-by-bucket_id-collection_id-id-1" [
   bucket_id: string
   collection_id: string
   id: string
@@ -465,7 +465,7 @@ export def "buckets-collections-records-attachment attachment-by-bucket_id-colle
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/buckets/($bucket_id)/collections/($collection_id)/records/($id)/attachment")
+  let full_url = (build-url $base ({bucket_id: $bucket_id, collection_id: $collection_id, id: $id} | format pattern "/buckets/{bucket_id}/collections/{collection_id}/records/{id}/attachment"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -486,14 +486,14 @@ export def "buckets-collections collection" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list
-  --If-Match: string
-  --If-None-Match: string
+  --if-match: string
+  --if-none-match: string
 ]: nothing -> record<data: record<cache_expires: int, schema: record>, permissions: record<read: list<string>, record_create: list<string>, write: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/buckets/($bucket_id)/collections/($id)" $qp)
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id, id: $id} | format pattern "/buckets/{bucket_id}/collections/{id}") $qp)
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -522,14 +522,14 @@ export def "buckets-groups groups" [
   --id: string
   --last-modified: int
   --fields: list
-  --If-Match: string
-  --If-None-Match: string
+  --if-match: string
+  --if-none-match: string
 ]: nothing -> record<data: table<members: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/buckets/($bucket_id)/groups" $qp)
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id} | format pattern "/buckets/{bucket_id}/groups") $qp)
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -551,14 +551,14 @@ export def "buckets-groups group" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list
-  --If-Match: string
-  --If-None-Match: string
+  --if-match: string
+  --if-none-match: string
 ]: nothing -> record<data: record<members: list<string>>, permissions: record<read: list<string>, write: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/buckets/($bucket_id)/groups/($id)" $qp)
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({bucket_id: $bucket_id, id: $id} | format pattern "/buckets/{bucket_id}/groups/{id}") $qp)
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -579,14 +579,14 @@ export def "buckets bucket" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list
-  --If-Match: string
-  --If-None-Match: string
+  --if-match: string
+  --if-none-match: string
 ]: nothing -> record<data: record<collection_schema: record, group_schema: record, record_schema: record>, permissions: record<collection_create: list<string>, group_create: list<string>, read: list<string>, write: list<string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
-  let full_url = (build-url $base $"/buckets/($id)" $qp)
-  let extra_headers = {"If-Match": $If_Match, "If-None-Match": $If_None_Match} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/buckets/{id}") $qp)
+  let extra_headers = {"If-Match": $if_match, "If-None-Match": $if_none_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

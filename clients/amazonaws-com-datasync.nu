@@ -66,55 +66,55 @@ def base-url-completer [] { ["http://datasync.us-east-1.amazonaws.com" "http://d
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["FmrsService.CancelTaskExecution"] }
-def X-Amz-Target-completer-1 [] { ["FmrsService.CreateAgent"] }
-def X-Amz-Target-completer-2 [] { ["FmrsService.CreateLocationEfs"] }
-def X-Amz-Target-completer-3 [] { ["FmrsService.CreateLocationFsxLustre"] }
-def X-Amz-Target-completer-4 [] { ["FmrsService.CreateLocationFsxOntap"] }
-def X-Amz-Target-completer-5 [] { ["FmrsService.CreateLocationFsxOpenZfs"] }
-def X-Amz-Target-completer-6 [] { ["FmrsService.CreateLocationFsxWindows"] }
-def X-Amz-Target-completer-7 [] { ["FmrsService.CreateLocationHdfs"] }
-def X-Amz-Target-completer-8 [] { ["FmrsService.CreateLocationNfs"] }
-def X-Amz-Target-completer-9 [] { ["FmrsService.CreateLocationObjectStorage"] }
-def X-Amz-Target-completer-10 [] { ["FmrsService.CreateLocationS3"] }
-def X-Amz-Target-completer-11 [] { ["FmrsService.CreateLocationSmb"] }
-def X-Amz-Target-completer-12 [] { ["FmrsService.CreateTask"] }
-def X-Amz-Target-completer-13 [] { ["FmrsService.DeleteAgent"] }
-def X-Amz-Target-completer-14 [] { ["FmrsService.DeleteLocation"] }
-def X-Amz-Target-completer-15 [] { ["FmrsService.DeleteTask"] }
-def X-Amz-Target-completer-16 [] { ["FmrsService.DescribeAgent"] }
-def X-Amz-Target-completer-17 [] { ["FmrsService.DescribeLocationEfs"] }
-def X-Amz-Target-completer-18 [] { ["FmrsService.DescribeLocationFsxLustre"] }
-def X-Amz-Target-completer-19 [] { ["FmrsService.DescribeLocationFsxOntap"] }
-def X-Amz-Target-completer-20 [] { ["FmrsService.DescribeLocationFsxOpenZfs"] }
-def X-Amz-Target-completer-21 [] { ["FmrsService.DescribeLocationFsxWindows"] }
-def X-Amz-Target-completer-22 [] { ["FmrsService.DescribeLocationHdfs"] }
-def X-Amz-Target-completer-23 [] { ["FmrsService.DescribeLocationNfs"] }
-def X-Amz-Target-completer-24 [] { ["FmrsService.DescribeLocationObjectStorage"] }
-def X-Amz-Target-completer-25 [] { ["FmrsService.DescribeLocationS3"] }
-def X-Amz-Target-completer-26 [] { ["FmrsService.DescribeLocationSmb"] }
-def X-Amz-Target-completer-27 [] { ["FmrsService.DescribeTask"] }
-def X-Amz-Target-completer-28 [] { ["FmrsService.DescribeTaskExecution"] }
-def X-Amz-Target-completer-29 [] { ["FmrsService.ListAgents"] }
-def X-Amz-Target-completer-30 [] { ["FmrsService.ListLocations"] }
-def X-Amz-Target-completer-31 [] { ["FmrsService.ListTagsForResource"] }
-def X-Amz-Target-completer-32 [] { ["FmrsService.ListTaskExecutions"] }
-def X-Amz-Target-completer-33 [] { ["FmrsService.ListTasks"] }
-def X-Amz-Target-completer-34 [] { ["FmrsService.StartTaskExecution"] }
-def X-Amz-Target-completer-35 [] { ["FmrsService.TagResource"] }
-def X-Amz-Target-completer-36 [] { ["FmrsService.UntagResource"] }
-def X-Amz-Target-completer-37 [] { ["FmrsService.UpdateAgent"] }
-def X-Amz-Target-completer-38 [] { ["FmrsService.UpdateLocationHdfs"] }
-def X-Amz-Target-completer-39 [] { ["FmrsService.UpdateLocationNfs"] }
-def X-Amz-Target-completer-40 [] { ["FmrsService.UpdateLocationObjectStorage"] }
-def X-Amz-Target-completer-41 [] { ["FmrsService.UpdateLocationSmb"] }
-def X-Amz-Target-completer-42 [] { ["FmrsService.UpdateTask"] }
-def X-Amz-Target-completer-43 [] { ["FmrsService.UpdateTaskExecution"] }
+def x-amz-target-completer [] { ["FmrsService.CancelTaskExecution"] }
+def x-amz-target-completer-1 [] { ["FmrsService.CreateAgent"] }
+def x-amz-target-completer-2 [] { ["FmrsService.CreateLocationEfs"] }
+def x-amz-target-completer-3 [] { ["FmrsService.CreateLocationFsxLustre"] }
+def x-amz-target-completer-4 [] { ["FmrsService.CreateLocationFsxOntap"] }
+def x-amz-target-completer-5 [] { ["FmrsService.CreateLocationFsxOpenZfs"] }
+def x-amz-target-completer-6 [] { ["FmrsService.CreateLocationFsxWindows"] }
+def x-amz-target-completer-7 [] { ["FmrsService.CreateLocationHdfs"] }
+def x-amz-target-completer-8 [] { ["FmrsService.CreateLocationNfs"] }
+def x-amz-target-completer-9 [] { ["FmrsService.CreateLocationObjectStorage"] }
+def x-amz-target-completer-10 [] { ["FmrsService.CreateLocationS3"] }
+def x-amz-target-completer-11 [] { ["FmrsService.CreateLocationSmb"] }
+def x-amz-target-completer-12 [] { ["FmrsService.CreateTask"] }
+def x-amz-target-completer-13 [] { ["FmrsService.DeleteAgent"] }
+def x-amz-target-completer-14 [] { ["FmrsService.DeleteLocation"] }
+def x-amz-target-completer-15 [] { ["FmrsService.DeleteTask"] }
+def x-amz-target-completer-16 [] { ["FmrsService.DescribeAgent"] }
+def x-amz-target-completer-17 [] { ["FmrsService.DescribeLocationEfs"] }
+def x-amz-target-completer-18 [] { ["FmrsService.DescribeLocationFsxLustre"] }
+def x-amz-target-completer-19 [] { ["FmrsService.DescribeLocationFsxOntap"] }
+def x-amz-target-completer-20 [] { ["FmrsService.DescribeLocationFsxOpenZfs"] }
+def x-amz-target-completer-21 [] { ["FmrsService.DescribeLocationFsxWindows"] }
+def x-amz-target-completer-22 [] { ["FmrsService.DescribeLocationHdfs"] }
+def x-amz-target-completer-23 [] { ["FmrsService.DescribeLocationNfs"] }
+def x-amz-target-completer-24 [] { ["FmrsService.DescribeLocationObjectStorage"] }
+def x-amz-target-completer-25 [] { ["FmrsService.DescribeLocationS3"] }
+def x-amz-target-completer-26 [] { ["FmrsService.DescribeLocationSmb"] }
+def x-amz-target-completer-27 [] { ["FmrsService.DescribeTask"] }
+def x-amz-target-completer-28 [] { ["FmrsService.DescribeTaskExecution"] }
+def x-amz-target-completer-29 [] { ["FmrsService.ListAgents"] }
+def x-amz-target-completer-30 [] { ["FmrsService.ListLocations"] }
+def x-amz-target-completer-31 [] { ["FmrsService.ListTagsForResource"] }
+def x-amz-target-completer-32 [] { ["FmrsService.ListTaskExecutions"] }
+def x-amz-target-completer-33 [] { ["FmrsService.ListTasks"] }
+def x-amz-target-completer-34 [] { ["FmrsService.StartTaskExecution"] }
+def x-amz-target-completer-35 [] { ["FmrsService.TagResource"] }
+def x-amz-target-completer-36 [] { ["FmrsService.UntagResource"] }
+def x-amz-target-completer-37 [] { ["FmrsService.UpdateAgent"] }
+def x-amz-target-completer-38 [] { ["FmrsService.UpdateLocationHdfs"] }
+def x-amz-target-completer-39 [] { ["FmrsService.UpdateLocationNfs"] }
+def x-amz-target-completer-40 [] { ["FmrsService.UpdateLocationObjectStorage"] }
+def x-amz-target-completer-41 [] { ["FmrsService.UpdateLocationSmb"] }
+def x-amz-target-completer-42 [] { ["FmrsService.UpdateTask"] }
+def x-amz-target-completer-43 [] { ["FmrsService.UpdateTaskExecution"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-fmrs-service-cancel-task-execution CancelTaskExecution" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-fmrs-service-cancel-task-execution cancel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=FmrsService.CancelTaskExecution
 # operationId: CancelTaskExecution
-export def "x-amz-target-fmrs-service-cancel-task-execution CancelTaskExecution" [
+export def "x-amz-target-fmrs-service-cancel-task-execution cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,23 +147,23 @@ export def "x-amz-target-fmrs-service-cancel-task-execution CancelTaskExecution"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  TaskExecutionArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  task_execution_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CancelTaskExecution")
-  let body = {TaskExecutionArn: $TaskExecutionArn} | compact
+  let body = {"TaskExecutionArn": $task_execution_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,7 +174,7 @@ export def "x-amz-target-fmrs-service-cancel-task-execution CancelTaskExecution"
 #
 # POST /#X-Amz-Target=FmrsService.CreateAgent
 # operationId: CreateAgent
-export def "x-amz-target-fmrs-service-create-agent CreateAgent" [
+export def "x-amz-target-fmrs-service-create-agent create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,28 +183,28 @@ export def "x-amz-target-fmrs-service-create-agent CreateAgent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ActivationKey: any
-  --AgentName: any
-  --Tags: any
-  --VpcEndpointId: any
-  --SubnetArns: any
-  --SecurityGroupArns: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  activation_key: any
+  --agent-name: any
+  --tags: any
+  --vpc-endpoint-id: any
+  --subnet-arns: any
+  --security-group-arns: any
 ]: any -> record<AgentArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateAgent")
-  let body = {ActivationKey: $ActivationKey, AgentName: $AgentName, Tags: $Tags, VpcEndpointId: $VpcEndpointId, SubnetArns: $SubnetArns, SecurityGroupArns: $SecurityGroupArns} | compact
+  let body = {"ActivationKey": $activation_key, "AgentName": $agent_name, "Tags": $tags, "VpcEndpointId": $vpc_endpoint_id, "SubnetArns": $subnet_arns, "SecurityGroupArns": $security_group_arns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -215,7 +215,7 @@ export def "x-amz-target-fmrs-service-create-agent CreateAgent" [
 #
 # POST /#X-Amz-Target=FmrsService.CreateLocationEfs
 # operationId: CreateLocationEfs
-export def "x-amz-target-fmrs-service-create-location-efs CreateLocationEfs" [
+export def "x-amz-target-fmrs-service-create-location-efs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,29 +224,29 @@ export def "x-amz-target-fmrs-service-create-location-efs CreateLocationEfs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  --Subdirectory: any
-  EfsFilesystemArn: any
-  Ec2Config: any
-  --Tags: any
-  --AccessPointArn: any
-  --FileSystemAccessRoleArn: any
-  --InTransitEncryption: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  --subdirectory: any
+  efs_filesystem_arn: any
+  ec2_config: any
+  --tags: any
+  --access-point-arn: any
+  --file-system-access-role-arn: any
+  --in-transit-encryption: any
 ]: any -> record<LocationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateLocationEfs")
-  let body = {Subdirectory: $Subdirectory, EfsFilesystemArn: $EfsFilesystemArn, Ec2Config: $Ec2Config, Tags: $Tags, AccessPointArn: $AccessPointArn, FileSystemAccessRoleArn: $FileSystemAccessRoleArn, InTransitEncryption: $InTransitEncryption} | compact
+  let body = {"Subdirectory": $subdirectory, "EfsFilesystemArn": $efs_filesystem_arn, "Ec2Config": $ec2_config, "Tags": $tags, "AccessPointArn": $access_point_arn, "FileSystemAccessRoleArn": $file_system_access_role_arn, "InTransitEncryption": $in_transit_encryption} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -257,7 +257,7 @@ export def "x-amz-target-fmrs-service-create-location-efs CreateLocationEfs" [
 #
 # POST /#X-Amz-Target=FmrsService.CreateLocationFsxLustre
 # operationId: CreateLocationFsxLustre
-export def "x-amz-target-fmrs-service-create-location-fsx-lustre CreateLocationFsxLustre" [
+export def "x-amz-target-fmrs-service-create-location-fsx-lustre create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,26 +266,26 @@ export def "x-amz-target-fmrs-service-create-location-fsx-lustre CreateLocationF
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  FsxFilesystemArn: any
-  SecurityGroupArns: any
-  --Subdirectory: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  fsx_filesystem_arn: any
+  security_group_arns: any
+  --subdirectory: any
+  --tags: any
 ]: any -> record<LocationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateLocationFsxLustre")
-  let body = {FsxFilesystemArn: $FsxFilesystemArn, SecurityGroupArns: $SecurityGroupArns, Subdirectory: $Subdirectory, Tags: $Tags} | compact
+  let body = {"FsxFilesystemArn": $fsx_filesystem_arn, "SecurityGroupArns": $security_group_arns, "Subdirectory": $subdirectory, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,7 +297,7 @@ export def "x-amz-target-fmrs-service-create-location-fsx-lustre CreateLocationF
 # POST /#X-Amz-Target=FmrsService.CreateLocationFsxOntap
 # operationId: CreateLocationFsxOntap
 # --Protocol shape: {NFS?: any, SMB?: any}
-export def "x-amz-target-fmrs-service-create-location-fsx-ontap CreateLocationFsxOntap" [
+export def "x-amz-target-fmrs-service-create-location-fsx-ontap create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,27 +306,27 @@ export def "x-amz-target-fmrs-service-create-location-fsx-ontap CreateLocationFs
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  Protocol: record # Specifies the data transfer protocol that DataSync uses to access your Amazon FSx file system. — shape: {NFS?: any, SMB?: any}
-  SecurityGroupArns: any
-  StorageVirtualMachineArn: any
-  --Subdirectory: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  protocol: record # Specifies the data transfer protocol that DataSync uses to access your Amazon FSx file system. — shape: {NFS?: any, SMB?: any}
+  security_group_arns: any
+  storage_virtual_machine_arn: any
+  --subdirectory: any
+  --tags: any
 ]: any -> record<LocationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateLocationFsxOntap")
-  let body = {Protocol: $Protocol, SecurityGroupArns: $SecurityGroupArns, StorageVirtualMachineArn: $StorageVirtualMachineArn, Subdirectory: $Subdirectory, Tags: $Tags} | compact
+  let body = {"Protocol": $protocol, "SecurityGroupArns": $security_group_arns, "StorageVirtualMachineArn": $storage_virtual_machine_arn, "Subdirectory": $subdirectory, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -337,7 +337,7 @@ export def "x-amz-target-fmrs-service-create-location-fsx-ontap CreateLocationFs
 #
 # POST /#X-Amz-Target=FmrsService.CreateLocationFsxOpenZfs
 # operationId: CreateLocationFsxOpenZfs
-export def "x-amz-target-fmrs-service-create-location-fsx-open-zfs CreateLocationFsxOpenZfs" [
+export def "x-amz-target-fmrs-service-create-location-fsx-open-zfs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,27 +346,27 @@ export def "x-amz-target-fmrs-service-create-location-fsx-open-zfs CreateLocatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  FsxFilesystemArn: any
-  Protocol: any
-  SecurityGroupArns: any
-  --Subdirectory: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  fsx_filesystem_arn: any
+  protocol: any
+  security_group_arns: any
+  --subdirectory: any
+  --tags: any
 ]: any -> record<LocationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateLocationFsxOpenZfs")
-  let body = {FsxFilesystemArn: $FsxFilesystemArn, Protocol: $Protocol, SecurityGroupArns: $SecurityGroupArns, Subdirectory: $Subdirectory, Tags: $Tags} | compact
+  let body = {"FsxFilesystemArn": $fsx_filesystem_arn, "Protocol": $protocol, "SecurityGroupArns": $security_group_arns, "Subdirectory": $subdirectory, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -377,7 +377,7 @@ export def "x-amz-target-fmrs-service-create-location-fsx-open-zfs CreateLocatio
 #
 # POST /#X-Amz-Target=FmrsService.CreateLocationFsxWindows
 # operationId: CreateLocationFsxWindows
-export def "x-amz-target-fmrs-service-create-location-fsx-windows CreateLocationFsxWindows" [
+export def "x-amz-target-fmrs-service-create-location-fsx-windows create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,29 +386,29 @@ export def "x-amz-target-fmrs-service-create-location-fsx-windows CreateLocation
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  --Subdirectory: any
-  FsxFilesystemArn: any
-  SecurityGroupArns: any
-  --Tags: any
-  User: any
-  --Domain: any
-  Password: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  --subdirectory: any
+  fsx_filesystem_arn: any
+  security_group_arns: any
+  --tags: any
+  user: any
+  --domain: any
+  password: any
 ]: any -> record<LocationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateLocationFsxWindows")
-  let body = {Subdirectory: $Subdirectory, FsxFilesystemArn: $FsxFilesystemArn, SecurityGroupArns: $SecurityGroupArns, Tags: $Tags, User: $User, Domain: $Domain, Password: $Password} | compact
+  let body = {"Subdirectory": $subdirectory, "FsxFilesystemArn": $fsx_filesystem_arn, "SecurityGroupArns": $security_group_arns, "Tags": $tags, "User": $user, "Domain": $domain, "Password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -419,7 +419,7 @@ export def "x-amz-target-fmrs-service-create-location-fsx-windows CreateLocation
 #
 # POST /#X-Amz-Target=FmrsService.CreateLocationHdfs
 # operationId: CreateLocationHdfs
-export def "x-amz-target-fmrs-service-create-location-hdfs CreateLocationHdfs" [
+export def "x-amz-target-fmrs-service-create-location-hdfs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,35 +428,35 @@ export def "x-amz-target-fmrs-service-create-location-hdfs CreateLocationHdfs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
-  --Subdirectory: any
-  NameNodes: any
-  --BlockSize: any
-  --ReplicationFactor: any
-  --KmsKeyProviderUri: any
-  --QopConfiguration: any
-  AuthenticationType: any
-  --SimpleUser: any
-  --KerberosPrincipal: any
-  --KerberosKeytab: any
-  --KerberosKrb5Conf: any
-  AgentArns: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
+  --subdirectory: any
+  name_nodes: any
+  --block-size: any
+  --replication-factor: any
+  --kms-key-provider-uri: any
+  --qop-configuration: any
+  authentication_type: any
+  --simple-user: any
+  --kerberos-principal: any
+  --kerberos-keytab: any
+  --kerberos-krb5-conf: any
+  agent_arns: any
+  --tags: any
 ]: any -> record<LocationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateLocationHdfs")
-  let body = {Subdirectory: $Subdirectory, NameNodes: $NameNodes, BlockSize: $BlockSize, ReplicationFactor: $ReplicationFactor, KmsKeyProviderUri: $KmsKeyProviderUri, QopConfiguration: $QopConfiguration, AuthenticationType: $AuthenticationType, SimpleUser: $SimpleUser, KerberosPrincipal: $KerberosPrincipal, KerberosKeytab: $KerberosKeytab, KerberosKrb5Conf: $KerberosKrb5Conf, AgentArns: $AgentArns, Tags: $Tags} | compact
+  let body = {"Subdirectory": $subdirectory, "NameNodes": $name_nodes, "BlockSize": $block_size, "ReplicationFactor": $replication_factor, "KmsKeyProviderUri": $kms_key_provider_uri, "QopConfiguration": $qop_configuration, "AuthenticationType": $authentication_type, "SimpleUser": $simple_user, "KerberosPrincipal": $kerberos_principal, "KerberosKeytab": $kerberos_keytab, "KerberosKrb5Conf": $kerberos_krb5_conf, "AgentArns": $agent_arns, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -467,7 +467,7 @@ export def "x-amz-target-fmrs-service-create-location-hdfs CreateLocationHdfs" [
 #
 # POST /#X-Amz-Target=FmrsService.CreateLocationNfs
 # operationId: CreateLocationNfs
-export def "x-amz-target-fmrs-service-create-location-nfs CreateLocationNfs" [
+export def "x-amz-target-fmrs-service-create-location-nfs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,27 +476,27 @@ export def "x-amz-target-fmrs-service-create-location-nfs CreateLocationNfs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  Subdirectory: any
-  ServerHostname: any
-  OnPremConfig: any
-  --MountOptions: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  subdirectory: any
+  server_hostname: any
+  on_prem_config: any
+  --mount-options: any
+  --tags: any
 ]: any -> record<LocationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateLocationNfs")
-  let body = {Subdirectory: $Subdirectory, ServerHostname: $ServerHostname, OnPremConfig: $OnPremConfig, MountOptions: $MountOptions, Tags: $Tags} | compact
+  let body = {"Subdirectory": $subdirectory, "ServerHostname": $server_hostname, "OnPremConfig": $on_prem_config, "MountOptions": $mount_options, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,7 +507,7 @@ export def "x-amz-target-fmrs-service-create-location-nfs CreateLocationNfs" [
 #
 # POST /#X-Amz-Target=FmrsService.CreateLocationObjectStorage
 # operationId: CreateLocationObjectStorage
-export def "x-amz-target-fmrs-service-create-location-object-storage CreateLocationObjectStorage" [
+export def "x-amz-target-fmrs-service-create-location-object-storage create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -516,32 +516,32 @@ export def "x-amz-target-fmrs-service-create-location-object-storage CreateLocat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  ServerHostname: any
-  --ServerPort: any
-  --ServerProtocol: any
-  --Subdirectory: any
-  BucketName: any
-  --AccessKey: any
-  --SecretKey: any
-  AgentArns: any
-  --Tags: any
-  --ServerCertificate: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  server_hostname: any
+  --server-port: any
+  --server-protocol: any
+  --subdirectory: any
+  bucket_name: any
+  --access-key: any
+  --secret-key: any
+  agent_arns: any
+  --tags: any
+  --server-certificate: any
 ]: any -> record<LocationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateLocationObjectStorage")
-  let body = {ServerHostname: $ServerHostname, ServerPort: $ServerPort, ServerProtocol: $ServerProtocol, Subdirectory: $Subdirectory, BucketName: $BucketName, AccessKey: $AccessKey, SecretKey: $SecretKey, AgentArns: $AgentArns, Tags: $Tags, ServerCertificate: $ServerCertificate} | compact
+  let body = {"ServerHostname": $server_hostname, "ServerPort": $server_port, "ServerProtocol": $server_protocol, "Subdirectory": $subdirectory, "BucketName": $bucket_name, "AccessKey": $access_key, "SecretKey": $secret_key, "AgentArns": $agent_arns, "Tags": $tags, "ServerCertificate": $server_certificate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -553,7 +553,7 @@ export def "x-amz-target-fmrs-service-create-location-object-storage CreateLocat
 # POST /#X-Amz-Target=FmrsService.CreateLocationS3
 # operationId: CreateLocationS3
 # --S3Config shape: {BucketAccessRoleArn: any}
-export def "x-amz-target-fmrs-service-create-location-s3 CreateLocationS3" [
+export def "x-amz-target-fmrs-service-create-location-s3 create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,28 +562,28 @@ export def "x-amz-target-fmrs-service-create-location-s3 CreateLocationS3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  --Subdirectory: any
-  S3BucketArn: any
-  --S3StorageClass: any
-  S3Config: record # <p>The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role used to access an Amazon S3 bucket.</p> <p>For detailed information about using such a role, see Creating a Location for Amazon S3 in the <i>DataSync User Guide</i>.</p> — shape: {BucketAccessRoleArn: any}
-  --AgentArns: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  --subdirectory: any
+  s3_bucket_arn: any
+  --s3-storage-class: any
+  s3_config: record # <p>The Amazon Resource Name (ARN) of the Identity and Access Management (IAM) role used to access an Amazon S3 bucket.</p> <p>For detailed information about using such a role, see Creating a Location for Amazon S3 in the <i>DataSync User Guide</i>.</p> — shape: {BucketAccessRoleArn: any}
+  --agent-arns: any
+  --tags: any
 ]: any -> record<LocationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateLocationS3")
-  let body = {Subdirectory: $Subdirectory, S3BucketArn: $S3BucketArn, S3StorageClass: $S3StorageClass, S3Config: $S3Config, AgentArns: $AgentArns, Tags: $Tags} | compact
+  let body = {"Subdirectory": $subdirectory, "S3BucketArn": $s3_bucket_arn, "S3StorageClass": $s3_storage_class, "S3Config": $s3_config, "AgentArns": $agent_arns, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -594,7 +594,7 @@ export def "x-amz-target-fmrs-service-create-location-s3 CreateLocationS3" [
 #
 # POST /#X-Amz-Target=FmrsService.CreateLocationSmb
 # operationId: CreateLocationSmb
-export def "x-amz-target-fmrs-service-create-location-smb CreateLocationSmb" [
+export def "x-amz-target-fmrs-service-create-location-smb create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,30 +603,30 @@ export def "x-amz-target-fmrs-service-create-location-smb CreateLocationSmb" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  Subdirectory: any
-  ServerHostname: any
-  User: any
-  --Domain: any
-  Password: any
-  AgentArns: any
-  --MountOptions: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  subdirectory: any
+  server_hostname: any
+  user: any
+  --domain: any
+  password: any
+  agent_arns: any
+  --mount-options: any
+  --tags: any
 ]: any -> record<LocationArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateLocationSmb")
-  let body = {Subdirectory: $Subdirectory, ServerHostname: $ServerHostname, User: $User, Domain: $Domain, Password: $Password, AgentArns: $AgentArns, MountOptions: $MountOptions, Tags: $Tags} | compact
+  let body = {"Subdirectory": $subdirectory, "ServerHostname": $server_hostname, "User": $user, "Domain": $domain, "Password": $password, "AgentArns": $agent_arns, "MountOptions": $mount_options, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -637,7 +637,7 @@ export def "x-amz-target-fmrs-service-create-location-smb CreateLocationSmb" [
 #
 # POST /#X-Amz-Target=FmrsService.CreateTask
 # operationId: CreateTask
-export def "x-amz-target-fmrs-service-create-task CreateTask" [
+export def "x-amz-target-fmrs-service-create-task create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -646,31 +646,31 @@ export def "x-amz-target-fmrs-service-create-task CreateTask" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  SourceLocationArn: any
-  DestinationLocationArn: any
-  --CloudWatchLogGroupArn: any
-  --Name: any
-  --Options: any
-  --Excludes: any
-  --Schedule: any
-  --Tags: any
-  --Includes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  source_location_arn: any
+  destination_location_arn: any
+  --cloud-watch-log-group-arn: any
+  --name: any
+  --options: any
+  --excludes: any
+  --schedule: any
+  --tags: any
+  --includes: any
 ]: any -> record<TaskArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.CreateTask")
-  let body = {SourceLocationArn: $SourceLocationArn, DestinationLocationArn: $DestinationLocationArn, CloudWatchLogGroupArn: $CloudWatchLogGroupArn, Name: $Name, Options: $Options, Excludes: $Excludes, Schedule: $Schedule, Tags: $Tags, Includes: $Includes} | compact
+  let body = {"SourceLocationArn": $source_location_arn, "DestinationLocationArn": $destination_location_arn, "CloudWatchLogGroupArn": $cloud_watch_log_group_arn, "Name": $name, "Options": $options, "Excludes": $excludes, "Schedule": $schedule, "Tags": $tags, "Includes": $includes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -681,7 +681,7 @@ export def "x-amz-target-fmrs-service-create-task CreateTask" [
 #
 # POST /#X-Amz-Target=FmrsService.DeleteAgent
 # operationId: DeleteAgent
-export def "x-amz-target-fmrs-service-delete-agent DeleteAgent" [
+export def "x-amz-target-fmrs-service-delete-agent delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,23 +690,23 @@ export def "x-amz-target-fmrs-service-delete-agent DeleteAgent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  AgentArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  agent_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DeleteAgent")
-  let body = {AgentArn: $AgentArn} | compact
+  let body = {"AgentArn": $agent_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -717,7 +717,7 @@ export def "x-amz-target-fmrs-service-delete-agent DeleteAgent" [
 #
 # POST /#X-Amz-Target=FmrsService.DeleteLocation
 # operationId: DeleteLocation
-export def "x-amz-target-fmrs-service-delete-location DeleteLocation" [
+export def "x-amz-target-fmrs-service-delete-location delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,23 +726,23 @@ export def "x-amz-target-fmrs-service-delete-location DeleteLocation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  location_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DeleteLocation")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -753,7 +753,7 @@ export def "x-amz-target-fmrs-service-delete-location DeleteLocation" [
 #
 # POST /#X-Amz-Target=FmrsService.DeleteTask
 # operationId: DeleteTask
-export def "x-amz-target-fmrs-service-delete-task DeleteTask" [
+export def "x-amz-target-fmrs-service-delete-task delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,23 +762,23 @@ export def "x-amz-target-fmrs-service-delete-task DeleteTask" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  TaskArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  task_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DeleteTask")
-  let body = {TaskArn: $TaskArn} | compact
+  let body = {"TaskArn": $task_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -789,7 +789,7 @@ export def "x-amz-target-fmrs-service-delete-task DeleteTask" [
 #
 # POST /#X-Amz-Target=FmrsService.DescribeAgent
 # operationId: DescribeAgent
-export def "x-amz-target-fmrs-service-describe-agent DescribeAgent" [
+export def "x-amz-target-fmrs-service-describe-agent post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -798,23 +798,23 @@ export def "x-amz-target-fmrs-service-describe-agent DescribeAgent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  AgentArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  agent_arn: any
 ]: any -> record<AgentArn: record, Name: record, Status: record, LastConnectionTime: record, CreationTime: record, EndpointType: record, PrivateLinkConfig: record<VpcEndpointId: record, PrivateLinkEndpoint: record, SubnetArns: record, SecurityGroupArns: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeAgent")
-  let body = {AgentArn: $AgentArn} | compact
+  let body = {"AgentArn": $agent_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -825,7 +825,7 @@ export def "x-amz-target-fmrs-service-describe-agent DescribeAgent" [
 #
 # POST /#X-Amz-Target=FmrsService.DescribeLocationEfs
 # operationId: DescribeLocationEfs
-export def "x-amz-target-fmrs-service-describe-location-efs DescribeLocationEfs" [
+export def "x-amz-target-fmrs-service-describe-location-efs post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,23 +834,23 @@ export def "x-amz-target-fmrs-service-describe-location-efs DescribeLocationEfs"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  location_arn: any
 ]: any -> record<LocationArn: record, LocationUri: record, Ec2Config: record<SubnetArn: record, SecurityGroupArns: record>, CreationTime: record, AccessPointArn: record, FileSystemAccessRoleArn: record, InTransitEncryption: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeLocationEfs")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -861,7 +861,7 @@ export def "x-amz-target-fmrs-service-describe-location-efs DescribeLocationEfs"
 #
 # POST /#X-Amz-Target=FmrsService.DescribeLocationFsxLustre
 # operationId: DescribeLocationFsxLustre
-export def "x-amz-target-fmrs-service-describe-location-fsx-lustre DescribeLocationFsxLustre" [
+export def "x-amz-target-fmrs-service-describe-location-fsx-lustre post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -870,23 +870,23 @@ export def "x-amz-target-fmrs-service-describe-location-fsx-lustre DescribeLocat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  location_arn: any
 ]: any -> record<LocationArn: record, LocationUri: record, SecurityGroupArns: record, CreationTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeLocationFsxLustre")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -897,7 +897,7 @@ export def "x-amz-target-fmrs-service-describe-location-fsx-lustre DescribeLocat
 #
 # POST /#X-Amz-Target=FmrsService.DescribeLocationFsxOntap
 # operationId: DescribeLocationFsxOntap
-export def "x-amz-target-fmrs-service-describe-location-fsx-ontap DescribeLocationFsxOntap" [
+export def "x-amz-target-fmrs-service-describe-location-fsx-ontap post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,23 +906,23 @@ export def "x-amz-target-fmrs-service-describe-location-fsx-ontap DescribeLocati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  location_arn: any
 ]: any -> record<CreationTime: record, LocationArn: record, LocationUri: record, Protocol: record<NFS: record<MountOptions: record>, SMB: record<Domain: record, MountOptions: record, Password: record, User: record>>, SecurityGroupArns: record, StorageVirtualMachineArn: record, FsxFilesystemArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeLocationFsxOntap")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -933,7 +933,7 @@ export def "x-amz-target-fmrs-service-describe-location-fsx-ontap DescribeLocati
 #
 # POST /#X-Amz-Target=FmrsService.DescribeLocationFsxOpenZfs
 # operationId: DescribeLocationFsxOpenZfs
-export def "x-amz-target-fmrs-service-describe-location-fsx-open-zfs DescribeLocationFsxOpenZfs" [
+export def "x-amz-target-fmrs-service-describe-location-fsx-open-zfs post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -942,23 +942,23 @@ export def "x-amz-target-fmrs-service-describe-location-fsx-open-zfs DescribeLoc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  location_arn: any
 ]: any -> record<LocationArn: record, LocationUri: record, SecurityGroupArns: record, Protocol: record<NFS: record<MountOptions: record>, SMB: record<Domain: record, MountOptions: record, Password: record, User: record>>, CreationTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeLocationFsxOpenZfs")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -969,7 +969,7 @@ export def "x-amz-target-fmrs-service-describe-location-fsx-open-zfs DescribeLoc
 #
 # POST /#X-Amz-Target=FmrsService.DescribeLocationFsxWindows
 # operationId: DescribeLocationFsxWindows
-export def "x-amz-target-fmrs-service-describe-location-fsx-windows DescribeLocationFsxWindows" [
+export def "x-amz-target-fmrs-service-describe-location-fsx-windows post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -978,23 +978,23 @@ export def "x-amz-target-fmrs-service-describe-location-fsx-windows DescribeLoca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  location_arn: any
 ]: any -> record<LocationArn: record, LocationUri: record, SecurityGroupArns: record, CreationTime: record, User: record, Domain: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeLocationFsxWindows")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1005,7 +1005,7 @@ export def "x-amz-target-fmrs-service-describe-location-fsx-windows DescribeLoca
 #
 # POST /#X-Amz-Target=FmrsService.DescribeLocationHdfs
 # operationId: DescribeLocationHdfs
-export def "x-amz-target-fmrs-service-describe-location-hdfs DescribeLocationHdfs" [
+export def "x-amz-target-fmrs-service-describe-location-hdfs post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1014,23 +1014,23 @@ export def "x-amz-target-fmrs-service-describe-location-hdfs DescribeLocationHdf
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  location_arn: any
 ]: any -> record<LocationArn: record, LocationUri: record, NameNodes: record, BlockSize: record, ReplicationFactor: record, KmsKeyProviderUri: record, QopConfiguration: record<RpcProtection: record, DataTransferProtection: record>, AuthenticationType: record, SimpleUser: record, KerberosPrincipal: record, AgentArns: record, CreationTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeLocationHdfs")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1041,7 +1041,7 @@ export def "x-amz-target-fmrs-service-describe-location-hdfs DescribeLocationHdf
 #
 # POST /#X-Amz-Target=FmrsService.DescribeLocationNfs
 # operationId: DescribeLocationNfs
-export def "x-amz-target-fmrs-service-describe-location-nfs DescribeLocationNfs" [
+export def "x-amz-target-fmrs-service-describe-location-nfs post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1050,23 +1050,23 @@ export def "x-amz-target-fmrs-service-describe-location-nfs DescribeLocationNfs"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  location_arn: any
 ]: any -> record<LocationArn: record, LocationUri: record, OnPremConfig: record<AgentArns: record>, MountOptions: record<Version: record>, CreationTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeLocationNfs")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1077,7 +1077,7 @@ export def "x-amz-target-fmrs-service-describe-location-nfs DescribeLocationNfs"
 #
 # POST /#X-Amz-Target=FmrsService.DescribeLocationObjectStorage
 # operationId: DescribeLocationObjectStorage
-export def "x-amz-target-fmrs-service-describe-location-object-storage DescribeLocationObjectStorage" [
+export def "x-amz-target-fmrs-service-describe-location-object-storage post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,23 +1086,23 @@ export def "x-amz-target-fmrs-service-describe-location-object-storage DescribeL
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  location_arn: any
 ]: any -> record<LocationArn: record, LocationUri: record, AccessKey: record, ServerPort: record, ServerProtocol: record, AgentArns: record, CreationTime: record, ServerCertificate: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeLocationObjectStorage")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1113,7 +1113,7 @@ export def "x-amz-target-fmrs-service-describe-location-object-storage DescribeL
 #
 # POST /#X-Amz-Target=FmrsService.DescribeLocationS3
 # operationId: DescribeLocationS3
-export def "x-amz-target-fmrs-service-describe-location-s3 DescribeLocationS3" [
+export def "x-amz-target-fmrs-service-describe-location-s3 post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1122,23 +1122,23 @@ export def "x-amz-target-fmrs-service-describe-location-s3 DescribeLocationS3" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  location_arn: any
 ]: any -> record<LocationArn: record, LocationUri: record, S3StorageClass: record, S3Config: record<BucketAccessRoleArn: record>, AgentArns: record, CreationTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeLocationS3")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1149,7 +1149,7 @@ export def "x-amz-target-fmrs-service-describe-location-s3 DescribeLocationS3" [
 #
 # POST /#X-Amz-Target=FmrsService.DescribeLocationSmb
 # operationId: DescribeLocationSmb
-export def "x-amz-target-fmrs-service-describe-location-smb DescribeLocationSmb" [
+export def "x-amz-target-fmrs-service-describe-location-smb post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1158,23 +1158,23 @@ export def "x-amz-target-fmrs-service-describe-location-smb DescribeLocationSmb"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  LocationArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  location_arn: any
 ]: any -> record<LocationArn: record, LocationUri: record, AgentArns: record, User: record, Domain: record, MountOptions: record<Version: record>, CreationTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeLocationSmb")
-  let body = {LocationArn: $LocationArn} | compact
+  let body = {"LocationArn": $location_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1185,7 +1185,7 @@ export def "x-amz-target-fmrs-service-describe-location-smb DescribeLocationSmb"
 #
 # POST /#X-Amz-Target=FmrsService.DescribeTask
 # operationId: DescribeTask
-export def "x-amz-target-fmrs-service-describe-task DescribeTask" [
+export def "x-amz-target-fmrs-service-describe-task post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1194,23 +1194,23 @@ export def "x-amz-target-fmrs-service-describe-task DescribeTask" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  TaskArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  task_arn: any
 ]: any -> record<TaskArn: record, Status: record, Name: record, CurrentTaskExecutionArn: record, SourceLocationArn: record, DestinationLocationArn: record, CloudWatchLogGroupArn: record, SourceNetworkInterfaceArns: record, DestinationNetworkInterfaceArns: record, Options: record<VerifyMode: record, OverwriteMode: record, Atime: record, Mtime: record, Uid: record, Gid: record, PreserveDeletedFiles: record, PreserveDevices: record, PosixPermissions: record, BytesPerSecond: record, TaskQueueing: record, LogLevel: record, TransferMode: record, SecurityDescriptorCopyFlags: record, ObjectTags: record>, Excludes: record, Schedule: record<ScheduleExpression: record>, ErrorCode: record, ErrorDetail: record, CreationTime: record, Includes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeTask")
-  let body = {TaskArn: $TaskArn} | compact
+  let body = {"TaskArn": $task_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1221,7 +1221,7 @@ export def "x-amz-target-fmrs-service-describe-task DescribeTask" [
 #
 # POST /#X-Amz-Target=FmrsService.DescribeTaskExecution
 # operationId: DescribeTaskExecution
-export def "x-amz-target-fmrs-service-describe-task-execution DescribeTaskExecution" [
+export def "x-amz-target-fmrs-service-describe-task-execution post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1230,23 +1230,23 @@ export def "x-amz-target-fmrs-service-describe-task-execution DescribeTaskExecut
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  TaskExecutionArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  task_execution_arn: any
 ]: any -> record<TaskExecutionArn: record, Status: record, Options: record<VerifyMode: record, OverwriteMode: record, Atime: record, Mtime: record, Uid: record, Gid: record, PreserveDeletedFiles: record, PreserveDevices: record, PosixPermissions: record, BytesPerSecond: record, TaskQueueing: record, LogLevel: record, TransferMode: record, SecurityDescriptorCopyFlags: record, ObjectTags: record>, Excludes: record, Includes: record, StartTime: record, EstimatedFilesToTransfer: record, EstimatedBytesToTransfer: record, FilesTransferred: record, BytesWritten: record, BytesTransferred: record, Result: record<PrepareDuration: record, PrepareStatus: record, TotalDuration: record, TransferDuration: record, TransferStatus: record, VerifyDuration: record, VerifyStatus: record, ErrorCode: record, ErrorDetail: record>, BytesCompressed: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.DescribeTaskExecution")
-  let body = {TaskExecutionArn: $TaskExecutionArn} | compact
+  let body = {"TaskExecutionArn": $task_execution_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1257,7 +1257,7 @@ export def "x-amz-target-fmrs-service-describe-task-execution DescribeTaskExecut
 #
 # POST /#X-Amz-Target=FmrsService.ListAgents
 # operationId: ListAgents
-export def "x-amz-target-fmrs-service-list-agents ListAgents" [
+export def "x-amz-target-fmrs-service-list-agents list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,27 +1266,27 @@ export def "x-amz-target-fmrs-service-list-agents ListAgents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --max-results: any
+  --next-token: any
 ]: any -> record<Agents: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.ListAgents" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1297,7 +1297,7 @@ export def "x-amz-target-fmrs-service-list-agents ListAgents" [
 #
 # POST /#X-Amz-Target=FmrsService.ListLocations
 # operationId: ListLocations
-export def "x-amz-target-fmrs-service-list-locations ListLocations" [
+export def "x-amz-target-fmrs-service-list-locations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1306,28 +1306,28 @@ export def "x-amz-target-fmrs-service-list-locations ListLocations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  --MaxResults: any
-  --NextToken: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  --max-results: any
+  --next-token: any
+  --filters: any
 ]: any -> record<Locations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.ListLocations" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken, Filters: $Filters} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1338,7 +1338,7 @@ export def "x-amz-target-fmrs-service-list-locations ListLocations" [
 #
 # POST /#X-Amz-Target=FmrsService.ListTagsForResource
 # operationId: ListTagsForResource
-export def "x-amz-target-fmrs-service-list-tags-for-resource ListTagsForResource" [
+export def "x-amz-target-fmrs-service-list-tags-for-resource list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1347,28 +1347,28 @@ export def "x-amz-target-fmrs-service-list-tags-for-resource ListTagsForResource
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  ResourceArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  resource_arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<Tags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.ListTagsForResource" $qp)
-  let body = {ResourceArn: $ResourceArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ResourceArn": $resource_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1379,7 +1379,7 @@ export def "x-amz-target-fmrs-service-list-tags-for-resource ListTagsForResource
 #
 # POST /#X-Amz-Target=FmrsService.ListTaskExecutions
 # operationId: ListTaskExecutions
-export def "x-amz-target-fmrs-service-list-task-executions ListTaskExecutions" [
+export def "x-amz-target-fmrs-service-list-task-executions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1388,28 +1388,28 @@ export def "x-amz-target-fmrs-service-list-task-executions ListTaskExecutions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --TaskArn: any
-  --MaxResults: any
-  --NextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --task-arn: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<TaskExecutions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.ListTaskExecutions" $qp)
-  let body = {TaskArn: $TaskArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"TaskArn": $task_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1420,7 +1420,7 @@ export def "x-amz-target-fmrs-service-list-task-executions ListTaskExecutions" [
 #
 # POST /#X-Amz-Target=FmrsService.ListTasks
 # operationId: ListTasks
-export def "x-amz-target-fmrs-service-list-tasks ListTasks" [
+export def "x-amz-target-fmrs-service-list-tasks list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1429,28 +1429,28 @@ export def "x-amz-target-fmrs-service-list-tasks ListTasks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  --MaxResults: any
-  --NextToken: any
-  --Filters: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  --max-results: any
+  --next-token: any
+  --filters: any
 ]: any -> record<Tasks: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.ListTasks" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken, Filters: $Filters} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token, "Filters": $filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1462,7 +1462,7 @@ export def "x-amz-target-fmrs-service-list-tasks ListTasks" [
 # POST /#X-Amz-Target=FmrsService.StartTaskExecution
 # operationId: StartTaskExecution
 # --OverrideOptions shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
-export def "x-amz-target-fmrs-service-start-task-execution StartTaskExecution" [
+export def "x-amz-target-fmrs-service-start-task-execution start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1471,27 +1471,27 @@ export def "x-amz-target-fmrs-service-start-task-execution StartTaskExecution" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  TaskArn: any
-  --OverrideOptions: record # <p>Configures your DataSync task settings. These options include how DataSync handles files, objects, and their associated metadata. You also can specify how DataSync verifies data integrity, set bandwidth limits for your task, among other options.</p> <p>Each task setting has a default value. Unless you need to, you don't have to configure any of these <code>Options</code> before starting your task.</p> — shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
-  --Includes: any
-  --Excludes: any
-  --Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  task_arn: any
+  --override-options: record # <p>Configures your DataSync task settings. These options include how DataSync handles files, objects, and their associated metadata. You also can specify how DataSync verifies data integrity, set bandwidth limits for your task, among other options.</p> <p>Each task setting has a default value. Unless you need to, you don't have to configure any of these <code>Options</code> before starting your task.</p> — shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
+  --includes: any
+  --excludes: any
+  --tags: any
 ]: any -> record<TaskExecutionArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.StartTaskExecution")
-  let body = {TaskArn: $TaskArn, OverrideOptions: $OverrideOptions, Includes: $Includes, Excludes: $Excludes, Tags: $Tags} | compact
+  let body = {"TaskArn": $task_arn, "OverrideOptions": $override_options, "Includes": $includes, "Excludes": $excludes, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1502,7 +1502,7 @@ export def "x-amz-target-fmrs-service-start-task-execution StartTaskExecution" [
 #
 # POST /#X-Amz-Target=FmrsService.TagResource
 # operationId: TagResource
-export def "x-amz-target-fmrs-service-tag-resource TagResource" [
+export def "x-amz-target-fmrs-service-tag-resource tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1511,24 +1511,24 @@ export def "x-amz-target-fmrs-service-tag-resource TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
-  ResourceArn: any
-  Tags: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
+  resource_arn: any
+  tags: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.TagResource")
-  let body = {ResourceArn: $ResourceArn, Tags: $Tags} | compact
+  let body = {"ResourceArn": $resource_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1539,7 +1539,7 @@ export def "x-amz-target-fmrs-service-tag-resource TagResource" [
 #
 # POST /#X-Amz-Target=FmrsService.UntagResource
 # operationId: UntagResource
-export def "x-amz-target-fmrs-service-untag-resource UntagResource" [
+export def "x-amz-target-fmrs-service-untag-resource untag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,24 +1548,24 @@ export def "x-amz-target-fmrs-service-untag-resource UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
-  ResourceArn: any
-  Keys: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
+  resource_arn: any
+  keys: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.UntagResource")
-  let body = {ResourceArn: $ResourceArn, Keys: $Keys} | compact
+  let body = {"ResourceArn": $resource_arn, "Keys": $keys} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1576,7 +1576,7 @@ export def "x-amz-target-fmrs-service-untag-resource UntagResource" [
 #
 # POST /#X-Amz-Target=FmrsService.UpdateAgent
 # operationId: UpdateAgent
-export def "x-amz-target-fmrs-service-update-agent UpdateAgent" [
+export def "x-amz-target-fmrs-service-update-agent update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1585,24 +1585,24 @@ export def "x-amz-target-fmrs-service-update-agent UpdateAgent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  AgentArn: any
-  --Name: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  agent_arn: any
+  --name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.UpdateAgent")
-  let body = {AgentArn: $AgentArn, Name: $Name} | compact
+  let body = {"AgentArn": $agent_arn, "Name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1613,7 +1613,7 @@ export def "x-amz-target-fmrs-service-update-agent UpdateAgent" [
 #
 # POST /#X-Amz-Target=FmrsService.UpdateLocationHdfs
 # operationId: UpdateLocationHdfs
-export def "x-amz-target-fmrs-service-update-location-hdfs UpdateLocationHdfs" [
+export def "x-amz-target-fmrs-service-update-location-hdfs update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1622,35 +1622,35 @@ export def "x-amz-target-fmrs-service-update-location-hdfs UpdateLocationHdfs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  LocationArn: any
-  --Subdirectory: any
-  --NameNodes: any
-  --BlockSize: any
-  --ReplicationFactor: any
-  --KmsKeyProviderUri: any
-  --QopConfiguration: any
-  --AuthenticationType: any
-  --SimpleUser: any
-  --KerberosPrincipal: any
-  --KerberosKeytab: any
-  --KerberosKrb5Conf: any
-  --AgentArns: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  location_arn: any
+  --subdirectory: any
+  --name-nodes: any
+  --block-size: any
+  --replication-factor: any
+  --kms-key-provider-uri: any
+  --qop-configuration: any
+  --authentication-type: any
+  --simple-user: any
+  --kerberos-principal: any
+  --kerberos-keytab: any
+  --kerberos-krb5-conf: any
+  --agent-arns: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.UpdateLocationHdfs")
-  let body = {LocationArn: $LocationArn, Subdirectory: $Subdirectory, NameNodes: $NameNodes, BlockSize: $BlockSize, ReplicationFactor: $ReplicationFactor, KmsKeyProviderUri: $KmsKeyProviderUri, QopConfiguration: $QopConfiguration, AuthenticationType: $AuthenticationType, SimpleUser: $SimpleUser, KerberosPrincipal: $KerberosPrincipal, KerberosKeytab: $KerberosKeytab, KerberosKrb5Conf: $KerberosKrb5Conf, AgentArns: $AgentArns} | compact
+  let body = {"LocationArn": $location_arn, "Subdirectory": $subdirectory, "NameNodes": $name_nodes, "BlockSize": $block_size, "ReplicationFactor": $replication_factor, "KmsKeyProviderUri": $kms_key_provider_uri, "QopConfiguration": $qop_configuration, "AuthenticationType": $authentication_type, "SimpleUser": $simple_user, "KerberosPrincipal": $kerberos_principal, "KerberosKeytab": $kerberos_keytab, "KerberosKrb5Conf": $kerberos_krb5_conf, "AgentArns": $agent_arns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1663,7 +1663,7 @@ export def "x-amz-target-fmrs-service-update-location-hdfs UpdateLocationHdfs" [
 # operationId: UpdateLocationNfs
 # --OnPremConfig shape: {AgentArns: any}
 # --MountOptions shape: {Version?: any}
-export def "x-amz-target-fmrs-service-update-location-nfs UpdateLocationNfs" [
+export def "x-amz-target-fmrs-service-update-location-nfs update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1672,26 +1672,26 @@ export def "x-amz-target-fmrs-service-update-location-nfs UpdateLocationNfs" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
-  LocationArn: any
-  --Subdirectory: any
-  --OnPremConfig: record # A list of Amazon Resource Names (ARNs) of agents to use for a Network File System (NFS) location. — shape: {AgentArns: any}
-  --MountOptions: record # Specifies how DataSync can access a location using the NFS protocol. — shape: {Version?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
+  location_arn: any
+  --subdirectory: any
+  --on-prem-config: record # A list of Amazon Resource Names (ARNs) of agents to use for a Network File System (NFS) location. — shape: {AgentArns: any}
+  --mount-options: record # Specifies how DataSync can access a location using the NFS protocol. — shape: {Version?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.UpdateLocationNfs")
-  let body = {LocationArn: $LocationArn, Subdirectory: $Subdirectory, OnPremConfig: $OnPremConfig, MountOptions: $MountOptions} | compact
+  let body = {"LocationArn": $location_arn, "Subdirectory": $subdirectory, "OnPremConfig": $on_prem_config, "MountOptions": $mount_options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1702,7 +1702,7 @@ export def "x-amz-target-fmrs-service-update-location-nfs UpdateLocationNfs" [
 #
 # POST /#X-Amz-Target=FmrsService.UpdateLocationObjectStorage
 # operationId: UpdateLocationObjectStorage
-export def "x-amz-target-fmrs-service-update-location-object-storage UpdateLocationObjectStorage" [
+export def "x-amz-target-fmrs-service-update-location-object-storage update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1711,30 +1711,30 @@ export def "x-amz-target-fmrs-service-update-location-object-storage UpdateLocat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
-  LocationArn: any
-  --ServerPort: any
-  --ServerProtocol: any
-  --Subdirectory: any
-  --AccessKey: any
-  --SecretKey: any
-  --AgentArns: any
-  --ServerCertificate: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
+  location_arn: any
+  --server-port: any
+  --server-protocol: any
+  --subdirectory: any
+  --access-key: any
+  --secret-key: any
+  --agent-arns: any
+  --server-certificate: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.UpdateLocationObjectStorage")
-  let body = {LocationArn: $LocationArn, ServerPort: $ServerPort, ServerProtocol: $ServerProtocol, Subdirectory: $Subdirectory, AccessKey: $AccessKey, SecretKey: $SecretKey, AgentArns: $AgentArns, ServerCertificate: $ServerCertificate} | compact
+  let body = {"LocationArn": $location_arn, "ServerPort": $server_port, "ServerProtocol": $server_protocol, "Subdirectory": $subdirectory, "AccessKey": $access_key, "SecretKey": $secret_key, "AgentArns": $agent_arns, "ServerCertificate": $server_certificate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1746,7 +1746,7 @@ export def "x-amz-target-fmrs-service-update-location-object-storage UpdateLocat
 # POST /#X-Amz-Target=FmrsService.UpdateLocationSmb
 # operationId: UpdateLocationSmb
 # --MountOptions shape: {Version?: any}
-export def "x-amz-target-fmrs-service-update-location-smb UpdateLocationSmb" [
+export def "x-amz-target-fmrs-service-update-location-smb update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1755,29 +1755,29 @@ export def "x-amz-target-fmrs-service-update-location-smb UpdateLocationSmb" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
-  LocationArn: any
-  --Subdirectory: any
-  --User: any
-  --Domain: any
-  --Password: any
-  --AgentArns: any
-  --MountOptions: record # Specifies the version of the Server Message Block (SMB) protocol that DataSync uses to access an SMB file server. — shape: {Version?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
+  location_arn: any
+  --subdirectory: any
+  --user: any
+  --domain: any
+  --password: any
+  --agent-arns: any
+  --mount-options: record # Specifies the version of the Server Message Block (SMB) protocol that DataSync uses to access an SMB file server. — shape: {Version?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.UpdateLocationSmb")
-  let body = {LocationArn: $LocationArn, Subdirectory: $Subdirectory, User: $User, Domain: $Domain, Password: $Password, AgentArns: $AgentArns, MountOptions: $MountOptions} | compact
+  let body = {"LocationArn": $location_arn, "Subdirectory": $subdirectory, "User": $user, "Domain": $domain, "Password": $password, "AgentArns": $agent_arns, "MountOptions": $mount_options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1789,7 +1789,7 @@ export def "x-amz-target-fmrs-service-update-location-smb UpdateLocationSmb" [
 # POST /#X-Amz-Target=FmrsService.UpdateTask
 # operationId: UpdateTask
 # --Options shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
-export def "x-amz-target-fmrs-service-update-task UpdateTask" [
+export def "x-amz-target-fmrs-service-update-task update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1798,29 +1798,29 @@ export def "x-amz-target-fmrs-service-update-task UpdateTask" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  TaskArn: any
-  --Options: record # <p>Configures your DataSync task settings. These options include how DataSync handles files, objects, and their associated metadata. You also can specify how DataSync verifies data integrity, set bandwidth limits for your task, among other options.</p> <p>Each task setting has a default value. Unless you need to, you don't have to configure any of these <code>Options</code> before starting your task.</p> — shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
-  --Excludes: any
-  --Schedule: any
-  --Name: any
-  --CloudWatchLogGroupArn: any
-  --Includes: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  task_arn: any
+  --options: record # <p>Configures your DataSync task settings. These options include how DataSync handles files, objects, and their associated metadata. You also can specify how DataSync verifies data integrity, set bandwidth limits for your task, among other options.</p> <p>Each task setting has a default value. Unless you need to, you don't have to configure any of these <code>Options</code> before starting your task.</p> — shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
+  --excludes: any
+  --schedule: any
+  --name: any
+  --cloud-watch-log-group-arn: any
+  --includes: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.UpdateTask")
-  let body = {TaskArn: $TaskArn, Options: $Options, Excludes: $Excludes, Schedule: $Schedule, Name: $Name, CloudWatchLogGroupArn: $CloudWatchLogGroupArn, Includes: $Includes} | compact
+  let body = {"TaskArn": $task_arn, "Options": $options, "Excludes": $excludes, "Schedule": $schedule, "Name": $name, "CloudWatchLogGroupArn": $cloud_watch_log_group_arn, "Includes": $includes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1832,7 +1832,7 @@ export def "x-amz-target-fmrs-service-update-task UpdateTask" [
 # POST /#X-Amz-Target=FmrsService.UpdateTaskExecution
 # operationId: UpdateTaskExecution
 # --Options shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
-export def "x-amz-target-fmrs-service-update-task-execution UpdateTaskExecution" [
+export def "x-amz-target-fmrs-service-update-task-execution update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1841,24 +1841,24 @@ export def "x-amz-target-fmrs-service-update-task-execution UpdateTaskExecution"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
-  TaskExecutionArn: any
-  Options: record # <p>Configures your DataSync task settings. These options include how DataSync handles files, objects, and their associated metadata. You also can specify how DataSync verifies data integrity, set bandwidth limits for your task, among other options.</p> <p>Each task setting has a default value. Unless you need to, you don't have to configure any of these <code>Options</code> before starting your task.</p> — shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
+  task_execution_arn: any
+  options: record # <p>Configures your DataSync task settings. These options include how DataSync handles files, objects, and their associated metadata. You also can specify how DataSync verifies data integrity, set bandwidth limits for your task, among other options.</p> <p>Each task setting has a default value. Unless you need to, you don't have to configure any of these <code>Options</code> before starting your task.</p> — shape: {VerifyMode?: any, OverwriteMode?: any, Atime?: any, Mtime?: any, Uid?: any, Gid?: any, PreserveDeletedFiles?: any, PreserveDevices?: any, PosixPermissions?: any, BytesPerSecond?: any, TaskQueueing?: any, LogLevel?: any, TransferMode?: any, SecurityDescriptorCopyFlags?: any, ObjectTags?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=FmrsService.UpdateTaskExecution")
-  let body = {TaskExecutionArn: $TaskExecutionArn, Options: $Options} | compact
+  let body = {"TaskExecutionArn": $task_execution_arn, "Options": $options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

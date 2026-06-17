@@ -65,7 +65,7 @@ def base-url-completer [] { ["https://test.api.amadeus.com/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def viewBy-completer [] { ["DATE" "DURATION" "WEEK"] }
+def view-by-completer [] { ["DATE" "DURATION" "WEEK"] }
 def accept-completer [] { ["application/json" "application/vnd.amadeus+json"] }
 
 # List all available API commands with their parameters
@@ -107,16 +107,16 @@ export def "shopping-flight-dates get" [
   --accept: string@accept-completer # Response content type
   --origin: string # IATA code of the city from which the flight will depart  [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx) - e.g. MAD for Madrid  (e.g. MAD)
   --destination: string # IATA code of the city to which the flight is going.  [IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx) - e.g. MUC for Munich  (e.g. MUC)
-  --departureDate: string # the date, or range of dates, on which the flight will depart from the origin. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2017-12-25. Ranges are specified with a comma and are inclusive
-  --oneWay: oneof<nothing, bool> # if this parameter is set to true, only one-way flights are considered. If this parameter is not set or set to false, only round-trip flights are considered (default: false)
+  --departure-date: string # the date, or range of dates, on which the flight will depart from the origin. Dates are specified in the [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format, e.g. 2017-12-25. Ranges are specified with a comma and are inclusive
+  --one-way: oneof<nothing, bool> # if this parameter is set to true, only one-way flights are considered. If this parameter is not set or set to false, only round-trip flights are considered (default: false)
   --duration: string # exact duration or range of durations of the travel, in days. This parameter must not be set if oneWay is true. Ranges are specified with a comma and are inclusive, e.g. 2,8
-  --nonStop: oneof<nothing, bool> # if this parameter is set to true, only flights going from the origin to the destination with no stop in-between are considered (default: false)
-  --maxPrice: int # defines the price limit for each offer returned. The value should be a positive number, without decimals (format: int64)
-  --viewBy: string@viewBy-completer # view the flight dates by DATE, DURATION, or WEEK. View by DATE (default when oneWay is true) to get the cheapest flight dates for every departure date in the given range. View by DURATION (default when oneWay is false) to get the cheapest flight dates for every departure date and for every duration in the given ranges. View by WEEK to get the cheapest flight destination for every week in the given range of departure dates. Note that specifying a detailed view but large ranges may result in a huge number of flight dates being returned. For some very large numbers of flight dates, the API may refuse to provide a response
+  --non-stop: oneof<nothing, bool> # if this parameter is set to true, only flights going from the origin to the destination with no stop in-between are considered (default: false)
+  --max-price: int # defines the price limit for each offer returned. The value should be a positive number, without decimals (format: int64)
+  --view-by: string@view-by-completer # view the flight dates by DATE, DURATION, or WEEK. View by DATE (default when oneWay is true) to get the cheapest flight dates for every departure date in the given range. View by DURATION (default when oneWay is false) to get the cheapest flight dates for every departure date and for every duration in the given ranges. View by WEEK to get the cheapest flight destination for every week in the given range of departure dates. Note that specifying a detailed view but large ranges may result in a huge number of flight dates being returned. For some very large numbers of flight dates, the API may refuse to provide a response
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "departureDate" $departureDate "scalar") (serialize-qp "oneWay" $oneWay "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "nonStop" $nonStop "scalar") (serialize-qp "maxPrice" $maxPrice "scalar") (serialize-qp "viewBy" $viewBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "oneWay" $one_way "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "nonStop" $non_stop "scalar") (serialize-qp "maxPrice" $max_price "scalar") (serialize-qp "viewBy" $view_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shopping/flight-dates" $qp)
   let accept_val = ($accept | default "application/vnd.amadeus+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

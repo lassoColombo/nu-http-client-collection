@@ -121,7 +121,7 @@ export def "v1-output-format all" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "jurisdiction" $jurisdiction "scalar") (serialize-qp "technology" $technology "scalar") (serialize-qp "incentive_type" $incentive_type "scalar") (serialize-qp "regulation_type" $regulation_type "scalar") (serialize-qp "user_type" $user_type "scalar") (serialize-qp "poc" $poc "scalar") (serialize-qp "recent" $recent "scalar") (serialize-qp "expired" $expired "scalar") (serialize-qp "law_type" $law_type "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "local" $local "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1.($output_format)" $qp)
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/v1.{output_format}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,7 +147,7 @@ export def "category-list-output-format categories" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/category-list.($output_format)" $qp)
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/v1/category-list.{output_format}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,7 +173,7 @@ export def "pocs-output-format pocs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "jurisdiction" $jurisdiction "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/pocs.($output_format)" $qp)
+  let full_url = (build-url $base ({output_format: $output_format} | format pattern "/v1/pocs.{output_format}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,8 +184,8 @@ export def "pocs-output-format pocs" [
 # GET /v1/{id}.{output_format}
 # operationId: transportation_incentives_laws_id
 export def "api id" [
-  output_format: string
   id: int
+  output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "api id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar") (serialize-qp "poc" $poc "scalar") (serialize-qp "expired" $expired "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($id).($output_format)" $qp)
+  let full_url = (build-url $base ({id: $id, output_format: $output_format} | format pattern "/v1/{id}.{output_format}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-detectors ListHostingEnvironmentDetectorResponses" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-detectors list-hosting-environment-detector-responses" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,10 +93,10 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/detectors
 # operationId: Diagnostics_ListHostingEnvironmentDetectorResponses
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-detectors ListHostingEnvironmentDetectorResponses" [
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-detectors list-hosting-environment-detector-responses" [
+  subscription_id: string
+  resource_group_name: string
   name: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/hostingEnvironments/($name)/detectors" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{name}/detectors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,11 +120,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/detectors/{detectorName}
 # operationId: Diagnostics_GetHostingEnvironmentDetectorResponse
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-detectors GetHostingEnvironmentDetectorResponse" [
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-detectors get-hosting-environment-detector-response" [
+  subscription_id: string
+  resource_group_name: string
   name: string
-  detectorName: string
-  subscriptionId: string
+  detector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,15 +133,15 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startTime: string # Start Time (format: date-time)
-  --endTime: string # End Time (format: date-time)
-  --timeGrain: string # Time Grain
+  --start-time: string # Start Time (format: date-time)
+  --end-time: string # End Time (format: date-time)
+  --time-grain: string # Time Grain
   --api-version: string # API Version
 ]: nothing -> record<properties: record<dataset: list<record>, metadata: record<category: string, description: string, subCategory: string, supportTopicId: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "timeGrain" $timeGrain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/hostingEnvironments/($name)/detectors/($detectorName)" $qp)
+  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, name: $name, detector_name: $detector_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/hostingEnvironments/{name}/detectors/{detector_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -151,10 +151,10 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/detectors
 # operationId: Diagnostics_ListSiteDetectorResponses
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-detectors ListSiteDetectorResponses" [
-  resourceGroupName: string
-  siteName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-detectors list-site-detector-responses" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-detector
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/detectors" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/detectors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,11 +178,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-detector
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/detectors/{detectorName}
 # operationId: Diagnostics_GetSiteDetectorResponse
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-detectors GetSiteDetectorResponse" [
-  resourceGroupName: string
-  siteName: string
-  detectorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-detectors get-site-detector-response" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
+  detector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,15 +191,15 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-detector
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startTime: string # Start Time (format: date-time)
-  --endTime: string # End Time (format: date-time)
-  --timeGrain: string # Time Grain
+  --start-time: string # Start Time (format: date-time)
+  --end-time: string # End Time (format: date-time)
+  --time-grain: string # Time Grain
   --api-version: string # API Version
 ]: nothing -> record<properties: record<dataset: list<record>, metadata: record<category: string, description: string, subCategory: string, supportTopicId: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "timeGrain" $timeGrain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/detectors/($detectorName)" $qp)
+  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, detector_name: $detector_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/detectors/{detector_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -209,10 +209,10 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-detector
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics
 # operationId: Diagnostics_ListSiteDiagnosticCategories
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics ListSiteDiagnosticCategories" [
-  resourceGroupName: string
-  siteName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics list-site-diagnostic-categories" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/diagnostics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -236,11 +236,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}
 # operationId: Diagnostics_GetSiteDiagnosticCategory
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics GetSiteDiagnosticCategory" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics get-site-diagnostic-category" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
+  diagnostic_category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/diagnostics/($diagnosticCategory)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, diagnostic_category: $diagnostic_category} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -264,11 +264,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/analyses
 # operationId: Diagnostics_ListSiteAnalyses
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-analyses ListSiteAnalyses" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-analyses list" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
+  diagnostic_category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/diagnostics/($diagnosticCategory)/analyses" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, diagnostic_category: $diagnostic_category} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/analyses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -292,12 +292,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/analyses/{analysisName}
 # operationId: Diagnostics_GetSiteAnalysis
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-analyses GetSiteAnalysis" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
-  analysisName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-analyses get-site-analysis" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
+  diagnostic_category: string
+  analysis_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/diagnostics/($diagnosticCategory)/analyses/($analysisName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, diagnostic_category: $diagnostic_category, analysis_name: $analysis_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/analyses/{analysis_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -321,12 +321,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/analyses/{analysisName}/execute
 # operationId: Diagnostics_ExecuteSiteAnalysis
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-analyses-execute ExecuteSiteAnalysis" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
-  analysisName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-analyses-execute exec-ute-site-analysis" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
+  diagnostic_category: string
+  analysis_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,15 +335,15 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startTime: string # Start Time (format: date-time)
-  --endTime: string # End Time (format: date-time)
-  --timeGrain: string # Time Grain
+  --start-time: string # Start Time (format: date-time)
+  --end-time: string # End Time (format: date-time)
+  --time-grain: string # Time Grain
   --api-version: string # API Version
 ]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, endTime: string, nonCorrelatedDetectors: list<record>, payload: list<record>, startTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "timeGrain" $timeGrain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/diagnostics/($diagnosticCategory)/analyses/($analysisName)/execute" $qp)
+  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, diagnostic_category: $diagnostic_category, analysis_name: $analysis_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/analyses/{analysis_name}/execute") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -353,11 +353,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/detectors
 # operationId: Diagnostics_ListSiteDetectors
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-detectors ListSiteDetectors" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-detectors list" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
+  diagnostic_category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +371,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/diagnostics/($diagnosticCategory)/detectors" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, diagnostic_category: $diagnostic_category} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/detectors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -381,12 +381,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/detectors/{detectorName}
 # operationId: Diagnostics_GetSiteDetector
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-detectors GetSiteDetector" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
-  detectorName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-detectors get" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
+  diagnostic_category: string
+  detector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/diagnostics/($diagnosticCategory)/detectors/($detectorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, diagnostic_category: $diagnostic_category, detector_name: $detector_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/detectors/{detector_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -410,12 +410,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/diagnostics/{diagnosticCategory}/detectors/{detectorName}/execute
 # operationId: Diagnostics_ExecuteSiteDetector
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-detectors-execute ExecuteSiteDetector" [
-  resourceGroupName: string
-  siteName: string
-  detectorName: string
-  diagnosticCategory: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnostics-detectors-execute exec-ute" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
+  diagnostic_category: string
+  detector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,15 +424,15 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startTime: string # Start Time (format: date-time)
-  --endTime: string # End Time (format: date-time)
-  --timeGrain: string # Time Grain
+  --start-time: string # Start Time (format: date-time)
+  --end-time: string # End Time (format: date-time)
+  --time-grain: string # Time Grain
   --api-version: string # API Version
 ]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, data: list<list>, detectorDefinition: record<properties: record>, endTime: string, issueDetected: bool, metrics: list<record>, responseMetaData: record<dataSource: record>, startTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "timeGrain" $timeGrain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/diagnostics/($diagnosticCategory)/detectors/($detectorName)/execute" $qp)
+  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, diagnostic_category: $diagnostic_category, detector_name: $detector_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/diagnostics/{diagnostic_category}/detectors/{detector_name}/execute") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -442,11 +442,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-diagnost
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/detectors
 # operationId: Diagnostics_ListSiteDetectorResponsesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-detectors ListSiteDetectorResponsesSlot" [
-  resourceGroupName: string
-  siteName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-detectors list-site-detector-responses" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   slot: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/slots/($slot)/detectors" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/detectors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -470,12 +470,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/detectors/{detectorName}
 # operationId: Diagnostics_GetSiteDetectorResponseSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-detectors GetSiteDetectorResponseSlot" [
-  resourceGroupName: string
-  siteName: string
-  detectorName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-detectors get-site-detector-response" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   slot: string
-  subscriptionId: string
+  detector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,15 +484,15 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startTime: string # Start Time (format: date-time)
-  --endTime: string # End Time (format: date-time)
-  --timeGrain: string # Time Grain
+  --start-time: string # Start Time (format: date-time)
+  --end-time: string # End Time (format: date-time)
+  --time-grain: string # Time Grain
   --api-version: string # API Version
 ]: nothing -> record<properties: record<dataset: list<record>, metadata: record<category: string, description: string, subCategory: string, supportTopicId: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "timeGrain" $timeGrain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/slots/($slot)/detectors/($detectorName)" $qp)
+  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, slot: $slot, detector_name: $detector_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/detectors/{detector_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -502,11 +502,11 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-de
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics
 # operationId: Diagnostics_ListSiteDiagnosticCategoriesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics ListSiteDiagnosticCategoriesSlot" [
-  resourceGroupName: string
-  siteName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics list-site-diagnostic-categories" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   slot: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,7 +520,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/slots/($slot)/diagnostics" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, slot: $slot} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -530,12 +530,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}
 # operationId: Diagnostics_GetSiteDiagnosticCategorySlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics GetSiteDiagnosticCategorySlot" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics get-site-diagnostic-category" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   slot: string
-  subscriptionId: string
+  diagnostic_category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/slots/($slot)/diagnostics/($diagnosticCategory)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, slot: $slot, diagnostic_category: $diagnostic_category} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -559,12 +559,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/analyses
 # operationId: Diagnostics_ListSiteAnalysesSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-analyses ListSiteAnalysesSlot" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-analyses list" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   slot: string
-  subscriptionId: string
+  diagnostic_category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/slots/($slot)/diagnostics/($diagnosticCategory)/analyses" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, slot: $slot, diagnostic_category: $diagnostic_category} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/analyses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -588,13 +588,13 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/analyses/{analysisName}
 # operationId: Diagnostics_GetSiteAnalysisSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-analyses GetSiteAnalysisSlot" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
-  analysisName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-analyses get-site-analysis" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   slot: string
-  subscriptionId: string
+  diagnostic_category: string
+  analysis_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/slots/($slot)/diagnostics/($diagnosticCategory)/analyses/($analysisName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, slot: $slot, diagnostic_category: $diagnostic_category, analysis_name: $analysis_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/analyses/{analysis_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -618,13 +618,13 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/analyses/{analysisName}/execute
 # operationId: Diagnostics_ExecuteSiteAnalysisSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-analyses-execute ExecuteSiteAnalysisSlot" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
-  analysisName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-analyses-execute exec-ute-site-analysis" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   slot: string
-  subscriptionId: string
+  diagnostic_category: string
+  analysis_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,15 +633,15 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startTime: string # Start Time (format: date-time)
-  --endTime: string # End Time (format: date-time)
-  --timeGrain: string # Time Grain
+  --start-time: string # Start Time (format: date-time)
+  --end-time: string # End Time (format: date-time)
+  --time-grain: string # Time Grain
   --api-version: string # API Version
 ]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, endTime: string, nonCorrelatedDetectors: list<record>, payload: list<record>, startTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "timeGrain" $timeGrain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/slots/($slot)/diagnostics/($diagnosticCategory)/analyses/($analysisName)/execute" $qp)
+  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, slot: $slot, diagnostic_category: $diagnostic_category, analysis_name: $analysis_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/analyses/{analysis_name}/execute") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -651,12 +651,12 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/detectors
 # operationId: Diagnostics_ListSiteDetectorsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-detectors ListSiteDetectorsSlot" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-detectors list" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   slot: string
-  subscriptionId: string
+  diagnostic_category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -670,7 +670,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/slots/($slot)/diagnostics/($diagnosticCategory)/detectors" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, slot: $slot, diagnostic_category: $diagnostic_category} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/detectors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -680,13 +680,13 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/detectors/{detectorName}
 # operationId: Diagnostics_GetSiteDetectorSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-detectors GetSiteDetectorSlot" [
-  resourceGroupName: string
-  siteName: string
-  diagnosticCategory: string
-  detectorName: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-detectors get" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   slot: string
-  subscriptionId: string
+  diagnostic_category: string
+  detector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,7 +700,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/slots/($slot)/diagnostics/($diagnosticCategory)/detectors/($detectorName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, slot: $slot, diagnostic_category: $diagnostic_category, detector_name: $detector_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/detectors/{detector_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -710,13 +710,13 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{siteName}/slots/{slot}/diagnostics/{diagnosticCategory}/detectors/{detectorName}/execute
 # operationId: Diagnostics_ExecuteSiteDetectorSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-detectors-execute ExecuteSiteDetectorSlot" [
-  resourceGroupName: string
-  siteName: string
-  detectorName: string
-  diagnosticCategory: string
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-diagnostics-detectors-execute exec-ute" [
+  subscription_id: string
+  resource_group_name: string
+  site_name: string
   slot: string
-  subscriptionId: string
+  diagnostic_category: string
+  detector_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,15 +725,15 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-di
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startTime: string # Start Time (format: date-time)
-  --endTime: string # End Time (format: date-time)
-  --timeGrain: string # Time Grain
+  --start-time: string # Start Time (format: date-time)
+  --end-time: string # End Time (format: date-time)
+  --time-grain: string # Time Grain
   --api-version: string # API Version
 ]: nothing -> record<properties: record<abnormalTimePeriods: list<record>, data: list<list>, detectorDefinition: record<properties: record>, endTime: string, issueDetected: bool, metrics: list<record>, responseMetaData: record<dataSource: record>, startTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startTime" $startTime "scalar") (serialize-qp "endTime" $endTime "scalar") (serialize-qp "timeGrain" $timeGrain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Web/sites/($siteName)/slots/($slot)/diagnostics/($diagnosticCategory)/detectors/($detectorName)/execute" $qp)
+  let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "timeGrain" $time_grain "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, site_name: $site_name, slot: $slot, diagnostic_category: $diagnostic_category, detector_name: $detector_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Web/sites/{site_name}/slots/{slot}/diagnostics/{diagnostic_category}/detectors/{detector_name}/execute") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

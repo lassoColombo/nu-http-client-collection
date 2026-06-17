@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "patrowl-engine get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "patrowl-engine get-default-page" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getDefaultPage
-export def "patrowl-engine get" [
+export def "patrowl-engine get-default-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,7 +114,7 @@ export def "patrowl-engine get" [
 #
 # GET /clean
 # operationId: CleanScansPage
-export def "clean CleanScansPage" [
+export def "clean list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,8 +136,8 @@ export def "clean CleanScansPage" [
 #
 # GET /clean/{scanId}
 # operationId: CleanScanPage
-export def "clean CleanScanPage" [
-  scanId: int
+export def "clean get" [
+  scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -149,7 +149,7 @@ export def "clean CleanScanPage" [
 ]: nothing -> record<page: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/clean/($scanId)")
+  let full_url = (build-url $base ({scan_id: $scan_id} | format pattern "/clean/{scan_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -159,8 +159,8 @@ export def "clean CleanScanPage" [
 #
 # GET /getfindings/{scanId}
 # operationId: GetFindingPage
-export def "getfindings GetFindingPage" [
-  scanId: int
+export def "getfindings get-finding-page" [
+  scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "getfindings GetFindingPage" [
 ]: nothing -> table<confidence: string, description: string, issue_id: int, meta_links: list<string>, meta_risk: record<cvss_base_score: list, cvss_vector: list, exploit_available: list, exploitability_ease: list, patch_publication_date: list>, meta_tags: list<string>, meta_vuln_refs: record<bid: list, cpe: list, cve: list, cwe: list>, raw: string, severity: string, solution: string, target_addrs: list<string>, target_proto: list<string>, timestamp: string, title: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/getfindings/($scanId)")
+  let full_url = (build-url $base ({scan_id: $scan_id} | format pattern "/getfindings/{scan_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -182,7 +182,7 @@ export def "getfindings GetFindingPage" [
 #
 # GET /info
 # operationId: getInfoPage
-export def "info get" [
+export def "info get-info-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "info get" [
 #
 # GET /liveness
 # operationId: getLivenessPage
-export def "liveness get" [
+export def "liveness get-liveness-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "liveness get" [
 #
 # GET /readiness
 # operationId: getReadinessPage
-export def "readiness get" [
+export def "readiness get-readiness-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "readiness get" [
 #
 # GET /reloadconfig
 # operationId: reloadConfigurationPage
-export def "reloadconfig reloadConfigurationPage" [
+export def "reloadconfig reload-configuration-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,7 +271,7 @@ export def "reloadconfig reloadConfigurationPage" [
 # POST /startscan
 # operationId: StartScanPage
 # --assets item shape: {criticity?: "low"|"medium"|"high", datatype?: "ip"|"ip-range"|"ip-subnet"|"fqdn"|"domain"|"url"|"keyword"|"person"|"organisation"|"path"|"application", id?: string, value?: string}
-export def "startscan StartScanPage" [
+export def "startscan start-scan-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,7 +288,7 @@ export def "startscan StartScanPage" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/startscan")
-  let body = {assets: $assets, options: $options, scan_id: $scan_id} | compact
+  let body = {"assets": $assets, "options": $options, "scan_id": $scan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -299,7 +299,7 @@ export def "startscan StartScanPage" [
 #
 # GET /status
 # operationId: StatusScansPage
-export def "status StatusScansPage" [
+export def "status list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,8 +321,8 @@ export def "status StatusScansPage" [
 #
 # GET /status/{scanId}
 # operationId: StatusScanPage
-export def "status StatusScanPage" [
-  scanId: int
+export def "status get" [
+  scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "status StatusScanPage" [
 ]: nothing -> record<page: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/status/($scanId)")
+  let full_url = (build-url $base ({scan_id: $scan_id} | format pattern "/status/{scan_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -344,8 +344,8 @@ export def "status StatusScanPage" [
 #
 # GET /stop/{scanId}
 # operationId: StopScanPage
-export def "stop StopScanPage" [
-  scanId: int
+export def "stop stop-scan-page" [
+  scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "stop StopScanPage" [
 ]: nothing -> record<page: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stop/($scanId)")
+  let full_url = (build-url $base ({scan_id: $scan_id} | format pattern "/stop/{scan_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -367,7 +367,7 @@ export def "stop StopScanPage" [
 #
 # GET /stopscans
 # operationId: StopScansPage
-export def "stopscans StopScansPage" [
+export def "stopscans stop-scans-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "stopscans StopScansPage" [
 #
 # GET /test
 # operationId: getTestPage
-export def "test get" [
+export def "test get-test-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -102,7 +102,7 @@ export def "auth-jwt auth" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
   username: string # The email for a Client, or the API for a partner product
   password: string # The passowrd for a Client, or the API key for a service
   role: string # The role for which authentication will be made. Value : role_product
@@ -111,9 +111,9 @@ export def "auth-jwt auth" [
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/jwt")
-  let body = {username: $username, password: $password, role: $role} | compact
+  let body = {"username": $username, "password": $password, "role": $role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -125,9 +125,9 @@ export def "auth-jwt auth" [
 # GET /clients/{clientId}/datasets/{datasetId}/genes/{geneSymbol}
 # operationId: get_client_gene
 export def "clients-datasets-genes gene" [
-  clientId: string
-  datasetId: string
-  geneSymbol: string
+  client_id: string
+  dataset_id: string
+  gene_symbol: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,12 +136,12 @@ export def "clients-datasets-genes gene" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> record<molecular_location: record<chromosome_accession: string, start: int, stop: int>, snps: table<chromosome_accession: string, genotyped_alleles: list, location: int, phased: bool, reference_genome: string, snp_id: string>, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/clients/($clientId)/datasets/($datasetId)/genes/($geneSymbol)")
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let full_url = (build-url $base ({client_id: $client_id, dataset_id: $dataset_id, gene_symbol: $gene_symbol} | format pattern "/clients/{client_id}/datasets/{dataset_id}/genes/{gene_symbol}"))
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -152,8 +152,8 @@ export def "clients-datasets-genes gene" [
 #
 # operationId: get_client_snp_group
 export def "clients-datasets-snps group-by-clientId-datasetId" [
-  clientId: string
-  datasetId: string
+  client_id: string
+  dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,12 +162,12 @@ export def "clients-datasets-snps group-by-clientId-datasetId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> table<chromosome_accession: string, genotyped_alleles: list<string>, location: int, phased: bool, reference_genome: string, snp_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/clients/($clientId)/datasets/($datasetId)/snps/")
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let full_url = (build-url $base ({client_id: $client_id, dataset_id: $dataset_id} | format pattern "/clients/{client_id}/datasets/{dataset_id}/snps/"))
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -179,8 +179,8 @@ export def "clients-datasets-snps group-by-clientId-datasetId" [
 # POST /clients/{clientId}/datasets/{datasetId}/snps/
 # operationId: post_client_snp_group
 export def "clients-datasets-snps group-by-clientId-datasetId-1" [
-  clientId: string
-  datasetId: string
+  client_id: string
+  dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,16 +189,16 @@ export def "clients-datasets-snps group-by-clientId-datasetId-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
   snps: string # JSON-encoded list of snps to be fetched
 ]: any -> table<chromosome_accession: string, genotyped_alleles: list<string>, location: int, phased: bool, reference_genome: string, snp_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/clients/($clientId)/datasets/($datasetId)/snps/")
-  let body = {snps: $snps} | compact
+  let full_url = (build-url $base ({client_id: $client_id, dataset_id: $dataset_id} | format pattern "/clients/{client_id}/datasets/{dataset_id}/snps/"))
+  let body = {"snps": $snps} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -210,9 +210,9 @@ export def "clients-datasets-snps group-by-clientId-datasetId-1" [
 # GET /clients/{clientId}/datasets/{datasetId}/snps/{snpId}
 # operationId: get_client_snp
 export def "clients-datasets-snps snp" [
-  clientId: string
-  datasetId: string
-  snpId: string
+  client_id: string
+  dataset_id: string
+  snp_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,12 +221,12 @@ export def "clients-datasets-snps snp" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> record<chromosome_accession: string, genotyped_alleles: list<string>, location: int, phased: bool, reference_genome: string, snp_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/clients/($clientId)/datasets/($datasetId)/snps/($snpId)")
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let full_url = (build-url $base ({client_id: $client_id, dataset_id: $dataset_id, snp_id: $snp_id} | format pattern "/clients/{client_id}/datasets/{dataset_id}/snps/{snp_id}"))
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -238,7 +238,7 @@ export def "clients-datasets-snps snp" [
 # GET /products/{productId}
 # operationId: get_product
 export def "products product" [
-  productId: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,12 +247,12 @@ export def "products product" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> record<authorized_scopes: list<string>, email: string, product_uuid: string, redirect_uri: string, snps_authorized: list<string>, snps_authorized_any: bool, snps_min_required: record<min_pct: int, snps: list<string>>, snps_min_required_any: bool> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($productId)")
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/products/{product_id}"))
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -263,7 +263,7 @@ export def "products product" [
 #
 # operationId: get_authorizations_queue
 export def "products-authorizations queue" [
-  productId: string
+  product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,13 +273,13 @@ export def "products-authorizations queue" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --seq-num-start: string # The first sequence number from which to fetch (the sequence number of the last processed authorization)
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> table<authorization_uuid: string, client_uuid: string, create_timestamp: int, is_active: bool, order: string, product_uuid: string, report_credentials: list<record>, report_files: list<record>, scopes: record<address: record, dataset: string, email: string, login: string, name: record, sex: string>, sequence_number: int, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "seq_num_start" $seq_num_start "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/products/($productId)/authorizations" $qp)
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let full_url = (build-url $base ({product_id: $product_id} | format pattern "/products/{product_id}/authorizations") $qp)
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -290,8 +290,8 @@ export def "products-authorizations queue" [
 #
 # operationId: get_product_authorization
 export def "products-authorizations authorization-by-productId-authorizationId" [
-  productId: string
-  authorizationId: string
+  product_id: string
+  authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,12 +300,12 @@ export def "products-authorizations authorization-by-productId-authorizationId" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> record<authorization_uuid: string, client_uuid: string, create_timestamp: int, is_active: bool, order: string, product_uuid: string, report_credentials: table<authorization_uuid: string, client_password: string, client_username: string, create_timestamp: int, report_credentials_uuid: string, report_url: string>, report_files: table<authorization_uuid: string, create_timestamp: int, file_location: record, report_file_uuid: string>, scopes: record<address: record<address1: string, address2: string, city: string, country: string, phone: string, state: string, zipcode: string>, dataset: string, email: string, login: string, name: record<first_name: string, last_name: string>, sex: string>, sequence_number: int, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($productId)/authorizations/($authorizationId)")
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let full_url = (build-url $base ({product_id: $product_id, authorization_id: $authorization_id} | format pattern "/products/{product_id}/authorizations/{authorization_id}"))
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -317,8 +317,8 @@ export def "products-authorizations authorization-by-productId-authorizationId" 
 # POST /products/{productId}/authorizations/{authorizationId}
 # operationId: post_product_authorization
 export def "products-authorizations authorization-by-productId-authorizationId-1" [
-  productId: string
-  authorizationId: string
+  product_id: string
+  authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "products-authorizations authorization-by-productId-authorizationId-1
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($productId)/authorizations/($authorizationId)")
+  let full_url = (build-url $base ({product_id: $product_id, authorization_id: $authorization_id} | format pattern "/products/{product_id}/authorizations/{authorization_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -341,8 +341,8 @@ export def "products-authorizations authorization-by-productId-authorizationId-1
 # POST /products/{productId}/authorizations/{authorizationId}/credentials
 # operationId: post_authorization_result_credentials
 export def "products-authorizations-credentials credentials" [
-  productId: string
-  authorizationId: string
+  product_id: string
+  authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -351,7 +351,7 @@ export def "products-authorizations-credentials credentials" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
   --credentials-username: string # Credentials for accessing the result. Includes password, username and url
   --credentials-password: string # Credentials for accessing the result. Includes password, username and url
   --report-url: string # Credentials for accessing the result. Includes password, username and url
@@ -359,10 +359,10 @@ export def "products-authorizations-credentials credentials" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($productId)/authorizations/($authorizationId)/credentials")
-  let body = {credentials_username: $credentials_username, credentials_password: $credentials_password, report_url: $report_url} | compact
+  let full_url = (build-url $base ({product_id: $product_id, authorization_id: $authorization_id} | format pattern "/products/{product_id}/authorizations/{authorization_id}/credentials"))
+  let body = {"credentials_username": $credentials_username, "credentials_password": $credentials_password, "report_url": $report_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -374,8 +374,8 @@ export def "products-authorizations-credentials credentials" [
 # POST /products/{productId}/authorizations/{authorizationId}/file
 # operationId: post_authorization_result_file
 export def "products-authorizations-file file" [
-  productId: string
-  authorizationId: string
+  product_id: string
+  authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -385,17 +385,17 @@ export def "products-authorizations-file file" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --original-filename: string # Optional original filename for the report. If not provided, the filename of uploaded file will be used
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
   --file-report: path # A binary file (e.g. pdf) that contains the result of the authorization
 ]: any -> record<authorization_uuid: string, create_timestamp: int, file_location: record<filename_original: string, host: string, path: string>, report_file_uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "original_filename" $original_filename "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/products/($productId)/authorizations/($authorizationId)/file" $qp)
-  let body = {file_report: $file_report} | compact
+  let full_url = (build-url $base ({product_id: $product_id, authorization_id: $authorization_id} | format pattern "/products/{product_id}/authorizations/{authorization_id}/file") $qp)
+  let body = {"file_report": $file_report} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -408,8 +408,8 @@ export def "products-authorizations-file file" [
 # POST /products/{productId}/authorizations/{authorizationId}/unfulfillable
 # operationId: post_product_authorization_unfulfillable
 export def "products-authorizations-unfulfillable unfulfillable" [
-  productId: string
-  authorizationId: string
+  product_id: string
+  authorization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "products-authorizations-unfulfillable unfulfillable" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/products/($productId)/authorizations/($authorizationId)/unfulfillable")
+  let full_url = (build-url $base ({product_id: $product_id, authorization_id: $authorization_id} | format pattern "/products/{product_id}/authorizations/{authorization_id}/unfulfillable"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -432,7 +432,7 @@ export def "products-authorizations-unfulfillable unfulfillable" [
 # GET /reference/genes/databases/{databaseName}/accessions/{accession}
 # operationId: get_gene
 export def "reference-genes-databases-accessions gene" [
-  databaseName: string
+  database_name: string
   accession: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,13 +444,13 @@ export def "reference-genes-databases-accessions gene" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dbsnp-build: int # The dbSNP build for which to consider snps belonging to the gene. Defaults to 149 (default: 149)
   --reference-genome: string # The reference genome for which gene annotations will be returned. Defaults to GRCh37p13 (default: GRCH37P13)
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> record<chromosome: string, molecular_end_position: int, molecular_start_position: int, parent_accession: string, snp_ids: list<string>, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dbsnp_build" $dbsnp_build "scalar") (serialize-qp "reference_genome" $reference_genome "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/reference/genes/databases/($databaseName)/accessions/($accession)" $qp)
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let full_url = (build-url $base ({database_name: $database_name, accession: $accession} | format pattern "/reference/genes/databases/{database_name}/accessions/{accession}") $qp)
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -470,12 +470,12 @@ export def "reference-genomes group" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> table<reference_accession: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reference/genomes/")
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -487,7 +487,7 @@ export def "reference-genomes group" [
 # GET /reference/genomes/{genomeBuildAccession}/chromosomes
 # operationId: get_reference_genome
 export def "reference-genomes-chromosomes genome" [
-  genomeBuildAccession: string
+  genome_build_accession: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -496,12 +496,12 @@ export def "reference-genomes-chromosomes genome" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> table<reference_accession: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/reference/genomes/($genomeBuildAccession)/chromosomes")
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let full_url = (build-url $base ({genome_build_accession: $genome_build_accession} | format pattern "/reference/genomes/{genome_build_accession}/chromosomes"))
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -513,8 +513,8 @@ export def "reference-genomes-chromosomes genome" [
 # GET /reference/genomes/{genomeBuildAccession}/chromosomes/{chromosomeAccession}
 # operationId: get_reference_chromosome
 export def "reference-genomes-chromosomes chromosome" [
-  genomeBuildAccession: string
-  chromosomeAccession: string
+  genome_build_accession: string
+  chromosome_accession: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,13 +525,13 @@ export def "reference-genomes-chromosomes chromosome" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --range-start: int # Location on the chromosome
   --range-stop: int # Location on the chromosome
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> record<sequence: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "range_start" $range_start "scalar") (serialize-qp "range_stop" $range_stop "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/reference/genomes/($genomeBuildAccession)/chromosomes/($chromosomeAccession)" $qp)
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let full_url = (build-url $base ({genome_build_accession: $genome_build_accession, chromosome_accession: $chromosome_accession} | format pattern "/reference/genomes/{genome_build_accession}/chromosomes/{chromosome_accession}") $qp)
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -543,7 +543,7 @@ export def "reference-genomes-chromosomes chromosome" [
 # GET /reference/snps/{snpAccession}
 # operationId: get_reference_snp
 export def "reference-snps snp" [
-  snpAccession: string
+  snp_accession: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,13 +554,13 @@ export def "reference-snps snp" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dbsnp-version: int # The dbSNP build. Defaults to 149 (default: 149)
   --grch-version: string # The GRCh build on which to place snips. Defaults to GRCh37p13 (default: GRCH37P13)
-  --X-Fields: string # An optional fields mask
+  --x-fields: string # An optional fields mask
 ]: nothing -> record<alternative_alleles: list<string>, chromosome: string, chromosome_accession: string, dbsnp_version: int, location: int, reference_allele: string, reference_genome: string, snp_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dbsnp_version" $dbsnp_version "scalar") (serialize-qp "grch_version" $grch_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/reference/snps/($snpAccession)" $qp)
-  let extra_headers = {"X-Fields": $X_Fields} | compact
+  let full_url = (build-url $base ({snp_accession: $snp_accession} | format pattern "/reference/snps/{snp_accession}") $qp)
+  let extra_headers = {"X-Fields": $x_fields} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

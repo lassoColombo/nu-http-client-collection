@@ -107,7 +107,7 @@ export def "message-message-current get" [
 ]: nothing -> record<annunciatorDisabled: bool, annunciatorType: string, id: int, isSecurityOverride: bool, publishTime: string, scrollingMessages: table<alertType: string, content: string, displayFrom: string, displayTo: string, id: int, verticalAlignment: string>, showCommonsBell: bool, showLordsBell: bool, slides: table<carouselDisplaySeconds: int, carouselOrder: int, id: int, lines: list, slideTime: string, soundToPlay: string, speakerTime: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Message/message/($annunciator)/current")
+  let full_url = (build-url $base ({annunciator: $annunciator} | format pattern "/api/Message/message/{annunciator}/current"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -131,7 +131,7 @@ export def "message-message get" [
 ]: nothing -> record<annunciatorDisabled: bool, annunciatorType: string, id: int, isSecurityOverride: bool, publishTime: string, scrollingMessages: table<alertType: string, content: string, displayFrom: string, displayTo: string, id: int, verticalAlignment: string>, showCommonsBell: bool, showLordsBell: bool, slides: table<carouselDisplaySeconds: int, carouselOrder: int, id: int, lines: list, slideTime: string, soundToPlay: string, speakerTime: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/Message/message/($annunciator)/($date)")
+  let full_url = (build-url $base ({annunciator: $annunciator, date: $date} | format pattern "/api/Message/message/{annunciator}/{date}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

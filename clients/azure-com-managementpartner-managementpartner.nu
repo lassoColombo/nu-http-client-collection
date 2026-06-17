@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-management-partner-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-management-partner-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ManagementPartner/operations
 # operationId: Operation_List
-export def "providers-microsoft-management-partner-operations List" [
+export def "providers-microsoft-management-partner-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,8 +141,8 @@ export def "providers-microsoft-management-partner-partners list" [
 #
 # DELETE /providers/Microsoft.ManagementPartner/partners/{partnerId}
 # operationId: Partner_Delete
-export def "providers-microsoft-management-partner-partners Delete" [
-  partnerId: string
+export def "providers-microsoft-management-partner-partners delete" [
+  partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "providers-microsoft-management-partner-partners Delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.ManagementPartner/partners/($partnerId)" $qp)
+  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/providers/Microsoft.ManagementPartner/partners/{partner_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -166,8 +166,8 @@ export def "providers-microsoft-management-partner-partners Delete" [
 #
 # GET /providers/Microsoft.ManagementPartner/partners/{partnerId}
 # operationId: Partner_Get
-export def "providers-microsoft-management-partner-partners Get" [
-  partnerId: string
+export def "providers-microsoft-management-partner-partners get" [
+  partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "providers-microsoft-management-partner-partners Get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.ManagementPartner/partners/($partnerId)" $qp)
+  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/providers/Microsoft.ManagementPartner/partners/{partner_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -191,8 +191,8 @@ export def "providers-microsoft-management-partner-partners Get" [
 #
 # PATCH /providers/Microsoft.ManagementPartner/partners/{partnerId}
 # operationId: Partner_Update
-export def "providers-microsoft-management-partner-partners Update" [
-  partnerId: string
+export def "providers-microsoft-management-partner-partners update" [
+  partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "providers-microsoft-management-partner-partners Update" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.ManagementPartner/partners/($partnerId)" $qp)
+  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/providers/Microsoft.ManagementPartner/partners/{partner_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,8 +216,8 @@ export def "providers-microsoft-management-partner-partners Update" [
 #
 # PUT /providers/Microsoft.ManagementPartner/partners/{partnerId}
 # operationId: Partner_Create
-export def "providers-microsoft-management-partner-partners Create" [
-  partnerId: string
+export def "providers-microsoft-management-partner-partners create" [
+  partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "providers-microsoft-management-partner-partners Create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/providers/Microsoft.ManagementPartner/partners/($partnerId)" $qp)
+  let full_url = (build-url $base ({partner_id: $partner_id} | format pattern "/providers/Microsoft.ManagementPartner/partners/{partner_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

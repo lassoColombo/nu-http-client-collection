@@ -115,7 +115,7 @@ export def "balance get" [
 #
 # GET /validate
 # operationId: validateIBAN
-export def "validate validateIBAN" [
+export def "validate validate-iban" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -139,7 +139,7 @@ export def "validate validateIBAN" [
 #
 # GET /validate-basic
 # operationId: validateIBANBasic
-export def "validate-basic validateIBANBasic" [
+export def "validate-basic validate-iban" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -189,7 +189,7 @@ export def "addon-linkers get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/addon/linkers/($linker_key)")
+  let full_url = (build-url $base ({linker_key: $linker_key} | format pattern "/addon/linkers/{linker_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -211,7 +211,7 @@ export def "addon-linkers-values delete-by-linker_key" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/addon/linkers/($linker_key)/values")
+  let full_url = (build-url $base ({linker_key: $linker_key} | format pattern "/addon/linkers/{linker_key}/values"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -233,7 +233,7 @@ export def "addon-linkers-values list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/addon/linkers/($linker_key)/values")
+  let full_url = (build-url $base ({linker_key: $linker_key} | format pattern "/addon/linkers/{linker_key}/values"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -255,7 +255,7 @@ export def "addon-linkers-values post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/addon/linkers/($linker_key)/values")
+  let full_url = (build-url $base ({linker_key: $linker_key} | format pattern "/addon/linkers/{linker_key}/values"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -277,7 +277,7 @@ export def "addon-linkers-values put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/addon/linkers/($linker_key)/values")
+  let full_url = (build-url $base ({linker_key: $linker_key} | format pattern "/addon/linkers/{linker_key}/values"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -300,7 +300,7 @@ export def "addon-linkers-values delete-by-linker_key-value_id" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/addon/linkers/($linker_key)/values/($value_id)")
+  let full_url = (build-url $base ({linker_key: $linker_key, value_id: $value_id} | format pattern "/addon/linkers/{linker_key}/values/{value_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -323,7 +323,7 @@ export def "addon-linkers-values get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/addon/linkers/($linker_key)/values/($value_id)")
+  let full_url = (build-url $base ({linker_key: $linker_key, value_id: $value_id} | format pattern "/addon/linkers/{linker_key}/values/{value_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -366,7 +366,7 @@ export def "hook-events get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<category: string, description: string, event: string, label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/hook_events/($subject_type)")
+  let full_url = (build-url $base ({subject_type: $subject_type} | format pattern "/hook_events/{subject_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -390,7 +390,7 @@ export def "pullrequests get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/pullrequests/($selected_user)" $qp)
+  let full_url = (build-url $base ({selected_user: $selected_user} | format pattern "/pullrequests/{selected_user}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -442,7 +442,7 @@ export def "repositories get-by-workspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)" $qp)
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/repositories/{workspace}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -452,8 +452,8 @@ export def "repositories get-by-workspace" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}
 export def "repositories delete" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,7 +467,7 @@ export def "repositories delete" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "redirect_to" $redirect_to "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -476,9 +476,9 @@ export def "repositories delete" [
 # Get a repository
 #
 # GET /repositories/{workspace}/{repo_slug}
-export def "repositories get-by-repo_slug-workspace" [
-  repo_slug: string
+export def "repositories get-by-workspace-repo_slug" [
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "repositories get-by-repo_slug-workspace" [
 ]: nothing -> record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record<href: string, name: string>, clone: list<record>, commits: record<href: string, name: string>, downloads: record<href: string, name: string>, forks: record<href: string, name: string>, hooks: record<href: string, name: string>, html: record<href: string, name: string>, pullrequests: record<href: string, name: string>, self: record<href: string, name: string>, watchers: record<href: string, name: string>>, mainbranch: record<links: record<commits: record, html: record, self: record>, name: string, target: record<participants: list, repository: any>, type: string, default_merge_strategy: string, merge_strategies: list<string>>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record<avatar: record, html: record>, name: string, owner: record<links: record>, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -501,8 +501,8 @@ export def "repositories get-by-repo_slug-workspace" [
 # POST /repositories/{workspace}/{repo_slug}
 # --links shape: {avatar?: record, clone?: list, commits?: record, downloads?: record, forks?: record, hooks?: record, html?: record, pullrequests?: record, self?: record, watchers?: record}
 export def "repositories post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,8 +534,8 @@ export def "repositories post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)")
-  let body = {type: $type, created_on: $created_on, description: $description, fork_policy: $fork_policy, full_name: $full_name, has_issues: $has_issues, has_wiki: $has_wiki, is_private: $is_private, language: $language, links: $links, mainbranch: $mainbranch, name: $name, owner: $owner, parent: $parent, project: $project, scm: $scm, size: $size, updated_on: $updated_on, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}"))
+  let body = {"type": $type, "created_on": $created_on, "description": $description, "fork_policy": $fork_policy, "full_name": $full_name, "has_issues": $has_issues, "has_wiki": $has_wiki, "is_private": $is_private, "language": $language, "links": $links, "mainbranch": $mainbranch, "name": $name, "owner": $owner, "parent": $parent, "project": $project, "scm": $scm, "size": $size, "updated_on": $updated_on, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -547,8 +547,8 @@ export def "repositories post" [
 # PUT /repositories/{workspace}/{repo_slug}
 # --links shape: {avatar?: record, clone?: list, commits?: record, downloads?: record, forks?: record, hooks?: record, html?: record, pullrequests?: record, self?: record, watchers?: record}
 export def "repositories put" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,8 +580,8 @@ export def "repositories put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)")
-  let body = {type: $type, created_on: $created_on, description: $description, fork_policy: $fork_policy, full_name: $full_name, has_issues: $has_issues, has_wiki: $has_wiki, is_private: $is_private, language: $language, links: $links, mainbranch: $mainbranch, name: $name, owner: $owner, parent: $parent, project: $project, scm: $scm, size: $size, updated_on: $updated_on, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}"))
+  let body = {"type": $type, "created_on": $created_on, "description": $description, "fork_policy": $fork_policy, "full_name": $full_name, "has_issues": $has_issues, "has_wiki": $has_wiki, "is_private": $is_private, "language": $language, "links": $links, "mainbranch": $mainbranch, "name": $name, "owner": $owner, "parent": $parent, "project": $project, "scm": $scm, "size": $size, "updated_on": $updated_on, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -592,8 +592,8 @@ export def "repositories put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/branch-restrictions
 export def "repositories-branch-restrictions list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "repositories-branch-restrictions list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "kind" $kind "scalar") (serialize-qp "pattern" $pattern "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branch-restrictions" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/branch-restrictions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -620,8 +620,8 @@ export def "repositories-branch-restrictions list" [
 # --groups item shape: {type: string, full_slug?: string, links?: record, name?: string, owner?: any, slug?: string, workspace?: any}
 # --users item shape: {type: string, created_on?: string, display_name?: string, links?: record, username?: string, uuid?: string}
 export def "repositories-branch-restrictions post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,8 +637,8 @@ export def "repositories-branch-restrictions post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branch-restrictions")
-  let body = {type: $type, groups: $groups, users: $users} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/branch-restrictions"))
+  let body = {"type": $type, "groups": $groups, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -649,9 +649,9 @@ export def "repositories-branch-restrictions post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/branch-restrictions/{id}
 export def "repositories-branch-restrictions delete" [
-  id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "repositories-branch-restrictions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branch-restrictions/($id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, id: $id} | format pattern "/repositories/{workspace}/{repo_slug}/branch-restrictions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -673,9 +673,9 @@ export def "repositories-branch-restrictions delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/branch-restrictions/{id}
 export def "repositories-branch-restrictions get" [
-  id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,7 +687,7 @@ export def "repositories-branch-restrictions get" [
 ]: nothing -> record<type: string, groups: table<type: string, full_slug: string, links: record, name: string, owner: record, slug: string, workspace: record>, users: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branch-restrictions/($id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, id: $id} | format pattern "/repositories/{workspace}/{repo_slug}/branch-restrictions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -699,9 +699,9 @@ export def "repositories-branch-restrictions get" [
 # --groups item shape: {type: string, full_slug?: string, links?: record, name?: string, owner?: any, slug?: string, workspace?: any}
 # --users item shape: {type: string, created_on?: string, display_name?: string, links?: record, username?: string, uuid?: string}
 export def "repositories-branch-restrictions put" [
-  id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,8 +717,8 @@ export def "repositories-branch-restrictions put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branch-restrictions/($id)")
-  let body = {type: $type, groups: $groups, users: $users} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, id: $id} | format pattern "/repositories/{workspace}/{repo_slug}/branch-restrictions/{id}"))
+  let body = {"type": $type, "groups": $groups, "users": $users} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -729,8 +729,8 @@ export def "repositories-branch-restrictions put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/branching-model
 export def "repositories-branching-model get" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +742,7 @@ export def "repositories-branching-model get" [
 ]: nothing -> record<type: string, branch_types: table<kind: string, prefix: string>, development: record<branch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, use_mainbranch: bool>, production: record<branch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branching-model")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/branching-model"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -752,8 +752,8 @@ export def "repositories-branching-model get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/branching-model/settings
 export def "repositories-branching-model-settings get" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -765,7 +765,7 @@ export def "repositories-branching-model-settings get" [
 ]: nothing -> record<type: string, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, links: record<self: record<href: string, name: string>>, production: record<enabled: bool, is_valid: bool, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branching-model/settings")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/branching-model/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -775,8 +775,8 @@ export def "repositories-branching-model-settings get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/branching-model/settings
 export def "repositories-branching-model-settings put" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "repositories-branching-model-settings put" [
 ]: nothing -> record<type: string, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, links: record<self: record<href: string, name: string>>, production: record<enabled: bool, is_valid: bool, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/branching-model/settings")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/branching-model/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -798,9 +798,9 @@ export def "repositories-branching-model-settings put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}
 export def "repositories-commit get" [
-  commit: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  commit: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,7 +812,7 @@ export def "repositories-commit get" [
 ]: nothing -> record<participants: table<type: string, approved: bool, participated_on: string, role: string, state: string, user: record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: any, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -822,9 +822,9 @@ export def "repositories-commit get" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/commit/{commit}/approve
 export def "repositories-commit-approve delete" [
-  commit: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  commit: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -836,7 +836,7 @@ export def "repositories-commit-approve delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/approve")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -846,9 +846,9 @@ export def "repositories-commit-approve delete" [
 #
 # POST /repositories/{workspace}/{repo_slug}/commit/{commit}/approve
 export def "repositories-commit-approve post" [
-  commit: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  commit: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,7 +860,7 @@ export def "repositories-commit-approve post" [
 ]: nothing -> record<type: string, approved: bool, participated_on: string, role: string, state: string, user: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/approve")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -870,9 +870,9 @@ export def "repositories-commit-approve post" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/comments
 export def "repositories-commit-comments list" [
-  commit: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  commit: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "repositories-commit-comments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/comments" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -897,9 +897,9 @@ export def "repositories-commit-comments list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/commit/{commit}/comments
 export def "repositories-commit-comments post" [
-  commit: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  commit: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,8 +913,8 @@ export def "repositories-commit-comments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/comments")
-  let body = {commit: $body_commit} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/comments"))
+  let body = {"commit": $body_commit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -925,10 +925,10 @@ export def "repositories-commit-comments post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}
 export def "repositories-commit-comments delete" [
-  comment_id: int
-  commit: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  commit: string
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "repositories-commit-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/comments/($comment_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, comment_id: $comment_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -950,10 +950,10 @@ export def "repositories-commit-comments delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}
 export def "repositories-commit-comments get" [
-  comment_id: int
-  commit: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  commit: string
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,7 +965,7 @@ export def "repositories-commit-comments get" [
 ]: nothing -> record<commit: record<participants: list<record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/comments/($comment_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, comment_id: $comment_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -975,10 +975,10 @@ export def "repositories-commit-comments get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}
 export def "repositories-commit-comments put" [
-  comment_id: int
-  commit: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  commit: string
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -992,8 +992,8 @@ export def "repositories-commit-comments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/comments/($comment_id)")
-  let body = {commit: $body_commit} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, comment_id: $comment_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/comments/{comment_id}"))
+  let body = {"commit": $body_commit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1004,7 +1004,7 @@ export def "repositories-commit-comments put" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}
 # operationId: deleteCommitHostedPropertyValue
-export def "repositories-commit-properties delete" [
+export def "repositories-commit-properties delete-hosted-property-value" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1021,7 +1021,7 @@ export def "repositories-commit-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/properties/($app_key)/($property_name)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, app_key: $app_key, property_name: $property_name} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1031,7 +1031,7 @@ export def "repositories-commit-properties delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}
 # operationId: getCommitHostedPropertyValue
-export def "repositories-commit-properties get" [
+export def "repositories-commit-properties get-hosted-property-value" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1048,7 +1048,7 @@ export def "repositories-commit-properties get" [
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/properties/($app_key)/($property_name)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, app_key: $app_key, property_name: $property_name} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1058,7 +1058,7 @@ export def "repositories-commit-properties get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}
 # operationId: updateCommitHostedPropertyValue
-export def "repositories-commit-properties updateCommitHostedPropertyValue" [
+export def "repositories-commit-properties update-hosted-property-value" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1077,8 +1077,8 @@ export def "repositories-commit-properties updateCommitHostedPropertyValue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/properties/($app_key)/($property_name)")
-  let body = {_attributes: $attributes} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, app_key: $app_key, property_name: $property_name} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/properties/{app_key}/{property_name}"))
+  let body = {"_attributes": $attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1089,7 +1089,7 @@ export def "repositories-commit-properties updateCommitHostedPropertyValue" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/pullrequests
 # operationId: getPullrequestsForCommit
-export def "repositories-commit-pullrequests get" [
+export def "repositories-commit-pullrequests get-pullrequests-for" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1107,7 +1107,7 @@ export def "repositories-commit-pullrequests get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pagelen" $pagelen "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/pullrequests" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/pullrequests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1117,7 +1117,7 @@ export def "repositories-commit-pullrequests get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/reports
 # operationId: getReportsForCommit
-export def "repositories-commit-reports list" [
+export def "repositories-commit-reports get-reports-for" [
   workspace: string
   repo_slug: string
   commit: string
@@ -1132,7 +1132,7 @@ export def "repositories-commit-reports list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, data: list, details: string, external_id: string, link: string, logo_url: string, remote_link_enabled: bool, report_type: string, reporter: string, result: string, title: string, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1146,7 +1146,7 @@ export def "repositories-commit-reports delete" [
   workspace: string
   repo_slug: string
   commit: string
-  reportId: string
+  report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1158,7 +1158,7 @@ export def "repositories-commit-reports delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, report_id: $report_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1172,7 +1172,7 @@ export def "repositories-commit-reports get" [
   workspace: string
   repo_slug: string
   commit: string
-  reportId: string
+  report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1184,7 +1184,7 @@ export def "repositories-commit-reports get" [
 ]: nothing -> record<type: string, created_on: string, data: table<title: string, type: string, value: record>, details: string, external_id: string, link: string, logo_url: string, remote_link_enabled: bool, report_type: string, reporter: string, result: string, title: string, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, report_id: $report_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1195,11 +1195,11 @@ export def "repositories-commit-reports get" [
 # PUT /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}
 # operationId: createOrUpdateReport
 # --data item shape: {title?: string, type?: "BOOLEAN"|"DATE"|"DURATION"|"LINK"|"NUMBER"|"PERCENTAGE"|"TEXT", value?: record}
-export def "repositories-commit-reports createOrUpdateReport" [
+export def "repositories-commit-reports create-or-update" [
   workspace: string
   repo_slug: string
   commit: string
-  reportId: string
+  report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,8 +1226,8 @@ export def "repositories-commit-reports createOrUpdateReport" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)")
-  let body = {type: $type, created_on: $created_on, data: $data, details: $details, external_id: $external_id, link: $link, logo_url: $logo_url, remote_link_enabled: $remote_link_enabled, report_type: $report_type, reporter: $reporter, result: $result, title: $title, updated_on: $updated_on, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, report_id: $report_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}"))
+  let body = {"type": $type, "created_on": $created_on, "data": $data, "details": $details, "external_id": $external_id, "link": $link, "logo_url": $logo_url, "remote_link_enabled": $remote_link_enabled, "report_type": $report_type, "reporter": $reporter, "result": $result, "title": $title, "updated_on": $updated_on, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1238,11 +1238,11 @@ export def "repositories-commit-reports createOrUpdateReport" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}/annotations
 # operationId: getAnnotationsForReport
-export def "repositories-commit-reports-annotations list" [
+export def "repositories-commit-reports-annotations get-annotations-for" [
   workspace: string
   repo_slug: string
   commit: string
-  reportId: string
+  report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,7 +1254,7 @@ export def "repositories-commit-reports-annotations list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, annotation_type: string, created_on: string, details: string, external_id: string, line: int, link: string, path: string, result: string, severity: string, summary: string, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)/annotations")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, report_id: $report_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}/annotations"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1268,7 +1268,7 @@ export def "repositories-commit-reports-annotations bulkCreateOrUpdateAnnotation
   workspace: string
   repo_slug: string
   commit: string
-  reportId: string
+  report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1282,7 +1282,7 @@ export def "repositories-commit-reports-annotations bulkCreateOrUpdateAnnotation
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)/annotations")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, report_id: $report_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}/annotations"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1297,8 +1297,8 @@ export def "repositories-commit-reports-annotations delete" [
   workspace: string
   repo_slug: string
   commit: string
-  reportId: string
-  annotationId: string
+  report_id: string
+  annotation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,7 +1310,7 @@ export def "repositories-commit-reports-annotations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)/annotations/($annotationId)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, report_id: $report_id, annotation_id: $annotation_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}/annotations/{annotation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1324,8 +1324,8 @@ export def "repositories-commit-reports-annotations get" [
   workspace: string
   repo_slug: string
   commit: string
-  reportId: string
-  annotationId: string
+  report_id: string
+  annotation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1337,7 +1337,7 @@ export def "repositories-commit-reports-annotations get" [
 ]: nothing -> record<type: string, annotation_type: string, created_on: string, details: string, external_id: string, line: int, link: string, path: string, result: string, severity: string, summary: string, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)/annotations/($annotationId)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, report_id: $report_id, annotation_id: $annotation_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}/annotations/{annotation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1347,12 +1347,12 @@ export def "repositories-commit-reports-annotations get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{reportId}/annotations/{annotationId}
 # operationId: createOrUpdateAnnotation
-export def "repositories-commit-reports-annotations createOrUpdateAnnotation" [
+export def "repositories-commit-reports-annotations create-or-update" [
   workspace: string
   repo_slug: string
   commit: string
-  reportId: string
-  annotationId: string
+  report_id: string
+  annotation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1378,8 +1378,8 @@ export def "repositories-commit-reports-annotations createOrUpdateAnnotation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/reports/($reportId)/annotations/($annotationId)")
-  let body = {type: $type, annotation_type: $annotation_type, created_on: $created_on, details: $details, external_id: $external_id, line: $line, link: $link, path: $path, result: $result, severity: $severity, summary: $summary, updated_on: $updated_on, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, report_id: $report_id, annotation_id: $annotation_id} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/reports/{report_id}/annotations/{annotation_id}"))
+  let body = {"type": $type, "annotation_type": $annotation_type, "created_on": $created_on, "details": $details, "external_id": $external_id, "line": $line, "link": $link, "path": $path, "result": $result, "severity": $severity, "summary": $summary, "updated_on": $updated_on, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1390,9 +1390,9 @@ export def "repositories-commit-reports-annotations createOrUpdateAnnotation" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/statuses
 export def "repositories-commit-statuses get" [
-  commit: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  commit: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1407,7 +1407,7 @@ export def "repositories-commit-statuses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/statuses" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1418,9 +1418,9 @@ export def "repositories-commit-statuses get" [
 # POST /repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build
 # --links shape: {commit?: record, self?: record}
 export def "repositories-commit-statuses-build post" [
-  commit: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  commit: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1444,8 +1444,8 @@ export def "repositories-commit-statuses-build post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/statuses/build")
-  let body = {type: $type, created_on: $created_on, description: $description, key: $key, links: $links, name: $name, refname: $refname, state: $state, updated_on: $updated_on, url: $body_url, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build"))
+  let body = {"type": $type, "created_on": $created_on, "description": $description, "key": $key, "links": $links, "name": $name, "refname": $refname, "state": $state, "updated_on": $updated_on, "url": $body_url, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1456,10 +1456,10 @@ export def "repositories-commit-statuses-build post" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build/{key}
 export def "repositories-commit-statuses-build get" [
+  workspace: string
+  repo_slug: string
   commit: string
   key: string
-  repo_slug: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1471,7 +1471,7 @@ export def "repositories-commit-statuses-build get" [
 ]: nothing -> record<type: string, created_on: string, description: string, key: string, links: record<commit: record<href: string, name: string>, self: record<href: string, name: string>>, name: string, refname: string, state: string, updated_on: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/statuses/build/($key)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, key: $key} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1482,10 +1482,10 @@ export def "repositories-commit-statuses-build get" [
 # PUT /repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build/{key}
 # --links shape: {commit?: record, self?: record}
 export def "repositories-commit-statuses-build put" [
+  workspace: string
+  repo_slug: string
   commit: string
   key: string
-  repo_slug: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,8 +1509,8 @@ export def "repositories-commit-statuses-build put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commit/($commit)/statuses/build/($key)")
-  let body = {type: $type, created_on: $created_on, description: $description, key: $body_key, links: $links, name: $name, refname: $refname, state: $state, updated_on: $updated_on, url: $body_url, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, key: $key} | format pattern "/repositories/{workspace}/{repo_slug}/commit/{commit}/statuses/build/{key}"))
+  let body = {"type": $type, "created_on": $created_on, "description": $description, "key": $body_key, "links": $links, "name": $name, "refname": $refname, "state": $state, "updated_on": $updated_on, "url": $body_url, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1521,8 +1521,8 @@ export def "repositories-commit-statuses-build put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commits
 export def "repositories-commits list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1534,7 +1534,7 @@ export def "repositories-commits list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, date: string, hash: string, message: string, parents: list, summary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commits")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/commits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1543,9 +1543,9 @@ export def "repositories-commits list" [
 # List commits with include/exclude
 #
 # POST /repositories/{workspace}/{repo_slug}/commits
-export def "repositories-commits post-by-repo_slug-workspace" [
-  repo_slug: string
+export def "repositories-commits post-by-workspace-repo_slug" [
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1557,7 +1557,7 @@ export def "repositories-commits post-by-repo_slug-workspace" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, date: string, hash: string, message: string, parents: list, summary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commits")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/commits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1567,9 +1567,9 @@ export def "repositories-commits post-by-repo_slug-workspace" [
 #
 # GET /repositories/{workspace}/{repo_slug}/commits/{revision}
 export def "repositories-commits get" [
+  workspace: string
   repo_slug: string
   revision: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1581,7 +1581,7 @@ export def "repositories-commits get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, date: string, hash: string, message: string, parents: list, summary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commits/($revision)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, revision: $revision} | format pattern "/repositories/{workspace}/{repo_slug}/commits/{revision}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1590,10 +1590,10 @@ export def "repositories-commits get" [
 # List commits for revision using include/exclude
 #
 # POST /repositories/{workspace}/{repo_slug}/commits/{revision}
-export def "repositories-commits post-by-repo_slug-revision-workspace" [
+export def "repositories-commits post-by-workspace-repo_slug-revision" [
+  workspace: string
   repo_slug: string
   revision: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1605,7 +1605,7 @@ export def "repositories-commits post-by-repo_slug-revision-workspace" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, author: record, date: string, hash: string, message: string, parents: list, summary: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/commits/($revision)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, revision: $revision} | format pattern "/repositories/{workspace}/{repo_slug}/commits/{revision}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1615,8 +1615,8 @@ export def "repositories-commits post-by-repo_slug-revision-workspace" [
 #
 # GET /repositories/{workspace}/{repo_slug}/components
 export def "repositories-components list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1628,7 +1628,7 @@ export def "repositories-components list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, id: int, links: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/components")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/components"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1638,9 +1638,9 @@ export def "repositories-components list" [
 #
 # GET /repositories/{workspace}/{repo_slug}/components/{component_id}
 export def "repositories-components get" [
-  component_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  component_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1652,7 +1652,7 @@ export def "repositories-components get" [
 ]: nothing -> record<type: string, id: int, links: record<self: record<href: string, name: string>>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/components/($component_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, component_id: $component_id} | format pattern "/repositories/{workspace}/{repo_slug}/components/{component_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1662,8 +1662,8 @@ export def "repositories-components get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/default-reviewers
 export def "repositories-default-reviewers list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,7 +1675,7 @@ export def "repositories-default-reviewers list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/default-reviewers")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/default-reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1685,9 +1685,9 @@ export def "repositories-default-reviewers list" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}
 export def "repositories-default-reviewers delete" [
+  workspace: string
   repo_slug: string
   target_username: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1699,7 +1699,7 @@ export def "repositories-default-reviewers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/default-reviewers/($target_username)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, target_username: $target_username} | format pattern "/repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1709,9 +1709,9 @@ export def "repositories-default-reviewers delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}
 export def "repositories-default-reviewers get" [
+  workspace: string
   repo_slug: string
   target_username: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1723,7 +1723,7 @@ export def "repositories-default-reviewers get" [
 ]: nothing -> record<type: string, created_on: string, display_name: string, links: record<avatar: record<href: string, name: string>>, username: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/default-reviewers/($target_username)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, target_username: $target_username} | format pattern "/repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1733,9 +1733,9 @@ export def "repositories-default-reviewers get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}
 export def "repositories-default-reviewers put" [
+  workspace: string
   repo_slug: string
   target_username: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1747,7 +1747,7 @@ export def "repositories-default-reviewers put" [
 ]: nothing -> record<type: string, created_on: string, display_name: string, links: record<avatar: record<href: string, name: string>>, username: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/default-reviewers/($target_username)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, target_username: $target_username} | format pattern "/repositories/{workspace}/{repo_slug}/default-reviewers/{target_username}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1757,8 +1757,8 @@ export def "repositories-default-reviewers put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/deploy-keys
 export def "repositories-deploy-keys list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1770,7 +1770,7 @@ export def "repositories-deploy-keys list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, added_on: string, comment: string, key: string, label: string, last_used: string, links: record, owner: record, repository: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deploy-keys")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/deploy-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1780,8 +1780,8 @@ export def "repositories-deploy-keys list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/deploy-keys
 export def "repositories-deploy-keys post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1793,7 +1793,7 @@ export def "repositories-deploy-keys post" [
 ]: nothing -> record<type: string, added_on: string, comment: string, key: string, label: string, last_used: string, links: record<self: record<href: string, name: string>>, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deploy-keys")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/deploy-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1803,9 +1803,9 @@ export def "repositories-deploy-keys post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}
 export def "repositories-deploy-keys delete" [
-  key_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1817,7 +1817,7 @@ export def "repositories-deploy-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deploy-keys/($key_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, key_id: $key_id} | format pattern "/repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1827,9 +1827,9 @@ export def "repositories-deploy-keys delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}
 export def "repositories-deploy-keys get" [
-  key_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1841,7 +1841,7 @@ export def "repositories-deploy-keys get" [
 ]: nothing -> record<type: string, added_on: string, comment: string, key: string, label: string, last_used: string, links: record<self: record<href: string, name: string>>, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deploy-keys/($key_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, key_id: $key_id} | format pattern "/repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1851,9 +1851,9 @@ export def "repositories-deploy-keys get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}
 export def "repositories-deploy-keys put" [
-  key_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1865,7 +1865,7 @@ export def "repositories-deploy-keys put" [
 ]: nothing -> record<type: string, added_on: string, comment: string, key: string, label: string, last_used: string, links: record<self: record<href: string, name: string>>, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deploy-keys/($key_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, key_id: $key_id} | format pattern "/repositories/{workspace}/{repo_slug}/deploy-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1875,7 +1875,7 @@ export def "repositories-deploy-keys put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/deployments/
 # operationId: getDeploymentsForRepository
-export def "repositories-deployments list" [
+export def "repositories-deployments get-deployments-for-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1889,7 +1889,7 @@ export def "repositories-deployments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, environment: record, release: record, state: record, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deployments/")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/deployments/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1899,7 +1899,7 @@ export def "repositories-deployments list" [
 #
 # GET /repositories/{workspace}/{repo_slug}/deployments/{deployment_uuid}
 # operationId: getDeploymentForRepository
-export def "repositories-deployments get" [
+export def "repositories-deployments get-deployment-for-repository" [
   workspace: string
   repo_slug: string
   deployment_uuid: string
@@ -1914,7 +1914,7 @@ export def "repositories-deployments get" [
 ]: nothing -> record<type: string, environment: record<type: string, name: string, uuid: string>, release: record<type: string, commit: record<participants: list, repository: record>, created_on: string, name: string, url: string, uuid: string>, state: record<type: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deployments/($deployment_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, deployment_uuid: $deployment_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/deployments/{deployment_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1939,7 +1939,7 @@ export def "repositories-deployments-config-environments-variables get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, key: string, secured: bool, uuid: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deployments_config/environments/($environment_uuid)/variables")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, environment_uuid: $environment_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1949,7 +1949,7 @@ export def "repositories-deployments-config-environments-variables get" [
 #
 # POST /repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables
 # operationId: createDeploymentVariable
-export def "repositories-deployments-config-environments-variables createDeploymentVariable" [
+export def "repositories-deployments-config-environments-variables create" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -1970,8 +1970,8 @@ export def "repositories-deployments-config-environments-variables createDeploym
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deployments_config/environments/($environment_uuid)/variables")
-  let body = {type: $type, key: $key, secured: $secured, uuid: $uuid, value: $value} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, environment_uuid: $environment_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables"))
+  let body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1998,7 +1998,7 @@ export def "repositories-deployments-config-environments-variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deployments_config/environments/($environment_uuid)/variables/($variable_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, environment_uuid: $environment_uuid, variable_uuid: $variable_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2008,7 +2008,7 @@ export def "repositories-deployments-config-environments-variables delete" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables/{variable_uuid}
 # operationId: updateDeploymentVariable
-export def "repositories-deployments-config-environments-variables updateDeploymentVariable" [
+export def "repositories-deployments-config-environments-variables update" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -2030,8 +2030,8 @@ export def "repositories-deployments-config-environments-variables updateDeploym
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/deployments_config/environments/($environment_uuid)/variables/($variable_uuid)")
-  let body = {type: $type, key: $key, secured: $secured, uuid: $uuid, value: $value} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, environment_uuid: $environment_uuid, variable_uuid: $variable_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/deployments_config/environments/{environment_uuid}/variables/{variable_uuid}"))
+  let body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2042,9 +2042,9 @@ export def "repositories-deployments-config-environments-variables updateDeploym
 #
 # GET /repositories/{workspace}/{repo_slug}/diff/{spec}
 export def "repositories-diff get" [
+  workspace: string
   repo_slug: string
   spec: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2064,7 +2064,7 @@ export def "repositories-diff get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "context" $context "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "ignore_whitespace" $ignore_whitespace "scalar") (serialize-qp "binary" $binary "scalar") (serialize-qp "renames" $renames "scalar") (serialize-qp "merge" $merge "scalar") (serialize-qp "topic" $topic "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/diff/($spec)" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, spec: $spec} | format pattern "/repositories/{workspace}/{repo_slug}/diff/{spec}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2074,9 +2074,9 @@ export def "repositories-diff get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/diffstat/{spec}
 export def "repositories-diffstat get" [
+  workspace: string
   repo_slug: string
   spec: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2094,7 +2094,7 @@ export def "repositories-diffstat get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ignore_whitespace" $ignore_whitespace "scalar") (serialize-qp "merge" $merge "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "renames" $renames "scalar") (serialize-qp "topic" $topic "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/diffstat/($spec)" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, spec: $spec} | format pattern "/repositories/{workspace}/{repo_slug}/diffstat/{spec}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2104,8 +2104,8 @@ export def "repositories-diffstat get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/downloads
 export def "repositories-downloads list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2117,7 +2117,7 @@ export def "repositories-downloads list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/downloads")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/downloads"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2127,8 +2127,8 @@ export def "repositories-downloads list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/downloads
 export def "repositories-downloads post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2140,7 +2140,7 @@ export def "repositories-downloads post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/downloads")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/downloads"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2150,9 +2150,9 @@ export def "repositories-downloads post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/downloads/{filename}
 export def "repositories-downloads delete" [
-  filename: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2164,7 +2164,7 @@ export def "repositories-downloads delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/downloads/($filename)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, filename: $filename} | format pattern "/repositories/{workspace}/{repo_slug}/downloads/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2174,9 +2174,9 @@ export def "repositories-downloads delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/downloads/{filename}
 export def "repositories-downloads get" [
-  filename: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2188,7 +2188,7 @@ export def "repositories-downloads get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/downloads/($filename)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, filename: $filename} | format pattern "/repositories/{workspace}/{repo_slug}/downloads/{filename}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2198,8 +2198,8 @@ export def "repositories-downloads get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/effective-branching-model
 export def "repositories-effective-branching-model get" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2211,7 +2211,7 @@ export def "repositories-effective-branching-model get" [
 ]: nothing -> record<type: string, branch_types: table<kind: string, prefix: string>, development: record<branch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, use_mainbranch: bool>, production: record<branch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/effective-branching-model")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/effective-branching-model"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2221,8 +2221,8 @@ export def "repositories-effective-branching-model get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/effective-default-reviewers
 export def "repositories-effective-default-reviewers get" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2234,7 +2234,7 @@ export def "repositories-effective-default-reviewers get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<reviewer_type: string, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/effective-default-reviewers")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/effective-default-reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2244,7 +2244,7 @@ export def "repositories-effective-default-reviewers get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/environments/
 # operationId: getEnvironmentsForRepository
-export def "repositories-environments list" [
+export def "repositories-environments get-environments-for-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2258,7 +2258,7 @@ export def "repositories-environments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, name: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/environments/")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/environments/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2268,7 +2268,7 @@ export def "repositories-environments list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/environments/
 # operationId: createEnvironment
-export def "repositories-environments createEnvironment" [
+export def "repositories-environments create" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2286,8 +2286,8 @@ export def "repositories-environments createEnvironment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/environments/")
-  let body = {type: $type, name: $name, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/environments/"))
+  let body = {"type": $type, "name": $name, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2298,7 +2298,7 @@ export def "repositories-environments createEnvironment" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/environments/{environment_uuid}
 # operationId: deleteEnvironmentForRepository
-export def "repositories-environments delete" [
+export def "repositories-environments delete-environment-for-repository" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -2313,7 +2313,7 @@ export def "repositories-environments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/environments/($environment_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, environment_uuid: $environment_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/environments/{environment_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2323,7 +2323,7 @@ export def "repositories-environments delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/environments/{environment_uuid}
 # operationId: getEnvironmentForRepository
-export def "repositories-environments get" [
+export def "repositories-environments get-environment-for-repository" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -2338,7 +2338,7 @@ export def "repositories-environments get" [
 ]: nothing -> record<type: string, name: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/environments/($environment_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, environment_uuid: $environment_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/environments/{environment_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2348,7 +2348,7 @@ export def "repositories-environments get" [
 #
 # POST /repositories/{workspace}/{repo_slug}/environments/{environment_uuid}/changes/
 # operationId: updateEnvironmentForRepository
-export def "repositories-environments-changes updateEnvironmentForRepository" [
+export def "repositories-environments-changes update-environment-for-repository" [
   workspace: string
   repo_slug: string
   environment_uuid: string
@@ -2363,7 +2363,7 @@ export def "repositories-environments-changes updateEnvironmentForRepository" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/environments/($environment_uuid)/changes/")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, environment_uuid: $environment_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/environments/{environment_uuid}/changes/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2373,10 +2373,10 @@ export def "repositories-environments-changes updateEnvironmentForRepository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/filehistory/{commit}/{path}
 export def "repositories-filehistory get" [
+  workspace: string
+  repo_slug: string
   commit: string
   path: string
-  repo_slug: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2392,7 +2392,7 @@ export def "repositories-filehistory get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "renames" $renames "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/filehistory/($commit)/($path)" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, path: $path} | format pattern "/repositories/{workspace}/{repo_slug}/filehistory/{commit}/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2402,8 +2402,8 @@ export def "repositories-filehistory get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/forks
 export def "repositories-forks get" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2419,7 +2419,7 @@ export def "repositories-forks get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/forks" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/forks") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2430,8 +2430,8 @@ export def "repositories-forks get" [
 # POST /repositories/{workspace}/{repo_slug}/forks
 # --links shape: {avatar?: record, clone?: list, commits?: record, downloads?: record, forks?: record, hooks?: record, html?: record, pullrequests?: record, self?: record, watchers?: record}
 export def "repositories-forks post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2463,8 +2463,8 @@ export def "repositories-forks post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/forks")
-  let body = {type: $type, created_on: $created_on, description: $description, fork_policy: $fork_policy, full_name: $full_name, has_issues: $has_issues, has_wiki: $has_wiki, is_private: $is_private, language: $language, links: $links, mainbranch: $mainbranch, name: $name, owner: $owner, parent: $parent, project: $project, scm: $scm, size: $size, updated_on: $updated_on, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/forks"))
+  let body = {"type": $type, "created_on": $created_on, "description": $description, "fork_policy": $fork_policy, "full_name": $full_name, "has_issues": $has_issues, "has_wiki": $has_wiki, "is_private": $is_private, "language": $language, "links": $links, "mainbranch": $mainbranch, "name": $name, "owner": $owner, "parent": $parent, "project": $project, "scm": $scm, "size": $size, "updated_on": $updated_on, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2475,8 +2475,8 @@ export def "repositories-forks post" [
 #
 # GET /repositories/{workspace}/{repo_slug}/hooks
 export def "repositories-hooks list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2488,7 +2488,7 @@ export def "repositories-hooks list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, active: bool, created_at: string, description: string, events: list, subject: record, subject_type: string, url: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/hooks")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/hooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2498,8 +2498,8 @@ export def "repositories-hooks list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/hooks
 export def "repositories-hooks post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2511,7 +2511,7 @@ export def "repositories-hooks post" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/hooks")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/hooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2521,9 +2521,9 @@ export def "repositories-hooks post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/hooks/{uid}
 export def "repositories-hooks delete" [
+  workspace: string
   repo_slug: string
   uid: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2535,7 +2535,7 @@ export def "repositories-hooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/hooks/($uid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, uid: $uid} | format pattern "/repositories/{workspace}/{repo_slug}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2545,9 +2545,9 @@ export def "repositories-hooks delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/hooks/{uid}
 export def "repositories-hooks get" [
+  workspace: string
   repo_slug: string
   uid: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2559,7 +2559,7 @@ export def "repositories-hooks get" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/hooks/($uid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, uid: $uid} | format pattern "/repositories/{workspace}/{repo_slug}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2569,9 +2569,9 @@ export def "repositories-hooks get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/hooks/{uid}
 export def "repositories-hooks put" [
+  workspace: string
   repo_slug: string
   uid: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2583,7 +2583,7 @@ export def "repositories-hooks put" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/hooks/($uid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, uid: $uid} | format pattern "/repositories/{workspace}/{repo_slug}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2593,8 +2593,8 @@ export def "repositories-hooks put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues
 export def "repositories-issues list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2606,7 +2606,7 @@ export def "repositories-issues list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, assignee: record, component: record, content: record, created_on: string, edited_on: string, id: int, kind: string, links: record, milestone: record, priority: string, reporter: record, repository: record, state: string, title: string, updated_on: string, version: record, votes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/issues"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2618,8 +2618,8 @@ export def "repositories-issues list" [
 # --content shape: {html?: string, markup?: "markdown"|"creole"|"plaintext", raw?: string}
 # --links shape: {attachments?: record, comments?: record, html?: record, self?: record, vote?: record, watch?: record}
 export def "repositories-issues post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2650,8 +2650,8 @@ export def "repositories-issues post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues")
-  let body = {type: $type, assignee: $assignee, component: $component, content: $content, created_on: $created_on, edited_on: $edited_on, id: $id, kind: $kind, links: $links, milestone: $milestone, priority: $priority, reporter: $reporter, repository: $repository, state: $state, title: $title, updated_on: $updated_on, version: $version, votes: $votes} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/issues"))
+  let body = {"type": $type, "assignee": $assignee, "component": $component, "content": $content, "created_on": $created_on, "edited_on": $edited_on, "id": $id, "kind": $kind, "links": $links, "milestone": $milestone, "priority": $priority, "reporter": $reporter, "repository": $repository, "state": $state, "title": $title, "updated_on": $updated_on, "version": $version, "votes": $votes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2662,8 +2662,8 @@ export def "repositories-issues post" [
 #
 # POST /repositories/{workspace}/{repo_slug}/issues/export
 export def "repositories-issues-export post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2681,8 +2681,8 @@ export def "repositories-issues-export post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/export")
-  let body = {include_attachments: $include_attachments, project_key: $project_key, project_name: $project_name, send_email: $send_email, type: $type} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/issues/export"))
+  let body = {"include_attachments": $include_attachments, "project_key": $project_key, "project_name": $project_name, "send_email": $send_email, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2693,10 +2693,10 @@ export def "repositories-issues-export post" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/export/{repo_name}-issues-{task_id}.zip
 export def "repositories-issues-export get" [
-  repo_name: string
-  repo_slug: string
-  task_id: string
   workspace: string
+  repo_slug: string
+  repo_name: string
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2708,7 +2708,7 @@ export def "repositories-issues-export get" [
 ]: nothing -> record<count: int, pct: float, phase: string, status: string, total: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/export/($repo_name)-issues-($task_id).zip")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, repo_name: $repo_name, task_id: $task_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/export/{repo_name}-issues-{task_id}.zip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2718,8 +2718,8 @@ export def "repositories-issues-export get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/import
 export def "repositories-issues-import get" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2731,7 +2731,7 @@ export def "repositories-issues-import get" [
 ]: nothing -> record<count: int, pct: float, phase: string, status: string, total: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/import")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/issues/import"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2741,8 +2741,8 @@ export def "repositories-issues-import get" [
 #
 # POST /repositories/{workspace}/{repo_slug}/issues/import
 export def "repositories-issues-import post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2754,7 +2754,7 @@ export def "repositories-issues-import post" [
 ]: nothing -> record<count: int, pct: float, phase: string, status: string, total: int, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/import")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/issues/import"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2764,9 +2764,9 @@ export def "repositories-issues-import post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/issues/{issue_id}
 export def "repositories-issues delete" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2778,7 +2778,7 @@ export def "repositories-issues delete" [
 ]: nothing -> record<type: string, assignee: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, component: record<type: string, id: int, links: record<self: record>, name: string>, content: record<html: string, markup: string, raw: string>, created_on: string, edited_on: string, id: int, kind: string, links: record<attachments: record<href: string, name: string>, comments: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>, vote: record<href: string, name: string>, watch: record<href: string, name: string>>, milestone: record<type: string, id: int, links: record<self: record>, name: string>, priority: string, reporter: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, state: string, title: string, updated_on: string, version: record<type: string, id: int, links: record<self: record>, name: string>, votes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2788,9 +2788,9 @@ export def "repositories-issues delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}
 export def "repositories-issues get" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2802,7 +2802,7 @@ export def "repositories-issues get" [
 ]: nothing -> record<type: string, assignee: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, component: record<type: string, id: int, links: record<self: record>, name: string>, content: record<html: string, markup: string, raw: string>, created_on: string, edited_on: string, id: int, kind: string, links: record<attachments: record<href: string, name: string>, comments: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>, vote: record<href: string, name: string>, watch: record<href: string, name: string>>, milestone: record<type: string, id: int, links: record<self: record>, name: string>, priority: string, reporter: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, state: string, title: string, updated_on: string, version: record<type: string, id: int, links: record<self: record>, name: string>, votes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2812,9 +2812,9 @@ export def "repositories-issues get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/issues/{issue_id}
 export def "repositories-issues put" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2826,7 +2826,7 @@ export def "repositories-issues put" [
 ]: nothing -> record<type: string, assignee: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, component: record<type: string, id: int, links: record<self: record>, name: string>, content: record<html: string, markup: string, raw: string>, created_on: string, edited_on: string, id: int, kind: string, links: record<attachments: record<href: string, name: string>, comments: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>, vote: record<href: string, name: string>, watch: record<href: string, name: string>>, milestone: record<type: string, id: int, links: record<self: record>, name: string>, priority: string, reporter: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, state: string, title: string, updated_on: string, version: record<type: string, id: int, links: record<self: record>, name: string>, votes: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2836,9 +2836,9 @@ export def "repositories-issues put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments
 export def "repositories-issues-attachments list" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2850,7 +2850,7 @@ export def "repositories-issues-attachments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, links: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/attachments")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2860,9 +2860,9 @@ export def "repositories-issues-attachments list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments
 export def "repositories-issues-attachments post" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2874,7 +2874,7 @@ export def "repositories-issues-attachments post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/attachments")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2884,10 +2884,10 @@ export def "repositories-issues-attachments post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments/{path}
 export def "repositories-issues-attachments delete" [
+  workspace: string
+  repo_slug: string
   issue_id: string
   path: string
-  repo_slug: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2899,7 +2899,7 @@ export def "repositories-issues-attachments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/attachments/($path)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id, path: $path} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2909,10 +2909,10 @@ export def "repositories-issues-attachments delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments/{path}
 export def "repositories-issues-attachments get" [
+  workspace: string
+  repo_slug: string
   issue_id: string
   path: string
-  repo_slug: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2924,7 +2924,7 @@ export def "repositories-issues-attachments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/attachments/($path)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id, path: $path} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/attachments/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2934,9 +2934,9 @@ export def "repositories-issues-attachments get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/changes
 export def "repositories-issues-changes list" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2951,7 +2951,7 @@ export def "repositories-issues-changes list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/changes" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/changes") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2964,9 +2964,9 @@ export def "repositories-issues-changes list" [
 # --links shape: {issue?: record, self?: record}
 # --message shape: {html?: string, markup?: "markdown"|"creole"|"plaintext", raw?: string}
 export def "repositories-issues-changes post" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2987,8 +2987,8 @@ export def "repositories-issues-changes post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/changes")
-  let body = {changes: $changes, created_on: $created_on, issue: $issue, links: $links, message: $message, name: $name, type: $type, user: $user} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/changes"))
+  let body = {"changes": $changes, "created_on": $created_on, "issue": $issue, "links": $links, "message": $message, "name": $name, "type": $type, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2999,10 +2999,10 @@ export def "repositories-issues-changes post" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/changes/{change_id}
 export def "repositories-issues-changes get" [
-  change_id: string
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
+  change_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3014,7 +3014,7 @@ export def "repositories-issues-changes get" [
 ]: nothing -> record<changes: record<assignee: record<new: string, old: string>, component: record<new: string, old: string>, content: record<new: string, old: string>, kind: record<new: string, old: string>, milestone: record<new: string, old: string>, priority: record<new: string, old: string>, state: record<new: string, old: string>, title: record<new: string, old: string>, version: record<new: string, old: string>>, created_on: string, issue: record<type: string, assignee: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, component: record<type: string, id: int, links: record, name: string>, content: record<html: string, markup: string, raw: string>, created_on: string, edited_on: string, id: int, kind: string, links: record<attachments: record, comments: record, html: record, self: record, vote: record, watch: record>, milestone: record<type: string, id: int, links: record, name: string>, priority: string, reporter: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>, state: string, title: string, updated_on: string, version: record<type: string, id: int, links: record, name: string>, votes: int>, links: record<issue: record<href: string, name: string>, self: record<href: string, name: string>>, message: record<html: string, markup: string, raw: string>, name: string, type: string, user: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/changes/($change_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id, change_id: $change_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/changes/{change_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3024,9 +3024,9 @@ export def "repositories-issues-changes get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments
 export def "repositories-issues-comments list" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3040,7 +3040,7 @@ export def "repositories-issues-comments list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/comments" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3050,9 +3050,9 @@ export def "repositories-issues-comments list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments
 export def "repositories-issues-comments post" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3066,8 +3066,8 @@ export def "repositories-issues-comments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/comments")
-  let body = {issue: $issue} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments"))
+  let body = {"issue": $issue} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3078,10 +3078,10 @@ export def "repositories-issues-comments post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}
 export def "repositories-issues-comments delete" [
-  comment_id: int
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3093,7 +3093,7 @@ export def "repositories-issues-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/comments/($comment_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id, comment_id: $comment_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3103,10 +3103,10 @@ export def "repositories-issues-comments delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}
 export def "repositories-issues-comments get" [
-  comment_id: int
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3118,7 +3118,7 @@ export def "repositories-issues-comments get" [
 ]: nothing -> record<issue: record<type: string, assignee: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, component: record<type: string, id: int, links: record, name: string>, content: record<html: string, markup: string, raw: string>, created_on: string, edited_on: string, id: int, kind: string, links: record<attachments: record, comments: record, html: record, self: record, vote: record, watch: record>, milestone: record<type: string, id: int, links: record, name: string>, priority: string, reporter: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>, state: string, title: string, updated_on: string, version: record<type: string, id: int, links: record, name: string>, votes: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/comments/($comment_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id, comment_id: $comment_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3128,10 +3128,10 @@ export def "repositories-issues-comments get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}
 export def "repositories-issues-comments put" [
-  comment_id: int
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3145,8 +3145,8 @@ export def "repositories-issues-comments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/comments/($comment_id)")
-  let body = {issue: $issue} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id, comment_id: $comment_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/comments/{comment_id}"))
+  let body = {"issue": $issue} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3157,9 +3157,9 @@ export def "repositories-issues-comments put" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote
 export def "repositories-issues-vote delete" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3171,7 +3171,7 @@ export def "repositories-issues-vote delete" [
 ]: nothing -> record<error: record<data: record, detail: string, message: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/vote")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3181,9 +3181,9 @@ export def "repositories-issues-vote delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote
 export def "repositories-issues-vote get" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3195,7 +3195,7 @@ export def "repositories-issues-vote get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/vote")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3205,9 +3205,9 @@ export def "repositories-issues-vote get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote
 export def "repositories-issues-vote put" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3219,7 +3219,7 @@ export def "repositories-issues-vote put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/vote")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/vote"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3229,9 +3229,9 @@ export def "repositories-issues-vote put" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch
 export def "repositories-issues-watch delete" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3243,7 +3243,7 @@ export def "repositories-issues-watch delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/watch")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3253,9 +3253,9 @@ export def "repositories-issues-watch delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch
 export def "repositories-issues-watch get" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3267,7 +3267,7 @@ export def "repositories-issues-watch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/watch")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3277,9 +3277,9 @@ export def "repositories-issues-watch get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch
 export def "repositories-issues-watch put" [
-  issue_id: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  issue_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3291,7 +3291,7 @@ export def "repositories-issues-watch put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/issues/($issue_id)/watch")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, issue_id: $issue_id} | format pattern "/repositories/{workspace}/{repo_slug}/issues/{issue_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3301,9 +3301,9 @@ export def "repositories-issues-watch put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/merge-base/{revspec}
 export def "repositories-merge-base get" [
+  workspace: string
   repo_slug: string
   revspec: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3315,7 +3315,7 @@ export def "repositories-merge-base get" [
 ]: nothing -> record<participants: table<type: string, approved: bool, participated_on: string, role: string, state: string, user: record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: any, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/merge-base/($revspec)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, revspec: $revspec} | format pattern "/repositories/{workspace}/{repo_slug}/merge-base/{revspec}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3325,8 +3325,8 @@ export def "repositories-merge-base get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/milestones
 export def "repositories-milestones list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3338,7 +3338,7 @@ export def "repositories-milestones list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, id: int, links: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/milestones")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/milestones"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3348,9 +3348,9 @@ export def "repositories-milestones list" [
 #
 # GET /repositories/{workspace}/{repo_slug}/milestones/{milestone_id}
 export def "repositories-milestones get" [
-  milestone_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  milestone_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3362,7 +3362,7 @@ export def "repositories-milestones get" [
 ]: nothing -> record<type: string, id: int, links: record<self: record<href: string, name: string>>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/milestones/($milestone_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, milestone_id: $milestone_id} | format pattern "/repositories/{workspace}/{repo_slug}/milestones/{milestone_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3372,8 +3372,8 @@ export def "repositories-milestones get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/override-settings
 export def "repositories-override-settings get" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3385,7 +3385,7 @@ export def "repositories-override-settings get" [
 ]: nothing -> record<override_settings: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/override-settings")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/override-settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3395,8 +3395,8 @@ export def "repositories-override-settings get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/override-settings
 export def "repositories-override-settings put" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3408,7 +3408,7 @@ export def "repositories-override-settings put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/override-settings")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/override-settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3418,9 +3418,9 @@ export def "repositories-override-settings put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/patch/{spec}
 export def "repositories-patch get" [
+  workspace: string
   repo_slug: string
   spec: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3432,7 +3432,7 @@ export def "repositories-patch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/patch/($spec)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, spec: $spec} | format pattern "/repositories/{workspace}/{repo_slug}/patch/{spec}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3442,8 +3442,8 @@ export def "repositories-patch get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/permissions-config/groups
 export def "repositories-permissions-config-groups list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3455,7 +3455,7 @@ export def "repositories-permissions-config-groups list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<group: record, links: record, permission: string, repository: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/groups")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/groups"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3465,9 +3465,9 @@ export def "repositories-permissions-config-groups list" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}
 export def "repositories-permissions-config-groups delete" [
-  group_slug: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  group_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3479,7 +3479,7 @@ export def "repositories-permissions-config-groups delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/groups/($group_slug)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, group_slug: $group_slug} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3489,9 +3489,9 @@ export def "repositories-permissions-config-groups delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}
 export def "repositories-permissions-config-groups get" [
-  group_slug: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  group_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3503,7 +3503,7 @@ export def "repositories-permissions-config-groups get" [
 ]: nothing -> record<group: record<type: string, full_slug: string, links: record<html: record, self: record>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, slug: string, workspace: record<type: string, created_on: string, is_private: bool, links: record, name: string, slug: string, updated_on: string, uuid: string>>, links: record<self: record<href: string, name: string>>, permission: string, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/groups/($group_slug)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, group_slug: $group_slug} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3513,9 +3513,9 @@ export def "repositories-permissions-config-groups get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}
 export def "repositories-permissions-config-groups put" [
-  group_slug: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  group_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3527,7 +3527,7 @@ export def "repositories-permissions-config-groups put" [
 ]: nothing -> record<group: record<type: string, full_slug: string, links: record<html: record, self: record>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, slug: string, workspace: record<type: string, created_on: string, is_private: bool, links: record, name: string, slug: string, updated_on: string, uuid: string>>, links: record<self: record<href: string, name: string>>, permission: string, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/groups/($group_slug)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, group_slug: $group_slug} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/groups/{group_slug}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3537,8 +3537,8 @@ export def "repositories-permissions-config-groups put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/permissions-config/users
 export def "repositories-permissions-config-users list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3550,7 +3550,7 @@ export def "repositories-permissions-config-users list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<links: record, permission: string, repository: record, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/users")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/users"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3560,9 +3560,9 @@ export def "repositories-permissions-config-users list" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}
 export def "repositories-permissions-config-users delete" [
+  workspace: string
   repo_slug: string
   selected_user_id: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3574,7 +3574,7 @@ export def "repositories-permissions-config-users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/users/($selected_user_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, selected_user_id: $selected_user_id} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3584,9 +3584,9 @@ export def "repositories-permissions-config-users delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}
 export def "repositories-permissions-config-users get" [
+  workspace: string
   repo_slug: string
   selected_user_id: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3598,7 +3598,7 @@ export def "repositories-permissions-config-users get" [
 ]: nothing -> record<links: record<self: record<href: string, name: string>>, permission: string, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, type: string, user: record<account_id: string, account_status: string, has_2fa_enabled: bool, is_staff: bool, links: record<avatar: record, html: record, repositories: record, self: record>, nickname: string, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/users/($selected_user_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, selected_user_id: $selected_user_id} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3608,9 +3608,9 @@ export def "repositories-permissions-config-users get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}
 export def "repositories-permissions-config-users put" [
+  workspace: string
   repo_slug: string
   selected_user_id: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3622,7 +3622,7 @@ export def "repositories-permissions-config-users put" [
 ]: nothing -> record<links: record<self: record<href: string, name: string>>, permission: string, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, type: string, user: record<account_id: string, account_status: string, has_2fa_enabled: bool, is_staff: bool, links: record<avatar: record, html: record, repositories: record, self: record>, nickname: string, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/permissions-config/users/($selected_user_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, selected_user_id: $selected_user_id} | format pattern "/repositories/{workspace}/{repo_slug}/permissions-config/users/{selected_user_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3632,7 +3632,7 @@ export def "repositories-permissions-config-users put" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines-config/caches
 # operationId: deleteRepositoryPipelineCaches
-export def "repositories-pipelines-config-caches delete-by-workspace-repo_slug" [
+export def "repositories-pipelines-config-caches delete-repository-by-workspace-repo_slug" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3648,7 +3648,7 @@ export def "repositories-pipelines-config-caches delete-by-workspace-repo_slug" 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/caches" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines-config/caches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3658,7 +3658,7 @@ export def "repositories-pipelines-config-caches delete-by-workspace-repo_slug" 
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines-config/caches/
 # operationId: getRepositoryPipelineCaches
-export def "repositories-pipelines-config-caches get" [
+export def "repositories-pipelines-config-caches get-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3672,7 +3672,7 @@ export def "repositories-pipelines-config-caches get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, file_size_bytes: int, key_hash: string, name: string, path: string, pipeline_uuid: string, step_uuid: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/caches/")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines-config/caches/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3682,7 +3682,7 @@ export def "repositories-pipelines-config-caches get" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines-config/caches/{cache_uuid}
 # operationId: deleteRepositoryPipelineCache
-export def "repositories-pipelines-config-caches delete-by-workspace-repo_slug-cache_uuid" [
+export def "repositories-pipelines-config-caches delete-repository-by-workspace-repo_slug-cache_uuid" [
   workspace: string
   repo_slug: string
   cache_uuid: string
@@ -3697,7 +3697,7 @@ export def "repositories-pipelines-config-caches delete-by-workspace-repo_slug-c
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/caches/($cache_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, cache_uuid: $cache_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines-config/caches/{cache_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3707,7 +3707,7 @@ export def "repositories-pipelines-config-caches delete-by-workspace-repo_slug-c
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines-config/caches/{cache_uuid}/content-uri
 # operationId: getRepositoryPipelineCacheContentURI
-export def "repositories-pipelines-config-caches-content-uri get" [
+export def "repositories-pipelines-config-caches-content-uri get-repository" [
   workspace: string
   repo_slug: string
   cache_uuid: string
@@ -3722,7 +3722,7 @@ export def "repositories-pipelines-config-caches-content-uri get" [
 ]: nothing -> record<uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines-config/caches/($cache_uuid)/content-uri")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, cache_uuid: $cache_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines-config/caches/{cache_uuid}/content-uri"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3732,7 +3732,7 @@ export def "repositories-pipelines-config-caches-content-uri get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/
 # operationId: getPipelinesForRepository
-export def "repositories-pipelines list" [
+export def "repositories-pipelines get-pipelines-for-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3746,7 +3746,7 @@ export def "repositories-pipelines list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, build_number: int, build_seconds_used: int, completed_on: string, created_on: string, creator: record, repository: record, state: record, target: record, trigger: record, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3756,7 +3756,7 @@ export def "repositories-pipelines list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pipelines/
 # operationId: createPipelineForRepository
-export def "repositories-pipelines createPipelineForRepository" [
+export def "repositories-pipelines create-pipeline-for-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3782,8 +3782,8 @@ export def "repositories-pipelines createPipelineForRepository" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/")
-  let body = {type: $type, build_number: $build_number, build_seconds_used: $build_seconds_used, completed_on: $completed_on, created_on: $created_on, creator: $creator, repository: $repository, state: $state, target: $target, trigger: $trigger, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/"))
+  let body = {"type": $type, "build_number": $build_number, "build_seconds_used": $build_seconds_used, "completed_on": $completed_on, "created_on": $created_on, "creator": $creator, "repository": $repository, "state": $state, "target": $target, "trigger": $trigger, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3794,7 +3794,7 @@ export def "repositories-pipelines createPipelineForRepository" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}
 # operationId: getPipelineForRepository
-export def "repositories-pipelines get" [
+export def "repositories-pipelines get-pipeline-for-repository" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -3809,7 +3809,7 @@ export def "repositories-pipelines get" [
 ]: nothing -> record<type: string, build_number: int, build_seconds_used: int, completed_on: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>, state: record<type: string>, target: record<type: string>, trigger: record<type: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pipeline_uuid: $pipeline_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3819,7 +3819,7 @@ export def "repositories-pipelines get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/
 # operationId: getPipelineStepsForRepository
-export def "repositories-pipelines-steps list" [
+export def "repositories-pipelines-steps get-pipeline-steps-for-repository" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -3834,7 +3834,7 @@ export def "repositories-pipelines-steps list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, completed_on: string, image: record, script_commands: list, setup_commands: list, started_on: string, state: record, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pipeline_uuid: $pipeline_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3844,7 +3844,7 @@ export def "repositories-pipelines-steps list" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}
 # operationId: getPipelineStepForRepository
-export def "repositories-pipelines-steps get" [
+export def "repositories-pipelines-steps get-pipeline-step-for-repository" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -3860,7 +3860,7 @@ export def "repositories-pipelines-steps get" [
 ]: nothing -> record<type: string, completed_on: string, image: record<email: string, name: string, password: string, username: string>, script_commands: table<command: string, name: string>, setup_commands: table<command: string, name: string>, started_on: string, state: record<type: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pipeline_uuid: $pipeline_uuid, step_uuid: $step_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3870,7 +3870,7 @@ export def "repositories-pipelines-steps get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/log
 # operationId: getPipelineStepLogForRepository
-export def "repositories-pipelines-steps-log get" [
+export def "repositories-pipelines-steps-log get-pipeline-step-log-for-repository" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -3886,7 +3886,7 @@ export def "repositories-pipelines-steps-log get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)/log")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pipeline_uuid: $pipeline_uuid, step_uuid: $step_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/log"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3896,7 +3896,7 @@ export def "repositories-pipelines-steps-log get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/logs/{log_uuid}
 # operationId: getPipelineContainerLog
-export def "repositories-pipelines-steps-logs get" [
+export def "repositories-pipelines-steps-logs get-pipeline-container" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -3913,7 +3913,7 @@ export def "repositories-pipelines-steps-logs get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)/logs/($log_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pipeline_uuid: $pipeline_uuid, step_uuid: $step_uuid, log_uuid: $log_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/logs/{log_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3939,7 +3939,7 @@ export def "repositories-pipelines-steps-test-reports get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)/test_reports")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pipeline_uuid: $pipeline_uuid, step_uuid: $step_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/test_reports"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3965,7 +3965,7 @@ export def "repositories-pipelines-steps-test-reports-test-cases get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)/test_reports/test_cases")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pipeline_uuid: $pipeline_uuid, step_uuid: $step_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/test_reports/test_cases"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3992,7 +3992,7 @@ export def "repositories-pipelines-steps-test-reports-test-cases-test-case-reaso
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/steps/($step_uuid)/test_reports/test_cases/($test_case_uuid)/test_case_reasons")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pipeline_uuid: $pipeline_uuid, step_uuid: $step_uuid, test_case_uuid: $test_case_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/steps/{step_uuid}/test_reports/test_cases/{test_case_uuid}/test_case_reasons"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4002,7 +4002,7 @@ export def "repositories-pipelines-steps-test-reports-test-cases-test-case-reaso
 #
 # POST /repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/stopPipeline
 # operationId: stopPipeline
-export def "repositories-pipelines-stop-pipeline stopPipeline" [
+export def "repositories-pipelines-stop-pipeline stop" [
   workspace: string
   repo_slug: string
   pipeline_uuid: string
@@ -4017,7 +4017,7 @@ export def "repositories-pipelines-stop-pipeline stopPipeline" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines/($pipeline_uuid)/stopPipeline")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pipeline_uuid: $pipeline_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines/{pipeline_uuid}/stopPipeline"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4027,7 +4027,7 @@ export def "repositories-pipelines-stop-pipeline stopPipeline" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config
 # operationId: getRepositoryPipelineConfig
-export def "repositories-pipelines-config get" [
+export def "repositories-pipelines-config get-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4041,7 +4041,7 @@ export def "repositories-pipelines-config get" [
 ]: nothing -> record<type: string, enabled: bool, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record<avatar: record, clone: list, commits: record, downloads: record, forks: record, hooks: record, html: record, pullrequests: record, self: record, watchers: record>, mainbranch: record<links: record, name: string, target: record, type: string, default_merge_strategy: string, merge_strategies: list>, name: string, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, parent: any, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>, scm: string, size: int, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4051,7 +4051,7 @@ export def "repositories-pipelines-config get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config
 # operationId: updateRepositoryPipelineConfig
-export def "repositories-pipelines-config updateRepositoryPipelineConfig" [
+export def "repositories-pipelines-config update-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4069,8 +4069,8 @@ export def "repositories-pipelines-config updateRepositoryPipelineConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config")
-  let body = {type: $type, enabled: $enabled, repository: $repository} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config"))
+  let body = {"type": $type, "enabled": $enabled, "repository": $repository} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4081,7 +4081,7 @@ export def "repositories-pipelines-config updateRepositoryPipelineConfig" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config/build_number
 # operationId: updateRepositoryBuildNumber
-export def "repositories-pipelines-config-build-number updateRepositoryBuildNumber" [
+export def "repositories-pipelines-config-build-number update-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4098,8 +4098,8 @@ export def "repositories-pipelines-config-build-number updateRepositoryBuildNumb
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/build_number")
-  let body = {type: $type, next: $next} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/build_number"))
+  let body = {"type": $type, "next": $next} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4124,7 +4124,7 @@ export def "repositories-pipelines-config-schedules list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, cron_pattern: string, enabled: bool, selector: record, target: record, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/schedules/")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4134,7 +4134,7 @@ export def "repositories-pipelines-config-schedules list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/
 # operationId: createRepositoryPipelineSchedule
-export def "repositories-pipelines-config-schedules createRepositoryPipelineSchedule" [
+export def "repositories-pipelines-config-schedules create-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4157,8 +4157,8 @@ export def "repositories-pipelines-config-schedules createRepositoryPipelineSche
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/schedules/")
-  let body = {type: $type, created_on: $created_on, cron_pattern: $cron_pattern, enabled: $enabled, selector: $selector, target: $target, updated_on: $updated_on, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/"))
+  let body = {"type": $type, "created_on": $created_on, "cron_pattern": $cron_pattern, "enabled": $enabled, "selector": $selector, "target": $target, "updated_on": $updated_on, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4169,7 +4169,7 @@ export def "repositories-pipelines-config-schedules createRepositoryPipelineSche
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}
 # operationId: deleteRepositoryPipelineSchedule
-export def "repositories-pipelines-config-schedules delete" [
+export def "repositories-pipelines-config-schedules delete-repository" [
   workspace: string
   repo_slug: string
   schedule_uuid: string
@@ -4184,7 +4184,7 @@ export def "repositories-pipelines-config-schedules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/schedules/($schedule_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, schedule_uuid: $schedule_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4194,7 +4194,7 @@ export def "repositories-pipelines-config-schedules delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}
 # operationId: getRepositoryPipelineSchedule
-export def "repositories-pipelines-config-schedules get" [
+export def "repositories-pipelines-config-schedules get-repository" [
   workspace: string
   repo_slug: string
   schedule_uuid: string
@@ -4209,7 +4209,7 @@ export def "repositories-pipelines-config-schedules get" [
 ]: nothing -> record<type: string, created_on: string, cron_pattern: string, enabled: bool, selector: record<type: string, pattern: string>, target: record<type: string>, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/schedules/($schedule_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, schedule_uuid: $schedule_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4219,7 +4219,7 @@ export def "repositories-pipelines-config-schedules get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}
 # operationId: updateRepositoryPipelineSchedule
-export def "repositories-pipelines-config-schedules updateRepositoryPipelineSchedule" [
+export def "repositories-pipelines-config-schedules update-repository" [
   workspace: string
   repo_slug: string
   schedule_uuid: string
@@ -4243,8 +4243,8 @@ export def "repositories-pipelines-config-schedules updateRepositoryPipelineSche
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/schedules/($schedule_uuid)")
-  let body = {type: $type, created_on: $created_on, cron_pattern: $cron_pattern, enabled: $enabled, selector: $selector, target: $target, updated_on: $updated_on, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, schedule_uuid: $schedule_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}"))
+  let body = {"type": $type, "created_on": $created_on, "cron_pattern": $cron_pattern, "enabled": $enabled, "selector": $selector, "target": $target, "updated_on": $updated_on, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4255,7 +4255,7 @@ export def "repositories-pipelines-config-schedules updateRepositoryPipelineSche
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}/executions/
 # operationId: getRepositoryPipelineScheduleExecutions
-export def "repositories-pipelines-config-schedules-executions get" [
+export def "repositories-pipelines-config-schedules-executions get-repository" [
   workspace: string
   repo_slug: string
   schedule_uuid: string
@@ -4270,7 +4270,7 @@ export def "repositories-pipelines-config-schedules-executions get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/schedules/($schedule_uuid)/executions/")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, schedule_uuid: $schedule_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/schedules/{schedule_uuid}/executions/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4280,7 +4280,7 @@ export def "repositories-pipelines-config-schedules-executions get" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair
 # operationId: deleteRepositoryPipelineKeyPair
-export def "repositories-pipelines-config-ssh-key-pair delete" [
+export def "repositories-pipelines-config-ssh-key-pair delete-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4294,7 +4294,7 @@ export def "repositories-pipelines-config-ssh-key-pair delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/key_pair")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4304,7 +4304,7 @@ export def "repositories-pipelines-config-ssh-key-pair delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair
 # operationId: getRepositoryPipelineSshKeyPair
-export def "repositories-pipelines-config-ssh-key-pair get" [
+export def "repositories-pipelines-config-ssh-key-pair get-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4318,7 +4318,7 @@ export def "repositories-pipelines-config-ssh-key-pair get" [
 ]: nothing -> record<type: string, private_key: string, public_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/key_pair")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4328,7 +4328,7 @@ export def "repositories-pipelines-config-ssh-key-pair get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair
 # operationId: updateRepositoryPipelineKeyPair
-export def "repositories-pipelines-config-ssh-key-pair updateRepositoryPipelineKeyPair" [
+export def "repositories-pipelines-config-ssh-key-pair update-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4346,8 +4346,8 @@ export def "repositories-pipelines-config-ssh-key-pair updateRepositoryPipelineK
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/key_pair")
-  let body = {type: $type, private_key: $private_key, public_key: $public_key} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/key_pair"))
+  let body = {"type": $type, "private_key": $private_key, "public_key": $public_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4372,7 +4372,7 @@ export def "repositories-pipelines-config-ssh-known-hosts list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, hostname: string, public_key: record, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/known_hosts/")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4382,7 +4382,7 @@ export def "repositories-pipelines-config-ssh-known-hosts list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/
 # operationId: createRepositoryPipelineKnownHost
-export def "repositories-pipelines-config-ssh-known-hosts createRepositoryPipelineKnownHost" [
+export def "repositories-pipelines-config-ssh-known-hosts create-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4401,8 +4401,8 @@ export def "repositories-pipelines-config-ssh-known-hosts createRepositoryPipeli
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/known_hosts/")
-  let body = {type: $type, hostname: $hostname, public_key: $public_key, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/"))
+  let body = {"type": $type, "hostname": $hostname, "public_key": $public_key, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4413,7 +4413,7 @@ export def "repositories-pipelines-config-ssh-known-hosts createRepositoryPipeli
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}
 # operationId: deleteRepositoryPipelineKnownHost
-export def "repositories-pipelines-config-ssh-known-hosts delete" [
+export def "repositories-pipelines-config-ssh-known-hosts delete-repository" [
   workspace: string
   repo_slug: string
   known_host_uuid: string
@@ -4428,7 +4428,7 @@ export def "repositories-pipelines-config-ssh-known-hosts delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/known_hosts/($known_host_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, known_host_uuid: $known_host_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4438,7 +4438,7 @@ export def "repositories-pipelines-config-ssh-known-hosts delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}
 # operationId: getRepositoryPipelineKnownHost
-export def "repositories-pipelines-config-ssh-known-hosts get" [
+export def "repositories-pipelines-config-ssh-known-hosts get-repository" [
   workspace: string
   repo_slug: string
   known_host_uuid: string
@@ -4453,7 +4453,7 @@ export def "repositories-pipelines-config-ssh-known-hosts get" [
 ]: nothing -> record<type: string, hostname: string, public_key: record<type: string, key: string, key_type: string, md5_fingerprint: string, sha256_fingerprint: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/known_hosts/($known_host_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, known_host_uuid: $known_host_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4463,7 +4463,7 @@ export def "repositories-pipelines-config-ssh-known-hosts get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}
 # operationId: updateRepositoryPipelineKnownHost
-export def "repositories-pipelines-config-ssh-known-hosts updateRepositoryPipelineKnownHost" [
+export def "repositories-pipelines-config-ssh-known-hosts update-repository" [
   workspace: string
   repo_slug: string
   known_host_uuid: string
@@ -4483,8 +4483,8 @@ export def "repositories-pipelines-config-ssh-known-hosts updateRepositoryPipeli
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/ssh/known_hosts/($known_host_uuid)")
-  let body = {type: $type, hostname: $hostname, public_key: $public_key, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, known_host_uuid: $known_host_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/ssh/known_hosts/{known_host_uuid}"))
+  let body = {"type": $type, "hostname": $hostname, "public_key": $public_key, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4509,7 +4509,7 @@ export def "repositories-pipelines-config-variables list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, key: string, secured: bool, uuid: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/variables/")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/variables/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4519,7 +4519,7 @@ export def "repositories-pipelines-config-variables list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pipelines_config/variables/
 # operationId: createRepositoryPipelineVariable
-export def "repositories-pipelines-config-variables createRepositoryPipelineVariable" [
+export def "repositories-pipelines-config-variables create-repository" [
   workspace: string
   repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4539,8 +4539,8 @@ export def "repositories-pipelines-config-variables createRepositoryPipelineVari
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/variables/")
-  let body = {type: $type, key: $key, secured: $secured, uuid: $uuid, value: $value} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/variables/"))
+  let body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4551,7 +4551,7 @@ export def "repositories-pipelines-config-variables createRepositoryPipelineVari
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}
 # operationId: deleteRepositoryPipelineVariable
-export def "repositories-pipelines-config-variables delete" [
+export def "repositories-pipelines-config-variables delete-repository" [
   workspace: string
   repo_slug: string
   variable_uuid: string
@@ -4566,7 +4566,7 @@ export def "repositories-pipelines-config-variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/variables/($variable_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, variable_uuid: $variable_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4576,7 +4576,7 @@ export def "repositories-pipelines-config-variables delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}
 # operationId: getRepositoryPipelineVariable
-export def "repositories-pipelines-config-variables get" [
+export def "repositories-pipelines-config-variables get-repository" [
   workspace: string
   repo_slug: string
   variable_uuid: string
@@ -4591,7 +4591,7 @@ export def "repositories-pipelines-config-variables get" [
 ]: nothing -> record<type: string, key: string, secured: bool, uuid: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/variables/($variable_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, variable_uuid: $variable_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4601,7 +4601,7 @@ export def "repositories-pipelines-config-variables get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}
 # operationId: updateRepositoryPipelineVariable
-export def "repositories-pipelines-config-variables updateRepositoryPipelineVariable" [
+export def "repositories-pipelines-config-variables update-repository" [
   workspace: string
   repo_slug: string
   variable_uuid: string
@@ -4622,8 +4622,8 @@ export def "repositories-pipelines-config-variables updateRepositoryPipelineVari
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pipelines_config/variables/($variable_uuid)")
-  let body = {type: $type, key: $key, secured: $secured, uuid: $uuid, value: $value} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, variable_uuid: $variable_uuid} | format pattern "/repositories/{workspace}/{repo_slug}/pipelines_config/variables/{variable_uuid}"))
+  let body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4634,7 +4634,7 @@ export def "repositories-pipelines-config-variables updateRepositoryPipelineVari
 #
 # DELETE /repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}
 # operationId: deleteRepositoryHostedPropertyValue
-export def "repositories-properties delete" [
+export def "repositories-properties delete-repository-hosted-property-value" [
   workspace: string
   repo_slug: string
   app_key: string
@@ -4650,7 +4650,7 @@ export def "repositories-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/properties/($app_key)/($property_name)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, app_key: $app_key, property_name: $property_name} | format pattern "/repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4660,7 +4660,7 @@ export def "repositories-properties delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}
 # operationId: getRepositoryHostedPropertyValue
-export def "repositories-properties get" [
+export def "repositories-properties get-repository-hosted-property-value" [
   workspace: string
   repo_slug: string
   app_key: string
@@ -4676,7 +4676,7 @@ export def "repositories-properties get" [
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/properties/($app_key)/($property_name)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, app_key: $app_key, property_name: $property_name} | format pattern "/repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4686,7 +4686,7 @@ export def "repositories-properties get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}
 # operationId: updateRepositoryHostedPropertyValue
-export def "repositories-properties updateRepositoryHostedPropertyValue" [
+export def "repositories-properties update-repository-hosted-property-value" [
   workspace: string
   repo_slug: string
   app_key: string
@@ -4704,8 +4704,8 @@ export def "repositories-properties updateRepositoryHostedPropertyValue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/properties/($app_key)/($property_name)")
-  let body = {_attributes: $attributes} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, app_key: $app_key, property_name: $property_name} | format pattern "/repositories/{workspace}/{repo_slug}/properties/{app_key}/{property_name}"))
+  let body = {"_attributes": $attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4716,8 +4716,8 @@ export def "repositories-properties updateRepositoryHostedPropertyValue" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests
 export def "repositories-pullrequests list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4731,7 +4731,7 @@ export def "repositories-pullrequests list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4749,8 +4749,8 @@ export def "repositories-pullrequests list" [
 # --source shape: {branch?: record, commit?: record, repository?: any}
 # --summary shape: {html?: string, markup?: "markdown"|"creole"|"plaintext", raw?: string}
 export def "repositories-pullrequests post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4783,8 +4783,8 @@ export def "repositories-pullrequests post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests")
-  let body = {type: $type, author: $author, close_source_branch: $close_source_branch, closed_by: $closed_by, comment_count: $comment_count, created_on: $created_on, destination: $destination, id: $id, links: $links, merge_commit: $merge_commit, participants: $participants, reason: $reason, rendered: $rendered, reviewers: $reviewers, source: $body_source, state: $state, summary: $summary, task_count: $task_count, title: $title, updated_on: $updated_on} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests"))
+  let body = {"type": $type, "author": $author, "close_source_branch": $close_source_branch, "closed_by": $closed_by, "comment_count": $comment_count, "created_on": $created_on, "destination": $destination, "id": $id, "links": $links, "merge_commit": $merge_commit, "participants": $participants, "reason": $reason, "rendered": $rendered, "reviewers": $reviewers, "source": $body_source, "state": $state, "summary": $summary, "task_count": $task_count, "title": $title, "updated_on": $updated_on} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4795,8 +4795,8 @@ export def "repositories-pullrequests post" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/activity
 export def "repositories-pullrequests-activity list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4808,7 +4808,7 @@ export def "repositories-pullrequests-activity list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/activity")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/activity"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4818,9 +4818,9 @@ export def "repositories-pullrequests-activity list" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}
 export def "repositories-pullrequests get" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4832,7 +4832,7 @@ export def "repositories-pullrequests get" [
 ]: nothing -> record<type: string, author: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, close_source_branch: bool, closed_by: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, comment_count: int, created_on: string, destination: record<branch: record<default_merge_strategy: string, merge_strategies: list, name: string>, commit: record<hash: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, id: int, links: record<activity: record<href: string, name: string>, approve: record<href: string, name: string>, comments: record<href: string, name: string>, commits: record<href: string, name: string>, decline: record<href: string, name: string>, diff: record<href: string, name: string>, diffstat: record<href: string, name: string>, html: record<href: string, name: string>, merge: record<href: string, name: string>, self: record<href: string, name: string>>, merge_commit: record<hash: string>, participants: table<type: string, approved: bool, participated_on: string, role: string, state: string, user: record>, reason: string, rendered: record<description: record<html: string, markup: string, raw: string>, reason: record<html: string, markup: string, raw: string>, title: record<html: string, markup: string, raw: string>>, reviewers: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, source: record<branch: record<default_merge_strategy: string, merge_strategies: list, name: string>, commit: record<hash: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, state: string, summary: record<html: string, markup: string, raw: string>, task_count: int, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4850,9 +4850,9 @@ export def "repositories-pullrequests get" [
 # --source shape: {branch?: record, commit?: record, repository?: any}
 # --summary shape: {html?: string, markup?: "markdown"|"creole"|"plaintext", raw?: string}
 export def "repositories-pullrequests put" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4885,8 +4885,8 @@ export def "repositories-pullrequests put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)")
-  let body = {type: $type, author: $author, close_source_branch: $close_source_branch, closed_by: $closed_by, comment_count: $comment_count, created_on: $created_on, destination: $destination, id: $id, links: $links, merge_commit: $merge_commit, participants: $participants, reason: $reason, rendered: $rendered, reviewers: $reviewers, source: $body_source, state: $state, summary: $summary, task_count: $task_count, title: $title, updated_on: $updated_on} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}"))
+  let body = {"type": $type, "author": $author, "close_source_branch": $close_source_branch, "closed_by": $closed_by, "comment_count": $comment_count, "created_on": $created_on, "destination": $destination, "id": $id, "links": $links, "merge_commit": $merge_commit, "participants": $participants, "reason": $reason, "rendered": $rendered, "reviewers": $reviewers, "source": $body_source, "state": $state, "summary": $summary, "task_count": $task_count, "title": $title, "updated_on": $updated_on} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4897,9 +4897,9 @@ export def "repositories-pullrequests put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/activity
 export def "repositories-pullrequests-activity get" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4911,7 +4911,7 @@ export def "repositories-pullrequests-activity get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/activity")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/activity"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4921,9 +4921,9 @@ export def "repositories-pullrequests-activity get" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/approve
 export def "repositories-pullrequests-approve delete" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4935,7 +4935,7 @@ export def "repositories-pullrequests-approve delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/approve")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4945,9 +4945,9 @@ export def "repositories-pullrequests-approve delete" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/approve
 export def "repositories-pullrequests-approve post" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4959,7 +4959,7 @@ export def "repositories-pullrequests-approve post" [
 ]: nothing -> record<type: string, approved: bool, participated_on: string, role: string, state: string, user: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/approve")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/approve"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4969,9 +4969,9 @@ export def "repositories-pullrequests-approve post" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments
 export def "repositories-pullrequests-comments list" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4983,7 +4983,7 @@ export def "repositories-pullrequests-comments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<pullrequest: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/comments")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4993,9 +4993,9 @@ export def "repositories-pullrequests-comments list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments
 export def "repositories-pullrequests-comments post" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5009,8 +5009,8 @@ export def "repositories-pullrequests-comments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/comments")
-  let body = {pullrequest: $pullrequest} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments"))
+  let body = {"pullrequest": $pullrequest} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5021,10 +5021,10 @@ export def "repositories-pullrequests-comments post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}
 export def "repositories-pullrequests-comments delete" [
-  comment_id: int
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5036,7 +5036,7 @@ export def "repositories-pullrequests-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/comments/($comment_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id, comment_id: $comment_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5046,10 +5046,10 @@ export def "repositories-pullrequests-comments delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}
 export def "repositories-pullrequests-comments get" [
-  comment_id: int
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5061,7 +5061,7 @@ export def "repositories-pullrequests-comments get" [
 ]: nothing -> record<pullrequest: record<type: string, author: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, close_source_branch: bool, closed_by: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, comment_count: int, created_on: string, destination: record<branch: record, commit: record, repository: record>, id: int, links: record<activity: record, approve: record, comments: record, commits: record, decline: record, diff: record, diffstat: record, html: record, merge: record, self: record>, merge_commit: record<hash: string>, participants: list<record>, reason: string, rendered: record<description: record, reason: record, title: record>, reviewers: list<record>, source: record<branch: record, commit: record, repository: record>, state: string, summary: record<html: string, markup: string, raw: string>, task_count: int, title: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/comments/($comment_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id, comment_id: $comment_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5071,10 +5071,10 @@ export def "repositories-pullrequests-comments get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}
 export def "repositories-pullrequests-comments put" [
-  comment_id: int
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5088,8 +5088,8 @@ export def "repositories-pullrequests-comments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/comments/($comment_id)")
-  let body = {pullrequest: $pullrequest} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id, comment_id: $comment_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/comments/{comment_id}"))
+  let body = {"pullrequest": $pullrequest} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5100,9 +5100,9 @@ export def "repositories-pullrequests-comments put" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/commits
 export def "repositories-pullrequests-commits get" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5114,7 +5114,7 @@ export def "repositories-pullrequests-commits get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/commits")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/commits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5124,9 +5124,9 @@ export def "repositories-pullrequests-commits get" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/decline
 export def "repositories-pullrequests-decline post" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5138,7 +5138,7 @@ export def "repositories-pullrequests-decline post" [
 ]: nothing -> record<type: string, author: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, close_source_branch: bool, closed_by: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, comment_count: int, created_on: string, destination: record<branch: record<default_merge_strategy: string, merge_strategies: list, name: string>, commit: record<hash: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, id: int, links: record<activity: record<href: string, name: string>, approve: record<href: string, name: string>, comments: record<href: string, name: string>, commits: record<href: string, name: string>, decline: record<href: string, name: string>, diff: record<href: string, name: string>, diffstat: record<href: string, name: string>, html: record<href: string, name: string>, merge: record<href: string, name: string>, self: record<href: string, name: string>>, merge_commit: record<hash: string>, participants: table<type: string, approved: bool, participated_on: string, role: string, state: string, user: record>, reason: string, rendered: record<description: record<html: string, markup: string, raw: string>, reason: record<html: string, markup: string, raw: string>, title: record<html: string, markup: string, raw: string>>, reviewers: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, source: record<branch: record<default_merge_strategy: string, merge_strategies: list, name: string>, commit: record<hash: string>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, state: string, summary: record<html: string, markup: string, raw: string>, task_count: int, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/decline")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/decline"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5148,9 +5148,9 @@ export def "repositories-pullrequests-decline post" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diff
 export def "repositories-pullrequests-diff get" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5162,7 +5162,7 @@ export def "repositories-pullrequests-diff get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/diff")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diff"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5172,9 +5172,9 @@ export def "repositories-pullrequests-diff get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diffstat
 export def "repositories-pullrequests-diffstat get" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5186,7 +5186,7 @@ export def "repositories-pullrequests-diffstat get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/diffstat")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/diffstat"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5196,9 +5196,9 @@ export def "repositories-pullrequests-diffstat get" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/merge
 export def "repositories-pullrequests-merge post" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5217,8 +5217,8 @@ export def "repositories-pullrequests-merge post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "async" $async "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/merge" $qp)
-  let body = {close_source_branch: $close_source_branch, merge_strategy: $merge_strategy, message: $message, type: $type} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/merge") $qp)
+  let body = {"close_source_branch": $close_source_branch, "merge_strategy": $merge_strategy, "message": $message, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5229,10 +5229,10 @@ export def "repositories-pullrequests-merge post" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/merge/task-status/{task_id}
 export def "repositories-pullrequests-merge-task-status get" [
-  pull_request_id: int
-  repo_slug: string
-  task_id: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5244,7 +5244,7 @@ export def "repositories-pullrequests-merge-task-status get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/merge/task-status/($task_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id, task_id: $task_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/merge/task-status/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5254,9 +5254,9 @@ export def "repositories-pullrequests-merge-task-status get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/patch
 export def "repositories-pullrequests-patch get" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5268,7 +5268,7 @@ export def "repositories-pullrequests-patch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/patch")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5278,9 +5278,9 @@ export def "repositories-pullrequests-patch get" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/request-changes
 export def "repositories-pullrequests-request-changes delete" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5292,7 +5292,7 @@ export def "repositories-pullrequests-request-changes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/request-changes")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/request-changes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5302,9 +5302,9 @@ export def "repositories-pullrequests-request-changes delete" [
 #
 # POST /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/request-changes
 export def "repositories-pullrequests-request-changes post" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5316,7 +5316,7 @@ export def "repositories-pullrequests-request-changes post" [
 ]: nothing -> record<type: string, approved: bool, participated_on: string, role: string, state: string, user: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/request-changes")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/request-changes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5326,9 +5326,9 @@ export def "repositories-pullrequests-request-changes post" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/statuses
 export def "repositories-pullrequests-statuses get" [
-  pull_request_id: int
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  pull_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5343,7 +5343,7 @@ export def "repositories-pullrequests-statuses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pull_request_id)/statuses" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pull_request_id: $pull_request_id} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pull_request_id}/statuses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5353,7 +5353,7 @@ export def "repositories-pullrequests-statuses get" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}
 # operationId: deletePullRequestHostedPropertyValue
-export def "repositories-pullrequests-properties delete" [
+export def "repositories-pullrequests-properties delete-pull-request-hosted-property-value" [
   workspace: string
   repo_slug: string
   pullrequest_id: string
@@ -5370,7 +5370,7 @@ export def "repositories-pullrequests-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pullrequest_id)/properties/($app_key)/($property_name)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pullrequest_id: $pullrequest_id, app_key: $app_key, property_name: $property_name} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5380,7 +5380,7 @@ export def "repositories-pullrequests-properties delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}
 # operationId: getPullRequestHostedPropertyValue
-export def "repositories-pullrequests-properties get" [
+export def "repositories-pullrequests-properties get-pull-request-hosted-property-value" [
   workspace: string
   repo_slug: string
   pullrequest_id: string
@@ -5397,7 +5397,7 @@ export def "repositories-pullrequests-properties get" [
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pullrequest_id)/properties/($app_key)/($property_name)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pullrequest_id: $pullrequest_id, app_key: $app_key, property_name: $property_name} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5407,7 +5407,7 @@ export def "repositories-pullrequests-properties get" [
 #
 # PUT /repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}
 # operationId: updatePullRequestHostedPropertyValue
-export def "repositories-pullrequests-properties updatePullRequestHostedPropertyValue" [
+export def "repositories-pullrequests-properties update-pull-request-hosted-property-value" [
   workspace: string
   repo_slug: string
   pullrequest_id: string
@@ -5426,8 +5426,8 @@ export def "repositories-pullrequests-properties updatePullRequestHostedProperty
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/pullrequests/($pullrequest_id)/properties/($app_key)/($property_name)")
-  let body = {_attributes: $attributes} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, pullrequest_id: $pullrequest_id, app_key: $app_key, property_name: $property_name} | format pattern "/repositories/{workspace}/{repo_slug}/pullrequests/{pullrequest_id}/properties/{app_key}/{property_name}"))
+  let body = {"_attributes": $attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5438,8 +5438,8 @@ export def "repositories-pullrequests-properties updatePullRequestHostedProperty
 #
 # GET /repositories/{workspace}/{repo_slug}/refs
 export def "repositories-refs get" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5454,7 +5454,7 @@ export def "repositories-refs get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/refs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5464,8 +5464,8 @@ export def "repositories-refs get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/refs/branches
 export def "repositories-refs-branches list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5480,7 +5480,7 @@ export def "repositories-refs-branches list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/branches" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/refs/branches") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5490,8 +5490,8 @@ export def "repositories-refs-branches list" [
 #
 # POST /repositories/{workspace}/{repo_slug}/refs/branches
 export def "repositories-refs-branches post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5503,7 +5503,7 @@ export def "repositories-refs-branches post" [
 ]: nothing -> record<links: record<commits: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>>, name: string, target: record<participants: list<record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: any, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, type: string, default_merge_strategy: string, merge_strategies: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/branches")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/refs/branches"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5513,9 +5513,9 @@ export def "repositories-refs-branches post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/refs/branches/{name}
 export def "repositories-refs-branches delete" [
-  name: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5527,7 +5527,7 @@ export def "repositories-refs-branches delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/branches/($name)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, name: $name} | format pattern "/repositories/{workspace}/{repo_slug}/refs/branches/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5537,9 +5537,9 @@ export def "repositories-refs-branches delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/refs/branches/{name}
 export def "repositories-refs-branches get" [
-  name: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5551,7 +5551,7 @@ export def "repositories-refs-branches get" [
 ]: nothing -> record<links: record<commits: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>>, name: string, target: record<participants: list<record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: any, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, type: string, default_merge_strategy: string, merge_strategies: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/branches/($name)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, name: $name} | format pattern "/repositories/{workspace}/{repo_slug}/refs/branches/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5561,8 +5561,8 @@ export def "repositories-refs-branches get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/refs/tags
 export def "repositories-refs-tags list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5577,7 +5577,7 @@ export def "repositories-refs-tags list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/tags" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/refs/tags") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5588,8 +5588,8 @@ export def "repositories-refs-tags list" [
 # POST /repositories/{workspace}/{repo_slug}/refs/tags
 # --links shape: {commits?: record, html?: record, self?: record}
 export def "repositories-refs-tags post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5609,8 +5609,8 @@ export def "repositories-refs-tags post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/tags")
-  let body = {links: $links, name: $name, target: $target, type: $type, date: $date, message: $message, tagger: $tagger} | compact
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/refs/tags"))
+  let body = {"links": $links, "name": $name, "target": $target, "type": $type, "date": $date, "message": $message, "tagger": $tagger} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5621,9 +5621,9 @@ export def "repositories-refs-tags post" [
 #
 # DELETE /repositories/{workspace}/{repo_slug}/refs/tags/{name}
 export def "repositories-refs-tags delete" [
-  name: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5635,7 +5635,7 @@ export def "repositories-refs-tags delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/tags/($name)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, name: $name} | format pattern "/repositories/{workspace}/{repo_slug}/refs/tags/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5645,9 +5645,9 @@ export def "repositories-refs-tags delete" [
 #
 # GET /repositories/{workspace}/{repo_slug}/refs/tags/{name}
 export def "repositories-refs-tags get" [
-  name: string
-  repo_slug: string
   workspace: string
+  repo_slug: string
+  name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5659,7 +5659,7 @@ export def "repositories-refs-tags get" [
 ]: nothing -> record<links: record<commits: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>>, name: string, target: record<participants: list<record>, repository: record<type: string, created_on: string, description: string, fork_policy: string, full_name: string, has_issues: bool, has_wiki: bool, is_private: bool, language: string, links: record, mainbranch: record, name: string, owner: record, parent: any, project: record, scm: string, size: int, updated_on: string, uuid: string>>, type: string, date: string, message: string, tagger: record<type: string, raw: string, user: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/refs/tags/($name)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, name: $name} | format pattern "/repositories/{workspace}/{repo_slug}/refs/tags/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5668,9 +5668,9 @@ export def "repositories-refs-tags get" [
 # Get the root directory of the main branch
 #
 # GET /repositories/{workspace}/{repo_slug}/src
-export def "repositories-src get-by-repo_slug-workspace" [
-  repo_slug: string
+export def "repositories-src get-by-workspace-repo_slug" [
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5684,7 +5684,7 @@ export def "repositories-src get-by-repo_slug-workspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/src" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/src") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5694,8 +5694,8 @@ export def "repositories-src get-by-repo_slug-workspace" [
 #
 # POST /repositories/{workspace}/{repo_slug}/src
 export def "repositories-src post" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5713,7 +5713,7 @@ export def "repositories-src post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "message" $message "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "parents" $parents "scalar") (serialize-qp "files" $files "scalar") (serialize-qp "branch" $branch "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/src" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/src") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5722,11 +5722,11 @@ export def "repositories-src post" [
 # Get file or directory contents
 #
 # GET /repositories/{workspace}/{repo_slug}/src/{commit}/{path}
-export def "repositories-src get-by-commit-path-repo_slug-workspace" [
+export def "repositories-src get-by-workspace-repo_slug-commit-path" [
+  workspace: string
+  repo_slug: string
   commit: string
   path: string
-  repo_slug: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5743,7 +5743,7 @@ export def "repositories-src get-by-commit-path-repo_slug-workspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "max_depth" $max_depth "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/src/($commit)/($path)" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, commit: $commit, path: $path} | format pattern "/repositories/{workspace}/{repo_slug}/src/{commit}/{path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5753,8 +5753,8 @@ export def "repositories-src get-by-commit-path-repo_slug-workspace" [
 #
 # GET /repositories/{workspace}/{repo_slug}/versions
 export def "repositories-versions list" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5766,7 +5766,7 @@ export def "repositories-versions list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, id: int, links: record, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/versions")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/versions"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5776,9 +5776,9 @@ export def "repositories-versions list" [
 #
 # GET /repositories/{workspace}/{repo_slug}/versions/{version_id}
 export def "repositories-versions get" [
+  workspace: string
   repo_slug: string
   version_id: int
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5790,7 +5790,7 @@ export def "repositories-versions get" [
 ]: nothing -> record<type: string, id: int, links: record<self: record<href: string, name: string>>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/versions/($version_id)")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug, version_id: $version_id} | format pattern "/repositories/{workspace}/{repo_slug}/versions/{version_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5800,8 +5800,8 @@ export def "repositories-versions get" [
 #
 # GET /repositories/{workspace}/{repo_slug}/watchers
 export def "repositories-watchers get" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5813,7 +5813,7 @@ export def "repositories-watchers get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/repositories/($workspace)/($repo_slug)/watchers")
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/repositories/{workspace}/{repo_slug}/watchers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5868,7 +5868,7 @@ export def "snippets post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/snippets")
-  let body = {type: $type, created_on: $created_on, creator: $creator, id: $id, is_private: $is_private, owner: $owner, scm: $scm, title: $title, updated_on: $updated_on} | compact
+  let body = {"type": $type, "created_on": $created_on, "creator": $creator, "id": $id, "is_private": $is_private, "owner": $owner, "scm": $scm, "title": $title, "updated_on": $updated_on} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5893,7 +5893,7 @@ export def "snippets get-by-workspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "role" $role "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/snippets/($workspace)" $qp)
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/snippets/{workspace}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5925,8 +5925,8 @@ export def "snippets post-by-workspace" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)")
-  let body = {type: $type, created_on: $created_on, creator: $creator, id: $id, is_private: $is_private, owner: $owner, scm: $scm, title: $title, updated_on: $updated_on} | compact
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/snippets/{workspace}"))
+  let body = {"type": $type, "created_on": $created_on, "creator": $creator, "id": $id, "is_private": $is_private, "owner": $owner, "scm": $scm, "title": $title, "updated_on": $updated_on} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5936,9 +5936,9 @@ export def "snippets post-by-workspace" [
 # Delete a snippet
 #
 # DELETE /snippets/{workspace}/{encoded_id}
-export def "snippets delete-by-encoded_id-workspace" [
-  encoded_id: string
+export def "snippets delete-by-workspace-encoded_id" [
   workspace: string
+  encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5950,7 +5950,7 @@ export def "snippets delete-by-encoded_id-workspace" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id} | format pattern "/snippets/{workspace}/{encoded_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5959,9 +5959,9 @@ export def "snippets delete-by-encoded_id-workspace" [
 # Get a snippet
 #
 # GET /snippets/{workspace}/{encoded_id}
-export def "snippets get-by-encoded_id-workspace" [
-  encoded_id: string
+export def "snippets get-by-workspace-encoded_id" [
   workspace: string
+  encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5974,7 +5974,7 @@ export def "snippets get-by-encoded_id-workspace" [
 ]: nothing -> record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, scm: string, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id} | format pattern "/snippets/{workspace}/{encoded_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5983,9 +5983,9 @@ export def "snippets get-by-encoded_id-workspace" [
 # Update a snippet
 #
 # PUT /snippets/{workspace}/{encoded_id}
-export def "snippets put-by-encoded_id-workspace" [
-  encoded_id: string
+export def "snippets put-by-workspace-encoded_id" [
   workspace: string
+  encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5998,7 +5998,7 @@ export def "snippets put-by-encoded_id-workspace" [
 ]: nothing -> record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, scm: string, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id} | format pattern "/snippets/{workspace}/{encoded_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6008,8 +6008,8 @@ export def "snippets put-by-encoded_id-workspace" [
 #
 # GET /snippets/{workspace}/{encoded_id}/comments
 export def "snippets-comments list" [
-  encoded_id: string
   workspace: string
+  encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6021,7 +6021,7 @@ export def "snippets-comments list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, links: record, snippet: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/comments")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id} | format pattern "/snippets/{workspace}/{encoded_id}/comments"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6032,8 +6032,8 @@ export def "snippets-comments list" [
 # POST /snippets/{workspace}/{encoded_id}/comments
 # --links shape: {html?: record, self?: record}
 export def "snippets-comments post" [
-  encoded_id: string
   workspace: string
+  encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6049,8 +6049,8 @@ export def "snippets-comments post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/comments")
-  let body = {type: $type, links: $links, snippet: $snippet} | compact
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id} | format pattern "/snippets/{workspace}/{encoded_id}/comments"))
+  let body = {"type": $type, "links": $links, "snippet": $snippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6061,9 +6061,9 @@ export def "snippets-comments post" [
 #
 # DELETE /snippets/{workspace}/{encoded_id}/comments/{comment_id}
 export def "snippets-comments delete" [
-  comment_id: int
-  encoded_id: string
   workspace: string
+  encoded_id: string
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6075,7 +6075,7 @@ export def "snippets-comments delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/comments/($comment_id)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, comment_id: $comment_id} | format pattern "/snippets/{workspace}/{encoded_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6085,9 +6085,9 @@ export def "snippets-comments delete" [
 #
 # GET /snippets/{workspace}/{encoded_id}/comments/{comment_id}
 export def "snippets-comments get" [
-  comment_id: int
-  encoded_id: string
   workspace: string
+  encoded_id: string
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6099,7 +6099,7 @@ export def "snippets-comments get" [
 ]: nothing -> record<type: string, links: record<html: record<href: string, name: string>, self: record<href: string, name: string>>, snippet: record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, scm: string, title: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/comments/($comment_id)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, comment_id: $comment_id} | format pattern "/snippets/{workspace}/{encoded_id}/comments/{comment_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6110,9 +6110,9 @@ export def "snippets-comments get" [
 # PUT /snippets/{workspace}/{encoded_id}/comments/{comment_id}
 # --links shape: {html?: record, self?: record}
 export def "snippets-comments put" [
-  comment_id: int
-  encoded_id: string
   workspace: string
+  encoded_id: string
+  comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6128,8 +6128,8 @@ export def "snippets-comments put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/comments/($comment_id)")
-  let body = {type: $type, links: $links, snippet: $snippet} | compact
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, comment_id: $comment_id} | format pattern "/snippets/{workspace}/{encoded_id}/comments/{comment_id}"))
+  let body = {"type": $type, "links": $links, "snippet": $snippet} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6140,8 +6140,8 @@ export def "snippets-comments put" [
 #
 # GET /snippets/{workspace}/{encoded_id}/commits
 export def "snippets-commits list" [
-  encoded_id: string
   workspace: string
+  encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6153,7 +6153,7 @@ export def "snippets-commits list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<links: record, snippet: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/commits")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id} | format pattern "/snippets/{workspace}/{encoded_id}/commits"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6163,9 +6163,9 @@ export def "snippets-commits list" [
 #
 # GET /snippets/{workspace}/{encoded_id}/commits/{revision}
 export def "snippets-commits get" [
+  workspace: string
   encoded_id: string
   revision: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6177,7 +6177,7 @@ export def "snippets-commits get" [
 ]: nothing -> record<links: record<diff: record<href: string, name: string>, html: record<href: string, name: string>, self: record<href: string, name: string>>, snippet: record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>, scm: string, title: string, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/commits/($revision)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, revision: $revision} | format pattern "/snippets/{workspace}/{encoded_id}/commits/{revision}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6187,9 +6187,9 @@ export def "snippets-commits get" [
 #
 # GET /snippets/{workspace}/{encoded_id}/files/{path}
 export def "snippets-files list" [
+  workspace: string
   encoded_id: string
   path: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6201,7 +6201,7 @@ export def "snippets-files list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/files/($path)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, path: $path} | format pattern "/snippets/{workspace}/{encoded_id}/files/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6211,8 +6211,8 @@ export def "snippets-files list" [
 #
 # DELETE /snippets/{workspace}/{encoded_id}/watch
 export def "snippets-watch delete" [
-  encoded_id: string
   workspace: string
+  encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6224,7 +6224,7 @@ export def "snippets-watch delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/watch")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id} | format pattern "/snippets/{workspace}/{encoded_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6234,8 +6234,8 @@ export def "snippets-watch delete" [
 #
 # GET /snippets/{workspace}/{encoded_id}/watch
 export def "snippets-watch get" [
-  encoded_id: string
   workspace: string
+  encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6247,7 +6247,7 @@ export def "snippets-watch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/watch")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id} | format pattern "/snippets/{workspace}/{encoded_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6257,8 +6257,8 @@ export def "snippets-watch get" [
 #
 # PUT /snippets/{workspace}/{encoded_id}/watch
 export def "snippets-watch put" [
-  encoded_id: string
   workspace: string
+  encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6270,7 +6270,7 @@ export def "snippets-watch put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/watch")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id} | format pattern "/snippets/{workspace}/{encoded_id}/watch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6282,8 +6282,8 @@ export def "snippets-watch put" [
 # DEPRECATED
 @deprecated
 export def "snippets-watchers get" [
-  encoded_id: string
   workspace: string
+  encoded_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6295,7 +6295,7 @@ export def "snippets-watchers get" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, display_name: string, links: record, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/watchers")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id} | format pattern "/snippets/{workspace}/{encoded_id}/watchers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6304,10 +6304,10 @@ export def "snippets-watchers get" [
 # Delete a previous revision of a snippet
 #
 # DELETE /snippets/{workspace}/{encoded_id}/{node_id}
-export def "snippets delete-by-encoded_id-node_id-workspace" [
+export def "snippets delete-by-workspace-encoded_id-node_id" [
+  workspace: string
   encoded_id: string
   node_id: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6319,7 +6319,7 @@ export def "snippets delete-by-encoded_id-node_id-workspace" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($node_id)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, node_id: $node_id} | format pattern "/snippets/{workspace}/{encoded_id}/{node_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6328,10 +6328,10 @@ export def "snippets delete-by-encoded_id-node_id-workspace" [
 # Get a previous revision of a snippet
 #
 # GET /snippets/{workspace}/{encoded_id}/{node_id}
-export def "snippets get-by-encoded_id-node_id-workspace" [
+export def "snippets get-by-workspace-encoded_id-node_id" [
+  workspace: string
   encoded_id: string
   node_id: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6344,7 +6344,7 @@ export def "snippets get-by-encoded_id-node_id-workspace" [
 ]: nothing -> record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, scm: string, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($node_id)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, node_id: $node_id} | format pattern "/snippets/{workspace}/{encoded_id}/{node_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6353,10 +6353,10 @@ export def "snippets get-by-encoded_id-node_id-workspace" [
 # Update a previous revision of a snippet
 #
 # PUT /snippets/{workspace}/{encoded_id}/{node_id}
-export def "snippets put-by-encoded_id-node_id-workspace" [
+export def "snippets put-by-workspace-encoded_id-node_id" [
+  workspace: string
   encoded_id: string
   node_id: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6369,7 +6369,7 @@ export def "snippets put-by-encoded_id-node_id-workspace" [
 ]: nothing -> record<type: string, created_on: string, creator: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, id: int, is_private: bool, owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, scm: string, title: string, updated_on: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($node_id)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, node_id: $node_id} | format pattern "/snippets/{workspace}/{encoded_id}/{node_id}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6379,10 +6379,10 @@ export def "snippets put-by-encoded_id-node_id-workspace" [
 #
 # GET /snippets/{workspace}/{encoded_id}/{node_id}/files/{path}
 export def "snippets-files get" [
+  workspace: string
   encoded_id: string
   node_id: string
   path: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6394,7 +6394,7 @@ export def "snippets-files get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($node_id)/files/($path)")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, node_id: $node_id, path: $path} | format pattern "/snippets/{workspace}/{encoded_id}/{node_id}/files/{path}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6404,9 +6404,9 @@ export def "snippets-files get" [
 #
 # GET /snippets/{workspace}/{encoded_id}/{revision}/diff
 export def "snippets-diff get" [
+  workspace: string
   encoded_id: string
   revision: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6420,7 +6420,7 @@ export def "snippets-diff get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($revision)/diff" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, revision: $revision} | format pattern "/snippets/{workspace}/{encoded_id}/{revision}/diff") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6430,9 +6430,9 @@ export def "snippets-diff get" [
 #
 # GET /snippets/{workspace}/{encoded_id}/{revision}/patch
 export def "snippets-patch get" [
+  workspace: string
   encoded_id: string
   revision: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6444,7 +6444,7 @@ export def "snippets-patch get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snippets/($workspace)/($encoded_id)/($revision)/patch")
+  let full_url = (build-url $base ({workspace: $workspace, encoded_id: $encoded_id, revision: $revision} | format pattern "/snippets/{workspace}/{encoded_id}/{revision}/patch"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6456,7 +6456,7 @@ export def "snippets-patch get" [
 # DEPRECATED
 # operationId: getPipelineVariablesForTeam
 @deprecated
-export def "teams-pipelines-config-variables list" [
+export def "teams-pipelines-config-variables get-pipeline-variables-for" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6469,7 +6469,7 @@ export def "teams-pipelines-config-variables list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, key: string, secured: bool, uuid: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($username)/pipelines_config/variables/")
+  let full_url = (build-url $base ({username: $username} | format pattern "/teams/{username}/pipelines_config/variables/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6481,7 +6481,7 @@ export def "teams-pipelines-config-variables list" [
 # DEPRECATED
 # operationId: createPipelineVariableForTeam
 @deprecated
-export def "teams-pipelines-config-variables createPipelineVariableForTeam" [
+export def "teams-pipelines-config-variables create-pipeline-variable-for" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6500,8 +6500,8 @@ export def "teams-pipelines-config-variables createPipelineVariableForTeam" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($username)/pipelines_config/variables/")
-  let body = {type: $type, key: $key, secured: $secured, uuid: $uuid, value: $value} | compact
+  let full_url = (build-url $base ({username: $username} | format pattern "/teams/{username}/pipelines_config/variables/"))
+  let body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6514,7 +6514,7 @@ export def "teams-pipelines-config-variables createPipelineVariableForTeam" [
 # DEPRECATED
 # operationId: deletePipelineVariableForTeam
 @deprecated
-export def "teams-pipelines-config-variables delete" [
+export def "teams-pipelines-config-variables delete-pipeline-variable-for" [
   username: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6528,7 +6528,7 @@ export def "teams-pipelines-config-variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($username)/pipelines_config/variables/($variable_uuid)")
+  let full_url = (build-url $base ({username: $username, variable_uuid: $variable_uuid} | format pattern "/teams/{username}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6540,7 +6540,7 @@ export def "teams-pipelines-config-variables delete" [
 # DEPRECATED
 # operationId: getPipelineVariableForTeam
 @deprecated
-export def "teams-pipelines-config-variables get" [
+export def "teams-pipelines-config-variables get-pipeline-variable-for" [
   username: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6554,7 +6554,7 @@ export def "teams-pipelines-config-variables get" [
 ]: nothing -> record<type: string, key: string, secured: bool, uuid: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($username)/pipelines_config/variables/($variable_uuid)")
+  let full_url = (build-url $base ({username: $username, variable_uuid: $variable_uuid} | format pattern "/teams/{username}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6566,7 +6566,7 @@ export def "teams-pipelines-config-variables get" [
 # DEPRECATED
 # operationId: updatePipelineVariableForTeam
 @deprecated
-export def "teams-pipelines-config-variables updatePipelineVariableForTeam" [
+export def "teams-pipelines-config-variables update-pipeline-variable-for" [
   username: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6586,8 +6586,8 @@ export def "teams-pipelines-config-variables updatePipelineVariableForTeam" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/teams/($username)/pipelines_config/variables/($variable_uuid)")
-  let body = {type: $type, key: $key, secured: $secured, uuid: $uuid, value: $value} | compact
+  let full_url = (build-url $base ({username: $username, variable_uuid: $variable_uuid} | format pattern "/teams/{username}/pipelines_config/variables/{variable_uuid}"))
+  let body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6598,7 +6598,7 @@ export def "teams-pipelines-config-variables updatePipelineVariableForTeam" [
 #
 # GET /teams/{username}/search/code
 # operationId: searchTeam
-export def "teams-search-code searchTeam" [
+export def "teams-search-code list" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6615,7 +6615,7 @@ export def "teams-search-code searchTeam" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_query" $search_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagelen" $pagelen "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/teams/($username)/search/code" $qp)
+  let full_url = (build-url $base ({username: $username} | format pattern "/teams/{username}/search/code") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6679,7 +6679,7 @@ export def "user-emails get" [
 ]: nothing -> record<error: record<data: record, detail: string, message: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/user/emails/($email)")
+  let full_url = (build-url $base ({email: $email} | format pattern "/user/emails/{email}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6749,7 +6749,7 @@ export def "users get" [
 ]: nothing -> record<type: string, created_on: string, display_name: string, links: record<avatar: record<href: string, name: string>>, username: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)")
+  let full_url = (build-url $base ({selected_user: $selected_user} | format pattern "/users/{selected_user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6761,7 +6761,7 @@ export def "users get" [
 # DEPRECATED
 # operationId: getPipelineVariablesForUser
 @deprecated
-export def "users-pipelines-config-variables list" [
+export def "users-pipelines-config-variables get-pipeline-variables-for" [
   selected_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6774,7 +6774,7 @@ export def "users-pipelines-config-variables list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, key: string, secured: bool, uuid: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/pipelines_config/variables/")
+  let full_url = (build-url $base ({selected_user: $selected_user} | format pattern "/users/{selected_user}/pipelines_config/variables/"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6786,7 +6786,7 @@ export def "users-pipelines-config-variables list" [
 # DEPRECATED
 # operationId: createPipelineVariableForUser
 @deprecated
-export def "users-pipelines-config-variables createPipelineVariableForUser" [
+export def "users-pipelines-config-variables create-pipeline-variable-for" [
   selected_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6805,8 +6805,8 @@ export def "users-pipelines-config-variables createPipelineVariableForUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/pipelines_config/variables/")
-  let body = {type: $type, key: $key, secured: $secured, uuid: $uuid, value: $value} | compact
+  let full_url = (build-url $base ({selected_user: $selected_user} | format pattern "/users/{selected_user}/pipelines_config/variables/"))
+  let body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6819,7 +6819,7 @@ export def "users-pipelines-config-variables createPipelineVariableForUser" [
 # DEPRECATED
 # operationId: deletePipelineVariableForUser
 @deprecated
-export def "users-pipelines-config-variables delete" [
+export def "users-pipelines-config-variables delete-pipeline-variable-for" [
   selected_user: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6833,7 +6833,7 @@ export def "users-pipelines-config-variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/pipelines_config/variables/($variable_uuid)")
+  let full_url = (build-url $base ({selected_user: $selected_user, variable_uuid: $variable_uuid} | format pattern "/users/{selected_user}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6845,7 +6845,7 @@ export def "users-pipelines-config-variables delete" [
 # DEPRECATED
 # operationId: getPipelineVariableForUser
 @deprecated
-export def "users-pipelines-config-variables get" [
+export def "users-pipelines-config-variables get-pipeline-variable-for" [
   selected_user: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6859,7 +6859,7 @@ export def "users-pipelines-config-variables get" [
 ]: nothing -> record<type: string, key: string, secured: bool, uuid: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/pipelines_config/variables/($variable_uuid)")
+  let full_url = (build-url $base ({selected_user: $selected_user, variable_uuid: $variable_uuid} | format pattern "/users/{selected_user}/pipelines_config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6871,7 +6871,7 @@ export def "users-pipelines-config-variables get" [
 # DEPRECATED
 # operationId: updatePipelineVariableForUser
 @deprecated
-export def "users-pipelines-config-variables updatePipelineVariableForUser" [
+export def "users-pipelines-config-variables update-pipeline-variable-for" [
   selected_user: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6891,8 +6891,8 @@ export def "users-pipelines-config-variables updatePipelineVariableForUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/pipelines_config/variables/($variable_uuid)")
-  let body = {type: $type, key: $key, secured: $secured, uuid: $uuid, value: $value} | compact
+  let full_url = (build-url $base ({selected_user: $selected_user, variable_uuid: $variable_uuid} | format pattern "/users/{selected_user}/pipelines_config/variables/{variable_uuid}"))
+  let body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6903,7 +6903,7 @@ export def "users-pipelines-config-variables updatePipelineVariableForUser" [
 #
 # DELETE /users/{selected_user}/properties/{app_key}/{property_name}
 # operationId: deleteUserHostedPropertyValue
-export def "users-properties delete" [
+export def "users-properties delete-user-hosted-property-value" [
   selected_user: string
   app_key: string
   property_name: string
@@ -6918,7 +6918,7 @@ export def "users-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/properties/($app_key)/($property_name)")
+  let full_url = (build-url $base ({selected_user: $selected_user, app_key: $app_key, property_name: $property_name} | format pattern "/users/{selected_user}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6928,7 +6928,7 @@ export def "users-properties delete" [
 #
 # GET /users/{selected_user}/properties/{app_key}/{property_name}
 # operationId: retrieveUserHostedPropertyValue
-export def "users-properties retrieveUserHostedPropertyValue" [
+export def "users-properties retrieve-user-hosted-property-value" [
   selected_user: string
   app_key: string
   property_name: string
@@ -6943,7 +6943,7 @@ export def "users-properties retrieveUserHostedPropertyValue" [
 ]: nothing -> record<_attributes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/properties/($app_key)/($property_name)")
+  let full_url = (build-url $base ({selected_user: $selected_user, app_key: $app_key, property_name: $property_name} | format pattern "/users/{selected_user}/properties/{app_key}/{property_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6953,7 +6953,7 @@ export def "users-properties retrieveUserHostedPropertyValue" [
 #
 # PUT /users/{selected_user}/properties/{app_key}/{property_name}
 # operationId: updateUserHostedPropertyValue
-export def "users-properties updateUserHostedPropertyValue" [
+export def "users-properties update-user-hosted-property-value" [
   selected_user: string
   app_key: string
   property_name: string
@@ -6970,8 +6970,8 @@ export def "users-properties updateUserHostedPropertyValue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/properties/($app_key)/($property_name)")
-  let body = {_attributes: $attributes} | compact
+  let full_url = (build-url $base ({selected_user: $selected_user, app_key: $app_key, property_name: $property_name} | format pattern "/users/{selected_user}/properties/{app_key}/{property_name}"))
+  let body = {"_attributes": $attributes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6982,7 +6982,7 @@ export def "users-properties updateUserHostedPropertyValue" [
 #
 # GET /users/{selected_user}/search/code
 # operationId: searchAccount
-export def "users-search-code searchAccount" [
+export def "users-search-code list-account" [
   selected_user: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6999,7 +6999,7 @@ export def "users-search-code searchAccount" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_query" $search_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagelen" $pagelen "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($selected_user)/search/code" $qp)
+  let full_url = (build-url $base ({selected_user: $selected_user} | format pattern "/users/{selected_user}/search/code") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7021,7 +7021,7 @@ export def "users-ssh-keys list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<owner: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/ssh-keys")
+  let full_url = (build-url $base ({selected_user: $selected_user} | format pattern "/users/{selected_user}/ssh-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7045,8 +7045,8 @@ export def "users-ssh-keys post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/ssh-keys")
-  let body = {owner: $owner} | compact
+  let full_url = (build-url $base ({selected_user: $selected_user} | format pattern "/users/{selected_user}/ssh-keys"))
+  let body = {"owner": $owner} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7057,8 +7057,8 @@ export def "users-ssh-keys post" [
 #
 # DELETE /users/{selected_user}/ssh-keys/{key_id}
 export def "users-ssh-keys delete" [
-  key_id: string
   selected_user: string
+  key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7070,7 +7070,7 @@ export def "users-ssh-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/ssh-keys/($key_id)")
+  let full_url = (build-url $base ({selected_user: $selected_user, key_id: $key_id} | format pattern "/users/{selected_user}/ssh-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7080,8 +7080,8 @@ export def "users-ssh-keys delete" [
 #
 # GET /users/{selected_user}/ssh-keys/{key_id}
 export def "users-ssh-keys get" [
-  key_id: string
   selected_user: string
+  key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7093,7 +7093,7 @@ export def "users-ssh-keys get" [
 ]: nothing -> record<owner: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/ssh-keys/($key_id)")
+  let full_url = (build-url $base ({selected_user: $selected_user, key_id: $key_id} | format pattern "/users/{selected_user}/ssh-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7103,8 +7103,8 @@ export def "users-ssh-keys get" [
 #
 # PUT /users/{selected_user}/ssh-keys/{key_id}
 export def "users-ssh-keys put" [
-  key_id: string
   selected_user: string
+  key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7118,8 +7118,8 @@ export def "users-ssh-keys put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($selected_user)/ssh-keys/($key_id)")
-  let body = {owner: $owner} | compact
+  let full_url = (build-url $base ({selected_user: $selected_user, key_id: $key_id} | format pattern "/users/{selected_user}/ssh-keys/{key_id}"))
+  let body = {"owner": $owner} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7167,7 +7167,7 @@ export def "workspaces get" [
 ]: nothing -> record<type: string, created_on: string, is_private: bool, links: record<avatar: record<href: string, name: string>, html: record<href: string, name: string>, members: record<href: string, name: string>, owners: record<href: string, name: string>, projects: record<href: string, name: string>, repositories: record<href: string, name: string>, self: record<href: string, name: string>, snippets: record<href: string, name: string>>, name: string, slug: string, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)")
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7189,7 +7189,7 @@ export def "workspaces-hooks list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, active: bool, created_at: string, description: string, events: list, subject: record, subject_type: string, url: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/hooks")
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/hooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7211,7 +7211,7 @@ export def "workspaces-hooks post" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/hooks")
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/hooks"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7221,8 +7221,8 @@ export def "workspaces-hooks post" [
 #
 # DELETE /workspaces/{workspace}/hooks/{uid}
 export def "workspaces-hooks delete" [
-  uid: string
   workspace: string
+  uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7234,7 +7234,7 @@ export def "workspaces-hooks delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/hooks/($uid)")
+  let full_url = (build-url $base ({workspace: $workspace, uid: $uid} | format pattern "/workspaces/{workspace}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7244,8 +7244,8 @@ export def "workspaces-hooks delete" [
 #
 # GET /workspaces/{workspace}/hooks/{uid}
 export def "workspaces-hooks get" [
-  uid: string
   workspace: string
+  uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7257,7 +7257,7 @@ export def "workspaces-hooks get" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/hooks/($uid)")
+  let full_url = (build-url $base ({workspace: $workspace, uid: $uid} | format pattern "/workspaces/{workspace}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7267,8 +7267,8 @@ export def "workspaces-hooks get" [
 #
 # PUT /workspaces/{workspace}/hooks/{uid}
 export def "workspaces-hooks put" [
-  uid: string
   workspace: string
+  uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7280,7 +7280,7 @@ export def "workspaces-hooks put" [
 ]: nothing -> record<type: string, active: bool, created_at: string, description: string, events: list<string>, subject: record<type: string>, subject_type: string, url: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/hooks/($uid)")
+  let full_url = (build-url $base ({workspace: $workspace, uid: $uid} | format pattern "/workspaces/{workspace}/hooks/{uid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7302,7 +7302,7 @@ export def "workspaces-members list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, links: record, user: record, workspace: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/members")
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/members"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7312,8 +7312,8 @@ export def "workspaces-members list" [
 #
 # GET /workspaces/{workspace}/members/{member}
 export def "workspaces-members get" [
-  member: string
   workspace: string
+  member: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7325,7 +7325,7 @@ export def "workspaces-members get" [
 ]: nothing -> record<type: string, links: record<self: record<href: string, name: string>>, user: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, workspace: record<type: string, created_on: string, is_private: bool, links: record<avatar: record, html: record, members: record, owners: record, projects: record, repositories: record, self: record, snippets: record>, name: string, slug: string, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/members/($member)")
+  let full_url = (build-url $base ({workspace: $workspace, member: $member} | format pattern "/workspaces/{workspace}/members/{member}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7349,7 +7349,7 @@ export def "workspaces-permissions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace)/permissions" $qp)
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/permissions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7374,7 +7374,7 @@ export def "workspaces-permissions-repositories list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace)/permissions/repositories" $qp)
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/permissions/repositories") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7384,8 +7384,8 @@ export def "workspaces-permissions-repositories list" [
 #
 # GET /workspaces/{workspace}/permissions/repositories/{repo_slug}
 export def "workspaces-permissions-repositories get" [
-  repo_slug: string
   workspace: string
+  repo_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7400,7 +7400,7 @@ export def "workspaces-permissions-repositories get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace)/permissions/repositories/($repo_slug)" $qp)
+  let full_url = (build-url $base ({workspace: $workspace, repo_slug: $repo_slug} | format pattern "/workspaces/{workspace}/permissions/repositories/{repo_slug}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7423,7 +7423,7 @@ export def "workspaces-pipelines-config-identity-oidc-well-known-openid-configur
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/identity/oidc/.well-known/openid-configuration")
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/pipelines-config/identity/oidc/.well-known/openid-configuration"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7433,7 +7433,7 @@ export def "workspaces-pipelines-config-identity-oidc-well-known-openid-configur
 #
 # GET /workspaces/{workspace}/pipelines-config/identity/oidc/keys.json
 # operationId: getOIDCKeys
-export def "workspaces-pipelines-config-identity-oidc-keysjson get" [
+export def "workspaces-pipelines-config-identity-oidc-keysjson get-oidc-keys" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7446,7 +7446,7 @@ export def "workspaces-pipelines-config-identity-oidc-keysjson get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/identity/oidc/keys.json")
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/pipelines-config/identity/oidc/keys.json"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7456,7 +7456,7 @@ export def "workspaces-pipelines-config-identity-oidc-keysjson get" [
 #
 # GET /workspaces/{workspace}/pipelines-config/variables
 # operationId: getPipelineVariablesForWorkspace
-export def "workspaces-pipelines-config-variables list" [
+export def "workspaces-pipelines-config-variables get-pipeline-variables-for" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7469,7 +7469,7 @@ export def "workspaces-pipelines-config-variables list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, key: string, secured: bool, uuid: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/variables")
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/pipelines-config/variables"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7479,7 +7479,7 @@ export def "workspaces-pipelines-config-variables list" [
 #
 # POST /workspaces/{workspace}/pipelines-config/variables
 # operationId: createPipelineVariableForWorkspace
-export def "workspaces-pipelines-config-variables createPipelineVariableForWorkspace" [
+export def "workspaces-pipelines-config-variables create-pipeline-variable-for" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7498,8 +7498,8 @@ export def "workspaces-pipelines-config-variables createPipelineVariableForWorks
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/variables")
-  let body = {type: $type, key: $key, secured: $secured, uuid: $uuid, value: $value} | compact
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/pipelines-config/variables"))
+  let body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7510,7 +7510,7 @@ export def "workspaces-pipelines-config-variables createPipelineVariableForWorks
 #
 # DELETE /workspaces/{workspace}/pipelines-config/variables/{variable_uuid}
 # operationId: deletePipelineVariableForWorkspace
-export def "workspaces-pipelines-config-variables delete" [
+export def "workspaces-pipelines-config-variables delete-pipeline-variable-for" [
   workspace: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7524,7 +7524,7 @@ export def "workspaces-pipelines-config-variables delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/variables/($variable_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, variable_uuid: $variable_uuid} | format pattern "/workspaces/{workspace}/pipelines-config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7534,7 +7534,7 @@ export def "workspaces-pipelines-config-variables delete" [
 #
 # GET /workspaces/{workspace}/pipelines-config/variables/{variable_uuid}
 # operationId: getPipelineVariableForWorkspace
-export def "workspaces-pipelines-config-variables get" [
+export def "workspaces-pipelines-config-variables get-pipeline-variable-for" [
   workspace: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7548,7 +7548,7 @@ export def "workspaces-pipelines-config-variables get" [
 ]: nothing -> record<type: string, key: string, secured: bool, uuid: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/variables/($variable_uuid)")
+  let full_url = (build-url $base ({workspace: $workspace, variable_uuid: $variable_uuid} | format pattern "/workspaces/{workspace}/pipelines-config/variables/{variable_uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7558,7 +7558,7 @@ export def "workspaces-pipelines-config-variables get" [
 #
 # PUT /workspaces/{workspace}/pipelines-config/variables/{variable_uuid}
 # operationId: updatePipelineVariableForWorkspace
-export def "workspaces-pipelines-config-variables updatePipelineVariableForWorkspace" [
+export def "workspaces-pipelines-config-variables update-pipeline-variable-for" [
   workspace: string
   variable_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7578,8 +7578,8 @@ export def "workspaces-pipelines-config-variables updatePipelineVariableForWorks
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/pipelines-config/variables/($variable_uuid)")
-  let body = {type: $type, key: $key, secured: $secured, uuid: $uuid, value: $value} | compact
+  let full_url = (build-url $base ({workspace: $workspace, variable_uuid: $variable_uuid} | format pattern "/workspaces/{workspace}/pipelines-config/variables/{variable_uuid}"))
+  let body = {"type": $type, "key": $key, "secured": $secured, "uuid": $uuid, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7602,7 +7602,7 @@ export def "workspaces-projects list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record, name: string, owner: record, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects")
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/projects"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7637,8 +7637,8 @@ export def "workspaces-projects post" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects")
-  let body = {type: $type, created_on: $created_on, description: $description, has_publicly_visible_repos: $has_publicly_visible_repos, is_private: $is_private, key: $key, links: $links, name: $name, owner: $owner, updated_on: $updated_on, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/projects"))
+  let body = {"type": $type, "created_on": $created_on, "description": $description, "has_publicly_visible_repos": $has_publicly_visible_repos, "is_private": $is_private, "key": $key, "links": $links, "name": $name, "owner": $owner, "updated_on": $updated_on, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7649,8 +7649,8 @@ export def "workspaces-projects post" [
 #
 # DELETE /workspaces/{workspace}/projects/{project_key}
 export def "workspaces-projects delete" [
-  project_key: string
   workspace: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7662,7 +7662,7 @@ export def "workspaces-projects delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key} | format pattern "/workspaces/{workspace}/projects/{project_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7672,8 +7672,8 @@ export def "workspaces-projects delete" [
 #
 # GET /workspaces/{workspace}/projects/{project_key}
 export def "workspaces-projects get" [
-  project_key: string
   workspace: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7685,7 +7685,7 @@ export def "workspaces-projects get" [
 ]: nothing -> record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record<avatar: record<href: string, name: string>, html: record<href: string, name: string>>, name: string, owner: record<links: record<avatar: record, html: record, members: record, projects: record, repositories: record, self: record>>, updated_on: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key} | format pattern "/workspaces/{workspace}/projects/{project_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7696,8 +7696,8 @@ export def "workspaces-projects get" [
 # PUT /workspaces/{workspace}/projects/{project_key}
 # --links shape: {avatar?: record, html?: record}
 export def "workspaces-projects put" [
-  project_key: string
   workspace: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7721,8 +7721,8 @@ export def "workspaces-projects put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)")
-  let body = {type: $type, created_on: $created_on, description: $description, has_publicly_visible_repos: $has_publicly_visible_repos, is_private: $is_private, key: $key, links: $links, name: $name, owner: $owner, updated_on: $updated_on, uuid: $uuid} | compact
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key} | format pattern "/workspaces/{workspace}/projects/{project_key}"))
+  let body = {"type": $type, "created_on": $created_on, "description": $description, "has_publicly_visible_repos": $has_publicly_visible_repos, "is_private": $is_private, "key": $key, "links": $links, "name": $name, "owner": $owner, "updated_on": $updated_on, "uuid": $uuid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7733,8 +7733,8 @@ export def "workspaces-projects put" [
 #
 # GET /workspaces/{workspace}/projects/{project_key}/branching-model
 export def "workspaces-projects-branching-model get" [
-  project_key: string
   workspace: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7746,7 +7746,7 @@ export def "workspaces-projects-branching-model get" [
 ]: nothing -> record<type: string, branch_types: table<kind: string, prefix: string>, development: record<name: string, use_mainbranch: bool>, production: record<name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/branching-model")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key} | format pattern "/workspaces/{workspace}/projects/{project_key}/branching-model"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7756,8 +7756,8 @@ export def "workspaces-projects-branching-model get" [
 #
 # GET /workspaces/{workspace}/projects/{project_key}/branching-model/settings
 export def "workspaces-projects-branching-model-settings get" [
-  project_key: string
   workspace: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7769,7 +7769,7 @@ export def "workspaces-projects-branching-model-settings get" [
 ]: nothing -> record<type: string, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, links: record<self: record<href: string, name: string>>, production: record<enabled: bool, is_valid: bool, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/branching-model/settings")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key} | format pattern "/workspaces/{workspace}/projects/{project_key}/branching-model/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7779,8 +7779,8 @@ export def "workspaces-projects-branching-model-settings get" [
 #
 # PUT /workspaces/{workspace}/projects/{project_key}/branching-model/settings
 export def "workspaces-projects-branching-model-settings put" [
-  project_key: string
   workspace: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7792,7 +7792,7 @@ export def "workspaces-projects-branching-model-settings put" [
 ]: nothing -> record<type: string, branch_types: table<enabled: bool, kind: string, prefix: string>, development: record<is_valid: bool, name: string, use_mainbranch: bool>, links: record<self: record<href: string, name: string>>, production: record<enabled: bool, is_valid: bool, name: string, use_mainbranch: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/branching-model/settings")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key} | format pattern "/workspaces/{workspace}/projects/{project_key}/branching-model/settings"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7802,8 +7802,8 @@ export def "workspaces-projects-branching-model-settings put" [
 #
 # GET /workspaces/{workspace}/projects/{project_key}/default-reviewers
 export def "workspaces-projects-default-reviewers list" [
-  project_key: string
   workspace: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7815,7 +7815,7 @@ export def "workspaces-projects-default-reviewers list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<reviewer_type: string, type: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/default-reviewers")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key} | format pattern "/workspaces/{workspace}/projects/{project_key}/default-reviewers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7825,9 +7825,9 @@ export def "workspaces-projects-default-reviewers list" [
 #
 # DELETE /workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}
 export def "workspaces-projects-default-reviewers delete" [
+  workspace: string
   project_key: string
   selected_user: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7839,7 +7839,7 @@ export def "workspaces-projects-default-reviewers delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/default-reviewers/($selected_user)")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key, selected_user: $selected_user} | format pattern "/workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7849,9 +7849,9 @@ export def "workspaces-projects-default-reviewers delete" [
 #
 # GET /workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}
 export def "workspaces-projects-default-reviewers get" [
+  workspace: string
   project_key: string
   selected_user: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7863,7 +7863,7 @@ export def "workspaces-projects-default-reviewers get" [
 ]: nothing -> record<account_id: string, account_status: string, has_2fa_enabled: bool, is_staff: bool, links: record<avatar: record<href: string, name: string>, html: record<href: string, name: string>, repositories: record<href: string, name: string>, self: record<href: string, name: string>>, nickname: string, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/default-reviewers/($selected_user)")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key, selected_user: $selected_user} | format pattern "/workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7873,9 +7873,9 @@ export def "workspaces-projects-default-reviewers get" [
 #
 # PUT /workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}
 export def "workspaces-projects-default-reviewers put" [
+  workspace: string
   project_key: string
   selected_user: string
-  workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7887,7 +7887,7 @@ export def "workspaces-projects-default-reviewers put" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/default-reviewers/($selected_user)")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key, selected_user: $selected_user} | format pattern "/workspaces/{workspace}/projects/{project_key}/default-reviewers/{selected_user}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7897,8 +7897,8 @@ export def "workspaces-projects-default-reviewers put" [
 #
 # GET /workspaces/{workspace}/projects/{project_key}/deploy-keys
 export def "workspaces-projects-deploy-keys list" [
-  project_key: string
   workspace: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7910,7 +7910,7 @@ export def "workspaces-projects-deploy-keys list" [
 ]: nothing -> record<next: string, page: int, pagelen: int, previous: string, size: int, values: table<type: string, added_on: string, comment: string, created_by: record, key: string, label: string, last_used: string, links: record, project: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/deploy-keys")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key} | format pattern "/workspaces/{workspace}/projects/{project_key}/deploy-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7920,8 +7920,8 @@ export def "workspaces-projects-deploy-keys list" [
 #
 # POST /workspaces/{workspace}/projects/{project_key}/deploy-keys
 export def "workspaces-projects-deploy-keys post" [
-  project_key: string
   workspace: string
+  project_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7933,7 +7933,7 @@ export def "workspaces-projects-deploy-keys post" [
 ]: nothing -> record<type: string, added_on: string, comment: string, created_by: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, key: string, label: string, last_used: string, links: record<self: record<href: string, name: string>>, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record<avatar: record, html: record>, name: string, owner: record<links: record>, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/deploy-keys")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key} | format pattern "/workspaces/{workspace}/projects/{project_key}/deploy-keys"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7943,9 +7943,9 @@ export def "workspaces-projects-deploy-keys post" [
 #
 # DELETE /workspaces/{workspace}/projects/{project_key}/deploy-keys/{key_id}
 export def "workspaces-projects-deploy-keys delete" [
-  key_id: string
-  project_key: string
   workspace: string
+  project_key: string
+  key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7957,7 +7957,7 @@ export def "workspaces-projects-deploy-keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/deploy-keys/($key_id)")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key, key_id: $key_id} | format pattern "/workspaces/{workspace}/projects/{project_key}/deploy-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7967,9 +7967,9 @@ export def "workspaces-projects-deploy-keys delete" [
 #
 # GET /workspaces/{workspace}/projects/{project_key}/deploy-keys/{key_id}
 export def "workspaces-projects-deploy-keys get" [
-  key_id: string
-  project_key: string
   workspace: string
+  project_key: string
+  key_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7981,7 +7981,7 @@ export def "workspaces-projects-deploy-keys get" [
 ]: nothing -> record<type: string, added_on: string, comment: string, created_by: record<type: string, created_on: string, display_name: string, links: record<avatar: record>, username: string, uuid: string>, key: string, label: string, last_used: string, links: record<self: record<href: string, name: string>>, project: record<type: string, created_on: string, description: string, has_publicly_visible_repos: bool, is_private: bool, key: string, links: record<avatar: record, html: record>, name: string, owner: record<links: record>, updated_on: string, uuid: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/workspaces/($workspace)/projects/($project_key)/deploy-keys/($key_id)")
+  let full_url = (build-url $base ({workspace: $workspace, project_key: $project_key, key_id: $key_id} | format pattern "/workspaces/{workspace}/projects/{project_key}/deploy-keys/{key_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7991,7 +7991,7 @@ export def "workspaces-projects-deploy-keys get" [
 #
 # GET /workspaces/{workspace}/search/code
 # operationId: searchWorkspace
-export def "workspaces-search-code searchWorkspace" [
+export def "workspaces-search-code list" [
   workspace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8008,7 +8008,7 @@ export def "workspaces-search-code searchWorkspace" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_query" $search_query "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pagelen" $pagelen "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/workspaces/($workspace)/search/code" $qp)
+  let full_url = (build-url $base ({workspace: $workspace} | format pattern "/workspaces/{workspace}/search/code") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

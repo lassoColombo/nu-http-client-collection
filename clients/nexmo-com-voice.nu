@@ -129,7 +129,7 @@ export def "calls list" [
 #
 # POST /
 # operationId: createCall
-export def "calls createCall" [
+export def "calls create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "calls get" [
 ]: nothing -> record<_links: record<self: record<href: string>>, conversation_uuid: string, direction: string, duration: string, end_time: string, from: record<number: string, type: string>, network: string, price: string, rate: string, start_time: string, status: string, to: record<number: string, type: string>, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($uuid)")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/{uuid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -178,7 +178,7 @@ export def "calls get" [
 # PUT /{uuid}
 # operationId: updateCall
 # --destination shape: {ncco: list, type: string}
-export def "calls updateCall" [
+export def "calls update" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,8 +194,8 @@ export def "calls updateCall" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($uuid)")
-  let body = {action: $action, destination: $destination} | compact
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/{uuid}"))
+  let body = {"action": $action, "destination": $destination} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -206,7 +206,7 @@ export def "calls updateCall" [
 #
 # PUT /{uuid}/dtmf
 # operationId: startDTMF
-export def "dtmf startDTMF" [
+export def "dtmf start" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,8 +221,8 @@ export def "dtmf startDTMF" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($uuid)/dtmf")
-  let body = {digits: $digits} | compact
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/{uuid}/dtmf"))
+  let body = {"digits": $digits} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -233,7 +233,7 @@ export def "dtmf startDTMF" [
 #
 # DELETE /{uuid}/stream
 # operationId: stopStream
-export def "stream stopStream" [
+export def "stream stop" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +246,7 @@ export def "stream stopStream" [
 ]: nothing -> record<message: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($uuid)/stream")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/{uuid}/stream"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -256,7 +256,7 @@ export def "stream stopStream" [
 #
 # PUT /{uuid}/stream
 # operationId: startStream
-export def "stream startStream" [
+export def "stream start" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,8 +273,8 @@ export def "stream startStream" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($uuid)/stream")
-  let body = {level: $level, loop: $body_loop, stream_url: $stream_url} | compact
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/{uuid}/stream"))
+  let body = {"level": $level, "loop": $body_loop, "stream_url": $stream_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -285,7 +285,7 @@ export def "stream startStream" [
 #
 # DELETE /{uuid}/talk
 # operationId: stopTalk
-export def "talk stopTalk" [
+export def "talk stop" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +298,7 @@ export def "talk stopTalk" [
 ]: nothing -> record<message: string, uuid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($uuid)/talk")
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/{uuid}/talk"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -309,7 +309,7 @@ export def "talk stopTalk" [
 # PUT /{uuid}/talk
 # operationId: startTalk
 @deprecated --flag voice-name
-export def "talk startTalk" [
+export def "talk start" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,8 +330,8 @@ export def "talk startTalk" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($uuid)/talk")
-  let body = {language: $language, level: $level, loop: $body_loop, premium: $premium, style: $style, text: $text, voice_name: $voice_name} | compact
+  let full_url = (build-url $base ({uuid: $uuid} | format pattern "/{uuid}/talk"))
+  let body = {"language": $language, "level": $level, "loop": $body_loop, "premium": $premium, "style": $style, "text": $text, "voice_name": $voice_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

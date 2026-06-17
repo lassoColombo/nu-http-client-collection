@@ -66,19 +66,19 @@ def base-url-completer [] { ["https://api.wordnik.com/v4"] }
 def auth-scheme-completer [] { ["query-api_key"] }
 
 # Completers for enum parameters
-def useCanonical-completer [] { ["false" "true"] }
-def partOfSpeech-completer [] { ["abbreviation" "adjective" "adverb" "affix" "article" "auxiliary-verb" "conjunction" "definite-article" "family-name" "given-name" "idiom" "imperative" "interjection" "noun" "noun-plural" "noun-posessive" "past-participle" "phrasal-prefix" "preposition" "pronoun" "proper-noun" "proper-noun-plural" "proper-noun-posessive" "suffix" "verb" "verb-intransitive" "verb-transitive"] }
-def sourceDictionaries-completer [] { ["ahd-5" "all" "century" "webster" "wiktionary" "wordnet"] }
-def includeTags-completer [] { ["false" "true"] }
-def includeDuplicates-completer [] { ["false" "true"] }
-def sourceDictionary-completer [] { ["ahd-5" "century" "webster" "wiktionary" "wordnet"] }
-def sourceDictionary-completer-1 [] { ["ahd-5" "century" "cmu" "macmillan" "webster" "wiktionary" "wordnet"] }
-def typeFormat-completer [] { ["IPA" "ahd-5" "arpabet" "gcide-diacritical"] }
-def relationshipTypes-completer [] { ["antonym" "cross-reference" "equivalent" "etymologically-related-term" "form" "has_topic" "hypernym" "hyponym" "inflected-form" "primary" "related-word" "rhyme" "same-context" "synonym" "variant" "verb-form" "verb-stem"] }
-def sortBy-completer [] { ["alpha" "count"] }
-def sortOrder-completer [] { ["asc" "desc"] }
-def includeSourceDictionaries-completer [] { ["ahd-5" "century" "cmu" "macmillan" "webster" "wiktionary" "wordnet"] }
-def excludeSourceDictionaries-completer [] { ["ahd-5" "century" "cmu" "macmillan" "webster" "wiktionary" "wordnet"] }
+def use-canonical-completer [] { ["false" "true"] }
+def part-of-speech-completer [] { ["abbreviation" "adjective" "adverb" "affix" "article" "auxiliary-verb" "conjunction" "definite-article" "family-name" "given-name" "idiom" "imperative" "interjection" "noun" "noun-plural" "noun-posessive" "past-participle" "phrasal-prefix" "preposition" "pronoun" "proper-noun" "proper-noun-plural" "proper-noun-posessive" "suffix" "verb" "verb-intransitive" "verb-transitive"] }
+def source-dictionaries-completer [] { ["ahd-5" "all" "century" "webster" "wiktionary" "wordnet"] }
+def include-tags-completer [] { ["false" "true"] }
+def include-duplicates-completer [] { ["false" "true"] }
+def source-dictionary-completer [] { ["ahd-5" "century" "webster" "wiktionary" "wordnet"] }
+def source-dictionary-completer-1 [] { ["ahd-5" "century" "cmu" "macmillan" "webster" "wiktionary" "wordnet"] }
+def type-format-completer [] { ["IPA" "ahd-5" "arpabet" "gcide-diacritical"] }
+def relationship-types-completer [] { ["antonym" "cross-reference" "equivalent" "etymologically-related-term" "form" "has_topic" "hypernym" "hyponym" "inflected-form" "primary" "related-word" "rhyme" "same-context" "synonym" "variant" "verb-form" "verb-stem"] }
+def sort-by-completer [] { ["alpha" "count"] }
+def sort-order-completer [] { ["asc" "desc"] }
+def include-source-dictionaries-completer [] { ["ahd-5" "century" "cmu" "macmillan" "webster" "wiktionary" "wordnet"] }
+def exclude-source-dictionaries-completer [] { ["ahd-5" "century" "cmu" "macmillan" "webster" "wiktionary" "wordnet"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -117,13 +117,13 @@ export def "wordjson-audio get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --useCanonical: string@useCanonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
+  --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
   --limit: int # Maximum number of results to return (format: int32, default: 50)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "useCanonical" $useCanonical "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/word.json/($word)/audio" $qp)
+  let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/audio") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -144,16 +144,16 @@ export def "wordjson-definitions get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of results to return (format: int32, default: 200)
-  --partOfSpeech: string@partOfSpeech-completer # CSV list of part-of-speech types
-  --includeRelated: string # Return related words with definitions (default: false)
-  --sourceDictionaries: list@sourceDictionaries-completer # Source dictionary to return definitions from.  If 'all' is received, results are returned from all sources. If multiple values are received (e.g. 'century,wiktionary'), results are returned from the first specified dictionary that has definitions. If left blank, results are returned from the first dictionary that has definitions. By default, dictionaries are searched in this order: ahd-5, wiktionary, webster, century, wordnet
-  --useCanonical: string@useCanonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
-  --includeTags: string@includeTags-completer # Return a closed set of XML tags in response (default: false)
+  --part-of-speech: string@part-of-speech-completer # CSV list of part-of-speech types
+  --include-related: string # Return related words with definitions (default: false)
+  --source-dictionaries: list@source-dictionaries-completer # Source dictionary to return definitions from.  If 'all' is received, results are returned from all sources. If multiple values are received (e.g. 'century,wiktionary'), results are returned from the first specified dictionary that has definitions. If left blank, results are returned from the first dictionary that has definitions. By default, dictionaries are searched in this order: ahd-5, wiktionary, webster, century, wordnet
+  --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
+  --include-tags: string@include-tags-completer # Return a closed set of XML tags in response (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "partOfSpeech" $partOfSpeech "scalar") (serialize-qp "includeRelated" $includeRelated "scalar") (serialize-qp "sourceDictionaries" $sourceDictionaries "csv") (serialize-qp "useCanonical" $useCanonical "scalar") (serialize-qp "includeTags" $includeTags "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/word.json/($word)/definitions" $qp)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "partOfSpeech" $part_of_speech "scalar") (serialize-qp "includeRelated" $include_related "scalar") (serialize-qp "sourceDictionaries" $source_dictionaries "csv") (serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "includeTags" $include_tags "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/definitions") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,12 +173,12 @@ export def "wordjson-etymologies get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --useCanonical: string@useCanonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
+  --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "useCanonical" $useCanonical "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/word.json/($word)/etymologies" $qp)
+  let qp = [(serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/etymologies") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -198,15 +198,15 @@ export def "wordjson-examples get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeDuplicates: string@includeDuplicates-completer # Show duplicate examples from different sources (default: false)
-  --useCanonical: string@useCanonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
+  --include-duplicates: string@include-duplicates-completer # Show duplicate examples from different sources (default: false)
+  --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
   --skip: int # Results to skip (format: int32, default: 0)
   --limit: int # Maximum number of results to return (format: int32, default: 5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeDuplicates" $includeDuplicates "scalar") (serialize-qp "useCanonical" $useCanonical "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/word.json/($word)/examples" $qp)
+  let qp = [(serialize-qp "includeDuplicates" $include_duplicates "scalar") (serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/examples") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -226,14 +226,14 @@ export def "wordjson-frequency get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --useCanonical: string@useCanonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
-  --startYear: int # Starting Year (format: int32, default: 1800)
-  --endYear: int # Ending Year (format: int32, default: 2012)
+  --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
+  --start-year: int # Starting Year (format: int32, default: 1800)
+  --end-year: int # Ending Year (format: int32, default: 2012)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "useCanonical" $useCanonical "scalar") (serialize-qp "startYear" $startYear "scalar") (serialize-qp "endYear" $endYear "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/word.json/($word)/frequency" $qp)
+  let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "startYear" $start_year "scalar") (serialize-qp "endYear" $end_year "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/frequency") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -253,14 +253,14 @@ export def "wordjson-hyphenation get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --useCanonical: string@useCanonical-completer # If true will try to return a correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
-  --sourceDictionary: string@sourceDictionary-completer # Get from a single dictionary. Valid options: ahd-5, century, wiktionary, webster, and wordnet.
+  --use-canonical: string@use-canonical-completer # If true will try to return a correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
+  --source-dictionary: string@source-dictionary-completer # Get from a single dictionary. Valid options: ahd-5, century, wiktionary, webster, and wordnet.
   --limit: int # Maximum number of results to return (format: int32, default: 50)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "useCanonical" $useCanonical "scalar") (serialize-qp "sourceDictionary" $sourceDictionary "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/word.json/($word)/hyphenation" $qp)
+  let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "sourceDictionary" $source_dictionary "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/hyphenation") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -282,12 +282,12 @@ export def "wordjson-phrases get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Maximum number of results to return (format: int32, default: 5)
   --wlmi: int # Minimum WLMI for the phrase (format: int32, default: 0)
-  --useCanonical: string@useCanonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
+  --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "wlmi" $wlmi "scalar") (serialize-qp "useCanonical" $useCanonical "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/word.json/($word)/phrases" $qp)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "wlmi" $wlmi "scalar") (serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/phrases") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,7 +297,7 @@ export def "wordjson-phrases get" [
 #
 # GET /word.json/{word}/pronunciations
 # operationId: getTextPronunciations
-export def "wordjson-pronunciations get" [
+export def "wordjson-pronunciations get-text" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,15 +307,15 @@ export def "wordjson-pronunciations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --useCanonical: string@useCanonical-completer # If true will try to return a correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
-  --sourceDictionary: string@sourceDictionary-completer-1 # Get from a single dictionary
-  --typeFormat: string@typeFormat-completer # Text pronunciation type
+  --use-canonical: string@use-canonical-completer # If true will try to return a correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
+  --source-dictionary: string@source-dictionary-completer-1 # Get from a single dictionary
+  --type-format: string@type-format-completer # Text pronunciation type
   --limit: int # Maximum number of results to return (format: int32, default: 50)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "useCanonical" $useCanonical "scalar") (serialize-qp "sourceDictionary" $sourceDictionary "scalar") (serialize-qp "typeFormat" $typeFormat "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/word.json/($word)/pronunciations" $qp)
+  let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "sourceDictionary" $source_dictionary "scalar") (serialize-qp "typeFormat" $type_format "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/pronunciations") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -335,14 +335,14 @@ export def "wordjson-related-words get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --useCanonical: string@useCanonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
-  --relationshipTypes: string@relationshipTypes-completer # Limits the total results per type of relationship type
-  --limitPerRelationshipType: int # Restrict to the supplied relationship types (format: int32, default: 10)
+  --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
+  --relationship-types: string@relationship-types-completer # Limits the total results per type of relationship type
+  --limit-per-relationship-type: int # Restrict to the supplied relationship types (format: int32, default: 10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "useCanonical" $useCanonical "scalar") (serialize-qp "relationshipTypes" $relationshipTypes "scalar") (serialize-qp "limitPerRelationshipType" $limitPerRelationshipType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/word.json/($word)/relatedWords" $qp)
+  let qp = [(serialize-qp "useCanonical" $use_canonical "scalar") (serialize-qp "relationshipTypes" $relationship_types "scalar") (serialize-qp "limitPerRelationshipType" $limit_per_relationship_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/relatedWords") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -365,7 +365,7 @@ export def "wordjson-scrabble-score get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/word.json/($word)/scrabbleScore")
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/scrabbleScore"))
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -385,12 +385,12 @@ export def "wordjson-top-example get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --useCanonical: string@useCanonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
+  --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "useCanonical" $useCanonical "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/word.json/($word)/topExample" $qp)
+  let qp = [(serialize-qp "useCanonical" $use_canonical "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({word: $word} | format pattern "/word.json/{word}/topExample") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -409,19 +409,19 @@ export def "wordsjson-random-word get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hasDictionaryDef: string # Only return words with dictionary definitions (default: true)
-  --includePartOfSpeech: string # CSV part-of-speech values to include (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
-  --excludePartOfSpeech: string # CSV part-of-speech values to exclude (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
-  --minCorpusCount: int # Minimum corpus frequency for terms (format: int32, default: 0)
-  --maxCorpusCount: int # Maximum corpus frequency for terms (format: int32, default: -1)
-  --minDictionaryCount: int # Minimum dictionary count (format: int32, default: 1)
-  --maxDictionaryCount: int # Maximum dictionary count (format: int32, default: -1)
-  --minLength: int # Minimum word length (format: int32, default: 5)
-  --maxLength: int # Maximum word length (format: int32, default: -1)
+  --has-dictionary-def: string # Only return words with dictionary definitions (default: true)
+  --include-part-of-speech: string # CSV part-of-speech values to include (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
+  --exclude-part-of-speech: string # CSV part-of-speech values to exclude (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
+  --min-corpus-count: int # Minimum corpus frequency for terms (format: int32, default: 0)
+  --max-corpus-count: int # Maximum corpus frequency for terms (format: int32, default: -1)
+  --min-dictionary-count: int # Minimum dictionary count (format: int32, default: 1)
+  --max-dictionary-count: int # Maximum dictionary count (format: int32, default: -1)
+  --min-length: int # Minimum word length (format: int32, default: 5)
+  --max-length: int # Maximum word length (format: int32, default: -1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hasDictionaryDef" $hasDictionaryDef "scalar") (serialize-qp "includePartOfSpeech" $includePartOfSpeech "scalar") (serialize-qp "excludePartOfSpeech" $excludePartOfSpeech "scalar") (serialize-qp "minCorpusCount" $minCorpusCount "scalar") (serialize-qp "maxCorpusCount" $maxCorpusCount "scalar") (serialize-qp "minDictionaryCount" $minDictionaryCount "scalar") (serialize-qp "maxDictionaryCount" $maxDictionaryCount "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hasDictionaryDef" $has_dictionary_def "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minDictionaryCount" $min_dictionary_count "scalar") (serialize-qp "maxDictionaryCount" $max_dictionary_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words.json/randomWord" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -441,22 +441,22 @@ export def "wordsjson-random-words get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --hasDictionaryDef: string # Only return words with dictionary definitions (default: true)
-  --includePartOfSpeech: string # CSV part-of-speech values to include (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
-  --excludePartOfSpeech: string # CSV part-of-speech values to exclude (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
-  --minCorpusCount: int # Minimum corpus frequency for terms (format: int32, default: 0)
-  --maxCorpusCount: int # Maximum corpus frequency for terms (format: int32, default: -1)
-  --minDictionaryCount: int # Minimum dictionary count (format: int32, default: 1)
-  --maxDictionaryCount: int # Maximum dictionary count (format: int32, default: -1)
-  --minLength: int # Minimum word length (format: int32, default: 5)
-  --maxLength: int # Maximum word length (format: int32, default: -1)
-  --sortBy: string@sortBy-completer # Attribute to sort by
-  --sortOrder: string@sortOrder-completer # Sort direction
+  --has-dictionary-def: string # Only return words with dictionary definitions (default: true)
+  --include-part-of-speech: string # CSV part-of-speech values to include (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
+  --exclude-part-of-speech: string # CSV part-of-speech values to exclude (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
+  --min-corpus-count: int # Minimum corpus frequency for terms (format: int32, default: 0)
+  --max-corpus-count: int # Maximum corpus frequency for terms (format: int32, default: -1)
+  --min-dictionary-count: int # Minimum dictionary count (format: int32, default: 1)
+  --max-dictionary-count: int # Maximum dictionary count (format: int32, default: -1)
+  --min-length: int # Minimum word length (format: int32, default: 5)
+  --max-length: int # Maximum word length (format: int32, default: -1)
+  --sort-by: string@sort-by-completer # Attribute to sort by
+  --sort-order: string@sort-order-completer # Sort direction
   --limit: int # Maximum number of results to return (format: int32, default: 10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hasDictionaryDef" $hasDictionaryDef "scalar") (serialize-qp "includePartOfSpeech" $includePartOfSpeech "scalar") (serialize-qp "excludePartOfSpeech" $excludePartOfSpeech "scalar") (serialize-qp "minCorpusCount" $minCorpusCount "scalar") (serialize-qp "maxCorpusCount" $maxCorpusCount "scalar") (serialize-qp "minDictionaryCount" $minDictionaryCount "scalar") (serialize-qp "maxDictionaryCount" $maxDictionaryCount "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hasDictionaryDef" $has_dictionary_def "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minDictionaryCount" $min_dictionary_count "scalar") (serialize-qp "maxDictionaryCount" $max_dictionary_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words.json/randomWords" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -477,25 +477,25 @@ export def "wordsjson-reverse-dictionary reverseDictionary" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # Search term
-  --findSenseForWord: string # Restricts words and finds closest sense
-  --includeSourceDictionaries: string@includeSourceDictionaries-completer # Only include these comma-delimited source dictionaries
-  --excludeSourceDictionaries: string@excludeSourceDictionaries-completer # Exclude these comma-delimited source dictionaries
-  --includePartOfSpeech: string # Only include these comma-delimited parts of speech (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
-  --excludePartOfSpeech: string # Exclude these comma-delimited parts of speech (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
-  --minCorpusCount: int # Minimum corpus frequency for terms (format: int32, default: 5)
-  --maxCorpusCount: int # Maximum corpus frequency for terms (format: int32, default: -1)
-  --minLength: int # Minimum word length (format: int32, default: 1)
-  --maxLength: int # Maximum word length (format: int32, default: -1)
-  --expandTerms: string # Expand terms
-  --includeTags: string@includeTags-completer # Return a closed set of XML tags in response (default: false)
-  --sortBy: string@sortBy-completer # Attribute to sort by
-  --sortOrder: string@sortOrder-completer # Sort direction
+  --find-sense-for-word: string # Restricts words and finds closest sense
+  --include-source-dictionaries: string@include-source-dictionaries-completer # Only include these comma-delimited source dictionaries
+  --exclude-source-dictionaries: string@exclude-source-dictionaries-completer # Exclude these comma-delimited source dictionaries
+  --include-part-of-speech: string # Only include these comma-delimited parts of speech (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
+  --exclude-part-of-speech: string # Exclude these comma-delimited parts of speech (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
+  --min-corpus-count: int # Minimum corpus frequency for terms (format: int32, default: 5)
+  --max-corpus-count: int # Maximum corpus frequency for terms (format: int32, default: -1)
+  --min-length: int # Minimum word length (format: int32, default: 1)
+  --max-length: int # Maximum word length (format: int32, default: -1)
+  --expand-terms: string # Expand terms
+  --include-tags: string@include-tags-completer # Return a closed set of XML tags in response (default: false)
+  --sort-by: string@sort-by-completer # Attribute to sort by
+  --sort-order: string@sort-order-completer # Sort direction
   --skip: string # Results to skip (default: 0)
   --limit: int # Maximum number of results to return (format: int32, default: 10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "findSenseForWord" $findSenseForWord "scalar") (serialize-qp "includeSourceDictionaries" $includeSourceDictionaries "scalar") (serialize-qp "excludeSourceDictionaries" $excludeSourceDictionaries "scalar") (serialize-qp "includePartOfSpeech" $includePartOfSpeech "scalar") (serialize-qp "excludePartOfSpeech" $excludePartOfSpeech "scalar") (serialize-qp "minCorpusCount" $minCorpusCount "scalar") (serialize-qp "maxCorpusCount" $maxCorpusCount "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar") (serialize-qp "expandTerms" $expandTerms "scalar") (serialize-qp "includeTags" $includeTags "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "findSenseForWord" $find_sense_for_word "scalar") (serialize-qp "includeSourceDictionaries" $include_source_dictionaries "scalar") (serialize-qp "excludeSourceDictionaries" $exclude_source_dictionaries "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "expandTerms" $expand_terms "scalar") (serialize-qp "includeTags" $include_tags "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/words.json/reverseDictionary" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -506,7 +506,7 @@ export def "wordsjson-reverse-dictionary reverseDictionary" [
 #
 # GET /words.json/search/{query}
 # operationId: searchWords
-export def "wordsjson-search searchWords" [
+export def "wordsjson-search list-words" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -516,23 +516,23 @@ export def "wordsjson-search searchWords" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --allowRegex: string # Search term is a Regular Expression (default: false)
-  --caseSensitive: string # Search case sensitive (default: true)
-  --includePartOfSpeech: string # Only include these comma-delimited parts of speech (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
-  --excludePartOfSpeech: string # Exclude these comma-delimited parts of speech (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
-  --minCorpusCount: int # Minimum corpus frequency for terms (format: int32, default: 5)
-  --maxCorpusCount: int # Maximum corpus frequency for terms (format: int32, default: -1)
-  --minDictionaryCount: int # Minimum number of dictionary entries for words returned (format: int32, default: 1)
-  --maxDictionaryCount: int # Maximum dictionary definition count (format: int32, default: -1)
-  --minLength: int # Minimum word length (format: int32, default: 1)
-  --maxLength: int # Maximum word length (format: int32, default: -1)
+  --allow-regex: string # Search term is a Regular Expression (default: false)
+  --case-sensitive: string # Search case sensitive (default: true)
+  --include-part-of-speech: string # Only include these comma-delimited parts of speech (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
+  --exclude-part-of-speech: string # Exclude these comma-delimited parts of speech (allowable values are noun, adjective, verb, adverb, interjection, pronoun, preposition, abbreviation, affix, article, auxiliary-verb, conjunction, definite-article, family-name, given-name, idiom, imperative, noun-plural, noun-posessive, past-participle, phrasal-prefix, proper-noun, proper-noun-plural, proper-noun-posessive, suffix, verb-intransitive, verb-transitive)
+  --min-corpus-count: int # Minimum corpus frequency for terms (format: int32, default: 5)
+  --max-corpus-count: int # Maximum corpus frequency for terms (format: int32, default: -1)
+  --min-dictionary-count: int # Minimum number of dictionary entries for words returned (format: int32, default: 1)
+  --max-dictionary-count: int # Maximum dictionary definition count (format: int32, default: -1)
+  --min-length: int # Minimum word length (format: int32, default: 1)
+  --max-length: int # Maximum word length (format: int32, default: -1)
   --skip: int # Results to skip (format: int32, default: 0)
   --limit: int # Maximum number of results to return (format: int32, default: 10)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "allowRegex" $allowRegex "scalar") (serialize-qp "caseSensitive" $caseSensitive "scalar") (serialize-qp "includePartOfSpeech" $includePartOfSpeech "scalar") (serialize-qp "excludePartOfSpeech" $excludePartOfSpeech "scalar") (serialize-qp "minCorpusCount" $minCorpusCount "scalar") (serialize-qp "maxCorpusCount" $maxCorpusCount "scalar") (serialize-qp "minDictionaryCount" $minDictionaryCount "scalar") (serialize-qp "maxDictionaryCount" $maxDictionaryCount "scalar") (serialize-qp "minLength" $minLength "scalar") (serialize-qp "maxLength" $maxLength "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/words.json/search/($query)" $qp)
+  let qp = [(serialize-qp "allowRegex" $allow_regex "scalar") (serialize-qp "caseSensitive" $case_sensitive "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minDictionaryCount" $min_dictionary_count "scalar") (serialize-qp "maxDictionaryCount" $max_dictionary_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({query: $query} | format pattern "/words.json/search/{query}") $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -66,12 +66,12 @@ def base-url-completer [] { ["https://management.azure.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def keyType-completer [] { ["PrimaryKey" "SecondaryKey"] }
+def key-type-completer [] { ["PrimaryKey" "SecondaryKey"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-event-hub-operations List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-event-hub-operations list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -95,7 +95,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.EventHub/operations
 # operationId: Operations_List
-export def "providers-microsoft-event-hub-operations List" [
+export def "providers-microsoft-event-hub-operations list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,8 +119,8 @@ export def "providers-microsoft-event-hub-operations List" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.EventHub/CheckNameAvailability
 # operationId: Namespaces_CheckNameAvailability
-export def "subscriptions-providers-microsoft-event-hub-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-event-hub-check-name-availability check" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,8 +136,8 @@ export def "subscriptions-providers-microsoft-event-hub-check-name-availability 
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EventHub/CheckNameAvailability" $qp)
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.EventHub/CheckNameAvailability") $qp)
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -148,8 +148,8 @@ export def "subscriptions-providers-microsoft-event-hub-check-name-availability 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventHub/namespaces
 # operationId: Namespaces_List
-export def "subscriptions-providers-microsoft-event-hub-namespaces List" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-event-hub-namespaces list" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "subscriptions-providers-microsoft-event-hub-namespaces List" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EventHub/namespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.EventHub/namespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -173,8 +173,8 @@ export def "subscriptions-providers-microsoft-event-hub-namespaces List" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventHub/sku/{sku}/regions
 # operationId: Regions_ListBySku
-export def "subscriptions-providers-microsoft-event-hub-sku-regions ListBySku" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-event-hub-sku-regions list-by" [
+  subscription_id: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -189,7 +189,7 @@ export def "subscriptions-providers-microsoft-event-hub-sku-regions ListBySku" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.EventHub/sku/($sku)/regions" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, sku: $sku} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.EventHub/sku/{sku}/regions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -199,9 +199,9 @@ export def "subscriptions-providers-microsoft-event-hub-sku-regions ListBySku" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces
 # operationId: Namespaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces ListByResourceGroup" [
-  resourceGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -225,10 +225,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}
 # operationId: Namespaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces Delete" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -252,10 +252,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}
 # operationId: Namespaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces Get" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -281,10 +281,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # operationId: Namespaces_Update
 # --properties shape: {isAutoInflateEnabled?: bool, kafkaEnabled?: bool, maximumThroughputUnits?: int}
 # --sku shape: {capacity?: int, name: "Basic"|"Standard", tier?: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces Update" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -303,8 +303,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)" $qp)
-  let body = {properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -317,10 +317,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # operationId: Namespaces_CreateOrUpdate
 # --properties shape: {isAutoInflateEnabled?: bool, kafkaEnabled?: bool, maximumThroughputUnits?: int}
 # --sku shape: {capacity?: int, name: "Basic"|"Standard", tier?: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces CreateOrUpdate" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,8 +339,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)" $qp)
-  let body = {properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}") $qp)
+  let body = {"properties": $properties, "sku": $sku, "location": $location, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -351,10 +351,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules
 # operationId: Namespaces_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules ListAuthorizationRules" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/AuthorizationRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/AuthorizationRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -378,11 +378,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules DeleteAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/AuthorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/AuthorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -406,11 +406,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules GetAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/AuthorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/AuthorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -435,11 +435,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules CreateOrUpdateAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,8 +455,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/AuthorizationRules/($authorizationRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/AuthorizationRules/{authorization_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -467,11 +467,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}/listKeys
 # operationId: Namespaces_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules-list-keys ListKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/AuthorizationRules/($authorizationRuleName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/AuthorizationRules/{authorization_rule_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -495,11 +495,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: Namespaces_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules-regenerate-keys RegenerateKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules-regenerate-keys post" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,14 +510,14 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
   --key: string # Optional, if the key value provided, is set for KeyType or autogenerated Key value set for keyType
-  keyType: string@keyType-completer # The access key to regenerate.
+  key_type: string@key-type-completer # The access key to regenerate.
 ]: any -> record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/AuthorizationRules/($authorizationRuleName)/regenerateKeys" $qp)
-  let body = {key: $key, keyType: $keyType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/AuthorizationRules/{authorization_rule_name}/regenerateKeys") $qp)
+  let body = {"key": $key, "keyType": $key_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -528,10 +528,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs
 # operationId: DisasterRecoveryConfigs_List
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs List" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,7 +545,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/disasterRecoveryConfigs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/disasterRecoveryConfigs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -555,10 +555,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/CheckNameAvailability
 # operationId: DisasterRecoveryConfigs_CheckNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-check-name-availability CheckNameAvailability" [
-  subscriptionId: string
-  resourceGroupName: string
-  namespaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-check-name-availability check" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -574,8 +574,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/disasterRecoveryConfigs/CheckNameAvailability" $qp)
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/disasterRecoveryConfigs/CheckNameAvailability") $qp)
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -586,11 +586,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}
 # operationId: DisasterRecoveryConfigs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs Delete" [
-  resourceGroupName: string
-  namespaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   alias: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/disasterRecoveryConfigs/($alias)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, alias: $alias} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/disasterRecoveryConfigs/{alias}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -614,11 +614,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}
 # operationId: DisasterRecoveryConfigs_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs Get" [
-  resourceGroupName: string
-  namespaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   alias: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,7 +632,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/disasterRecoveryConfigs/($alias)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, alias: $alias} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/disasterRecoveryConfigs/{alias}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -643,11 +643,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}
 # operationId: DisasterRecoveryConfigs_CreateOrUpdate
 # --properties shape: {alternateName?: string, partnerNamespace?: string}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs CreateOrUpdate" [
-  resourceGroupName: string
-  namespaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   alias: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,8 +663,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/disasterRecoveryConfigs/($alias)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, alias: $alias} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/disasterRecoveryConfigs/{alias}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -675,11 +675,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/AuthorizationRules
 # operationId: DisasterRecoveryConfigs_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-authorization-rules ListAuthorizationRules" [
-  resourceGroupName: string
-  namespaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-authorization-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   alias: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,7 +693,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/disasterRecoveryConfigs/($alias)/AuthorizationRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, alias: $alias} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/disasterRecoveryConfigs/{alias}/AuthorizationRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -703,12 +703,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/AuthorizationRules/{authorizationRuleName}
 # operationId: DisasterRecoveryConfigs_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-authorization-rules GetAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-authorization-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   alias: string
-  authorizationRuleName: string
-  subscriptionId: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/disasterRecoveryConfigs/($alias)/AuthorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, alias: $alias, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/disasterRecoveryConfigs/{alias}/AuthorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -732,12 +732,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/AuthorizationRules/{authorizationRuleName}/listKeys
 # operationId: DisasterRecoveryConfigs_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-authorization-rules-list-keys ListKeys" [
-  resourceGroupName: string
-  namespaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-authorization-rules-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   alias: string
-  authorizationRuleName: string
-  subscriptionId: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -751,7 +751,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/disasterRecoveryConfigs/($alias)/AuthorizationRules/($authorizationRuleName)/listKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, alias: $alias, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/disasterRecoveryConfigs/{alias}/AuthorizationRules/{authorization_rule_name}/listKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -761,11 +761,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/breakPairing
 # operationId: DisasterRecoveryConfigs_BreakPairing
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-break-pairing BreakPairing" [
-  resourceGroupName: string
-  namespaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-break-pairing post" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   alias: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -779,7 +779,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/disasterRecoveryConfigs/($alias)/breakPairing" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, alias: $alias} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/disasterRecoveryConfigs/{alias}/breakPairing") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -789,11 +789,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/failover
 # operationId: DisasterRecoveryConfigs_FailOver
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-failover FailOver" [
-  resourceGroupName: string
-  namespaceName: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-failover post" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   alias: string
-  subscriptionId: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/disasterRecoveryConfigs/($alias)/failover" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, alias: $alias} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/disasterRecoveryConfigs/{alias}/failover") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -817,10 +817,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs
 # operationId: EventHubs_ListByNamespace
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs ListByNamespace" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs list-by" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -836,7 +836,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -846,11 +846,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}
 # operationId: EventHubs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs Delete" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -864,7 +864,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -874,11 +874,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}
 # operationId: EventHubs_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs Get" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -892,7 +892,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -903,11 +903,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}
 # operationId: EventHubs_CreateOrUpdate
 # --properties shape: {captureDescription?: any, messageRetentionInDays?: int, partitionCount?: int, status?: "Active"|"Disabled"|"Restoring"|"SendDisabled"|"ReceiveDisabled"|"Creating"|"Deleting"|"Renaming"|"Unknown"}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs CreateOrUpdate" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -923,8 +923,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -935,11 +935,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules
 # operationId: EventHubs_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules ListAuthorizationRules" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,7 +953,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)/authorizationRules" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}/authorizationRules") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -963,12 +963,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules/{authorizationRuleName}
 # operationId: EventHubs_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules DeleteAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -982,7 +982,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)/authorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}/authorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -992,12 +992,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules/{authorizationRuleName}
 # operationId: EventHubs_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules GetAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,7 +1011,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)/authorizationRules/($authorizationRuleName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}/authorizationRules/{authorization_rule_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1022,12 +1022,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules/{authorizationRuleName}
 # operationId: EventHubs_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules CreateOrUpdateAuthorizationRule" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1043,8 +1043,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)/authorizationRules/($authorizationRuleName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}/authorizationRules/{authorization_rule_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1055,12 +1055,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules/{authorizationRuleName}/ListKeys
 # operationId: EventHubs_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules-list-keys ListKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules-list-keys list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,7 +1074,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)/authorizationRules/($authorizationRuleName)/ListKeys" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}/authorizationRules/{authorization_rule_name}/ListKeys") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1084,12 +1084,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: EventHubs_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules-regenerate-keys RegenerateKeys" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  authorizationRuleName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules-regenerate-keys post" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
+  authorization_rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,14 +1100,14 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API Version.
   --key: string # Optional, if the key value provided, is set for KeyType or autogenerated Key value set for keyType
-  keyType: string@keyType-completer # The access key to regenerate.
+  key_type: string@key-type-completer # The access key to regenerate.
 ]: any -> record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)/authorizationRules/($authorizationRuleName)/regenerateKeys" $qp)
-  let body = {key: $key, keyType: $keyType} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name, authorization_rule_name: $authorization_rule_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}/authorizationRules/{authorization_rule_name}/regenerateKeys") $qp)
+  let body = {"key": $key, "keyType": $key_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1118,11 +1118,11 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/consumergroups
 # operationId: ConsumerGroups_ListByEventHub
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups ListByEventHub" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups list-by" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1138,7 +1138,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)/consumergroups" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}/consumergroups") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1148,12 +1148,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/consumergroups/{consumerGroupName}
 # operationId: ConsumerGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups Delete" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  consumerGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups delete" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
+  consumer_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,7 +1167,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)/consumergroups/($consumerGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name, consumer_group_name: $consumer_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}/consumergroups/{consumer_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1177,12 +1177,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/consumergroups/{consumerGroupName}
 # operationId: ConsumerGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups Get" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  consumerGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
+  consumer_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1196,7 +1196,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)/consumergroups/($consumerGroupName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name, consumer_group_name: $consumer_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}/consumergroups/{consumer_group_name}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1207,12 +1207,12 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/consumergroups/{consumerGroupName}
 # operationId: ConsumerGroups_CreateOrUpdate
 # --properties shape: {userMetadata?: string}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups CreateOrUpdate" [
-  resourceGroupName: string
-  namespaceName: string
-  eventHubName: string
-  consumerGroupName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
+  event_hub_name: string
+  consumer_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1228,8 +1228,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/eventhubs/($eventHubName)/consumergroups/($consumerGroupName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name, event_hub_name: $event_hub_name, consumer_group_name: $consumer_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/eventhubs/{event_hub_name}/consumergroups/{consumer_group_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1240,10 +1240,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/messagingplan
 # operationId: Namespaces_GetMessagingPlan
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-messagingplan GetMessagingPlan" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-messagingplan get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1257,7 +1257,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/messagingplan" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/messagingplan") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1267,10 +1267,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/networkRuleSets
 # operationId: Namespaces_ListNetworkRuleSets
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets ListNetworkRuleSets" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets list" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1284,7 +1284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/networkRuleSets" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/networkRuleSets") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1294,10 +1294,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/networkRuleSets/default
 # operationId: Namespaces_GetNetworkRuleSet
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets-default GetNetworkRuleSet" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets-default get" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,7 +1311,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/networkRuleSets/default" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/networkRuleSets/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1322,10 +1322,10 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/networkRuleSets/default
 # operationId: Namespaces_CreateOrUpdateNetworkRuleSet
 # --properties shape: {defaultAction?: "Allow"|"Deny", ipRules?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets-default CreateOrUpdateNetworkRuleSet" [
-  resourceGroupName: string
-  namespaceName: string
-  subscriptionId: string
+export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets-default create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  namespace_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1341,8 +1341,8 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.EventHub/namespaces/($namespaceName)/networkRuleSets/default" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, namespace_name: $namespace_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.EventHub/namespaces/{namespace_name}/networkRuleSets/default") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

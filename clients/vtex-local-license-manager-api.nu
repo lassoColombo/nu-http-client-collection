@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "license-manager-site-pvt-logins-list-paged GetListUsers" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "license-manager-site-pvt-logins-list-paged get-list-users" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/license-manager/site/pvt/logins/list/paged
 # operationId: GetListUsers
-export def "license-manager-site-pvt-logins-list-paged GetListUsers" [
+export def "license-manager-site-pvt-logins-list-paged get-list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,17 +103,17 @@ export def "license-manager-site-pvt-logins-list-paged GetListUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --numItems: int # Number of items in the returned page (default: 10)
-  --pageNumber: int # Which page from the whole list will be returned (default: 1)
+  --num-items: int # Number of items in the returned page (default: 10)
+  --page-number: int # Which page from the whole list will be returned (default: 1)
   --qp-sort: string # Chooses the field that the list will be sorted by (default: name)
-  --sortType: string # Defines the sorting order. `ASC` is used for ascendant order. `DSC` is used for descendant order (default: ASC)
-  --Content-Type: string # The media type of the body of the request. Default value for license manager protocol is application/json
+  --sort-type: string # Defines the sorting order. `ASC` is used for ascendant order. `DSC` is used for descendant order (default: ASC)
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json
 ]: nothing -> record<items: table<accountNames: list, email: string, id: string, isAdmin: bool, isBlocked: bool, isReliable: bool, name: string, roles: list>, paging: record<page: int, pages: int, perPage: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "numItems" $numItems "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortType" $sortType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "numItems" $num_items "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortType" $sort_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/license-manager/site/pvt/logins/list/paged" $qp)
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -124,7 +124,7 @@ export def "license-manager-site-pvt-logins-list-paged GetListUsers" [
 #
 # GET /api/license-manager/site/pvt/roles/list/paged
 # operationId: GetListRoles
-export def "license-manager-site-pvt-roles-list-paged GetListRoles" [
+export def "license-manager-site-pvt-roles-list-paged get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -133,17 +133,17 @@ export def "license-manager-site-pvt-roles-list-paged GetListRoles" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --numItems: int # Number of items in the returned page (default: 10)
-  --pageNumber: int # Which page from the whole list will be returned (default: 1)
+  --num-items: int # Number of items in the returned page (default: 10)
+  --page-number: int # Which page from the whole list will be returned (default: 1)
   --qp-sort: string # Chooses the field that the list will be sorted by (default: id)
-  --sortType: string # Defines the sorting order. ASC is used for ascendant order. DSC is used for descendant order (default: ASC)
-  --Content-Type: string # The media type of the body of the request. Default value for license manager protocol is application/json
+  --sort-type: string # Defines the sorting order. ASC is used for ascendant order. DSC is used for descendant order (default: ASC)
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json
 ]: nothing -> record<items: table<id: int, isAdmin: bool, logins: string, name: string, products: list, resources: string, roleType: int>, paging: record<page: int, pages: int, perPage: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "numItems" $numItems "scalar") (serialize-qp "pageNumber" $pageNumber "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortType" $sortType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "numItems" $num_items "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortType" $sort_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/license-manager/site/pvt/roles/list/paged" $qp)
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -154,7 +154,7 @@ export def "license-manager-site-pvt-roles-list-paged GetListRoles" [
 #
 # POST /api/license-manager/users
 # operationId: CreateUser
-export def "license-manager-users CreateUser" [
+export def "license-manager-users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "license-manager-users CreateUser" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/license-manager/users")
-  let body = {email: $email, name: $name} | compact
+  let body = {"email": $email, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -181,8 +181,8 @@ export def "license-manager-users CreateUser" [
 #
 # GET /api/license-manager/users/{userId}
 # operationId: GetUser
-export def "license-manager-users GetUser" [
-  userId: string
+export def "license-manager-users get" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -191,12 +191,12 @@ export def "license-manager-users GetUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
 ]: nothing -> record<email: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/license-manager/users/($userId)")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/license-manager/users/{user_id}"))
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -207,8 +207,8 @@ export def "license-manager-users GetUser" [
 #
 # GET /api/license-manager/users/{userId}/roles
 # operationId: GetRolesbyUser
-export def "license-manager-users-roles GetRolesbyUser" [
-  userId: string
+export def "license-manager-users-roles get-rolesby" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,12 +217,12 @@ export def "license-manager-users-roles GetRolesbyUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
 ]: nothing -> table<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/license-manager/users/($userId)/roles")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/license-manager/users/{user_id}/roles"))
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -233,8 +233,8 @@ export def "license-manager-users-roles GetRolesbyUser" [
 #
 # PUT /api/license-manager/users/{userId}/roles
 # operationId: PutRolesinUser
-export def "license-manager-users-roles PutRolesinUser" [
-  userId: string
+export def "license-manager-users-roles update-rolesin" [
+  user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "license-manager-users-roles PutRolesinUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/license-manager/users/($userId)/roles")
+  let full_url = (build-url $base ({user_id: $user_id} | format pattern "/api/license-manager/users/{user_id}/roles"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -259,9 +259,9 @@ export def "license-manager-users-roles PutRolesinUser" [
 #
 # DELETE /api/license-manager/users/{userId}/roles/{roleId}
 # operationId: RemoveRolefromUser
-export def "license-manager-users-roles RemoveRolefromUser" [
-  userId: string
-  roleId: string
+export def "license-manager-users-roles delete-rolefrom" [
+  user_id: string
+  role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,12 +270,12 @@ export def "license-manager-users-roles RemoveRolefromUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/license-manager/users/($userId)/roles/($roleId)")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({user_id: $user_id, role_id: $role_id} | format pattern "/api/license-manager/users/{user_id}/roles/{role_id}"))
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -286,7 +286,7 @@ export def "license-manager-users-roles RemoveRolefromUser" [
 #
 # GET /api/vlm/account
 # operationId: GetAccount
-export def "vlm-account GetAccount" [
+export def "vlm-account get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "vlm-account GetAccount" [
 #
 # GET /api/vlm/account/stores
 # operationId: GetByAccount
-export def "vlm-account-stores GetByAccount" [
+export def "vlm-account-stores get-by" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "vlm-account-stores GetByAccount" [
 #
 # GET /api/vlm/appkeys
 # operationId: Getappkeysfromaccount
-export def "vlm-appkeys Getappkeysfromaccount" [
+export def "vlm-appkeys get-appkeysfromaccount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,12 +339,12 @@ export def "vlm-appkeys Getappkeysfromaccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
+  --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
 ]: nothing -> table<appKey: string, createdIn: string, id: string, isActive: bool, label: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/vlm/appkeys")
-  let extra_headers = {"Content-Type": $Content_Type} | compact
+  let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -355,7 +355,7 @@ export def "vlm-appkeys Getappkeysfromaccount" [
 #
 # POST /api/vlm/appkeys
 # operationId: Createnewappkey
-export def "vlm-appkeys Createnewappkey" [
+export def "vlm-appkeys create-newappkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "vlm-appkeys Createnewappkey" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/vlm/appkeys")
-  let body = {label: $label} | compact
+  let body = {"label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,7 +381,7 @@ export def "vlm-appkeys Createnewappkey" [
 #
 # PUT /api/vlm/appkeys/{id}
 # operationId: Updateappkey
-export def "vlm-appkeys Updateappkey" [
+export def "vlm-appkeys update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,13 +391,13 @@ export def "vlm-appkeys Updateappkey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --isActive: oneof<nothing, bool> # If the application key should be active or inactive
+  --is-active: oneof<nothing, bool> # If the application key should be active or inactive
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/vlm/appkeys/($id)")
-  let body = {isActive: $isActive} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/api/vlm/appkeys/{id}"))
+  let body = {"isActive": $is_active} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

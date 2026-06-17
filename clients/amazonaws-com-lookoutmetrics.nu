@@ -66,13 +66,13 @@ def base-url-completer [] { ["http://lookoutmetrics.us-east-1.amazonaws.com" "ht
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def MetricSetFrequency-completer [] { ["P1D" "PT10M" "PT1H" "PT5M"] }
-def RelationshipTypeFilter-completer [] { ["CAUSE_OF_INPUT_ANOMALY_GROUP" "EFFECT_OF_INPUT_ANOMALY_GROUP"] }
+def metric-set-frequency-completer [] { ["P1D" "PT10M" "PT1H" "PT5M"] }
+def relationship-type-filter-completer [] { ["CAUSE_OF_INPUT_ANOMALY_GROUP" "EFFECT_OF_INPUT_ANOMALY_GROUP"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-anomaly-detector ActivateAnomalyDetector" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-anomaly-detector post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,7 +96,7 @@ export def commands []: nothing -> table {
 #
 # POST /ActivateAnomalyDetector
 # operationId: ActivateAnomalyDetector
-export def "activate-anomaly-detector ActivateAnomalyDetector" [
+export def "activate-anomaly-detector post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -105,22 +105,22 @@ export def "activate-anomaly-detector ActivateAnomalyDetector" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The ARN of the anomaly detector.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The ARN of the anomaly detector.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ActivateAnomalyDetector")
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -131,7 +131,7 @@ export def "activate-anomaly-detector ActivateAnomalyDetector" [
 #
 # POST /BackTestAnomalyDetector
 # operationId: BackTestAnomalyDetector
-export def "back-test-anomaly-detector BackTestAnomalyDetector" [
+export def "back-test-anomaly-detector post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -140,22 +140,22 @@ export def "back-test-anomaly-detector BackTestAnomalyDetector" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The Amazon Resource Name (ARN) of the anomaly detector.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/BackTestAnomalyDetector")
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -168,7 +168,7 @@ export def "back-test-anomaly-detector BackTestAnomalyDetector" [
 # operationId: CreateAlert
 # --Action shape: {SNSConfiguration?: any, LambdaConfiguration?: any}
 # --AlertFilters shape: {MetricList?: any, DimensionFilterList?: any}
-export def "create-alert CreateAlert" [
+export def "create-alert create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,28 +177,28 @@ export def "create-alert CreateAlert" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AlertName: string # The name of the alert.
-  --AlertSensitivityThreshold: int # An integer from 0 to 100 specifying the alert sensitivity threshold.
-  --AlertDescription: string # A description of the alert.
-  AnomalyDetectorArn: string # The ARN of the detector to which the alert is attached.
-  Action: record # A configuration that specifies the action to perform when anomalies are detected. — shape: {SNSConfiguration?: any, LambdaConfiguration?: any}
-  --Tags: record # A list of <a href="https://docs.aws.amazon.com/lookoutmetrics/latest/dev/detectors-tags.html">tags</a> to apply to the alert.
-  --AlertFilters: record # The configuration of the alert filters. — shape: {MetricList?: any, DimensionFilterList?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  alert_name: string # The name of the alert.
+  --alert-sensitivity-threshold: int # An integer from 0 to 100 specifying the alert sensitivity threshold.
+  --alert-description: string # A description of the alert.
+  anomaly_detector_arn: string # The ARN of the detector to which the alert is attached.
+  action: record # A configuration that specifies the action to perform when anomalies are detected. — shape: {SNSConfiguration?: any, LambdaConfiguration?: any}
+  --tags: record # A list of <a href="https://docs.aws.amazon.com/lookoutmetrics/latest/dev/detectors-tags.html">tags</a> to apply to the alert.
+  --alert-filters: record # The configuration of the alert filters. — shape: {MetricList?: any, DimensionFilterList?: any}
 ]: any -> record<AlertArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateAlert")
-  let body = {AlertName: $AlertName, AlertSensitivityThreshold: $AlertSensitivityThreshold, AlertDescription: $AlertDescription, AnomalyDetectorArn: $AnomalyDetectorArn, Action: $Action, Tags: $Tags, AlertFilters: $AlertFilters} | compact
+  let body = {"AlertName": $alert_name, "AlertSensitivityThreshold": $alert_sensitivity_threshold, "AlertDescription": $alert_description, "AnomalyDetectorArn": $anomaly_detector_arn, "Action": $action, "Tags": $tags, "AlertFilters": $alert_filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -210,7 +210,7 @@ export def "create-alert CreateAlert" [
 # POST /CreateAnomalyDetector
 # operationId: CreateAnomalyDetector
 # --AnomalyDetectorConfig shape: {AnomalyDetectorFrequency?: any}
-export def "create-anomaly-detector CreateAnomalyDetector" [
+export def "create-anomaly-detector create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,26 +219,26 @@ export def "create-anomaly-detector CreateAnomalyDetector" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorName: string # The name of the detector.
-  --AnomalyDetectorDescription: string # A description of the detector.
-  AnomalyDetectorConfig: record # Contains information about a detector's configuration. — shape: {AnomalyDetectorFrequency?: any}
-  --KmsKeyArn: string # The ARN of the KMS key to use to encrypt your data.
-  --Tags: record # A list of <a href="https://docs.aws.amazon.com/lookoutmetrics/latest/dev/detectors-tags.html">tags</a> to apply to the anomaly detector.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_name: string # The name of the detector.
+  --anomaly-detector-description: string # A description of the detector.
+  anomaly_detector_config: record # Contains information about a detector's configuration. — shape: {AnomalyDetectorFrequency?: any}
+  --kms-key-arn: string # The ARN of the KMS key to use to encrypt your data.
+  --tags: record # A list of <a href="https://docs.aws.amazon.com/lookoutmetrics/latest/dev/detectors-tags.html">tags</a> to apply to the anomaly detector.
 ]: any -> record<AnomalyDetectorArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateAnomalyDetector")
-  let body = {AnomalyDetectorName: $AnomalyDetectorName, AnomalyDetectorDescription: $AnomalyDetectorDescription, AnomalyDetectorConfig: $AnomalyDetectorConfig, KmsKeyArn: $KmsKeyArn, Tags: $Tags} | compact
+  let body = {"AnomalyDetectorName": $anomaly_detector_name, "AnomalyDetectorDescription": $anomaly_detector_description, "AnomalyDetectorConfig": $anomaly_detector_config, "KmsKeyArn": $kms_key_arn, "Tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +253,7 @@ export def "create-anomaly-detector CreateAnomalyDetector" [
 # --TimestampColumn shape: {ColumnName?: any, ColumnFormat?: any}
 # --MetricSource shape: {S3SourceConfig?: record, AppFlowConfig?: any, CloudWatchConfig?: any, RDSSourceConfig?: any, RedshiftSourceConfig?: any, AthenaSourceConfig?: any}
 # --DimensionFilterList item shape: {Name?: any, FilterList?: any}
-export def "create-metric-set CreateMetricSet" [
+export def "create-metric-set create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,33 +262,33 @@ export def "create-metric-set CreateMetricSet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The ARN of the anomaly detector that will use the dataset.
-  MetricSetName: string # The name of the dataset.
-  --MetricSetDescription: string # A description of the dataset you are creating.
-  MetricList: list # A list of metrics that the dataset will contain. — item shape: {MetricName: any, AggregationFunction: any, Namespace?: any}
-  --Offset: int # After an interval ends, the amount of seconds that the detector waits before importing data. Offset is only supported for S3, Redshift, Athena and datasources.
-  --TimestampColumn: record # Contains information about the column used to track time in a source data file. — shape: {ColumnName?: any, ColumnFormat?: any}
-  --DimensionList: list # A list of the fields you want to treat as dimensions.
-  --MetricSetFrequency: string@MetricSetFrequency-completer # The frequency with which the source data will be analyzed for anomalies.
-  MetricSource: record # Contains information about source data used to generate metrics. — shape: {S3SourceConfig?: record, AppFlowConfig?: any, CloudWatchConfig?: any, RDSSourceConfig?: any, RedshiftSourceConfig?: any, AthenaSourceConfig?: any}
-  --Timezone: string # The time zone in which your source data was recorded.
-  --Tags: record # A list of <a href="https://docs.aws.amazon.com/lookoutmetrics/latest/dev/detectors-tags.html">tags</a> to apply to the dataset.
-  --DimensionFilterList: list # A list of filters that specify which data is kept for anomaly detection. — item shape: {Name?: any, FilterList?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The ARN of the anomaly detector that will use the dataset.
+  metric_set_name: string # The name of the dataset.
+  --metric-set-description: string # A description of the dataset you are creating.
+  metric_list: list # A list of metrics that the dataset will contain. — item shape: {MetricName: any, AggregationFunction: any, Namespace?: any}
+  --offset: int # After an interval ends, the amount of seconds that the detector waits before importing data. Offset is only supported for S3, Redshift, Athena and datasources.
+  --timestamp-column: record # Contains information about the column used to track time in a source data file. — shape: {ColumnName?: any, ColumnFormat?: any}
+  --dimension-list: list # A list of the fields you want to treat as dimensions.
+  --metric-set-frequency: string@metric-set-frequency-completer # The frequency with which the source data will be analyzed for anomalies.
+  metric_source: record # Contains information about source data used to generate metrics. — shape: {S3SourceConfig?: record, AppFlowConfig?: any, CloudWatchConfig?: any, RDSSourceConfig?: any, RedshiftSourceConfig?: any, AthenaSourceConfig?: any}
+  --timezone: string # The time zone in which your source data was recorded.
+  --tags: record # A list of <a href="https://docs.aws.amazon.com/lookoutmetrics/latest/dev/detectors-tags.html">tags</a> to apply to the dataset.
+  --dimension-filter-list: list # A list of filters that specify which data is kept for anomaly detection. — item shape: {Name?: any, FilterList?: any}
 ]: any -> record<MetricSetArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/CreateMetricSet")
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, MetricSetName: $MetricSetName, MetricSetDescription: $MetricSetDescription, MetricList: $MetricList, Offset: $Offset, TimestampColumn: $TimestampColumn, DimensionList: $DimensionList, MetricSetFrequency: $MetricSetFrequency, MetricSource: $MetricSource, Timezone: $Timezone, Tags: $Tags, DimensionFilterList: $DimensionFilterList} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "MetricSetName": $metric_set_name, "MetricSetDescription": $metric_set_description, "MetricList": $metric_list, "Offset": $offset, "TimestampColumn": $timestamp_column, "DimensionList": $dimension_list, "MetricSetFrequency": $metric_set_frequency, "MetricSource": $metric_source, "Timezone": $timezone, "Tags": $tags, "DimensionFilterList": $dimension_filter_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -299,7 +299,7 @@ export def "create-metric-set CreateMetricSet" [
 #
 # POST /DeactivateAnomalyDetector
 # operationId: DeactivateAnomalyDetector
-export def "deactivate-anomaly-detector DeactivateAnomalyDetector" [
+export def "deactivate-anomaly-detector post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,22 +308,22 @@ export def "deactivate-anomaly-detector DeactivateAnomalyDetector" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The Amazon Resource Name (ARN) of the anomaly detector.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DeactivateAnomalyDetector")
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -334,7 +334,7 @@ export def "deactivate-anomaly-detector DeactivateAnomalyDetector" [
 #
 # POST /DeleteAlert
 # operationId: DeleteAlert
-export def "delete-alert DeleteAlert" [
+export def "delete-alert delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,22 +343,22 @@ export def "delete-alert DeleteAlert" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AlertArn: string # The ARN of the alert to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  alert_arn: string # The ARN of the alert to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DeleteAlert")
-  let body = {AlertArn: $AlertArn} | compact
+  let body = {"AlertArn": $alert_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -369,7 +369,7 @@ export def "delete-alert DeleteAlert" [
 #
 # POST /DeleteAnomalyDetector
 # operationId: DeleteAnomalyDetector
-export def "delete-anomaly-detector DeleteAnomalyDetector" [
+export def "delete-anomaly-detector delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,22 +378,22 @@ export def "delete-anomaly-detector DeleteAnomalyDetector" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The ARN of the detector to delete.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The ARN of the detector to delete.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DeleteAnomalyDetector")
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -404,7 +404,7 @@ export def "delete-anomaly-detector DeleteAnomalyDetector" [
 #
 # POST /DescribeAlert
 # operationId: DescribeAlert
-export def "describe-alert DescribeAlert" [
+export def "describe-alert post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,22 +413,22 @@ export def "describe-alert DescribeAlert" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AlertArn: string # The ARN of the alert to describe.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  alert_arn: string # The ARN of the alert to describe.
 ]: any -> record<Alert: record<Action: record<SNSConfiguration: record, LambdaConfiguration: record>, AlertDescription: record, AlertArn: record, AnomalyDetectorArn: record, AlertName: record, AlertSensitivityThreshold: record, AlertType: record, AlertStatus: record, LastModificationTime: record, CreationTime: record, AlertFilters: record<MetricList: record, DimensionFilterList: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DescribeAlert")
-  let body = {AlertArn: $AlertArn} | compact
+  let body = {"AlertArn": $alert_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,7 +439,7 @@ export def "describe-alert DescribeAlert" [
 #
 # POST /DescribeAnomalyDetectionExecutions
 # operationId: DescribeAnomalyDetectionExecutions
-export def "describe-anomaly-detection-executions DescribeAnomalyDetectionExecutions" [
+export def "describe-anomaly-detection-executions post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,28 +448,28 @@ export def "describe-anomaly-detection-executions DescribeAnomalyDetectionExecut
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The Amazon Resource Name (ARN) of the anomaly detector.
-  --Timestamp: string # The timestamp of the anomaly detection job.
-  --MaxResults: int # The number of items to return in the response.
-  --NextToken: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
+  --timestamp: string # The timestamp of the anomaly detection job.
+  --max-results: int # The number of items to return in the response.
+  --next-token: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
 ]: any -> record<ExecutionList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/DescribeAnomalyDetectionExecutions" $qp)
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, Timestamp: $Timestamp, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "Timestamp": $timestamp, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -480,7 +480,7 @@ export def "describe-anomaly-detection-executions DescribeAnomalyDetectionExecut
 #
 # POST /DescribeAnomalyDetector
 # operationId: DescribeAnomalyDetector
-export def "describe-anomaly-detector DescribeAnomalyDetector" [
+export def "describe-anomaly-detector post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,22 +489,22 @@ export def "describe-anomaly-detector DescribeAnomalyDetector" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The ARN of the detector to describe.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The ARN of the detector to describe.
 ]: any -> record<AnomalyDetectorArn: record, AnomalyDetectorName: record, AnomalyDetectorDescription: record, AnomalyDetectorConfig: record<AnomalyDetectorFrequency: record>, CreationTime: record, LastModificationTime: record, Status: record, FailureReason: record, KmsKeyArn: record, FailureType: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DescribeAnomalyDetector")
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -515,7 +515,7 @@ export def "describe-anomaly-detector DescribeAnomalyDetector" [
 #
 # POST /DescribeMetricSet
 # operationId: DescribeMetricSet
-export def "describe-metric-set DescribeMetricSet" [
+export def "describe-metric-set post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -524,22 +524,22 @@ export def "describe-metric-set DescribeMetricSet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  MetricSetArn: string # The ARN of the dataset.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  metric_set_arn: string # The ARN of the dataset.
 ]: any -> record<MetricSetArn: record, AnomalyDetectorArn: record, MetricSetName: record, MetricSetDescription: record, CreationTime: record, LastModificationTime: record, Offset: record, MetricList: record, TimestampColumn: record<ColumnName: record, ColumnFormat: record>, DimensionList: record, MetricSetFrequency: record, Timezone: record, MetricSource: record<S3SourceConfig: record<RoleArn: record, TemplatedPathList: record, HistoricalDataPathList: record, FileFormatDescriptor: record>, AppFlowConfig: record<RoleArn: record, FlowName: record>, CloudWatchConfig: record<RoleArn: record, BackTestConfiguration: record>, RDSSourceConfig: record<DBInstanceIdentifier: record, DatabaseHost: record, DatabasePort: record, SecretManagerArn: record, DatabaseName: record, TableName: record, RoleArn: record, VpcConfiguration: record>, RedshiftSourceConfig: record<ClusterIdentifier: record, DatabaseHost: record, DatabasePort: record, SecretManagerArn: record, DatabaseName: record, TableName: record, RoleArn: record, VpcConfiguration: record>, AthenaSourceConfig: record<RoleArn: record, DatabaseName: record, DataCatalog: record, TableName: record, WorkGroupName: record, S3ResultsPath: record, BackTestConfiguration: record>>, DimensionFilterList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DescribeMetricSet")
-  let body = {MetricSetArn: $MetricSetArn} | compact
+  let body = {"MetricSetArn": $metric_set_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -551,7 +551,7 @@ export def "describe-metric-set DescribeMetricSet" [
 # POST /DetectMetricSetConfig
 # operationId: DetectMetricSetConfig
 # --AutoDetectionMetricSource shape: {S3SourceConfig?: any}
-export def "detect-metric-set-config DetectMetricSetConfig" [
+export def "detect-metric-set-config post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,23 +560,23 @@ export def "detect-metric-set-config DetectMetricSetConfig" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # An anomaly detector ARN.
-  AutoDetectionMetricSource: record # An auto detection metric source. — shape: {S3SourceConfig?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # An anomaly detector ARN.
+  auto_detection_metric_source: record # An auto detection metric source. — shape: {S3SourceConfig?: any}
 ]: any -> record<DetectedMetricSetConfig: record<Offset: record<Value: record, Confidence: record, Message: record>, MetricSetFrequency: record<Value: record, Confidence: record, Message: record>, MetricSource: record<S3SourceConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/DetectMetricSetConfig")
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, AutoDetectionMetricSource: $AutoDetectionMetricSource} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "AutoDetectionMetricSource": $auto_detection_metric_source} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -587,7 +587,7 @@ export def "detect-metric-set-config DetectMetricSetConfig" [
 #
 # POST /GetAnomalyGroup
 # operationId: GetAnomalyGroup
-export def "get-anomaly-group GetAnomalyGroup" [
+export def "get-anomaly-group get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -596,23 +596,23 @@ export def "get-anomaly-group GetAnomalyGroup" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyGroupId: string # The ID of the anomaly group.
-  AnomalyDetectorArn: string # The Amazon Resource Name (ARN) of the anomaly detector.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_group_id: string # The ID of the anomaly group.
+  anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
 ]: any -> record<AnomalyGroup: record<StartTime: record, EndTime: record, AnomalyGroupId: record, AnomalyGroupScore: record, PrimaryMetricName: record, MetricLevelImpactList: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetAnomalyGroup")
-  let body = {AnomalyGroupId: $AnomalyGroupId, AnomalyDetectorArn: $AnomalyDetectorArn} | compact
+  let body = {"AnomalyGroupId": $anomaly_group_id, "AnomalyDetectorArn": $anomaly_detector_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -623,7 +623,7 @@ export def "get-anomaly-group GetAnomalyGroup" [
 #
 # POST /GetDataQualityMetrics
 # operationId: GetDataQualityMetrics
-export def "get-data-quality-metrics GetDataQualityMetrics" [
+export def "get-data-quality-metrics get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -632,23 +632,23 @@ export def "get-data-quality-metrics GetDataQualityMetrics" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The Amazon Resource Name (ARN) of the anomaly detector that you want to investigate.
-  --MetricSetArn: string # The Amazon Resource Name (ARN) of a specific data quality metric set.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector that you want to investigate.
+  --metric-set-arn: string # The Amazon Resource Name (ARN) of a specific data quality metric set.
 ]: any -> record<AnomalyDetectorDataQualityMetricList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetDataQualityMetrics")
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, MetricSetArn: $MetricSetArn} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "MetricSetArn": $metric_set_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -660,7 +660,7 @@ export def "get-data-quality-metrics GetDataQualityMetrics" [
 # POST /GetFeedback
 # operationId: GetFeedback
 # --AnomalyGroupTimeSeriesFeedback shape: {AnomalyGroupId?: any, TimeSeriesId?: any}
-export def "get-feedback GetFeedback" [
+export def "get-feedback get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -669,28 +669,28 @@ export def "get-feedback GetFeedback" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The Amazon Resource Name (ARN) of the anomaly detector.
-  AnomalyGroupTimeSeriesFeedback: record # An anomalous metric in an anomaly group. — shape: {AnomalyGroupId?: any, TimeSeriesId?: any}
-  --MaxResults: int # The maximum number of results to return.
-  --NextToken: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
+  anomaly_group_time_series_feedback: record # An anomalous metric in an anomaly group. — shape: {AnomalyGroupId?: any, TimeSeriesId?: any}
+  --max-results: int # The maximum number of results to return.
+  --next-token: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
 ]: any -> record<AnomalyGroupTimeSeriesFeedback: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/GetFeedback" $qp)
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, AnomalyGroupTimeSeriesFeedback: $AnomalyGroupTimeSeriesFeedback, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "AnomalyGroupTimeSeriesFeedback": $anomaly_group_time_series_feedback, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -702,7 +702,7 @@ export def "get-feedback GetFeedback" [
 # POST /GetSampleData
 # operationId: GetSampleData
 # --S3SourceConfig shape: {RoleArn?: any, TemplatedPathList?: any, HistoricalDataPathList?: any, FileFormatDescriptor?: record}
-export def "get-sample-data GetSampleData" [
+export def "get-sample-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,22 +711,22 @@ export def "get-sample-data GetSampleData" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --S3SourceConfig: record # Contains information about the source configuration in Amazon S3. — shape: {RoleArn?: any, TemplatedPathList?: any, HistoricalDataPathList?: any, FileFormatDescriptor?: record}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --s3-source-config: record # Contains information about the source configuration in Amazon S3. — shape: {RoleArn?: any, TemplatedPathList?: any, HistoricalDataPathList?: any, FileFormatDescriptor?: record}
 ]: any -> record<HeaderValues: record, SampleRows: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetSampleData")
-  let body = {S3SourceConfig: $S3SourceConfig} | compact
+  let body = {"S3SourceConfig": $s3_source_config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -737,7 +737,7 @@ export def "get-sample-data GetSampleData" [
 #
 # POST /ListAlerts
 # operationId: ListAlerts
-export def "list-alerts ListAlerts" [
+export def "list-alerts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,27 +746,27 @@ export def "list-alerts ListAlerts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --AnomalyDetectorArn: string # The ARN of the alert's detector.
-  --NextToken: string # If the result of the previous request is truncated, the response includes a <code>NextToken</code>. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours.
-  --MaxResults: int # The maximum number of results that will be displayed by the request.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --anomaly-detector-arn: string # The ARN of the alert's detector.
+  --next-token: string # If the result of the previous request is truncated, the response includes a <code>NextToken</code>. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours.
+  --max-results: int # The maximum number of results that will be displayed by the request.
 ]: any -> record<AlertSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListAlerts" $qp)
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, NextToken: $NextToken, MaxResults: $MaxResults} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "NextToken": $next_token, "MaxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -777,7 +777,7 @@ export def "list-alerts ListAlerts" [
 #
 # POST /ListAnomalyDetectors
 # operationId: ListAnomalyDetectors
-export def "list-anomaly-detectors ListAnomalyDetectors" [
+export def "list-anomaly-detectors list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -786,26 +786,26 @@ export def "list-anomaly-detectors ListAnomalyDetectors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --MaxResults: int # The maximum number of results to return.
-  --NextToken: string # If the result of the previous request was truncated, the response includes a <code>NextToken</code>. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --max-results: int # The maximum number of results to return.
+  --next-token: string # If the result of the previous request was truncated, the response includes a <code>NextToken</code>. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours.
 ]: any -> record<AnomalyDetectorSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListAnomalyDetectors" $qp)
-  let body = {MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -816,7 +816,7 @@ export def "list-anomaly-detectors ListAnomalyDetectors" [
 #
 # POST /ListAnomalyGroupRelatedMetrics
 # operationId: ListAnomalyGroupRelatedMetrics
-export def "list-anomaly-group-related-metrics ListAnomalyGroupRelatedMetrics" [
+export def "list-anomaly-group-related-metrics list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -825,29 +825,29 @@ export def "list-anomaly-group-related-metrics ListAnomalyGroupRelatedMetrics" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The Amazon Resource Name (ARN) of the anomaly detector.
-  AnomalyGroupId: string # The ID of the anomaly group.
-  --RelationshipTypeFilter: string@RelationshipTypeFilter-completer # Filter for potential causes (<code>CAUSE_OF_INPUT_ANOMALY_GROUP</code>) or downstream effects (<code>EFFECT_OF_INPUT_ANOMALY_GROUP</code>) of the anomaly group.
-  --MaxResults: int # The maximum number of results to return.
-  --NextToken: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
+  anomaly_group_id: string # The ID of the anomaly group.
+  --relationship-type-filter: string@relationship-type-filter-completer # Filter for potential causes (<code>CAUSE_OF_INPUT_ANOMALY_GROUP</code>) or downstream effects (<code>EFFECT_OF_INPUT_ANOMALY_GROUP</code>) of the anomaly group.
+  --max-results: int # The maximum number of results to return.
+  --next-token: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
 ]: any -> record<InterMetricImpactList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListAnomalyGroupRelatedMetrics" $qp)
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, AnomalyGroupId: $AnomalyGroupId, RelationshipTypeFilter: $RelationshipTypeFilter, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "AnomalyGroupId": $anomaly_group_id, "RelationshipTypeFilter": $relationship_type_filter, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -858,7 +858,7 @@ export def "list-anomaly-group-related-metrics ListAnomalyGroupRelatedMetrics" [
 #
 # POST /ListAnomalyGroupSummaries
 # operationId: ListAnomalyGroupSummaries
-export def "list-anomaly-group-summaries ListAnomalyGroupSummaries" [
+export def "list-anomaly-group-summaries list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -867,28 +867,28 @@ export def "list-anomaly-group-summaries ListAnomalyGroupSummaries" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The Amazon Resource Name (ARN) of the anomaly detector.
-  SensitivityThreshold: int # The minimum severity score for inclusion in the output.
-  --MaxResults: int # The maximum number of results to return.
-  --NextToken: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
+  sensitivity_threshold: int # The minimum severity score for inclusion in the output.
+  --max-results: int # The maximum number of results to return.
+  --next-token: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
 ]: any -> record<AnomalyGroupSummaryList: record, AnomalyGroupStatistics: record<EvaluationStartDate: record, TotalCount: record, ItemizedMetricStatsList: record>, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListAnomalyGroupSummaries" $qp)
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, SensitivityThreshold: $SensitivityThreshold, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "SensitivityThreshold": $sensitivity_threshold, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -899,7 +899,7 @@ export def "list-anomaly-group-summaries ListAnomalyGroupSummaries" [
 #
 # POST /ListAnomalyGroupTimeSeries
 # operationId: ListAnomalyGroupTimeSeries
-export def "list-anomaly-group-time-series ListAnomalyGroupTimeSeries" [
+export def "list-anomaly-group-time-series list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -908,29 +908,29 @@ export def "list-anomaly-group-time-series ListAnomalyGroupTimeSeries" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The Amazon Resource Name (ARN) of the anomaly detector.
-  AnomalyGroupId: string # The ID of the anomaly group.
-  MetricName: string # The name of the measure field.
-  --MaxResults: int # The maximum number of results to return.
-  --NextToken: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
+  anomaly_group_id: string # The ID of the anomaly group.
+  metric_name: string # The name of the measure field.
+  --max-results: int # The maximum number of results to return.
+  --next-token: string # Specify the pagination token that's returned by a previous request to retrieve the next page of results.
 ]: any -> record<AnomalyGroupId: record, MetricName: record, TimestampList: record, NextToken: record, TimeSeriesList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListAnomalyGroupTimeSeries" $qp)
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, AnomalyGroupId: $AnomalyGroupId, MetricName: $MetricName, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "AnomalyGroupId": $anomaly_group_id, "MetricName": $metric_name, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -941,7 +941,7 @@ export def "list-anomaly-group-time-series ListAnomalyGroupTimeSeries" [
 #
 # POST /ListMetricSets
 # operationId: ListMetricSets
-export def "list-metric-sets ListMetricSets" [
+export def "list-metric-sets list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,27 +950,27 @@ export def "list-metric-sets ListMetricSets" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --MaxResults: string # Pagination limit
-  --NextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --AnomalyDetectorArn: string # The ARN of the anomaly detector containing the metrics sets to list.
-  --MaxResults: int # The maximum number of results to return.
-  --NextToken: string # If the result of the previous request was truncated, the response includes a <code>NextToken</code>. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --anomaly-detector-arn: string # The ARN of the anomaly detector containing the metrics sets to list.
+  --max-results: int # The maximum number of results to return.
+  --next-token: string # If the result of the previous request was truncated, the response includes a <code>NextToken</code>. To retrieve the next set of results, use the token in the next request. Tokens expire after 24 hours.
 ]: any -> record<MetricSetSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "MaxResults" $MaxResults "scalar") (serialize-qp "NextToken" $NextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ListMetricSets" $qp)
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -981,8 +981,8 @@ export def "list-metric-sets ListMetricSets" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags ListTagsForResource" [
-  resourceArn: string
+export def "tags list-tags-for-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -991,18 +991,18 @@ export def "tags ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resourceArn)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1013,8 +1013,8 @@ export def "tags ListTagsForResource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags TagResource" [
-  resourceArn: string
+export def "tags tag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,22 +1023,22 @@ export def "tags TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   tags: record # Tags to apply to the resource. Tag keys and values can contain letters, numbers, spaces, and the following symbols: <code>_.:/=+@-</code> 
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resourceArn)")
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1050,7 +1050,7 @@ export def "tags TagResource" [
 # POST /PutFeedback
 # operationId: PutFeedback
 # --AnomalyGroupTimeSeriesFeedback shape: {AnomalyGroupId?: any, TimeSeriesId?: any, IsAnomaly?: any}
-export def "put-feedback PutFeedback" [
+export def "put-feedback update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,23 +1059,23 @@ export def "put-feedback PutFeedback" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The Amazon Resource Name (ARN) of the anomaly detector.
-  AnomalyGroupTimeSeriesFeedback: record # Feedback for an anomalous metric. — shape: {AnomalyGroupId?: any, TimeSeriesId?: any, IsAnomaly?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The Amazon Resource Name (ARN) of the anomaly detector.
+  anomaly_group_time_series_feedback: record # Feedback for an anomalous metric. — shape: {AnomalyGroupId?: any, TimeSeriesId?: any, IsAnomaly?: any}
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/PutFeedback")
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, AnomalyGroupTimeSeriesFeedback: $AnomalyGroupTimeSeriesFeedback} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "AnomalyGroupTimeSeriesFeedback": $anomaly_group_time_series_feedback} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1086,8 +1086,8 @@ export def "put-feedback PutFeedback" [
 #
 # DELETE /tags/{resourceArn}#tagKeys
 # operationId: UntagResource
-export def "tags UntagResource" [
-  resourceArn: string
+export def "tags untag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,20 +1096,20 @@ export def "tags UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagKeys: list # Keys to remove from the resource's tags.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --tag-keys: list # Keys to remove from the resource's tags.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tagKeys" $tagKeys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($resourceArn)#tagKeys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1122,7 +1122,7 @@ export def "tags UntagResource" [
 # operationId: UpdateAlert
 # --Action shape: {SNSConfiguration?: any, LambdaConfiguration?: any}
 # --AlertFilters shape: {MetricList?: any, DimensionFilterList?: any}
-export def "update-alert UpdateAlert" [
+export def "update-alert update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,26 +1131,26 @@ export def "update-alert UpdateAlert" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AlertArn: string # The ARN of the alert to update.
-  --AlertDescription: string # A description of the alert.
-  --AlertSensitivityThreshold: int # An integer from 0 to 100 specifying the alert sensitivity threshold.
-  --Action: record # A configuration that specifies the action to perform when anomalies are detected. — shape: {SNSConfiguration?: any, LambdaConfiguration?: any}
-  --AlertFilters: record # The configuration of the alert filters. — shape: {MetricList?: any, DimensionFilterList?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  alert_arn: string # The ARN of the alert to update.
+  --alert-description: string # A description of the alert.
+  --alert-sensitivity-threshold: int # An integer from 0 to 100 specifying the alert sensitivity threshold.
+  --action: record # A configuration that specifies the action to perform when anomalies are detected. — shape: {SNSConfiguration?: any, LambdaConfiguration?: any}
+  --alert-filters: record # The configuration of the alert filters. — shape: {MetricList?: any, DimensionFilterList?: any}
 ]: any -> record<AlertArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateAlert")
-  let body = {AlertArn: $AlertArn, AlertDescription: $AlertDescription, AlertSensitivityThreshold: $AlertSensitivityThreshold, Action: $Action, AlertFilters: $AlertFilters} | compact
+  let body = {"AlertArn": $alert_arn, "AlertDescription": $alert_description, "AlertSensitivityThreshold": $alert_sensitivity_threshold, "Action": $action, "AlertFilters": $alert_filters} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1162,7 +1162,7 @@ export def "update-alert UpdateAlert" [
 # POST /UpdateAnomalyDetector
 # operationId: UpdateAnomalyDetector
 # --AnomalyDetectorConfig shape: {AnomalyDetectorFrequency?: any}
-export def "update-anomaly-detector UpdateAnomalyDetector" [
+export def "update-anomaly-detector update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,25 +1171,25 @@ export def "update-anomaly-detector UpdateAnomalyDetector" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  AnomalyDetectorArn: string # The ARN of the detector to update.
-  --KmsKeyArn: string # The Amazon Resource Name (ARN) of an AWS KMS encryption key.
-  --AnomalyDetectorDescription: string # The updated detector description.
-  --AnomalyDetectorConfig: record # Contains information about a detector's configuration. — shape: {AnomalyDetectorFrequency?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  anomaly_detector_arn: string # The ARN of the detector to update.
+  --kms-key-arn: string # The Amazon Resource Name (ARN) of an AWS KMS encryption key.
+  --anomaly-detector-description: string # The updated detector description.
+  --anomaly-detector-config: record # Contains information about a detector's configuration. — shape: {AnomalyDetectorFrequency?: any}
 ]: any -> record<AnomalyDetectorArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateAnomalyDetector")
-  let body = {AnomalyDetectorArn: $AnomalyDetectorArn, KmsKeyArn: $KmsKeyArn, AnomalyDetectorDescription: $AnomalyDetectorDescription, AnomalyDetectorConfig: $AnomalyDetectorConfig} | compact
+  let body = {"AnomalyDetectorArn": $anomaly_detector_arn, "KmsKeyArn": $kms_key_arn, "AnomalyDetectorDescription": $anomaly_detector_description, "AnomalyDetectorConfig": $anomaly_detector_config} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1204,7 +1204,7 @@ export def "update-anomaly-detector UpdateAnomalyDetector" [
 # --TimestampColumn shape: {ColumnName?: any, ColumnFormat?: any}
 # --MetricSource shape: {S3SourceConfig?: record, AppFlowConfig?: any, CloudWatchConfig?: any, RDSSourceConfig?: any, RedshiftSourceConfig?: any, AthenaSourceConfig?: any}
 # --DimensionFilterList item shape: {Name?: any, FilterList?: any}
-export def "update-metric-set UpdateMetricSet" [
+export def "update-metric-set update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,30 +1213,30 @@ export def "update-metric-set UpdateMetricSet" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  MetricSetArn: string # The ARN of the dataset to update.
-  --MetricSetDescription: string # The dataset's description.
-  --MetricList: list # The metric list. — item shape: {MetricName: any, AggregationFunction: any, Namespace?: any}
-  --Offset: int # After an interval ends, the amount of seconds that the detector waits before importing data. Offset is only supported for S3, Redshift, Athena and datasources.
-  --TimestampColumn: record # Contains information about the column used to track time in a source data file. — shape: {ColumnName?: any, ColumnFormat?: any}
-  --DimensionList: list # The dimension list.
-  --MetricSetFrequency: string@MetricSetFrequency-completer # The dataset's interval.
-  --MetricSource: record # Contains information about source data used to generate metrics. — shape: {S3SourceConfig?: record, AppFlowConfig?: any, CloudWatchConfig?: any, RDSSourceConfig?: any, RedshiftSourceConfig?: any, AthenaSourceConfig?: any}
-  --DimensionFilterList: list # Describes a list of filters for choosing specific dimensions and specific values. Each filter consists of the dimension and one of its values that you want to include. When multiple dimensions or values are specified, the dimensions are joined with an AND operation and the values are joined with an OR operation. — item shape: {Name?: any, FilterList?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  metric_set_arn: string # The ARN of the dataset to update.
+  --metric-set-description: string # The dataset's description.
+  --metric-list: list # The metric list. — item shape: {MetricName: any, AggregationFunction: any, Namespace?: any}
+  --offset: int # After an interval ends, the amount of seconds that the detector waits before importing data. Offset is only supported for S3, Redshift, Athena and datasources.
+  --timestamp-column: record # Contains information about the column used to track time in a source data file. — shape: {ColumnName?: any, ColumnFormat?: any}
+  --dimension-list: list # The dimension list.
+  --metric-set-frequency: string@metric-set-frequency-completer # The dataset's interval.
+  --metric-source: record # Contains information about source data used to generate metrics. — shape: {S3SourceConfig?: record, AppFlowConfig?: any, CloudWatchConfig?: any, RDSSourceConfig?: any, RedshiftSourceConfig?: any, AthenaSourceConfig?: any}
+  --dimension-filter-list: list # Describes a list of filters for choosing specific dimensions and specific values. Each filter consists of the dimension and one of its values that you want to include. When multiple dimensions or values are specified, the dimensions are joined with an AND operation and the values are joined with an OR operation. — item shape: {Name?: any, FilterList?: any}
 ]: any -> record<MetricSetArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UpdateMetricSet")
-  let body = {MetricSetArn: $MetricSetArn, MetricSetDescription: $MetricSetDescription, MetricList: $MetricList, Offset: $Offset, TimestampColumn: $TimestampColumn, DimensionList: $DimensionList, MetricSetFrequency: $MetricSetFrequency, MetricSource: $MetricSource, DimensionFilterList: $DimensionFilterList} | compact
+  let body = {"MetricSetArn": $metric_set_arn, "MetricSetDescription": $metric_set_description, "MetricList": $metric_list, "Offset": $offset, "TimestampColumn": $timestamp_column, "DimensionList": $dimension_list, "MetricSetFrequency": $metric_set_frequency, "MetricSource": $metric_source, "DimensionFilterList": $dimension_filter_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

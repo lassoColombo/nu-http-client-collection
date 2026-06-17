@@ -66,16 +66,16 @@ def base-url-completer [] { ["http://models-v2-lex.us-east-1.amazonaws.com" "htt
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def botType-completer [] { ["Bot" "BotNetwork"] }
-def fileFormat-completer [] { ["LexJson" "TSV"] }
+def bot-type-completer [] { ["Bot" "BotNetwork"] }
+def file-format-completer [] { ["LexJson" "TSV"] }
 def effect-completer [] { ["Allow" "Deny"] }
-def mergeStrategy-completer [] { ["Append" "FailOnConflict" "Overwrite"] }
-def searchOrder-completer [] { ["Ascending" "Descending"] }
+def merge-strategy-completer [] { ["Append" "FailOnConflict" "Overwrite"] }
+def search-order-completer [] { ["Ascending" "Descending"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bots-botversions-botlocales-customvocabulary-default-batchcreate BatchCreateCustomVocabularyItem" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bots-botversions-botlocales-customvocabulary-default-batchcreate put" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,10 +100,10 @@ export def commands []: nothing -> table {
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/batchcreate
 # operationId: BatchCreateCustomVocabularyItem
 # --customVocabularyItemList item shape: {phrase: any, weight?: any, displayAs?: any}
-export def "bots-botversions-botlocales-customvocabulary-default-batchcreate BatchCreateCustomVocabularyItem" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-customvocabulary-default-batchcreate put" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -112,22 +112,22 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchcreate Bat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  customVocabularyItemList: list # A list of new custom vocabulary items. Each entry must contain a phrase and can optionally contain a displayAs and/or a weight. — item shape: {phrase: any, weight?: any, displayAs?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  custom_vocabulary_item_list: list # A list of new custom vocabulary items. Each entry must contain a phrase and can optionally contain a displayAs and/or a weight. — item shape: {phrase: any, weight?: any, displayAs?: any}
 ]: any -> record<botId: record, botVersion: record, localeId: record, errors: record, resources: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/customvocabulary/DEFAULT/batchcreate")
-  let body = {customVocabularyItemList: $customVocabularyItemList} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchcreate"))
+  let body = {"customVocabularyItemList": $custom_vocabulary_item_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -139,10 +139,10 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchcreate Bat
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/batchdelete
 # operationId: BatchDeleteCustomVocabularyItem
 # --customVocabularyItemList item shape: {itemId: any}
-export def "bots-botversions-botlocales-customvocabulary-default-batchdelete BatchDeleteCustomVocabularyItem" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-customvocabulary-default-batchdelete post" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -151,22 +151,22 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchdelete Bat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  customVocabularyItemList: list # A list of custom vocabulary items requested to be deleted. Each entry must contain the unique custom vocabulary entry identifier. — item shape: {itemId: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  custom_vocabulary_item_list: list # A list of custom vocabulary items requested to be deleted. Each entry must contain the unique custom vocabulary entry identifier. — item shape: {itemId: any}
 ]: any -> record<botId: record, botVersion: record, localeId: record, errors: record, resources: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/customvocabulary/DEFAULT/batchdelete")
-  let body = {customVocabularyItemList: $customVocabularyItemList} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchdelete"))
+  let body = {"customVocabularyItemList": $custom_vocabulary_item_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,10 +178,10 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchdelete Bat
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/batchupdate
 # operationId: BatchUpdateCustomVocabularyItem
 # --customVocabularyItemList item shape: {itemId: any, phrase: any, weight?: any, displayAs?: any}
-export def "bots-botversions-botlocales-customvocabulary-default-batchupdate BatchUpdateCustomVocabularyItem" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-customvocabulary-default-batchupdate put" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,22 +190,22 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchupdate Bat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  customVocabularyItemList: list # A list of custom vocabulary items with updated fields. Each entry must contain a phrase and can optionally contain a displayAs and/or a weight. — item shape: {itemId: any, phrase: any, weight?: any, displayAs?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  custom_vocabulary_item_list: list # A list of custom vocabulary items with updated fields. Each entry must contain a phrase and can optionally contain a displayAs and/or a weight. — item shape: {itemId: any, phrase: any, weight?: any, displayAs?: any}
 ]: any -> record<botId: record, botVersion: record, localeId: record, errors: record, resources: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/customvocabulary/DEFAULT/batchupdate")
-  let body = {customVocabularyItemList: $customVocabularyItemList} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/batchupdate"))
+  let body = {"customVocabularyItemList": $custom_vocabulary_item_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -216,10 +216,10 @@ export def "bots-botversions-botlocales-customvocabulary-default-batchupdate Bat
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/
 # operationId: BuildBotLocale
-export def "bots-botversions-botlocales BuildBotLocale" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales build" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,18 +228,18 @@ export def "bots-botversions-botlocales BuildBotLocale" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botVersion: record, localeId: record, botLocaleStatus: record, lastBuildSubmittedDateTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -250,10 +250,10 @@ export def "bots-botversions-botlocales BuildBotLocale" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/
 # operationId: DeleteBotLocale
-export def "bots-botversions-botlocales DeleteBotLocale" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales delete" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,18 +262,18 @@ export def "bots-botversions-botlocales DeleteBotLocale" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botVersion: record, localeId: record, botLocaleStatus: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,10 +284,10 @@ export def "bots-botversions-botlocales DeleteBotLocale" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/
 # operationId: DescribeBotLocale
-export def "bots-botversions-botlocales DescribeBotLocale" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales get" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,18 +296,18 @@ export def "bots-botversions-botlocales DescribeBotLocale" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botVersion: record, localeId: record, localeName: record, description: record, nluIntentConfidenceThreshold: record, voiceSettings: record<voiceId: record, engine: record>, intentsCount: record, slotTypesCount: record, botLocaleStatus: record, failureReasons: record, creationDateTime: record, lastUpdatedDateTime: record, lastBuildSubmittedDateTime: record, botLocaleHistoryEvents: record, recommendedActions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -319,10 +319,10 @@ export def "bots-botversions-botlocales DescribeBotLocale" [
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/
 # operationId: UpdateBotLocale
 # --voiceSettings shape: {voiceId?: any, engine?: any}
-export def "bots-botversions-botlocales UpdateBotLocale" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales update" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,24 +331,24 @@ export def "bots-botversions-botlocales UpdateBotLocale" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --description: string # The new description of the locale.
-  nluIntentConfidenceThreshold: float # The new confidence threshold where Amazon Lex inserts the <code>AMAZON.FallbackIntent</code> and <code>AMAZON.KendraSearchIntent</code> intents in the list of possible intents for an utterance. (format: double)
-  --voiceSettings: record # Defines settings for using an Amazon Polly voice to communicate with a user. — shape: {voiceId?: any, engine?: any}
+  nlu_intent_confidence_threshold: float # The new confidence threshold where Amazon Lex inserts the <code>AMAZON.FallbackIntent</code> and <code>AMAZON.KendraSearchIntent</code> intents in the list of possible intents for an utterance. (format: double)
+  --voice-settings: record # Defines settings for using an Amazon Polly voice to communicate with a user. — shape: {voiceId?: any, engine?: any}
 ]: any -> record<botId: record, botVersion: record, localeId: record, localeName: record, description: record, nluIntentConfidenceThreshold: record, voiceSettings: record<voiceId: record, engine: record>, botLocaleStatus: record, failureReasons: record, creationDateTime: record, lastUpdatedDateTime: record, recommendedActions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/")
-  let body = {description: $description, nluIntentConfidenceThreshold: $nluIntentConfidenceThreshold, voiceSettings: $voiceSettings} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/"))
+  let body = {"description": $description, "nluIntentConfidenceThreshold": $nlu_intent_confidence_threshold, "voiceSettings": $voice_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -361,7 +361,7 @@ export def "bots-botversions-botlocales UpdateBotLocale" [
 # operationId: CreateBot
 # --dataPrivacy shape: {childDirected?: any}
 # --botMembers item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
-export def "bots CreateBot" [
+export def "bots create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,30 +370,30 @@ export def "bots CreateBot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  botName: string # The name of the bot. The bot name must be unique in the account that creates the bot.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  bot_name: string # The name of the bot. The bot name must be unique in the account that creates the bot.
   --description: string # A description of the bot. It appears in lists to help you identify a particular bot.
-  roleArn: string # The Amazon Resource Name (ARN) of an IAM role that has permission to access the bot.
-  dataPrivacy: record # By default, data stored by Amazon Lex is encrypted. The <code>DataPrivacy</code> structure provides settings that determine how Amazon Lex handles special cases of securing the data for your bot.  — shape: {childDirected?: any}
-  idleSessionTTLInSeconds: int # <p>The time, in seconds, that Amazon Lex should keep information about a user's conversation with the bot. </p> <p>A user interaction remains active for the amount of time specified. If no conversation occurs during this time, the session expires and Amazon Lex deletes any data provided before the timeout.</p> <p>You can specify between 60 (1 minute) and 86,400 (24 hours) seconds.</p>
-  --botTags: record # A list of tags to add to the bot. You can only add tags when you create a bot. You can't use the <code>UpdateBot</code> operation to update tags. To update tags, use the <code>TagResource</code> operation.
-  --testBotAliasTags: record # A list of tags to add to the test alias for a bot. You can only add tags when you create a bot. You can't use the <code>UpdateAlias</code> operation to update tags. To update tags on the test alias, use the <code>TagResource</code> operation.
-  --botType: string@botType-completer # The type of a bot to create.
-  --botMembers: list # The list of bot members in a network to be created. — item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
+  role_arn: string # The Amazon Resource Name (ARN) of an IAM role that has permission to access the bot.
+  data_privacy: record # By default, data stored by Amazon Lex is encrypted. The <code>DataPrivacy</code> structure provides settings that determine how Amazon Lex handles special cases of securing the data for your bot.  — shape: {childDirected?: any}
+  idle_session_ttl_in_seconds: int # <p>The time, in seconds, that Amazon Lex should keep information about a user's conversation with the bot. </p> <p>A user interaction remains active for the amount of time specified. If no conversation occurs during this time, the session expires and Amazon Lex deletes any data provided before the timeout.</p> <p>You can specify between 60 (1 minute) and 86,400 (24 hours) seconds.</p>
+  --bot-tags: record # A list of tags to add to the bot. You can only add tags when you create a bot. You can't use the <code>UpdateBot</code> operation to update tags. To update tags, use the <code>TagResource</code> operation.
+  --test-bot-alias-tags: record # A list of tags to add to the test alias for a bot. You can only add tags when you create a bot. You can't use the <code>UpdateAlias</code> operation to update tags. To update tags on the test alias, use the <code>TagResource</code> operation.
+  --bot-type: string@bot-type-completer # The type of a bot to create.
+  --bot-members: list # The list of bot members in a network to be created. — item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
 ]: any -> record<botId: record, botName: record, description: record, roleArn: record, dataPrivacy: record<childDirected: record>, idleSessionTTLInSeconds: record, botStatus: record, creationDateTime: record, botTags: record, testBotAliasTags: record, botType: record, botMembers: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bots/")
-  let body = {botName: $botName, description: $description, roleArn: $roleArn, dataPrivacy: $dataPrivacy, idleSessionTTLInSeconds: $idleSessionTTLInSeconds, botTags: $botTags, testBotAliasTags: $testBotAliasTags, botType: $botType, botMembers: $botMembers} | compact
+  let body = {"botName": $bot_name, "description": $description, "roleArn": $role_arn, "dataPrivacy": $data_privacy, "idleSessionTTLInSeconds": $idle_session_ttl_in_seconds, "botTags": $bot_tags, "testBotAliasTags": $test_bot_alias_tags, "botType": $bot_type, "botMembers": $bot_members} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -406,7 +406,7 @@ export def "bots CreateBot" [
 # operationId: ListBots
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots ListBots" [
+export def "bots list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,28 +415,28 @@ export def "bots ListBots" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --sortBy: record # Specifies attributes for sorting a list of bots. — shape: {attribute?: any, order?: any}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --sort-by: record # Specifies attributes for sorting a list of bots. — shape: {attribute?: any, order?: any}
   --filters: list # Provides the specification of a filter used to limit the bots in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: any, values: any, operator: any}
-  --maxResults: int # The maximum number of bots to return in each page of results. If there are fewer results than the maximum page size, only the actual number of results are returned.
-  --nextToken: string # <p>If the response from the <code>ListBots</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. </p> <p>Use the returned token in the <code>nextToken</code> parameter of a <code>ListBots</code> request to return the next page of results. For a complete set of results, call the <code>ListBots</code> operation until the <code>nextToken</code> returned in the response is null.</p>
+  --max-results: int # The maximum number of bots to return in each page of results. If there are fewer results than the maximum page size, only the actual number of results are returned.
+  --next-token: string # <p>If the response from the <code>ListBots</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. </p> <p>Use the returned token in the <code>nextToken</code> parameter of a <code>ListBots</code> request to return the next page of results. For a complete set of results, call the <code>ListBots</code> operation until the <code>nextToken</code> returned in the response is null.</p>
 ]: any -> record<botSummaries: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bots/" $qp)
-  let body = {sortBy: $sortBy, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -449,8 +449,8 @@ export def "bots ListBots" [
 # operationId: CreateBotAlias
 # --conversationLogSettings shape: {textLogSettings?: any, audioLogSettings?: any}
 # --sentimentAnalysisSettings shape: {detectSentiment?: any}
-export def "bots-botaliases CreateBotAlias" [
-  botId: string
+export def "bots-botaliases create-bot-alias" [
+  bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,28 +459,28 @@ export def "bots-botaliases CreateBotAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  botAliasName: string # The alias to create. The name must be unique for the bot.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  bot_alias_name: string # The alias to create. The name must be unique for the bot.
   --description: string # A description of the alias. Use this description to help identify the alias.
-  --botVersion: string # The version of the bot that this alias points to. You can use the <a href="https://docs.aws.amazon.com/lexv2/latest/APIReference/API_UpdateBotAlias.html">UpdateBotAlias</a> operation to change the bot version associated with the alias.
-  --botAliasLocaleSettings: record # Maps configuration information to a specific locale. You can use this parameter to specify a specific Lambda function to run different functions in different locales.
-  --conversationLogSettings: record # Configures conversation logging that saves audio, text, and metadata for the conversations with your users. — shape: {textLogSettings?: any, audioLogSettings?: any}
-  --sentimentAnalysisSettings: record # Determines whether Amazon Lex will use Amazon Comprehend to detect the sentiment of user utterances. — shape: {detectSentiment?: any}
+  --bot-version: string # The version of the bot that this alias points to. You can use the <a href="https://docs.aws.amazon.com/lexv2/latest/APIReference/API_UpdateBotAlias.html">UpdateBotAlias</a> operation to change the bot version associated with the alias.
+  --bot-alias-locale-settings: record # Maps configuration information to a specific locale. You can use this parameter to specify a specific Lambda function to run different functions in different locales.
+  --conversation-log-settings: record # Configures conversation logging that saves audio, text, and metadata for the conversations with your users. — shape: {textLogSettings?: any, audioLogSettings?: any}
+  --sentiment-analysis-settings: record # Determines whether Amazon Lex will use Amazon Comprehend to detect the sentiment of user utterances. — shape: {detectSentiment?: any}
   --tags: record # A list of tags to add to the bot alias. You can only add tags when you create an alias, you can't use the <code>UpdateBotAlias</code> operation to update the tags on a bot alias. To update tags, use the <code>TagResource</code> operation.
 ]: any -> record<botAliasId: record, botAliasName: record, description: record, botVersion: record, botAliasLocaleSettings: record, conversationLogSettings: record<textLogSettings: record, audioLogSettings: record>, sentimentAnalysisSettings: record<detectSentiment: record>, botAliasStatus: record, botId: record, creationDateTime: record, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botaliases/")
-  let body = {botAliasName: $botAliasName, description: $description, botVersion: $botVersion, botAliasLocaleSettings: $botAliasLocaleSettings, conversationLogSettings: $conversationLogSettings, sentimentAnalysisSettings: $sentimentAnalysisSettings, tags: $tags} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id} | format pattern "/bots/{bot_id}/botaliases/"))
+  let body = {"botAliasName": $bot_alias_name, "description": $description, "botVersion": $bot_version, "botAliasLocaleSettings": $bot_alias_locale_settings, "conversationLogSettings": $conversation_log_settings, "sentimentAnalysisSettings": $sentiment_analysis_settings, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -491,8 +491,8 @@ export def "bots-botaliases CreateBotAlias" [
 #
 # POST /bots/{botId}/botaliases/
 # operationId: ListBotAliases
-export def "bots-botaliases ListBotAliases" [
-  botId: string
+export def "bots-botaliases list" [
+  bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,26 +501,26 @@ export def "bots-botaliases ListBotAliases" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --maxResults: int # The maximum number of aliases to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # If the response from the <code>ListBotAliases</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --max-results: int # The maximum number of aliases to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # If the response from the <code>ListBotAliases</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
 ]: any -> record<botAliasSummaries: record, nextToken: record, botId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botaliases/" $qp)
-  let body = {maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id} | format pattern "/bots/{bot_id}/botaliases/") $qp)
+  let body = {"maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -532,9 +532,9 @@ export def "bots-botaliases ListBotAliases" [
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/
 # operationId: CreateBotLocale
 # --voiceSettings shape: {voiceId?: any, engine?: any}
-export def "bots-botversions-botlocales CreateBotLocale" [
-  botId: string
-  botVersion: string
+export def "bots-botversions-botlocales create" [
+  bot_id: string
+  bot_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,25 +543,25 @@ export def "bots-botversions-botlocales CreateBotLocale" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  localeId: string # The identifier of the language and locale that the bot will be used in. The string must match one of the supported locales. All of the intents, slot types, and slots used in the bot must have the same locale. For more information, see <a href="https://docs.aws.amazon.com/lexv2/latest/dg/how-languages.html">Supported languages</a>.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  locale_id: string # The identifier of the language and locale that the bot will be used in. The string must match one of the supported locales. All of the intents, slot types, and slots used in the bot must have the same locale. For more information, see <a href="https://docs.aws.amazon.com/lexv2/latest/dg/how-languages.html">Supported languages</a>.
   --description: string # A description of the bot locale. Use this to help identify the bot locale in lists.
-  nluIntentConfidenceThreshold: float # <p>Determines the threshold where Amazon Lex will insert the <code>AMAZON.FallbackIntent</code>, <code>AMAZON.KendraSearchIntent</code>, or both when returning alternative intents. <code>AMAZON.FallbackIntent</code> and <code>AMAZON.KendraSearchIntent</code> are only inserted if they are configured for the bot.</p> <p>For example, suppose a bot is configured with the confidence threshold of 0.80 and the <code>AMAZON.FallbackIntent</code>. Amazon Lex returns three alternative intents with the following confidence scores: IntentA (0.70), IntentB (0.60), IntentC (0.50). The response from the <code>RecognizeText</code> operation would be:</p> <ul> <li> <p>AMAZON.FallbackIntent</p> </li> <li> <p>IntentA</p> </li> <li> <p>IntentB</p> </li> <li> <p>IntentC</p> </li> </ul> (format: double)
-  --voiceSettings: record # Defines settings for using an Amazon Polly voice to communicate with a user. — shape: {voiceId?: any, engine?: any}
+  nlu_intent_confidence_threshold: float # <p>Determines the threshold where Amazon Lex will insert the <code>AMAZON.FallbackIntent</code>, <code>AMAZON.KendraSearchIntent</code>, or both when returning alternative intents. <code>AMAZON.FallbackIntent</code> and <code>AMAZON.KendraSearchIntent</code> are only inserted if they are configured for the bot.</p> <p>For example, suppose a bot is configured with the confidence threshold of 0.80 and the <code>AMAZON.FallbackIntent</code>. Amazon Lex returns three alternative intents with the following confidence scores: IntentA (0.70), IntentB (0.60), IntentC (0.50). The response from the <code>RecognizeText</code> operation would be:</p> <ul> <li> <p>AMAZON.FallbackIntent</p> </li> <li> <p>IntentA</p> </li> <li> <p>IntentB</p> </li> <li> <p>IntentC</p> </li> </ul> (format: double)
+  --voice-settings: record # Defines settings for using an Amazon Polly voice to communicate with a user. — shape: {voiceId?: any, engine?: any}
 ]: any -> record<botId: record, botVersion: record, localeName: record, localeId: record, description: record, nluIntentConfidenceThreshold: record, voiceSettings: record<voiceId: record, engine: record>, botLocaleStatus: record, creationDateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/")
-  let body = {localeId: $localeId, description: $description, nluIntentConfidenceThreshold: $nluIntentConfidenceThreshold, voiceSettings: $voiceSettings} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/"))
+  let body = {"localeId": $locale_id, "description": $description, "nluIntentConfidenceThreshold": $nlu_intent_confidence_threshold, "voiceSettings": $voice_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -574,9 +574,9 @@ export def "bots-botversions-botlocales CreateBotLocale" [
 # operationId: ListBotLocales
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots-botversions-botlocales ListBotLocales" [
-  botId: string
-  botVersion: string
+export def "bots-botversions-botlocales list" [
+  bot_id: string
+  bot_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,28 +585,28 @@ export def "bots-botversions-botlocales ListBotLocales" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --sortBy: record # Specifies attributes for sorting a list of bot locales. — shape: {attribute?: any, order?: any}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --sort-by: record # Specifies attributes for sorting a list of bot locales. — shape: {attribute?: any, order?: any}
   --filters: list # Provides the specification for a filter used to limit the response to only those locales that match the filter specification. You can only specify one filter and one value to filter on. — item shape: {name: any, values: any, operator: any}
-  --maxResults: int # The maximum number of aliases to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # If the response from the <code>ListBotLocales</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token as the <code>nextToken</code> parameter to return the next page of results. 
+  --max-results: int # The maximum number of aliases to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # If the response from the <code>ListBotLocales</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token as the <code>nextToken</code> parameter to return the next page of results. 
 ]: any -> record<botId: record, botVersion: record, nextToken: record, botLocaleSummaries: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/" $qp)
-  let body = {sortBy: $sortBy, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/") $qp)
+  let body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -617,8 +617,8 @@ export def "bots-botversions-botlocales ListBotLocales" [
 #
 # PUT /bots/{botId}/botversions/
 # operationId: CreateBotVersion
-export def "bots-botversions CreateBotVersion" [
-  botId: string
+export def "bots-botversions create" [
+  bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,23 +627,23 @@ export def "bots-botversions CreateBotVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   --description: string # A description of the version. Use the description to help identify the version in lists.
-  botVersionLocaleSpecification: record # Specifies the locales that Amazon Lex adds to this version. You can choose the <code>Draft</code> version or any other previously published version for each locale. When you specify a source version, the locale data is copied from the source version to the new version.
+  bot_version_locale_specification: record # Specifies the locales that Amazon Lex adds to this version. You can choose the <code>Draft</code> version or any other previously published version for each locale. When you specify a source version, the locale data is copied from the source version to the new version.
 ]: any -> record<botId: record, description: record, botVersion: record, botVersionLocaleSpecification: record, botStatus: record, creationDateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/")
-  let body = {description: $description, botVersionLocaleSpecification: $botVersionLocaleSpecification} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id} | format pattern "/bots/{bot_id}/botversions/"))
+  let body = {"description": $description, "botVersionLocaleSpecification": $bot_version_locale_specification} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -655,8 +655,8 @@ export def "bots-botversions CreateBotVersion" [
 # POST /bots/{botId}/botversions/
 # operationId: ListBotVersions
 # --sortBy shape: {attribute?: any, order?: any}
-export def "bots-botversions ListBotVersions" [
-  botId: string
+export def "bots-botversions list" [
+  bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,27 +665,27 @@ export def "bots-botversions ListBotVersions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --sortBy: record # Specifies attributes for sorting a list of bot versions. — shape: {attribute?: any, order?: any}
-  --maxResults: int # The maximum number of versions to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # If the response to the <code>ListBotVersion</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --sort-by: record # Specifies attributes for sorting a list of bot versions. — shape: {attribute?: any, order?: any}
+  --max-results: int # The maximum number of versions to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # If the response to the <code>ListBotVersion</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
 ]: any -> record<botId: record, botVersionSummaries: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botversions/" $qp)
-  let body = {sortBy: $sortBy, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id} | format pattern "/bots/{bot_id}/botversions/") $qp)
+  let body = {"sortBy": $sort_by, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -697,7 +697,7 @@ export def "bots-botversions ListBotVersions" [
 # PUT /exports/
 # operationId: CreateExport
 # --resourceSpecification shape: {botExportSpecification?: any, botLocaleExportSpecification?: any, customVocabularyExportSpecification?: any}
-export def "exports CreateExport" [
+export def "exports create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,24 +706,24 @@ export def "exports CreateExport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  resourceSpecification: record # Provides information about the bot or bot locale that you want to export. You can specify the <code>botExportSpecification</code> or the <code>botLocaleExportSpecification</code>, but not both. — shape: {botExportSpecification?: any, botLocaleExportSpecification?: any, customVocabularyExportSpecification?: any}
-  fileFormat: string@fileFormat-completer # The file format of the bot or bot locale definition files.
-  --filePassword: string # An password to use to encrypt the exported archive. Using a password is optional, but you should encrypt the archive to protect the data in transit between Amazon Lex and your local computer. (format: password)
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  resource_specification: record # Provides information about the bot or bot locale that you want to export. You can specify the <code>botExportSpecification</code> or the <code>botLocaleExportSpecification</code>, but not both. — shape: {botExportSpecification?: any, botLocaleExportSpecification?: any, customVocabularyExportSpecification?: any}
+  file_format: string@file-format-completer # The file format of the bot or bot locale definition files.
+  --file-password: string # An password to use to encrypt the exported archive. Using a password is optional, but you should encrypt the archive to protect the data in transit between Amazon Lex and your local computer. (format: password)
 ]: any -> record<exportId: record, resourceSpecification: record<botExportSpecification: record<botId: record, botVersion: record>, botLocaleExportSpecification: record<botId: record, botVersion: record, localeId: record>, customVocabularyExportSpecification: record<botId: record, botVersion: record, localeId: record>>, fileFormat: record, exportStatus: record, creationDateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exports/")
-  let body = {resourceSpecification: $resourceSpecification, fileFormat: $fileFormat, filePassword: $filePassword} | compact
+  let body = {"resourceSpecification": $resource_specification, "fileFormat": $file_format, "filePassword": $file_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -736,7 +736,7 @@ export def "exports CreateExport" [
 # operationId: ListExports
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "exports ListExports" [
+export def "exports list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,31 +745,31 @@ export def "exports ListExports" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --botId: string # The unique identifier that Amazon Lex assigned to the bot.
-  --botVersion: string # The version of the bot to list exports for. 
-  --sortBy: record # Provides information about sorting a list of exports. — shape: {attribute?: any, order?: any}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --bot-id: string # The unique identifier that Amazon Lex assigned to the bot.
+  --bot-version: string # The version of the bot to list exports for. 
+  --sort-by: record # Provides information about sorting a list of exports. — shape: {attribute?: any, order?: any}
   --filters: list # Provides the specification of a filter used to limit the exports in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: any, values: any, operator: any}
-  --maxResults: int # The maximum number of exports to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # <p>If the response from the <code>ListExports</code> operation contains more results that specified in the <code>maxResults</code> parameter, a token is returned in the response. </p> <p>Use the returned token in the <code>nextToken</code> parameter of a <code>ListExports</code> request to return the next page of results. For a complete set of results, call the <code>ListExports</code> operation until the <code>nextToken</code> returned in the response is null.</p>
-  --localeId: string # Specifies the resources that should be exported. If you don't specify a resource type in the <code>filters</code> parameter, both bot locales and custom vocabularies are exported.
+  --max-results: int # The maximum number of exports to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # <p>If the response from the <code>ListExports</code> operation contains more results that specified in the <code>maxResults</code> parameter, a token is returned in the response. </p> <p>Use the returned token in the <code>nextToken</code> parameter of a <code>ListExports</code> request to return the next page of results. For a complete set of results, call the <code>ListExports</code> operation until the <code>nextToken</code> returned in the response is null.</p>
+  --locale-id: string # Specifies the resources that should be exported. If you don't specify a resource type in the <code>filters</code> parameter, both bot locales and custom vocabularies are exported.
 ]: any -> record<botId: record, botVersion: record, exportSummaries: record, nextToken: record, localeId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/exports/" $qp)
-  let body = {botId: $botId, botVersion: $botVersion, sortBy: $sortBy, filters: $filters, maxResults: $maxResults, nextToken: $nextToken, localeId: $localeId} | compact
+  let body = {"botId": $bot_id, "botVersion": $bot_version, "sortBy": $sort_by, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token, "localeId": $locale_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -789,10 +789,10 @@ export def "exports ListExports" [
 # --outputContexts item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
 # --kendraConfiguration shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
 # --initialResponseSetting shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
-export def "bots-botversions-botlocales-intents CreateIntent" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-intents create" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -801,33 +801,33 @@ export def "bots-botversions-botlocales-intents CreateIntent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  intentName: string # The name of the intent. Intent names must be unique in the locale that contains the intent and cannot match the name of any built-in intent.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  intent_name: string # The name of the intent. Intent names must be unique in the locale that contains the intent and cannot match the name of any built-in intent.
   --description: string # A description of the intent. Use the description to help identify the intent in lists.
-  --parentIntentSignature: string # A unique identifier for the built-in intent to base this intent on.
-  --sampleUtterances: list # <p>An array of strings that a user might say to signal the intent. For example, "I want a pizza", or "I want a {PizzaSize} pizza". </p> <p>In an utterance, slot names are enclosed in curly braces ("{", "}") to indicate where they should be displayed in the utterance shown to the user.. </p> — item shape: {utterance: any}
-  --dialogCodeHook: record # Settings that determine the Lambda function that Amazon Lex uses for processing user responses. — shape: {enabled?: any}
-  --fulfillmentCodeHook: record # Determines if a Lambda function should be invoked for a specific intent. — shape: {enabled?: any, postFulfillmentStatusSpecification?: any, fulfillmentUpdatesSpecification?: any, active?: any}
-  --intentConfirmationSetting: record # Provides a prompt for making sure that the user is ready for the intent to be fulfilled. — shape: {promptSpecification?: any, declinationResponse?: any, active?: any, confirmationResponse?: record, confirmationNextStep?: any, confirmationConditional?: any, declinationNextStep?: any, declinationConditional?: any, failureResponse?: record, failureNextStep?: any, failureConditional?: record, codeHook?: any, elicitationCodeHook?: any}
-  --intentClosingSetting: record # Provides a statement the Amazon Lex conveys to the user when the intent is successfully fulfilled. — shape: {closingResponse?: any, active?: any, nextStep?: any, conditional?: any}
-  --inputContexts: list # <p>A list of contexts that must be active for this intent to be considered by Amazon Lex.</p> <p>When an intent has an input context list, Amazon Lex only considers using the intent in an interaction with the user when the specified contexts are included in the active context list for the session. If the contexts are not active, then Amazon Lex will not use the intent.</p> <p>A context can be automatically activated using the <code>outputContexts</code> property or it can be set at runtime.</p> <p> For example, if there are two intents with different input contexts that respond to the same utterances, only the intent with the active context will respond.</p> <p>An intent may have up to 5 input contexts. If an intent has multiple input contexts, all of the contexts must be active to consider the intent.</p> — item shape: {name: any}
-  --outputContexts: list # <p>A lists of contexts that the intent activates when it is fulfilled.</p> <p>You can use an output context to indicate the intents that Amazon Lex should consider for the next turn of the conversation with a customer. </p> <p>When you use the <code>outputContextsList</code> property, all of the contexts specified in the list are activated when the intent is fulfilled. You can set up to 10 output contexts. You can also set the number of conversation turns that the context should be active, or the length of time that the context should be active.</p> — item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
-  --kendraConfiguration: record # Provides configuration information for the AMAZON.KendraSearchIntent intent. When you use this intent, Amazon Lex searches the specified Amazon Kendra index and returns documents from the index that match the user's utterance. — shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
-  --initialResponseSetting: record # Configuration setting for a response sent to the user before Amazon Lex starts eliciting slots. — shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
+  --parent-intent-signature: string # A unique identifier for the built-in intent to base this intent on.
+  --sample-utterances: list # <p>An array of strings that a user might say to signal the intent. For example, "I want a pizza", or "I want a {PizzaSize} pizza". </p> <p>In an utterance, slot names are enclosed in curly braces ("{", "}") to indicate where they should be displayed in the utterance shown to the user.. </p> — item shape: {utterance: any}
+  --dialog-code-hook: record # Settings that determine the Lambda function that Amazon Lex uses for processing user responses. — shape: {enabled?: any}
+  --fulfillment-code-hook: record # Determines if a Lambda function should be invoked for a specific intent. — shape: {enabled?: any, postFulfillmentStatusSpecification?: any, fulfillmentUpdatesSpecification?: any, active?: any}
+  --intent-confirmation-setting: record # Provides a prompt for making sure that the user is ready for the intent to be fulfilled. — shape: {promptSpecification?: any, declinationResponse?: any, active?: any, confirmationResponse?: record, confirmationNextStep?: any, confirmationConditional?: any, declinationNextStep?: any, declinationConditional?: any, failureResponse?: record, failureNextStep?: any, failureConditional?: record, codeHook?: any, elicitationCodeHook?: any}
+  --intent-closing-setting: record # Provides a statement the Amazon Lex conveys to the user when the intent is successfully fulfilled. — shape: {closingResponse?: any, active?: any, nextStep?: any, conditional?: any}
+  --input-contexts: list # <p>A list of contexts that must be active for this intent to be considered by Amazon Lex.</p> <p>When an intent has an input context list, Amazon Lex only considers using the intent in an interaction with the user when the specified contexts are included in the active context list for the session. If the contexts are not active, then Amazon Lex will not use the intent.</p> <p>A context can be automatically activated using the <code>outputContexts</code> property or it can be set at runtime.</p> <p> For example, if there are two intents with different input contexts that respond to the same utterances, only the intent with the active context will respond.</p> <p>An intent may have up to 5 input contexts. If an intent has multiple input contexts, all of the contexts must be active to consider the intent.</p> — item shape: {name: any}
+  --output-contexts: list # <p>A lists of contexts that the intent activates when it is fulfilled.</p> <p>You can use an output context to indicate the intents that Amazon Lex should consider for the next turn of the conversation with a customer. </p> <p>When you use the <code>outputContextsList</code> property, all of the contexts specified in the list are activated when the intent is fulfilled. You can set up to 10 output contexts. You can also set the number of conversation turns that the context should be active, or the length of time that the context should be active.</p> — item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
+  --kendra-configuration: record # Provides configuration information for the AMAZON.KendraSearchIntent intent. When you use this intent, Amazon Lex searches the specified Amazon Kendra index and returns documents from the index that match the user's utterance. — shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
+  --initial-response-setting: record # Configuration setting for a response sent to the user before Amazon Lex starts eliciting slots. — shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
 ]: any -> record<intentId: record, intentName: record, description: record, parentIntentSignature: record, sampleUtterances: record, dialogCodeHook: record<enabled: record>, fulfillmentCodeHook: record<enabled: record, postFulfillmentStatusSpecification: record<successResponse: record, failureResponse: record, timeoutResponse: record, successNextStep: record, successConditional: record, failureNextStep: record, failureConditional: record, timeoutNextStep: record, timeoutConditional: record>, fulfillmentUpdatesSpecification: record<active: record, startResponse: record, updateResponse: record, timeoutInSeconds: record>, active: record>, intentConfirmationSetting: record<promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, declinationResponse: record<messageGroups: record, allowInterrupt: record>, active: record, confirmationResponse: record<messageGroups: record, allowInterrupt: record>, confirmationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, confirmationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, declinationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, declinationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, failureResponse: record<messageGroups: record, allowInterrupt: record>, failureNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, failureConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>, elicitationCodeHook: record<enableCodeHookInvocation: record, invocationLabel: record>>, intentClosingSetting: record<closingResponse: record<messageGroups: record, allowInterrupt: record>, active: record, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>>, inputContexts: record, outputContexts: record, kendraConfiguration: record<kendraIndex: record, queryFilterStringEnabled: record, queryFilterString: record>, botId: record, botVersion: record, localeId: record, creationDateTime: record, initialResponseSetting: record<initialResponse: record<messageGroups: record, allowInterrupt: record>, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/intents/")
-  let body = {intentName: $intentName, description: $description, parentIntentSignature: $parentIntentSignature, sampleUtterances: $sampleUtterances, dialogCodeHook: $dialogCodeHook, fulfillmentCodeHook: $fulfillmentCodeHook, intentConfirmationSetting: $intentConfirmationSetting, intentClosingSetting: $intentClosingSetting, inputContexts: $inputContexts, outputContexts: $outputContexts, kendraConfiguration: $kendraConfiguration, initialResponseSetting: $initialResponseSetting} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/"))
+  let body = {"intentName": $intent_name, "description": $description, "parentIntentSignature": $parent_intent_signature, "sampleUtterances": $sample_utterances, "dialogCodeHook": $dialog_code_hook, "fulfillmentCodeHook": $fulfillment_code_hook, "intentConfirmationSetting": $intent_confirmation_setting, "intentClosingSetting": $intent_closing_setting, "inputContexts": $input_contexts, "outputContexts": $output_contexts, "kendraConfiguration": $kendra_configuration, "initialResponseSetting": $initial_response_setting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -840,10 +840,10 @@ export def "bots-botversions-botlocales-intents CreateIntent" [
 # operationId: ListIntents
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots-botversions-botlocales-intents ListIntents" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-intents list" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,28 +852,28 @@ export def "bots-botversions-botlocales-intents ListIntents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --sortBy: record # Specifies attributes for sorting a list of intents. — shape: {attribute?: any, order?: any}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --sort-by: record # Specifies attributes for sorting a list of intents. — shape: {attribute?: any, order?: any}
   --filters: list # Provides the specification of a filter used to limit the intents in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: any, values: any, operator: any}
-  --maxResults: int # The maximum number of intents to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # <p>If the response from the <code>ListIntents</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response.</p> <p>Use the returned token in the <code>nextToken</code> parameter of a <code>ListIntents</code> request to return the next page of results. For a complete set of results, call the <code>ListIntents</code> operation until the <code>nextToken</code> returned in the response is null.</p>
+  --max-results: int # The maximum number of intents to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # <p>If the response from the <code>ListIntents</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response.</p> <p>Use the returned token in the <code>nextToken</code> parameter of a <code>ListIntents</code> request to return the next page of results. For a complete set of results, call the <code>ListIntents</code> operation until the <code>nextToken</code> returned in the response is null.</p>
 ]: any -> record<botId: record, botVersion: record, localeId: record, intentSummaries: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/intents/" $qp)
-  let body = {sortBy: $sortBy, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/") $qp)
+  let body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -884,8 +884,8 @@ export def "bots-botversions-botlocales-intents ListIntents" [
 #
 # POST /policy/{resourceArn}/
 # operationId: CreateResourcePolicy
-export def "policy CreateResourcePolicy" [
-  resourceArn: string
+export def "policy create-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,22 +894,22 @@ export def "policy CreateResourcePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   policy: string # <p>A resource policy to add to the resource. The policy is a JSON structure that contains one or more statements that define the policy. The policy must follow the IAM syntax. For more information about the contents of a JSON policy document, see <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies.html"> IAM JSON policy reference </a>. </p> <p>If the policy isn't valid, Amazon Lex returns a validation exception.</p>
 ]: any -> record<resourceArn: record, revisionId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/policy/($resourceArn)/")
-  let body = {policy: $policy} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/policy/{resource_arn}/"))
+  let body = {"policy": $policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -920,8 +920,8 @@ export def "policy CreateResourcePolicy" [
 #
 # DELETE /policy/{resourceArn}/
 # operationId: DeleteResourcePolicy
-export def "policy DeleteResourcePolicy" [
-  resourceArn: string
+export def "policy delete-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,20 +930,20 @@ export def "policy DeleteResourcePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --expectedRevisionId: string # <p>The identifier of the revision to edit. If this ID doesn't match the current revision number, Amazon Lex returns an exception</p> <p>If you don't specify a revision ID, Amazon Lex will delete the current policy.</p>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --expected-revision-id: string # <p>The identifier of the revision to edit. If this ID doesn't match the current revision number, Amazon Lex returns an exception</p> <p>If you don't specify a revision ID, Amazon Lex will delete the current policy.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expectedRevisionId" $expectedRevisionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/policy/($resourceArn)/" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/policy/{resource_arn}/") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -954,8 +954,8 @@ export def "policy DeleteResourcePolicy" [
 #
 # GET /policy/{resourceArn}/
 # operationId: DescribeResourcePolicy
-export def "policy DescribeResourcePolicy" [
-  resourceArn: string
+export def "policy get" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,18 +964,18 @@ export def "policy DescribeResourcePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<resourceArn: record, policy: record, revisionId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/policy/($resourceArn)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/policy/{resource_arn}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -986,8 +986,8 @@ export def "policy DescribeResourcePolicy" [
 #
 # PUT /policy/{resourceArn}/
 # operationId: UpdateResourcePolicy
-export def "policy UpdateResourcePolicy" [
-  resourceArn: string
+export def "policy update-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,24 +996,24 @@ export def "policy UpdateResourcePolicy" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --expectedRevisionId: string # <p>The identifier of the revision of the policy to update. If this revision ID doesn't match the current revision ID, Amazon Lex throws an exception.</p> <p>If you don't specify a revision, Amazon Lex overwrites the contents of the policy with the new values.</p>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --expected-revision-id: string # <p>The identifier of the revision of the policy to update. If this revision ID doesn't match the current revision ID, Amazon Lex throws an exception.</p> <p>If you don't specify a revision, Amazon Lex overwrites the contents of the policy with the new values.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   policy: string # <p>A resource policy to add to the resource. The policy is a JSON structure that contains one or more statements that define the policy. The policy must follow the IAM syntax. For more information about the contents of a JSON policy document, see <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies.html"> IAM JSON policy reference </a>. </p> <p>If the policy isn't valid, Amazon Lex returns a validation exception.</p>
 ]: any -> record<resourceArn: record, revisionId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expectedRevisionId" $expectedRevisionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/policy/($resourceArn)/" $qp)
-  let body = {policy: $policy} | compact
+  let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/policy/{resource_arn}/") $qp)
+  let body = {"policy": $policy} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1025,8 +1025,8 @@ export def "policy UpdateResourcePolicy" [
 # POST /policy/{resourceArn}/statements/
 # operationId: CreateResourcePolicyStatement
 # --principal item shape: {service?: any, arn?: any}
-export def "policy-statements CreateResourcePolicyStatement" [
-  resourceArn: string
+export def "policy-statements create-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,15 +1035,15 @@ export def "policy-statements CreateResourcePolicyStatement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --expectedRevisionId: string # <p>The identifier of the revision of the policy to edit. If this revision ID doesn't match the current revision ID, Amazon Lex throws an exception.</p> <p>If you don't specify a revision, Amazon Lex overwrites the contents of the policy with the new values.</p>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  statementId: string # The name of the statement. The ID is the same as the <code>Sid</code> IAM property. The statement name must be unique within the policy. For more information, see <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_sid.html">IAM JSON policy elements: Sid</a>. 
+  --expected-revision-id: string # <p>The identifier of the revision of the policy to edit. If this revision ID doesn't match the current revision ID, Amazon Lex throws an exception.</p> <p>If you don't specify a revision, Amazon Lex overwrites the contents of the policy with the new values.</p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  statement_id: string # The name of the statement. The ID is the same as the <code>Sid</code> IAM property. The statement name must be unique within the policy. For more information, see <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_sid.html">IAM JSON policy elements: Sid</a>. 
   effect: string@effect-completer # Determines whether the statement allows or denies access to the resource.
   principal: list # An IAM principal, such as an IAM users, IAM roles, or AWS services that is allowed or denied access to a resource. For more information, see <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html">AWS JSON policy elements: Principal</a>. — item shape: {service?: any, arn?: any}
   action: list # The Amazon Lex action that this policy either allows or denies. The action must apply to the resource type of the specified ARN. For more information, see <a href="https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonlexv2.html"> Actions, resources, and condition keys for Amazon Lex V2</a>.
@@ -1052,11 +1052,11 @@ export def "policy-statements CreateResourcePolicyStatement" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expectedRevisionId" $expectedRevisionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/policy/($resourceArn)/statements/" $qp)
-  let body = {statementId: $statementId, effect: $effect, principal: $principal, action: $action, condition: $condition} | compact
+  let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/policy/{resource_arn}/statements/") $qp)
+  let body = {"statementId": $statement_id, "effect": $effect, "principal": $principal, "action": $action, "condition": $condition} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1071,11 +1071,11 @@ export def "policy-statements CreateResourcePolicyStatement" [
 # --obfuscationSetting shape: {obfuscationSettingType?: any}
 # --multipleValuesSetting shape: {allowMultipleValues?: any}
 # --subSlotSetting shape: {expression?: any, slotSpecifications?: any}
-export def "bots-botversions-botlocales-intents-slots CreateSlot" [
-  botId: string
-  botVersion: string
-  localeId: string
-  intentId: string
+export def "bots-botversions-botlocales-intents-slots create" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  intent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1084,28 +1084,28 @@ export def "bots-botversions-botlocales-intents-slots CreateSlot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  slotName: string # The name of the slot. Slot names must be unique within the bot that contains the slot.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  slot_name: string # The name of the slot. Slot names must be unique within the bot that contains the slot.
   --description: string # A description of the slot. Use this to help identify the slot in lists.
-  --slotTypeId: string # The unique identifier for the slot type associated with this slot. The slot type determines the values that can be entered into the slot.
-  valueElicitationSetting: record # Specifies the elicitation setting details for constituent sub slots of a composite slot. — shape: {defaultValueSpecification?: any, slotConstraint?: any, promptSpecification?: any, sampleUtterances?: any, waitAndContinueSpecification?: record, slotCaptureSetting?: any}
-  --obfuscationSetting: record # Determines whether Amazon Lex obscures slot values in conversation logs.  — shape: {obfuscationSettingType?: any}
-  --multipleValuesSetting: record # Indicates whether a slot can return multiple values. — shape: {allowMultipleValues?: any}
-  --subSlotSetting: record # Specifications for the constituent sub slots and the expression for the composite slot. — shape: {expression?: any, slotSpecifications?: any}
+  --slot-type-id: string # The unique identifier for the slot type associated with this slot. The slot type determines the values that can be entered into the slot.
+  value_elicitation_setting: record # Specifies the elicitation setting details for constituent sub slots of a composite slot. — shape: {defaultValueSpecification?: any, slotConstraint?: any, promptSpecification?: any, sampleUtterances?: any, waitAndContinueSpecification?: record, slotCaptureSetting?: any}
+  --obfuscation-setting: record # Determines whether Amazon Lex obscures slot values in conversation logs.  — shape: {obfuscationSettingType?: any}
+  --multiple-values-setting: record # Indicates whether a slot can return multiple values. — shape: {allowMultipleValues?: any}
+  --sub-slot-setting: record # Specifications for the constituent sub slots and the expression for the composite slot. — shape: {expression?: any, slotSpecifications?: any}
 ]: any -> record<slotId: record, slotName: record, description: record, slotTypeId: record, valueElicitationSetting: record<defaultValueSpecification: record<defaultValueList: record>, slotConstraint: record, promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, sampleUtterances: record, waitAndContinueSpecification: record<waitingResponse: record, continueResponse: record, stillWaitingResponse: record, active: record>, slotCaptureSetting: record<captureResponse: record, captureNextStep: record, captureConditional: record, failureResponse: record, failureNextStep: record, failureConditional: record, codeHook: record, elicitationCodeHook: record>>, obfuscationSetting: record<obfuscationSettingType: record>, botId: record, botVersion: record, localeId: record, intentId: record, creationDateTime: record, multipleValuesSetting: record<allowMultipleValues: record>, subSlotSetting: record<expression: record, slotSpecifications: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/intents/($intentId)/slots/")
-  let body = {slotName: $slotName, description: $description, slotTypeId: $slotTypeId, valueElicitationSetting: $valueElicitationSetting, obfuscationSetting: $obfuscationSetting, multipleValuesSetting: $multipleValuesSetting, subSlotSetting: $subSlotSetting} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, intent_id: $intent_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/"))
+  let body = {"slotName": $slot_name, "description": $description, "slotTypeId": $slot_type_id, "valueElicitationSetting": $value_elicitation_setting, "obfuscationSetting": $obfuscation_setting, "multipleValuesSetting": $multiple_values_setting, "subSlotSetting": $sub_slot_setting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1118,11 +1118,11 @@ export def "bots-botversions-botlocales-intents-slots CreateSlot" [
 # operationId: ListSlots
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots-botversions-botlocales-intents-slots ListSlots" [
-  botId: string
-  botVersion: string
-  localeId: string
-  intentId: string
+export def "bots-botversions-botlocales-intents-slots list" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  intent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,28 +1131,28 @@ export def "bots-botversions-botlocales-intents-slots ListSlots" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --sortBy: record # Specifies attributes for sorting a list of bots. — shape: {attribute?: any, order?: any}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --sort-by: record # Specifies attributes for sorting a list of bots. — shape: {attribute?: any, order?: any}
   --filters: list # Provides the specification of a filter used to limit the slots in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: any, values: any, operator: any}
-  --maxResults: int # The maximum number of slots to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # If the response from the <code>ListSlots</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
+  --max-results: int # The maximum number of slots to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # If the response from the <code>ListSlots</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
 ]: any -> record<botId: record, botVersion: record, localeId: record, intentId: record, slotSummaries: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/intents/($intentId)/slots/" $qp)
-  let body = {sortBy: $sortBy, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, intent_id: $intent_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/") $qp)
+  let body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1167,10 +1167,10 @@ export def "bots-botversions-botlocales-intents-slots ListSlots" [
 # --valueSelectionSetting shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
 # --externalSourceSetting shape: {grammarSlotTypeSetting?: any}
 # --compositeSlotTypeSetting shape: {subSlots?: any}
-export def "bots-botversions-botlocales-slottypes CreateSlotType" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-slottypes create" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,28 +1179,28 @@ export def "bots-botversions-botlocales-slottypes CreateSlotType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  slotTypeName: string # The name for the slot. A slot type name must be unique within the account.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  slot_type_name: string # The name for the slot. A slot type name must be unique within the account.
   --description: string # A description of the slot type. Use the description to help identify the slot type in lists.
-  --slotTypeValues: list # A list of <code>SlotTypeValue</code> objects that defines the values that the slot type can take. Each value can have a list of synonyms, additional values that help train the machine learning model about the values that it resolves for a slot. — item shape: {sampleValue?: any, synonyms?: any}
-  --valueSelectionSetting: record # Contains settings used by Amazon Lex to select a slot value. — shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
-  --parentSlotTypeSignature: string # <p>The built-in slot type used as a parent of this slot type. When you define a parent slot type, the new slot type has the configuration of the parent slot type.</p> <p>Only <code>AMAZON.AlphaNumeric</code> is supported.</p>
-  --externalSourceSetting: record # Provides information about the external source of the slot type's definition. — shape: {grammarSlotTypeSetting?: any}
-  --compositeSlotTypeSetting: record # A composite slot is a combination of two or more slots that capture multiple pieces of information in a single user input. — shape: {subSlots?: any}
+  --slot-type-values: list # A list of <code>SlotTypeValue</code> objects that defines the values that the slot type can take. Each value can have a list of synonyms, additional values that help train the machine learning model about the values that it resolves for a slot. — item shape: {sampleValue?: any, synonyms?: any}
+  --value-selection-setting: record # Contains settings used by Amazon Lex to select a slot value. — shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
+  --parent-slot-type-signature: string # <p>The built-in slot type used as a parent of this slot type. When you define a parent slot type, the new slot type has the configuration of the parent slot type.</p> <p>Only <code>AMAZON.AlphaNumeric</code> is supported.</p>
+  --external-source-setting: record # Provides information about the external source of the slot type's definition. — shape: {grammarSlotTypeSetting?: any}
+  --composite-slot-type-setting: record # A composite slot is a combination of two or more slots that capture multiple pieces of information in a single user input. — shape: {subSlots?: any}
 ]: any -> record<slotTypeId: record, slotTypeName: record, description: record, slotTypeValues: record, valueSelectionSetting: record<resolutionStrategy: record, regexFilter: record<pattern: record>, advancedRecognitionSetting: record<audioRecognitionStrategy: record>>, parentSlotTypeSignature: record, botId: record, botVersion: record, localeId: record, creationDateTime: record, externalSourceSetting: record<grammarSlotTypeSetting: record<source: record>>, compositeSlotTypeSetting: record<subSlots: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/slottypes/")
-  let body = {slotTypeName: $slotTypeName, description: $description, slotTypeValues: $slotTypeValues, valueSelectionSetting: $valueSelectionSetting, parentSlotTypeSignature: $parentSlotTypeSignature, externalSourceSetting: $externalSourceSetting, compositeSlotTypeSetting: $compositeSlotTypeSetting} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/"))
+  let body = {"slotTypeName": $slot_type_name, "description": $description, "slotTypeValues": $slot_type_values, "valueSelectionSetting": $value_selection_setting, "parentSlotTypeSignature": $parent_slot_type_signature, "externalSourceSetting": $external_source_setting, "compositeSlotTypeSetting": $composite_slot_type_setting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1213,10 +1213,10 @@ export def "bots-botversions-botlocales-slottypes CreateSlotType" [
 # operationId: ListSlotTypes
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots-botversions-botlocales-slottypes ListSlotTypes" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-slottypes list" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,28 +1225,28 @@ export def "bots-botversions-botlocales-slottypes ListSlotTypes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --sortBy: record # Specifies attributes for sorting a list of slot types. — shape: {attribute?: any, order?: any}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --sort-by: record # Specifies attributes for sorting a list of slot types. — shape: {attribute?: any, order?: any}
   --filters: list # Provides the specification of a filter used to limit the slot types in the response to only those that match the filter specification. You can only specify one filter and only one string to filter on. — item shape: {name: any, values: any, operator: any}
-  --maxResults: int # The maximum number of slot types to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # If the response from the <code>ListSlotTypes</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
+  --max-results: int # The maximum number of slot types to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # If the response from the <code>ListSlotTypes</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
 ]: any -> record<botId: record, botVersion: record, localeId: record, slotTypeSummaries: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/slottypes/" $qp)
-  let body = {sortBy: $sortBy, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/") $qp)
+  let body = {"sortBy": $sort_by, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1257,7 +1257,7 @@ export def "bots-botversions-botlocales-slottypes ListSlotTypes" [
 #
 # POST /createuploadurl/
 # operationId: CreateUploadUrl
-export def "createuploadurl CreateUploadUrl" [
+export def "createuploadurl create-upload-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,18 +1266,18 @@ export def "createuploadurl CreateUploadUrl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<importId: record, uploadUrl: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/createuploadurl/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1288,8 +1288,8 @@ export def "createuploadurl CreateUploadUrl" [
 #
 # DELETE /bots/{botId}/
 # operationId: DeleteBot
-export def "bots DeleteBot" [
-  botId: string
+export def "bots delete" [
+  bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1298,20 +1298,20 @@ export def "bots DeleteBot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skipResourceInUseCheck: oneof<nothing, bool> # By default, Amazon Lex checks if any other resource, such as an alias or bot network, is using the bot version before it is deleted and throws a <code>ResourceInUseException</code> exception if the bot is being used by another resource. Set this parameter to <code>true</code> to skip this check and remove the bot even if it is being used by another resource.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --skip-resource-in-use-check: oneof<nothing, bool> # By default, Amazon Lex checks if any other resource, such as an alias or bot network, is using the bot version before it is deleted and throws a <code>ResourceInUseException</code> exception if the bot is being used by another resource. Set this parameter to <code>true</code> to skip this check and remove the bot even if it is being used by another resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botStatus: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skipResourceInUseCheck" $skipResourceInUseCheck "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id} | format pattern "/bots/{bot_id}/") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1322,8 +1322,8 @@ export def "bots DeleteBot" [
 #
 # GET /bots/{botId}/
 # operationId: DescribeBot
-export def "bots DescribeBot" [
-  botId: string
+export def "bots get" [
+  bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1332,18 +1332,18 @@ export def "bots DescribeBot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botName: record, description: record, roleArn: record, dataPrivacy: record<childDirected: record>, idleSessionTTLInSeconds: record, botStatus: record, creationDateTime: record, lastUpdatedDateTime: record, botType: record, botMembers: record, failureReasons: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id} | format pattern "/bots/{bot_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1356,8 +1356,8 @@ export def "bots DescribeBot" [
 # operationId: UpdateBot
 # --dataPrivacy shape: {childDirected?: any}
 # --botMembers item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
-export def "bots UpdateBot" [
-  botId: string
+export def "bots update" [
+  bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,28 +1366,28 @@ export def "bots UpdateBot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  botName: string # The new name of the bot. The name must be unique in the account that creates the bot.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  bot_name: string # The new name of the bot. The name must be unique in the account that creates the bot.
   --description: string # A description of the bot.
-  roleArn: string # The Amazon Resource Name (ARN) of an IAM role that has permissions to access the bot.
-  dataPrivacy: record # By default, data stored by Amazon Lex is encrypted. The <code>DataPrivacy</code> structure provides settings that determine how Amazon Lex handles special cases of securing the data for your bot.  — shape: {childDirected?: any}
-  idleSessionTTLInSeconds: int # <p>The time, in seconds, that Amazon Lex should keep information about a user's conversation with the bot.</p> <p>A user interaction remains active for the amount of time specified. If no conversation occurs during this time, the session expires and Amazon Lex deletes any data provided before the timeout.</p> <p>You can specify between 60 (1 minute) and 86,400 (24 hours) seconds.</p>
-  --botType: string@botType-completer # The type of the bot to be updated.
-  --botMembers: list # The list of bot members in the network associated with the update action. — item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
+  role_arn: string # The Amazon Resource Name (ARN) of an IAM role that has permissions to access the bot.
+  data_privacy: record # By default, data stored by Amazon Lex is encrypted. The <code>DataPrivacy</code> structure provides settings that determine how Amazon Lex handles special cases of securing the data for your bot.  — shape: {childDirected?: any}
+  idle_session_ttl_in_seconds: int # <p>The time, in seconds, that Amazon Lex should keep information about a user's conversation with the bot.</p> <p>A user interaction remains active for the amount of time specified. If no conversation occurs during this time, the session expires and Amazon Lex deletes any data provided before the timeout.</p> <p>You can specify between 60 (1 minute) and 86,400 (24 hours) seconds.</p>
+  --bot-type: string@bot-type-completer # The type of the bot to be updated.
+  --bot-members: list # The list of bot members in the network associated with the update action. — item shape: {botMemberId: any, botMemberName: any, botMemberAliasId: any, botMemberAliasName: any, botMemberVersion: any}
 ]: any -> record<botId: record, botName: record, description: record, roleArn: record, dataPrivacy: record<childDirected: record>, idleSessionTTLInSeconds: record, botStatus: record, creationDateTime: record, lastUpdatedDateTime: record, botType: record, botMembers: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/")
-  let body = {botName: $botName, description: $description, roleArn: $roleArn, dataPrivacy: $dataPrivacy, idleSessionTTLInSeconds: $idleSessionTTLInSeconds, botType: $botType, botMembers: $botMembers} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id} | format pattern "/bots/{bot_id}/"))
+  let body = {"botName": $bot_name, "description": $description, "roleArn": $role_arn, "dataPrivacy": $data_privacy, "idleSessionTTLInSeconds": $idle_session_ttl_in_seconds, "botType": $bot_type, "botMembers": $bot_members} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1398,9 +1398,9 @@ export def "bots UpdateBot" [
 #
 # DELETE /bots/{botId}/botaliases/{botAliasId}/
 # operationId: DeleteBotAlias
-export def "bots-botaliases DeleteBotAlias" [
-  botAliasId: string
-  botId: string
+export def "bots-botaliases delete-bot-alias" [
+  bot_id: string
+  bot_alias_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1409,20 +1409,20 @@ export def "bots-botaliases DeleteBotAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skipResourceInUseCheck: oneof<nothing, bool> # By default, Amazon Lex checks if any other resource, such as a bot network, is using the bot alias before it is deleted and throws a <code>ResourceInUseException</code> exception if the alias is being used by another resource. Set this parameter to <code>true</code> to skip this check and remove the alias even if it is being used by another resource.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --skip-resource-in-use-check: oneof<nothing, bool> # By default, Amazon Lex checks if any other resource, such as a bot network, is using the bot alias before it is deleted and throws a <code>ResourceInUseException</code> exception if the alias is being used by another resource. Set this parameter to <code>true</code> to skip this check and remove the alias even if it is being used by another resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botAliasId: record, botId: record, botAliasStatus: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skipResourceInUseCheck" $skipResourceInUseCheck "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botaliases/($botAliasId)/" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_alias_id: $bot_alias_id} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1433,9 +1433,9 @@ export def "bots-botaliases DeleteBotAlias" [
 #
 # GET /bots/{botId}/botaliases/{botAliasId}/
 # operationId: DescribeBotAlias
-export def "bots-botaliases DescribeBotAlias" [
-  botAliasId: string
-  botId: string
+export def "bots-botaliases get" [
+  bot_id: string
+  bot_alias_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1444,18 +1444,18 @@ export def "bots-botaliases DescribeBotAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botAliasId: record, botAliasName: record, description: record, botVersion: record, botAliasLocaleSettings: record, conversationLogSettings: record<textLogSettings: record, audioLogSettings: record>, sentimentAnalysisSettings: record<detectSentiment: record>, botAliasHistoryEvents: record, botAliasStatus: record, botId: record, creationDateTime: record, lastUpdatedDateTime: record, parentBotNetworks: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botaliases/($botAliasId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_alias_id: $bot_alias_id} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1468,9 +1468,9 @@ export def "bots-botaliases DescribeBotAlias" [
 # operationId: UpdateBotAlias
 # --conversationLogSettings shape: {textLogSettings?: any, audioLogSettings?: any}
 # --sentimentAnalysisSettings shape: {detectSentiment?: any}
-export def "bots-botaliases UpdateBotAlias" [
-  botAliasId: string
-  botId: string
+export def "bots-botaliases update-bot-alias" [
+  bot_id: string
+  bot_alias_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1479,27 +1479,27 @@ export def "bots-botaliases UpdateBotAlias" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  botAliasName: string # The new name to assign to the bot alias.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  bot_alias_name: string # The new name to assign to the bot alias.
   --description: string # The new description to assign to the bot alias.
-  --botVersion: string # The new bot version to assign to the bot alias.
-  --botAliasLocaleSettings: record # The new Lambda functions to use in each locale for the bot alias.
-  --conversationLogSettings: record # Configures conversation logging that saves audio, text, and metadata for the conversations with your users. — shape: {textLogSettings?: any, audioLogSettings?: any}
-  --sentimentAnalysisSettings: record # Determines whether Amazon Lex will use Amazon Comprehend to detect the sentiment of user utterances. — shape: {detectSentiment?: any}
+  --bot-version: string # The new bot version to assign to the bot alias.
+  --bot-alias-locale-settings: record # The new Lambda functions to use in each locale for the bot alias.
+  --conversation-log-settings: record # Configures conversation logging that saves audio, text, and metadata for the conversations with your users. — shape: {textLogSettings?: any, audioLogSettings?: any}
+  --sentiment-analysis-settings: record # Determines whether Amazon Lex will use Amazon Comprehend to detect the sentiment of user utterances. — shape: {detectSentiment?: any}
 ]: any -> record<botAliasId: record, botAliasName: record, description: record, botVersion: record, botAliasLocaleSettings: record, conversationLogSettings: record<textLogSettings: record, audioLogSettings: record>, sentimentAnalysisSettings: record<detectSentiment: record>, botAliasStatus: record, botId: record, creationDateTime: record, lastUpdatedDateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botaliases/($botAliasId)/")
-  let body = {botAliasName: $botAliasName, description: $description, botVersion: $botVersion, botAliasLocaleSettings: $botAliasLocaleSettings, conversationLogSettings: $conversationLogSettings, sentimentAnalysisSettings: $sentimentAnalysisSettings} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_alias_id: $bot_alias_id} | format pattern "/bots/{bot_id}/botaliases/{bot_alias_id}/"))
+  let body = {"botAliasName": $bot_alias_name, "description": $description, "botVersion": $bot_version, "botAliasLocaleSettings": $bot_alias_locale_settings, "conversationLogSettings": $conversation_log_settings, "sentimentAnalysisSettings": $sentiment_analysis_settings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1510,9 +1510,9 @@ export def "bots-botaliases UpdateBotAlias" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/
 # operationId: DeleteBotVersion
-export def "bots-botversions DeleteBotVersion" [
-  botId: string
-  botVersion: string
+export def "bots-botversions delete" [
+  bot_id: string
+  bot_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,20 +1521,20 @@ export def "bots-botversions DeleteBotVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skipResourceInUseCheck: oneof<nothing, bool> # By default, Amazon Lex checks if any other resource, such as an alias or bot network, is using the bot version before it is deleted and throws a <code>ResourceInUseException</code> exception if the version is being used by another resource. Set this parameter to <code>true</code> to skip this check and remove the version even if it is being used by another resource.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --skip-resource-in-use-check: oneof<nothing, bool> # By default, Amazon Lex checks if any other resource, such as an alias or bot network, is using the bot version before it is deleted and throws a <code>ResourceInUseException</code> exception if the version is being used by another resource. Set this parameter to <code>true</code> to skip this check and remove the version even if it is being used by another resource.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botVersion: record, botStatus: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skipResourceInUseCheck" $skipResourceInUseCheck "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version} | format pattern "/bots/{bot_id}/botversions/{bot_version}/") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1545,9 +1545,9 @@ export def "bots-botversions DeleteBotVersion" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/
 # operationId: DescribeBotVersion
-export def "bots-botversions DescribeBotVersion" [
-  botId: string
-  botVersion: string
+export def "bots-botversions version" [
+  bot_id: string
+  bot_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1556,18 +1556,18 @@ export def "bots-botversions DescribeBotVersion" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botName: record, botVersion: record, description: record, roleArn: record, dataPrivacy: record<childDirected: record>, idleSessionTTLInSeconds: record, botStatus: record, failureReasons: record, creationDateTime: record, parentBotNetworks: record, botType: record, botMembers: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version} | format pattern "/bots/{bot_id}/botversions/{bot_version}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1578,10 +1578,10 @@ export def "bots-botversions DescribeBotVersion" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary
 # operationId: DeleteCustomVocabulary
-export def "bots-botversions-botlocales-customvocabulary DeleteCustomVocabulary" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-customvocabulary delete" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1590,18 +1590,18 @@ export def "bots-botversions-botlocales-customvocabulary DeleteCustomVocabulary"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botVersion: record, localeId: record, customVocabularyStatus: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/customvocabulary")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1612,8 +1612,8 @@ export def "bots-botversions-botlocales-customvocabulary DeleteCustomVocabulary"
 #
 # DELETE /exports/{exportId}/
 # operationId: DeleteExport
-export def "exports DeleteExport" [
-  exportId: string
+export def "exports delete" [
+  export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1622,18 +1622,18 @@ export def "exports DeleteExport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<exportId: record, exportStatus: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/exports/($exportId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({export_id: $export_id} | format pattern "/exports/{export_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1644,8 +1644,8 @@ export def "exports DeleteExport" [
 #
 # GET /exports/{exportId}/
 # operationId: DescribeExport
-export def "exports DescribeExport" [
-  exportId: string
+export def "exports get" [
+  export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1654,18 +1654,18 @@ export def "exports DescribeExport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<exportId: record, resourceSpecification: record<botExportSpecification: record<botId: record, botVersion: record>, botLocaleExportSpecification: record<botId: record, botVersion: record, localeId: record>, customVocabularyExportSpecification: record<botId: record, botVersion: record, localeId: record>>, fileFormat: record, exportStatus: record, failureReasons: record, downloadUrl: record, creationDateTime: record, lastUpdatedDateTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/exports/($exportId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({export_id: $export_id} | format pattern "/exports/{export_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1676,8 +1676,8 @@ export def "exports DescribeExport" [
 #
 # PUT /exports/{exportId}/
 # operationId: UpdateExport
-export def "exports UpdateExport" [
-  exportId: string
+export def "exports update" [
+  export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,22 +1686,22 @@ export def "exports UpdateExport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --filePassword: string # The new password to use to encrypt the export zip archive. (format: password)
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --file-password: string # The new password to use to encrypt the export zip archive. (format: password)
 ]: any -> record<exportId: record, resourceSpecification: record<botExportSpecification: record<botId: record, botVersion: record>, botLocaleExportSpecification: record<botId: record, botVersion: record, localeId: record>, customVocabularyExportSpecification: record<botId: record, botVersion: record, localeId: record>>, fileFormat: record, exportStatus: record, creationDateTime: record, lastUpdatedDateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/exports/($exportId)/")
-  let body = {filePassword: $filePassword} | compact
+  let full_url = (build-url $base ({export_id: $export_id} | format pattern "/exports/{export_id}/"))
+  let body = {"filePassword": $file_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1712,8 +1712,8 @@ export def "exports UpdateExport" [
 #
 # DELETE /imports/{importId}/
 # operationId: DeleteImport
-export def "imports DeleteImport" [
-  importId: string
+export def "imports delete" [
+  import_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,18 +1722,18 @@ export def "imports DeleteImport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<importId: record, importStatus: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/($importId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({import_id: $import_id} | format pattern "/imports/{import_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1744,8 +1744,8 @@ export def "imports DeleteImport" [
 #
 # GET /imports/{importId}/
 # operationId: DescribeImport
-export def "imports DescribeImport" [
-  importId: string
+export def "imports get" [
+  import_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1754,18 +1754,18 @@ export def "imports DescribeImport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<importId: record, resourceSpecification: record<botImportSpecification: record<botName: record, roleArn: record, dataPrivacy: record, idleSessionTTLInSeconds: record, botTags: record, testBotAliasTags: record>, botLocaleImportSpecification: record<botId: record, botVersion: record, localeId: record, nluIntentConfidenceThreshold: record, voiceSettings: record>, customVocabularyImportSpecification: record<botId: record, botVersion: record, localeId: record>>, importedResourceId: record, importedResourceName: record, mergeStrategy: record, importStatus: record, failureReasons: record, creationDateTime: record, lastUpdatedDateTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/imports/($importId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({import_id: $import_id} | format pattern "/imports/{import_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1776,11 +1776,11 @@ export def "imports DescribeImport" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/
 # operationId: DeleteIntent
-export def "bots-botversions-botlocales-intents DeleteIntent" [
-  intentId: string
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-intents delete" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  intent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1789,18 +1789,18 @@ export def "bots-botversions-botlocales-intents DeleteIntent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/intents/($intentId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, intent_id: $intent_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1811,11 +1811,11 @@ export def "bots-botversions-botlocales-intents DeleteIntent" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/
 # operationId: DescribeIntent
-export def "bots-botversions-botlocales-intents DescribeIntent" [
-  intentId: string
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-intents get" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  intent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1824,18 +1824,18 @@ export def "bots-botversions-botlocales-intents DescribeIntent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<intentId: record, intentName: record, description: record, parentIntentSignature: record, sampleUtterances: record, dialogCodeHook: record<enabled: record>, fulfillmentCodeHook: record<enabled: record, postFulfillmentStatusSpecification: record<successResponse: record, failureResponse: record, timeoutResponse: record, successNextStep: record, successConditional: record, failureNextStep: record, failureConditional: record, timeoutNextStep: record, timeoutConditional: record>, fulfillmentUpdatesSpecification: record<active: record, startResponse: record, updateResponse: record, timeoutInSeconds: record>, active: record>, slotPriorities: record, intentConfirmationSetting: record<promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, declinationResponse: record<messageGroups: record, allowInterrupt: record>, active: record, confirmationResponse: record<messageGroups: record, allowInterrupt: record>, confirmationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, confirmationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, declinationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, declinationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, failureResponse: record<messageGroups: record, allowInterrupt: record>, failureNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, failureConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>, elicitationCodeHook: record<enableCodeHookInvocation: record, invocationLabel: record>>, intentClosingSetting: record<closingResponse: record<messageGroups: record, allowInterrupt: record>, active: record, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>>, inputContexts: record, outputContexts: record, kendraConfiguration: record<kendraIndex: record, queryFilterStringEnabled: record, queryFilterString: record>, botId: record, botVersion: record, localeId: record, creationDateTime: record, lastUpdatedDateTime: record, initialResponseSetting: record<initialResponse: record<messageGroups: record, allowInterrupt: record>, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/intents/($intentId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, intent_id: $intent_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1856,11 +1856,11 @@ export def "bots-botversions-botlocales-intents DescribeIntent" [
 # --outputContexts item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
 # --kendraConfiguration shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
 # --initialResponseSetting shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
-export def "bots-botversions-botlocales-intents UpdateIntent" [
-  intentId: string
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-intents update" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  intent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1869,34 +1869,34 @@ export def "bots-botversions-botlocales-intents UpdateIntent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  intentName: string # The new name for the intent.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  intent_name: string # The new name for the intent.
   --description: string # The new description of the intent.
-  --parentIntentSignature: string # The signature of the new built-in intent to use as the parent of this intent.
-  --sampleUtterances: list # New utterances used to invoke the intent. — item shape: {utterance: any}
-  --dialogCodeHook: record # Settings that determine the Lambda function that Amazon Lex uses for processing user responses. — shape: {enabled?: any}
-  --fulfillmentCodeHook: record # Determines if a Lambda function should be invoked for a specific intent. — shape: {enabled?: any, postFulfillmentStatusSpecification?: any, fulfillmentUpdatesSpecification?: any, active?: any}
-  --slotPriorities: list # A new list of slots and their priorities that are contained by the intent. — item shape: {priority: any, slotId: any}
-  --intentConfirmationSetting: record # Provides a prompt for making sure that the user is ready for the intent to be fulfilled. — shape: {promptSpecification?: any, declinationResponse?: any, active?: any, confirmationResponse?: record, confirmationNextStep?: any, confirmationConditional?: any, declinationNextStep?: any, declinationConditional?: any, failureResponse?: record, failureNextStep?: any, failureConditional?: record, codeHook?: any, elicitationCodeHook?: any}
-  --intentClosingSetting: record # Provides a statement the Amazon Lex conveys to the user when the intent is successfully fulfilled. — shape: {closingResponse?: any, active?: any, nextStep?: any, conditional?: any}
-  --inputContexts: list # A new list of contexts that must be active in order for Amazon Lex to consider the intent. — item shape: {name: any}
-  --outputContexts: list # A new list of contexts that Amazon Lex activates when the intent is fulfilled. — item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
-  --kendraConfiguration: record # Provides configuration information for the AMAZON.KendraSearchIntent intent. When you use this intent, Amazon Lex searches the specified Amazon Kendra index and returns documents from the index that match the user's utterance. — shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
-  --initialResponseSetting: record # Configuration setting for a response sent to the user before Amazon Lex starts eliciting slots. — shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
+  --parent-intent-signature: string # The signature of the new built-in intent to use as the parent of this intent.
+  --sample-utterances: list # New utterances used to invoke the intent. — item shape: {utterance: any}
+  --dialog-code-hook: record # Settings that determine the Lambda function that Amazon Lex uses for processing user responses. — shape: {enabled?: any}
+  --fulfillment-code-hook: record # Determines if a Lambda function should be invoked for a specific intent. — shape: {enabled?: any, postFulfillmentStatusSpecification?: any, fulfillmentUpdatesSpecification?: any, active?: any}
+  --slot-priorities: list # A new list of slots and their priorities that are contained by the intent. — item shape: {priority: any, slotId: any}
+  --intent-confirmation-setting: record # Provides a prompt for making sure that the user is ready for the intent to be fulfilled. — shape: {promptSpecification?: any, declinationResponse?: any, active?: any, confirmationResponse?: record, confirmationNextStep?: any, confirmationConditional?: any, declinationNextStep?: any, declinationConditional?: any, failureResponse?: record, failureNextStep?: any, failureConditional?: record, codeHook?: any, elicitationCodeHook?: any}
+  --intent-closing-setting: record # Provides a statement the Amazon Lex conveys to the user when the intent is successfully fulfilled. — shape: {closingResponse?: any, active?: any, nextStep?: any, conditional?: any}
+  --input-contexts: list # A new list of contexts that must be active in order for Amazon Lex to consider the intent. — item shape: {name: any}
+  --output-contexts: list # A new list of contexts that Amazon Lex activates when the intent is fulfilled. — item shape: {name: any, timeToLiveInSeconds: any, turnsToLive: any}
+  --kendra-configuration: record # Provides configuration information for the AMAZON.KendraSearchIntent intent. When you use this intent, Amazon Lex searches the specified Amazon Kendra index and returns documents from the index that match the user's utterance. — shape: {kendraIndex?: any, queryFilterStringEnabled?: any, queryFilterString?: any}
+  --initial-response-setting: record # Configuration setting for a response sent to the user before Amazon Lex starts eliciting slots. — shape: {initialResponse?: record, nextStep?: any, conditional?: record, codeHook?: record}
 ]: any -> record<intentId: record, intentName: record, description: record, parentIntentSignature: record, sampleUtterances: record, dialogCodeHook: record<enabled: record>, fulfillmentCodeHook: record<enabled: record, postFulfillmentStatusSpecification: record<successResponse: record, failureResponse: record, timeoutResponse: record, successNextStep: record, successConditional: record, failureNextStep: record, failureConditional: record, timeoutNextStep: record, timeoutConditional: record>, fulfillmentUpdatesSpecification: record<active: record, startResponse: record, updateResponse: record, timeoutInSeconds: record>, active: record>, slotPriorities: record, intentConfirmationSetting: record<promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, declinationResponse: record<messageGroups: record, allowInterrupt: record>, active: record, confirmationResponse: record<messageGroups: record, allowInterrupt: record>, confirmationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, confirmationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, declinationNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, declinationConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, failureResponse: record<messageGroups: record, allowInterrupt: record>, failureNextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, failureConditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>, elicitationCodeHook: record<enableCodeHookInvocation: record, invocationLabel: record>>, intentClosingSetting: record<closingResponse: record<messageGroups: record, allowInterrupt: record>, active: record, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>>, inputContexts: record, outputContexts: record, kendraConfiguration: record<kendraIndex: record, queryFilterStringEnabled: record, queryFilterString: record>, botId: record, botVersion: record, localeId: record, creationDateTime: record, lastUpdatedDateTime: record, initialResponseSetting: record<initialResponse: record<messageGroups: record, allowInterrupt: record>, nextStep: record<dialogAction: record, intent: record, sessionAttributes: record>, conditional: record<active: record, conditionalBranches: record, defaultBranch: record>, codeHook: record<enableCodeHookInvocation: record, active: record, invocationLabel: record, postCodeHookSpecification: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/intents/($intentId)/")
-  let body = {intentName: $intentName, description: $description, parentIntentSignature: $parentIntentSignature, sampleUtterances: $sampleUtterances, dialogCodeHook: $dialogCodeHook, fulfillmentCodeHook: $fulfillmentCodeHook, slotPriorities: $slotPriorities, intentConfirmationSetting: $intentConfirmationSetting, intentClosingSetting: $intentClosingSetting, inputContexts: $inputContexts, outputContexts: $outputContexts, kendraConfiguration: $kendraConfiguration, initialResponseSetting: $initialResponseSetting} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, intent_id: $intent_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/"))
+  let body = {"intentName": $intent_name, "description": $description, "parentIntentSignature": $parent_intent_signature, "sampleUtterances": $sample_utterances, "dialogCodeHook": $dialog_code_hook, "fulfillmentCodeHook": $fulfillment_code_hook, "slotPriorities": $slot_priorities, "intentConfirmationSetting": $intent_confirmation_setting, "intentClosingSetting": $intent_closing_setting, "inputContexts": $input_contexts, "outputContexts": $output_contexts, "kendraConfiguration": $kendra_configuration, "initialResponseSetting": $initial_response_setting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1907,9 +1907,9 @@ export def "bots-botversions-botlocales-intents UpdateIntent" [
 #
 # DELETE /policy/{resourceArn}/statements/{statementId}/
 # operationId: DeleteResourcePolicyStatement
-export def "policy-statements DeleteResourcePolicyStatement" [
-  resourceArn: string
-  statementId: string
+export def "policy-statements delete-resource" [
+  resource_arn: string
+  statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1918,20 +1918,20 @@ export def "policy-statements DeleteResourcePolicyStatement" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --expectedRevisionId: string # <p>The identifier of the revision of the policy to delete the statement from. If this revision ID doesn't match the current revision ID, Amazon Lex throws an exception.</p> <p>If you don't specify a revision, Amazon Lex removes the current contents of the statement. </p>
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --expected-revision-id: string # <p>The identifier of the revision of the policy to delete the statement from. If this revision ID doesn't match the current revision ID, Amazon Lex throws an exception.</p> <p>If you don't specify a revision, Amazon Lex removes the current contents of the statement. </p>
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expectedRevisionId" $expectedRevisionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/policy/($resourceArn)/statements/($statementId)/" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "expectedRevisionId" $expected_revision_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn, statement_id: $statement_id} | format pattern "/policy/{resource_arn}/statements/{statement_id}/") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1942,12 +1942,12 @@ export def "policy-statements DeleteResourcePolicyStatement" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/slots/{slotId}/
 # operationId: DeleteSlot
-export def "bots-botversions-botlocales-intents-slots DeleteSlot" [
-  slotId: string
-  botId: string
-  botVersion: string
-  localeId: string
-  intentId: string
+export def "bots-botversions-botlocales-intents-slots delete" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  intent_id: string
+  slot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1956,18 +1956,18 @@ export def "bots-botversions-botlocales-intents-slots DeleteSlot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/intents/($intentId)/slots/($slotId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, intent_id: $intent_id, slot_id: $slot_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1978,12 +1978,12 @@ export def "bots-botversions-botlocales-intents-slots DeleteSlot" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/intents/{intentId}/slots/{slotId}/
 # operationId: DescribeSlot
-export def "bots-botversions-botlocales-intents-slots DescribeSlot" [
-  slotId: string
-  botId: string
-  botVersion: string
-  localeId: string
-  intentId: string
+export def "bots-botversions-botlocales-intents-slots get" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  intent_id: string
+  slot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1992,18 +1992,18 @@ export def "bots-botversions-botlocales-intents-slots DescribeSlot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<slotId: record, slotName: record, description: record, slotTypeId: record, valueElicitationSetting: record<defaultValueSpecification: record<defaultValueList: record>, slotConstraint: record, promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, sampleUtterances: record, waitAndContinueSpecification: record<waitingResponse: record, continueResponse: record, stillWaitingResponse: record, active: record>, slotCaptureSetting: record<captureResponse: record, captureNextStep: record, captureConditional: record, failureResponse: record, failureNextStep: record, failureConditional: record, codeHook: record, elicitationCodeHook: record>>, obfuscationSetting: record<obfuscationSettingType: record>, botId: record, botVersion: record, localeId: record, intentId: record, creationDateTime: record, lastUpdatedDateTime: record, multipleValuesSetting: record<allowMultipleValues: record>, subSlotSetting: record<expression: record, slotSpecifications: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/intents/($intentId)/slots/($slotId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, intent_id: $intent_id, slot_id: $slot_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2018,12 +2018,12 @@ export def "bots-botversions-botlocales-intents-slots DescribeSlot" [
 # --obfuscationSetting shape: {obfuscationSettingType?: any}
 # --multipleValuesSetting shape: {allowMultipleValues?: any}
 # --subSlotSetting shape: {expression?: any, slotSpecifications?: any}
-export def "bots-botversions-botlocales-intents-slots UpdateSlot" [
-  slotId: string
-  botId: string
-  botVersion: string
-  localeId: string
-  intentId: string
+export def "bots-botversions-botlocales-intents-slots update" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  intent_id: string
+  slot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2032,28 +2032,28 @@ export def "bots-botversions-botlocales-intents-slots UpdateSlot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  slotName: string # The new name for the slot.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  slot_name: string # The new name for the slot.
   --description: string # The new description for the slot.
-  --slotTypeId: string # The unique identifier of the new slot type to associate with this slot. 
-  valueElicitationSetting: record # Specifies the elicitation setting details for constituent sub slots of a composite slot. — shape: {defaultValueSpecification?: any, slotConstraint?: any, promptSpecification?: any, sampleUtterances?: any, waitAndContinueSpecification?: record, slotCaptureSetting?: any}
-  --obfuscationSetting: record # Determines whether Amazon Lex obscures slot values in conversation logs.  — shape: {obfuscationSettingType?: any}
-  --multipleValuesSetting: record # Indicates whether a slot can return multiple values. — shape: {allowMultipleValues?: any}
-  --subSlotSetting: record # Specifications for the constituent sub slots and the expression for the composite slot. — shape: {expression?: any, slotSpecifications?: any}
+  --slot-type-id: string # The unique identifier of the new slot type to associate with this slot. 
+  value_elicitation_setting: record # Specifies the elicitation setting details for constituent sub slots of a composite slot. — shape: {defaultValueSpecification?: any, slotConstraint?: any, promptSpecification?: any, sampleUtterances?: any, waitAndContinueSpecification?: record, slotCaptureSetting?: any}
+  --obfuscation-setting: record # Determines whether Amazon Lex obscures slot values in conversation logs.  — shape: {obfuscationSettingType?: any}
+  --multiple-values-setting: record # Indicates whether a slot can return multiple values. — shape: {allowMultipleValues?: any}
+  --sub-slot-setting: record # Specifications for the constituent sub slots and the expression for the composite slot. — shape: {expression?: any, slotSpecifications?: any}
 ]: any -> record<slotId: record, slotName: record, description: record, slotTypeId: record, valueElicitationSetting: record<defaultValueSpecification: record<defaultValueList: record>, slotConstraint: record, promptSpecification: record<messageGroups: record, maxRetries: record, allowInterrupt: record, messageSelectionStrategy: record, promptAttemptsSpecification: record>, sampleUtterances: record, waitAndContinueSpecification: record<waitingResponse: record, continueResponse: record, stillWaitingResponse: record, active: record>, slotCaptureSetting: record<captureResponse: record, captureNextStep: record, captureConditional: record, failureResponse: record, failureNextStep: record, failureConditional: record, codeHook: record, elicitationCodeHook: record>>, obfuscationSetting: record<obfuscationSettingType: record>, botId: record, botVersion: record, localeId: record, intentId: record, creationDateTime: record, lastUpdatedDateTime: record, multipleValuesSetting: record<allowMultipleValues: record>, subSlotSetting: record<expression: record, slotSpecifications: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/intents/($intentId)/slots/($slotId)/")
-  let body = {slotName: $slotName, description: $description, slotTypeId: $slotTypeId, valueElicitationSetting: $valueElicitationSetting, obfuscationSetting: $obfuscationSetting, multipleValuesSetting: $multipleValuesSetting, subSlotSetting: $subSlotSetting} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, intent_id: $intent_id, slot_id: $slot_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/intents/{intent_id}/slots/{slot_id}/"))
+  let body = {"slotName": $slot_name, "description": $description, "slotTypeId": $slot_type_id, "valueElicitationSetting": $value_elicitation_setting, "obfuscationSetting": $obfuscation_setting, "multipleValuesSetting": $multiple_values_setting, "subSlotSetting": $sub_slot_setting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2064,11 +2064,11 @@ export def "bots-botversions-botlocales-intents-slots UpdateSlot" [
 #
 # DELETE /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/slottypes/{slotTypeId}/
 # operationId: DeleteSlotType
-export def "bots-botversions-botlocales-slottypes DeleteSlotType" [
-  slotTypeId: string
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-slottypes delete" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  slot_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2077,20 +2077,20 @@ export def "bots-botversions-botlocales-slottypes DeleteSlotType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --skipResourceInUseCheck: oneof<nothing, bool> # By default, the <code>DeleteSlotType</code> operations throws a <code>ResourceInUseException</code> exception if you try to delete a slot type used by a slot. Set the <code>skipResourceInUseCheck</code> parameter to <code>true</code> to skip this check and remove the slot type even if a slot uses it.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --skip-resource-in-use-check: oneof<nothing, bool> # By default, the <code>DeleteSlotType</code> operations throws a <code>ResourceInUseException</code> exception if you try to delete a slot type used by a slot. Set the <code>skipResourceInUseCheck</code> parameter to <code>true</code> to skip this check and remove the slot type even if a slot uses it.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "skipResourceInUseCheck" $skipResourceInUseCheck "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/slottypes/($slotTypeId)/" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "skipResourceInUseCheck" $skip_resource_in_use_check "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, slot_type_id: $slot_type_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2101,11 +2101,11 @@ export def "bots-botversions-botlocales-slottypes DeleteSlotType" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/slottypes/{slotTypeId}/
 # operationId: DescribeSlotType
-export def "bots-botversions-botlocales-slottypes DescribeSlotType" [
-  slotTypeId: string
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-slottypes get" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  slot_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2114,18 +2114,18 @@ export def "bots-botversions-botlocales-slottypes DescribeSlotType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<slotTypeId: record, slotTypeName: record, description: record, slotTypeValues: record, valueSelectionSetting: record<resolutionStrategy: record, regexFilter: record<pattern: record>, advancedRecognitionSetting: record<audioRecognitionStrategy: record>>, parentSlotTypeSignature: record, botId: record, botVersion: record, localeId: record, creationDateTime: record, lastUpdatedDateTime: record, externalSourceSetting: record<grammarSlotTypeSetting: record<source: record>>, compositeSlotTypeSetting: record<subSlots: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/slottypes/($slotTypeId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, slot_type_id: $slot_type_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2140,11 +2140,11 @@ export def "bots-botversions-botlocales-slottypes DescribeSlotType" [
 # --valueSelectionSetting shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
 # --externalSourceSetting shape: {grammarSlotTypeSetting?: any}
 # --compositeSlotTypeSetting shape: {subSlots?: any}
-export def "bots-botversions-botlocales-slottypes UpdateSlotType" [
-  slotTypeId: string
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-slottypes update" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  slot_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2153,28 +2153,28 @@ export def "bots-botversions-botlocales-slottypes UpdateSlotType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  slotTypeName: string # The new name of the slot type.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  slot_type_name: string # The new name of the slot type.
   --description: string # The new description of the slot type.
-  --slotTypeValues: list # A new list of values and their optional synonyms that define the values that the slot type can take. — item shape: {sampleValue?: any, synonyms?: any}
-  --valueSelectionSetting: record # Contains settings used by Amazon Lex to select a slot value. — shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
-  --parentSlotTypeSignature: string # The new built-in slot type that should be used as the parent of this slot type.
-  --externalSourceSetting: record # Provides information about the external source of the slot type's definition. — shape: {grammarSlotTypeSetting?: any}
-  --compositeSlotTypeSetting: record # A composite slot is a combination of two or more slots that capture multiple pieces of information in a single user input. — shape: {subSlots?: any}
+  --slot-type-values: list # A new list of values and their optional synonyms that define the values that the slot type can take. — item shape: {sampleValue?: any, synonyms?: any}
+  --value-selection-setting: record # Contains settings used by Amazon Lex to select a slot value. — shape: {resolutionStrategy?: any, regexFilter?: any, advancedRecognitionSetting?: any}
+  --parent-slot-type-signature: string # The new built-in slot type that should be used as the parent of this slot type.
+  --external-source-setting: record # Provides information about the external source of the slot type's definition. — shape: {grammarSlotTypeSetting?: any}
+  --composite-slot-type-setting: record # A composite slot is a combination of two or more slots that capture multiple pieces of information in a single user input. — shape: {subSlots?: any}
 ]: any -> record<slotTypeId: record, slotTypeName: record, description: record, slotTypeValues: record, valueSelectionSetting: record<resolutionStrategy: record, regexFilter: record<pattern: record>, advancedRecognitionSetting: record<audioRecognitionStrategy: record>>, parentSlotTypeSignature: record, botId: record, botVersion: record, localeId: record, creationDateTime: record, lastUpdatedDateTime: record, externalSourceSetting: record<grammarSlotTypeSetting: record<source: record>>, compositeSlotTypeSetting: record<subSlots: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/slottypes/($slotTypeId)/")
-  let body = {slotTypeName: $slotTypeName, description: $description, slotTypeValues: $slotTypeValues, valueSelectionSetting: $valueSelectionSetting, parentSlotTypeSignature: $parentSlotTypeSignature, externalSourceSetting: $externalSourceSetting, compositeSlotTypeSetting: $compositeSlotTypeSetting} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, slot_type_id: $slot_type_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/slottypes/{slot_type_id}/"))
+  let body = {"slotTypeName": $slot_type_name, "description": $description, "slotTypeValues": $slot_type_values, "valueSelectionSetting": $value_selection_setting, "parentSlotTypeSignature": $parent_slot_type_signature, "externalSourceSetting": $external_source_setting, "compositeSlotTypeSetting": $composite_slot_type_setting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2185,8 +2185,8 @@ export def "bots-botversions-botlocales-slottypes UpdateSlotType" [
 #
 # DELETE /bots/{botId}/utterances/
 # operationId: DeleteUtterances
-export def "bots-utterances DeleteUtterances" [
-  botId: string
+export def "bots-utterances delete" [
+  bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2195,21 +2195,21 @@ export def "bots-utterances DeleteUtterances" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --localeId: string # The identifier of the language and locale where the utterances were collected. The string must match one of the supported locales. For more information, see <a href="https://docs.aws.amazon.com/lexv2/latest/dg/how-languages.html">Supported languages</a>.
-  --sessionId: string # The unique identifier of the session with the user. The ID is returned in the response from the <a href="https://docs.aws.amazon.com/lexv2/latest/APIReference/API_runtime_RecognizeText.html">RecognizeText</a> and <a href="https://docs.aws.amazon.com/lexv2/latest/APIReference/API_runtime_RecognizeUtterance.html">RecognizeUtterance</a> operations.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --locale-id: string # The identifier of the language and locale where the utterances were collected. The string must match one of the supported locales. For more information, see <a href="https://docs.aws.amazon.com/lexv2/latest/dg/how-languages.html">Supported languages</a>.
+  --session-id: string # The unique identifier of the session with the user. The ID is returned in the response from the <a href="https://docs.aws.amazon.com/lexv2/latest/APIReference/API_runtime_RecognizeText.html">RecognizeText</a> and <a href="https://docs.aws.amazon.com/lexv2/latest/APIReference/API_runtime_RecognizeUtterance.html">RecognizeUtterance</a> operations.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "localeId" $localeId "scalar") (serialize-qp "sessionId" $sessionId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/utterances/" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "localeId" $locale_id "scalar") (serialize-qp "sessionId" $session_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id} | format pattern "/bots/{bot_id}/utterances/") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2220,11 +2220,11 @@ export def "bots-utterances DeleteUtterances" [
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/
 # operationId: DescribeBotRecommendation
-export def "bots-botversions-botlocales-botrecommendations DescribeBotRecommendation" [
-  botId: string
-  botVersion: string
-  localeId: string
-  botRecommendationId: string
+export def "bots-botversions-botlocales-botrecommendations get" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  bot_recommendation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2233,18 +2233,18 @@ export def "bots-botversions-botlocales-botrecommendations DescribeBotRecommenda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botVersion: record, localeId: record, botRecommendationStatus: record, botRecommendationId: record, failureReasons: record, creationDateTime: record, lastUpdatedDateTime: record, transcriptSourceSetting: record<s3BucketTranscriptSource: record<s3BucketName: record, pathFormat: record, transcriptFormat: record, transcriptFilter: record, kmsKeyArn: record>>, encryptionSetting: record<kmsKeyArn: record, botLocaleExportPassword: record, associatedTranscriptsPassword: record>, botRecommendationResults: record<botLocaleExportUrl: record, associatedTranscriptsUrl: record, statistics: record<intents: record, slotTypes: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/botrecommendations/($botRecommendationId)/")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, bot_recommendation_id: $bot_recommendation_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2256,11 +2256,11 @@ export def "bots-botversions-botlocales-botrecommendations DescribeBotRecommenda
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/
 # operationId: UpdateBotRecommendation
 # --encryptionSetting shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
-export def "bots-botversions-botlocales-botrecommendations UpdateBotRecommendation" [
-  botId: string
-  botVersion: string
-  localeId: string
-  botRecommendationId: string
+export def "bots-botversions-botlocales-botrecommendations update" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  bot_recommendation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2269,22 +2269,22 @@ export def "bots-botversions-botlocales-botrecommendations UpdateBotRecommendati
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  encryptionSetting: record # The object representing the passwords that were used to encrypt the data related to the bot recommendation, as well as the KMS key ARN used to encrypt the associated metadata. — shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  encryption_setting: record # The object representing the passwords that were used to encrypt the data related to the bot recommendation, as well as the KMS key ARN used to encrypt the associated metadata. — shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
 ]: any -> record<botId: record, botVersion: record, localeId: record, botRecommendationStatus: record, botRecommendationId: record, creationDateTime: record, lastUpdatedDateTime: record, transcriptSourceSetting: record<s3BucketTranscriptSource: record<s3BucketName: record, pathFormat: record, transcriptFormat: record, transcriptFilter: record, kmsKeyArn: record>>, encryptionSetting: record<kmsKeyArn: record, botLocaleExportPassword: record, associatedTranscriptsPassword: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/botrecommendations/($botRecommendationId)/")
-  let body = {encryptionSetting: $encryptionSetting} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, bot_recommendation_id: $bot_recommendation_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/"))
+  let body = {"encryptionSetting": $encryption_setting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2295,10 +2295,10 @@ export def "bots-botversions-botlocales-botrecommendations UpdateBotRecommendati
 #
 # GET /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/metadata
 # operationId: DescribeCustomVocabularyMetadata
-export def "bots-botversions-botlocales-customvocabulary-default-metadata DescribeCustomVocabularyMetadata" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-customvocabulary-default-metadata get" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2307,18 +2307,18 @@ export def "bots-botversions-botlocales-customvocabulary-default-metadata Descri
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botVersion: record, localeId: record, customVocabularyStatus: record, creationDateTime: record, lastUpdatedDateTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/customvocabulary/DEFAULT/metadata")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/metadata"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2332,8 +2332,8 @@ export def "bots-botversions-botlocales-customvocabulary-default-metadata Descri
 # --aggregationDuration shape: {relativeAggregationDuration?: any}
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "bots-aggregatedutterances ListAggregatedUtterances" [
-  botId: string
+export def "bots-aggregatedutterances list" [
+  bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2342,32 +2342,32 @@ export def "bots-aggregatedutterances ListAggregatedUtterances" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --botAliasId: string # The identifier of the bot alias associated with this request. If you specify the bot alias, you can't specify the bot version.
-  --botVersion: string # The identifier of the bot version associated with this request. If you specify the bot version, you can't specify the bot alias.
-  localeId: string # The identifier of the language and locale where the utterances were collected. For more information, see <a href="https://docs.aws.amazon.com/lexv2/latest/dg/how-languages.html">Supported languages</a>.
-  aggregationDuration: record # Provides parameters for setting the time window and duration for aggregating utterance data. — shape: {relativeAggregationDuration?: any}
-  --sortBy: record # Specifies attributes for sorting a list of utterances. — shape: {attribute?: any, order?: any}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --bot-alias-id: string # The identifier of the bot alias associated with this request. If you specify the bot alias, you can't specify the bot version.
+  --bot-version: string # The identifier of the bot version associated with this request. If you specify the bot version, you can't specify the bot alias.
+  locale_id: string # The identifier of the language and locale where the utterances were collected. For more information, see <a href="https://docs.aws.amazon.com/lexv2/latest/dg/how-languages.html">Supported languages</a>.
+  aggregation_duration: record # Provides parameters for setting the time window and duration for aggregating utterance data. — shape: {relativeAggregationDuration?: any}
+  --sort-by: record # Specifies attributes for sorting a list of utterances. — shape: {attribute?: any, order?: any}
   --filters: list # Provides the specification of a filter used to limit the utterances in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: any, values: any, operator: any}
-  --maxResults: int # The maximum number of utterances to return in each page of results. If there are fewer results than the maximum page size, only the actual number of results are returned. If you don't specify the <code>maxResults</code> parameter, 1,000 results are returned.
-  --nextToken: string # If the response from the <code>ListAggregatedUtterances</code> operation contains more results that specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
+  --max-results: int # The maximum number of utterances to return in each page of results. If there are fewer results than the maximum page size, only the actual number of results are returned. If you don't specify the <code>maxResults</code> parameter, 1,000 results are returned.
+  --next-token: string # If the response from the <code>ListAggregatedUtterances</code> operation contains more results that specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
 ]: any -> record<botId: record, botAliasId: record, botVersion: record, localeId: record, aggregationDuration: record<relativeAggregationDuration: record<timeDimension: record, timeValue: record>>, aggregationWindowStartTime: record, aggregationWindowEndTime: record, aggregationLastRefreshedDateTime: record, aggregatedUtterancesSummaries: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/aggregatedutterances/" $qp)
-  let body = {botAliasId: $botAliasId, botVersion: $botVersion, localeId: $localeId, aggregationDuration: $aggregationDuration, sortBy: $sortBy, filters: $filters, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id} | format pattern "/bots/{bot_id}/aggregatedutterances/") $qp)
+  let body = {"botAliasId": $bot_alias_id, "botVersion": $bot_version, "localeId": $locale_id, "aggregationDuration": $aggregation_duration, "sortBy": $sort_by, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2378,10 +2378,10 @@ export def "bots-aggregatedutterances ListAggregatedUtterances" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/
 # operationId: ListBotRecommendations
-export def "bots-botversions-botlocales-botrecommendations ListBotRecommendations" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-botrecommendations list" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2390,26 +2390,26 @@ export def "bots-botversions-botlocales-botrecommendations ListBotRecommendation
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --maxResults: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # If the response from the ListBotRecommendation operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --max-results: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # If the response from the ListBotRecommendation operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results.
 ]: any -> record<botId: record, botVersion: record, localeId: record, botRecommendationSummaries: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/botrecommendations/" $qp)
-  let body = {maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/") $qp)
+  let body = {"maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2422,10 +2422,10 @@ export def "bots-botversions-botlocales-botrecommendations ListBotRecommendation
 # operationId: StartBotRecommendation
 # --transcriptSourceSetting shape: {s3BucketTranscriptSource?: any}
 # --encryptionSetting shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
-export def "bots-botversions-botlocales-botrecommendations StartBotRecommendation" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-botrecommendations start" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2434,23 +2434,23 @@ export def "bots-botversions-botlocales-botrecommendations StartBotRecommendatio
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  transcriptSourceSetting: record # Indicates the setting of the location where the transcript is stored. — shape: {s3BucketTranscriptSource?: any}
-  --encryptionSetting: record # The object representing the passwords that were used to encrypt the data related to the bot recommendation, as well as the KMS key ARN used to encrypt the associated metadata. — shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  transcript_source_setting: record # Indicates the setting of the location where the transcript is stored. — shape: {s3BucketTranscriptSource?: any}
+  --encryption-setting: record # The object representing the passwords that were used to encrypt the data related to the bot recommendation, as well as the KMS key ARN used to encrypt the associated metadata. — shape: {kmsKeyArn?: any, botLocaleExportPassword?: any, associatedTranscriptsPassword?: any}
 ]: any -> record<botId: record, botVersion: record, localeId: record, botRecommendationStatus: record, botRecommendationId: record, creationDateTime: record, transcriptSourceSetting: record<s3BucketTranscriptSource: record<s3BucketName: record, pathFormat: record, transcriptFormat: record, transcriptFilter: record, kmsKeyArn: record>>, encryptionSetting: record<kmsKeyArn: record, botLocaleExportPassword: record, associatedTranscriptsPassword: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/botrecommendations/")
-  let body = {transcriptSourceSetting: $transcriptSourceSetting, encryptionSetting: $encryptionSetting} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/"))
+  let body = {"transcriptSourceSetting": $transcript_source_setting, "encryptionSetting": $encryption_setting} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2462,8 +2462,8 @@ export def "bots-botversions-botlocales-botrecommendations StartBotRecommendatio
 # POST /builtins/locales/{localeId}/intents/
 # operationId: ListBuiltInIntents
 # --sortBy shape: {attribute?: any, order?: any}
-export def "builtins-locales-intents ListBuiltInIntents" [
-  localeId: string
+export def "builtins-locales-intents list" [
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2472,27 +2472,27 @@ export def "builtins-locales-intents ListBuiltInIntents" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --sortBy: record # Specifies attributes for sorting a list of built-in intents. — shape: {attribute?: any, order?: any}
-  --maxResults: int # The maximum number of built-in intents to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # If the response from the <code>ListBuiltInIntents</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --sort-by: record # Specifies attributes for sorting a list of built-in intents. — shape: {attribute?: any, order?: any}
+  --max-results: int # The maximum number of built-in intents to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # If the response from the <code>ListBuiltInIntents</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
 ]: any -> record<builtInIntentSummaries: record, nextToken: record, localeId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/builtins/locales/($localeId)/intents/" $qp)
-  let body = {sortBy: $sortBy, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({locale_id: $locale_id} | format pattern "/builtins/locales/{locale_id}/intents/") $qp)
+  let body = {"sortBy": $sort_by, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2504,8 +2504,8 @@ export def "builtins-locales-intents ListBuiltInIntents" [
 # POST /builtins/locales/{localeId}/slottypes/
 # operationId: ListBuiltInSlotTypes
 # --sortBy shape: {attribute?: any, order?: any}
-export def "builtins-locales-slottypes ListBuiltInSlotTypes" [
-  localeId: string
+export def "builtins-locales-slottypes list" [
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2514,27 +2514,27 @@ export def "builtins-locales-slottypes ListBuiltInSlotTypes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --sortBy: record # Specifies attributes for sorting a list of built-in slot types. — shape: {attribute?: any, order?: any}
-  --maxResults: int # The maximum number of built-in slot types to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # If the response from the <code>ListBuiltInSlotTypes</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --sort-by: record # Specifies attributes for sorting a list of built-in slot types. — shape: {attribute?: any, order?: any}
+  --max-results: int # The maximum number of built-in slot types to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # If the response from the <code>ListBuiltInSlotTypes</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response. Use that token in the <code>nextToken</code> parameter to return the next page of results.
 ]: any -> record<builtInSlotTypeSummaries: record, nextToken: record, localeId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/builtins/locales/($localeId)/slottypes/" $qp)
-  let body = {sortBy: $sortBy, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({locale_id: $locale_id} | format pattern "/builtins/locales/{locale_id}/slottypes/") $qp)
+  let body = {"sortBy": $sort_by, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2545,10 +2545,10 @@ export def "builtins-locales-slottypes ListBuiltInSlotTypes" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/customvocabulary/DEFAULT/list
 # operationId: ListCustomVocabularyItems
-export def "bots-botversions-botlocales-customvocabulary-default-list ListCustomVocabularyItems" [
-  botId: string
-  botVersion: string
-  localeId: string
+export def "bots-botversions-botlocales-customvocabulary-default-list list-custom-vocabulary-items" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2557,26 +2557,26 @@ export def "bots-botversions-botlocales-customvocabulary-default-list ListCustom
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --maxResults: int # The maximum number of items returned by the list operation.
-  --nextToken: string # The nextToken identifier to the list custom vocabulary request.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --max-results: int # The maximum number of items returned by the list operation.
+  --next-token: string # The nextToken identifier to the list custom vocabulary request.
 ]: any -> record<botId: record, botVersion: record, localeId: record, customVocabularyItems: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/customvocabulary/DEFAULT/list" $qp)
-  let body = {maxResults: $maxResults, nextToken: $nextToken} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/customvocabulary/DEFAULT/list") $qp)
+  let body = {"maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2589,7 +2589,7 @@ export def "bots-botversions-botlocales-customvocabulary-default-list ListCustom
 # operationId: ListImports
 # --sortBy shape: {attribute?: any, order?: any}
 # --filters item shape: {name: any, values: any, operator: any}
-export def "imports ListImports" [
+export def "imports list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2598,31 +2598,31 @@ export def "imports ListImports" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --botId: string # The unique identifier that Amazon Lex assigned to the bot.
-  --botVersion: string # The version of the bot to list imports for.
-  --sortBy: record # Provides information for sorting a list of imports. — shape: {attribute?: any, order?: any}
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --bot-id: string # The unique identifier that Amazon Lex assigned to the bot.
+  --bot-version: string # The version of the bot to list imports for.
+  --sort-by: record # Provides information for sorting a list of imports. — shape: {attribute?: any, order?: any}
   --filters: list # Provides the specification of a filter used to limit the bots in the response to only those that match the filter specification. You can only specify one filter and one string to filter on. — item shape: {name: any, values: any, operator: any}
-  --maxResults: int # The maximum number of imports to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextToken: string # <p>If the response from the <code>ListImports</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response.</p> <p>Use the returned token in the <code>nextToken</code> parameter of a <code>ListImports</code> request to return the next page of results. For a complete set of results, call the <code>ListImports</code> operation until the <code>nextToken</code> returned in the response is null.</p>
-  --localeId: string # Specifies the locale that should be present in the list. If you don't specify a resource type in the <code>filters</code> parameter, the list contains both bot locales and custom vocabularies.
+  --max-results: int # The maximum number of imports to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-token: string # <p>If the response from the <code>ListImports</code> operation contains more results than specified in the <code>maxResults</code> parameter, a token is returned in the response.</p> <p>Use the returned token in the <code>nextToken</code> parameter of a <code>ListImports</code> request to return the next page of results. For a complete set of results, call the <code>ListImports</code> operation until the <code>nextToken</code> returned in the response is null.</p>
+  --locale-id: string # Specifies the locale that should be present in the list. If you don't specify a resource type in the <code>filters</code> parameter, the list contains both bot locales and custom vocabularies.
 ]: any -> record<botId: record, botVersion: record, importSummaries: record, nextToken: record, localeId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/imports/" $qp)
-  let body = {botId: $botId, botVersion: $botVersion, sortBy: $sortBy, filters: $filters, maxResults: $maxResults, nextToken: $nextToken, localeId: $localeId} | compact
+  let body = {"botId": $bot_id, "botVersion": $bot_version, "sortBy": $sort_by, "filters": $filters, "maxResults": $max_results, "nextToken": $next_token, "localeId": $locale_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2634,7 +2634,7 @@ export def "imports ListImports" [
 # PUT /imports/
 # operationId: StartImport
 # --resourceSpecification shape: {botImportSpecification?: any, botLocaleImportSpecification?: any, customVocabularyImportSpecification?: record}
-export def "imports StartImport" [
+export def "imports start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2643,25 +2643,25 @@ export def "imports StartImport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  importId: string # The unique identifier for the import. It is included in the response from the <a href="https://docs.aws.amazon.com/lexv2/latest/APIReference/API_CreateUploadUrl.html">CreateUploadUrl</a> operation.
-  resourceSpecification: record # Provides information about the bot or bot locale that you want to import. You can specify the <code>botImportSpecification</code> or the <code>botLocaleImportSpecification</code>, but not both. — shape: {botImportSpecification?: any, botLocaleImportSpecification?: any, customVocabularyImportSpecification?: record}
-  mergeStrategy: string@mergeStrategy-completer # The strategy to use when there is a name conflict between the imported resource and an existing resource. When the merge strategy is <code>FailOnConflict</code> existing resources are not overwritten and the import fails.
-  --filePassword: string # The password used to encrypt the zip archive that contains the resource definition. You should always encrypt the zip archive to protect it during transit between your site and Amazon Lex. (format: password)
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  import_id: string # The unique identifier for the import. It is included in the response from the <a href="https://docs.aws.amazon.com/lexv2/latest/APIReference/API_CreateUploadUrl.html">CreateUploadUrl</a> operation.
+  resource_specification: record # Provides information about the bot or bot locale that you want to import. You can specify the <code>botImportSpecification</code> or the <code>botLocaleImportSpecification</code>, but not both. — shape: {botImportSpecification?: any, botLocaleImportSpecification?: any, customVocabularyImportSpecification?: record}
+  merge_strategy: string@merge-strategy-completer # The strategy to use when there is a name conflict between the imported resource and an existing resource. When the merge strategy is <code>FailOnConflict</code> existing resources are not overwritten and the import fails.
+  --file-password: string # The password used to encrypt the zip archive that contains the resource definition. You should always encrypt the zip archive to protect it during transit between your site and Amazon Lex. (format: password)
 ]: any -> record<importId: record, resourceSpecification: record<botImportSpecification: record<botName: record, roleArn: record, dataPrivacy: record, idleSessionTTLInSeconds: record, botTags: record, testBotAliasTags: record>, botLocaleImportSpecification: record<botId: record, botVersion: record, localeId: record, nluIntentConfidenceThreshold: record, voiceSettings: record>, customVocabularyImportSpecification: record<botId: record, botVersion: record, localeId: record>>, mergeStrategy: record, importStatus: record, creationDateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/imports/")
-  let body = {importId: $importId, resourceSpecification: $resourceSpecification, mergeStrategy: $mergeStrategy, filePassword: $filePassword} | compact
+  let body = {"importId": $import_id, "resourceSpecification": $resource_specification, "mergeStrategy": $merge_strategy, "filePassword": $file_password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2672,11 +2672,11 @@ export def "imports StartImport" [
 #
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/intents
 # operationId: ListRecommendedIntents
-export def "bots-botversions-botlocales-botrecommendations-intents ListRecommendedIntents" [
-  botId: string
-  botVersion: string
-  localeId: string
-  botRecommendationId: string
+export def "bots-botversions-botlocales-botrecommendations-intents list-recommended" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  bot_recommendation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2685,26 +2685,26 @@ export def "bots-botversions-botlocales-botrecommendations-intents ListRecommend
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --nextToken: string # If the response from the ListRecommendedIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results.
-  --maxResults: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --next-token: string # If the response from the ListRecommendedIntents operation contains more results than specified in the maxResults parameter, a token is returned in the response. Use that token in the nextToken parameter to return the next page of results.
+  --max-results: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
 ]: any -> record<botId: record, botVersion: record, localeId: record, botRecommendationId: record, summaryList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/botrecommendations/($botRecommendationId)/intents" $qp)
-  let body = {nextToken: $nextToken, maxResults: $maxResults} | compact
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, bot_recommendation_id: $bot_recommendation_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/intents") $qp)
+  let body = {"nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2715,8 +2715,8 @@ export def "bots-botversions-botlocales-botrecommendations-intents ListRecommend
 #
 # GET /tags/{resourceARN}
 # operationId: ListTagsForResource
-export def "tags ListTagsForResource" [
-  resourceARN: string
+export def "tags list-tags-for-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2725,18 +2725,18 @@ export def "tags ListTagsForResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resourceARN)")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2747,8 +2747,8 @@ export def "tags ListTagsForResource" [
 #
 # POST /tags/{resourceARN}
 # operationId: TagResource
-export def "tags TagResource" [
-  resourceARN: string
+export def "tags tag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2757,22 +2757,22 @@ export def "tags TagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
   tags: record # A list of tag keys to add to the resource. If a tag key already exists, the existing value is replaced with the new value.
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/tags/($resourceARN)")
-  let body = {tags: $tags} | compact
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}"))
+  let body = {"tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2784,11 +2784,11 @@ export def "tags TagResource" [
 # POST /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/associatedtranscripts
 # operationId: SearchAssociatedTranscripts
 # --filters item shape: {name: any, values: any}
-export def "bots-botversions-botlocales-botrecommendations-associatedtranscripts SearchAssociatedTranscripts" [
-  botId: string
-  botVersion: string
-  localeId: string
-  botRecommendationId: string
+export def "bots-botversions-botlocales-botrecommendations-associatedtranscripts list" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  bot_recommendation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2797,25 +2797,25 @@ export def "bots-botversions-botlocales-botrecommendations-associatedtranscripts
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --searchOrder: string@searchOrder-completer # How SearchResults are ordered. Valid values are Ascending or Descending. The default is Descending.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --search-order: string@search-order-completer # How SearchResults are ordered. Valid values are Ascending or Descending. The default is Descending.
   filters: list # A list of filter objects. — item shape: {name: any, values: any}
-  --maxResults: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
-  --nextIndex: int # If the response from the SearchAssociatedTranscriptsRequest operation contains more results than specified in the maxResults parameter, an index is returned in the response. Use that index in the nextIndex parameter to return the next page of results.
+  --max-results: int # The maximum number of bot recommendations to return in each page of results. If there are fewer results than the max page size, only the actual number of results are returned.
+  --next-index: int # If the response from the SearchAssociatedTranscriptsRequest operation contains more results than specified in the maxResults parameter, an index is returned in the response. Use that index in the nextIndex parameter to return the next page of results.
 ]: any -> record<botId: record, botVersion: record, localeId: record, botRecommendationId: record, nextIndex: record, associatedTranscripts: record, totalResults: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/botrecommendations/($botRecommendationId)/associatedtranscripts")
-  let body = {searchOrder: $searchOrder, filters: $filters, maxResults: $maxResults, nextIndex: $nextIndex} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, bot_recommendation_id: $bot_recommendation_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/associatedtranscripts"))
+  let body = {"searchOrder": $search_order, "filters": $filters, "maxResults": $max_results, "nextIndex": $next_index} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2826,11 +2826,11 @@ export def "bots-botversions-botlocales-botrecommendations-associatedtranscripts
 #
 # PUT /bots/{botId}/botversions/{botVersion}/botlocales/{localeId}/botrecommendations/{botRecommendationId}/stopbotrecommendation
 # operationId: StopBotRecommendation
-export def "bots-botversions-botlocales-botrecommendations-stopbotrecommendation StopBotRecommendation" [
-  botId: string
-  botVersion: string
-  localeId: string
-  botRecommendationId: string
+export def "bots-botversions-botlocales-botrecommendations-stopbotrecommendation stop" [
+  bot_id: string
+  bot_version: string
+  locale_id: string
+  bot_recommendation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2839,18 +2839,18 @@ export def "bots-botversions-botlocales-botrecommendations-stopbotrecommendation
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record<botId: record, botVersion: record, localeId: record, botRecommendationStatus: record, botRecommendationId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/bots/($botId)/botversions/($botVersion)/botlocales/($localeId)/botrecommendations/($botRecommendationId)/stopbotrecommendation")
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let full_url = (build-url $base ({bot_id: $bot_id, bot_version: $bot_version, locale_id: $locale_id, bot_recommendation_id: $bot_recommendation_id} | format pattern "/bots/{bot_id}/botversions/{bot_version}/botlocales/{locale_id}/botrecommendations/{bot_recommendation_id}/stopbotrecommendation"))
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2861,8 +2861,8 @@ export def "bots-botversions-botlocales-botrecommendations-stopbotrecommendation
 #
 # DELETE /tags/{resourceARN}#tagKeys
 # operationId: UntagResource
-export def "tags UntagResource" [
-  resourceARN: string
+export def "tags untag-resource" [
+  resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2871,20 +2871,20 @@ export def "tags UntagResource" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tagKeys: list # A list of tag keys to remove from the resource. If a tag key does not exist on the resource, it is ignored.
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
+  --tag-keys: list # A list of tag keys to remove from the resource. If a tag key does not exist on the resource, it is ignored.
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "tagKeys" $tagKeys "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/tags/($resourceARN)#tagKeys" $qp)
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders} | compact
+  let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({resource_arn: $resource_arn} | format pattern "/tags/{resource_arn}#tagKeys") $qp)
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

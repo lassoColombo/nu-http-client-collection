@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dfs-slates-by-date DfsSlatesByDate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dfs-slates-by-date get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/DfsSlatesByDate/{date}
 # operationId: DfsSlatesByDate
-export def "dfs-slates-by-date DfsSlatesByDate" [
+export def "dfs-slates-by-date get" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -108,7 +108,7 @@ export def "dfs-slates-by-date DfsSlatesByDate" [
 ]: nothing -> table<DfsSlateGames: list<record>, DfsSlatePlayers: list<record>, IsMultiDaySlate: bool, NumberOfGames: int, Operator: string, OperatorDay: string, OperatorGameType: string, OperatorName: string, OperatorSlateID: int, OperatorStartTime: string, RemovedByOperator: bool, SalaryCap: int, SlateID: int, SlateRosterSlots: list<string>, VideoGameId: int> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/DfsSlatesByDate/($date)")
+  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/DfsSlatesByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -118,7 +118,7 @@ export def "dfs-slates-by-date DfsSlatesByDate" [
 #
 # GET /{format}/PlayerGameProjectionStatsByDate/{date}
 # operationId: ProjectedPlayerGameStatsByDate
-export def "player-game-projection-stats-by-date ProjectedPlayerGameStatsByDate" [
+export def "player-game-projection-stats-by-date get" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -132,7 +132,7 @@ export def "player-game-projection-stats-by-date ProjectedPlayerGameStatsByDate"
 ]: nothing -> table<Assists: float, CombatPlayerScore: float, DateTime: string, Day: string, Deaths: float, DoubleKills: float, FantasyPoints: float, GameId: int, Games: int, GoldEarned: float, GoldSpent: float, InhibitorKills: float, IsClosed: bool, KillingSpree: float, Kills: float, LargestCriticalStrike: float, LargestKillingSpree: float, LargestMultiKill: float, LongestTimeSpentLiving: float, MagicDamageDealt: float, MagicDamageDealtToChampions: float, MagicDamageTaken: float, MatchName: string, Matches: int, Name: string, NeutralMinionsKIlled: float, NeutralMinionsKIlledTeamJungle: float, NeutralMinionsKilledEnemyJungle: float, ObjectivePlayerScore: float, Opponent: string, OpponentId: int, PentaKills: float, PhysicalDamageDealt: float, PhysicalDamageDealtToChampions: float, PhysicalDamageTaken: float, PlayerId: int, Position: string, QuadraKills: float, SightWardsBoughtInGame: float, Team: string, TeamId: int, TenKillsOrAssists: float, TotalDamageDealt: float, TotalDamageDealtToChampions: float, TotalDamageTaken: float, TotalHeal: float, TotalMinionsKilled: float, TotalPlayerScore: float, TotalTimeCrowdControlDealt: float, TotalUnitsHealed: float, TripleKills: float, TrueDamageDealt: float, TrueDamageDealtToChampions: float, TrueDamageTaken: float, TurretKills: float, UnrealKills: float, Updated: string, VisionWardsBoughtInGame: float, WardsKilled: float, WardsPlaced: float> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/PlayerGameProjectionStatsByDate/($date)")
+  let full_url = (build-url $base ({format: $format, date: $date} | format pattern "/{format}/PlayerGameProjectionStatsByDate/{date}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -142,7 +142,7 @@ export def "player-game-projection-stats-by-date ProjectedPlayerGameStatsByDate"
 #
 # GET /{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}
 # operationId: ProjectedPlayerGameStatsByPlayer
-export def "player-game-projection-stats-by-player ProjectedPlayerGameStatsByPlayer" [
+export def "player-game-projection-stats-by-player get" [
   format: string
   date: string
   playerid: string
@@ -157,7 +157,7 @@ export def "player-game-projection-stats-by-player ProjectedPlayerGameStatsByPla
 ]: nothing -> table<Assists: float, CombatPlayerScore: float, DateTime: string, Day: string, Deaths: float, DoubleKills: float, FantasyPoints: float, GameId: int, Games: int, GoldEarned: float, GoldSpent: float, InhibitorKills: float, IsClosed: bool, KillingSpree: float, Kills: float, LargestCriticalStrike: float, LargestKillingSpree: float, LargestMultiKill: float, LongestTimeSpentLiving: float, MagicDamageDealt: float, MagicDamageDealtToChampions: float, MagicDamageTaken: float, MatchName: string, Matches: int, Name: string, NeutralMinionsKIlled: float, NeutralMinionsKIlledTeamJungle: float, NeutralMinionsKilledEnemyJungle: float, ObjectivePlayerScore: float, Opponent: string, OpponentId: int, PentaKills: float, PhysicalDamageDealt: float, PhysicalDamageDealtToChampions: float, PhysicalDamageTaken: float, PlayerId: int, Position: string, QuadraKills: float, SightWardsBoughtInGame: float, Team: string, TeamId: int, TenKillsOrAssists: float, TotalDamageDealt: float, TotalDamageDealtToChampions: float, TotalDamageTaken: float, TotalHeal: float, TotalMinionsKilled: float, TotalPlayerScore: float, TotalTimeCrowdControlDealt: float, TotalUnitsHealed: float, TripleKills: float, TrueDamageDealt: float, TrueDamageDealtToChampions: float, TrueDamageTaken: float, TurretKills: float, UnrealKills: float, Updated: string, VisionWardsBoughtInGame: float, WardsKilled: float, WardsPlaced: float> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($format)/PlayerGameProjectionStatsByPlayer/($date)/($playerid)")
+  let full_url = (build-url $base ({format: $format, date: $date, playerid: $playerid} | format pattern "/{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -66,57 +66,57 @@ def base-url-completer [] { ["http://codebuild.us-east-1.amazonaws.com" "http://
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["CodeBuild_20161006.BatchDeleteBuilds"] }
-def X-Amz-Target-completer-1 [] { ["CodeBuild_20161006.BatchGetBuildBatches"] }
-def X-Amz-Target-completer-2 [] { ["CodeBuild_20161006.BatchGetBuilds"] }
-def X-Amz-Target-completer-3 [] { ["CodeBuild_20161006.BatchGetProjects"] }
-def X-Amz-Target-completer-4 [] { ["CodeBuild_20161006.BatchGetReportGroups"] }
-def X-Amz-Target-completer-5 [] { ["CodeBuild_20161006.BatchGetReports"] }
-def X-Amz-Target-completer-6 [] { ["CodeBuild_20161006.CreateProject"] }
-def X-Amz-Target-completer-7 [] { ["CodeBuild_20161006.CreateReportGroup"] }
-def X-Amz-Target-completer-8 [] { ["CodeBuild_20161006.CreateWebhook"] }
-def X-Amz-Target-completer-9 [] { ["CodeBuild_20161006.DeleteBuildBatch"] }
-def X-Amz-Target-completer-10 [] { ["CodeBuild_20161006.DeleteProject"] }
-def X-Amz-Target-completer-11 [] { ["CodeBuild_20161006.DeleteReport"] }
-def X-Amz-Target-completer-12 [] { ["CodeBuild_20161006.DeleteReportGroup"] }
-def X-Amz-Target-completer-13 [] { ["CodeBuild_20161006.DeleteResourcePolicy"] }
-def X-Amz-Target-completer-14 [] { ["CodeBuild_20161006.DeleteSourceCredentials"] }
-def X-Amz-Target-completer-15 [] { ["CodeBuild_20161006.DeleteWebhook"] }
-def X-Amz-Target-completer-16 [] { ["CodeBuild_20161006.DescribeCodeCoverages"] }
-def X-Amz-Target-completer-17 [] { ["CodeBuild_20161006.DescribeTestCases"] }
-def X-Amz-Target-completer-18 [] { ["CodeBuild_20161006.GetReportGroupTrend"] }
-def X-Amz-Target-completer-19 [] { ["CodeBuild_20161006.GetResourcePolicy"] }
-def X-Amz-Target-completer-20 [] { ["CodeBuild_20161006.ImportSourceCredentials"] }
-def X-Amz-Target-completer-21 [] { ["CodeBuild_20161006.InvalidateProjectCache"] }
-def X-Amz-Target-completer-22 [] { ["CodeBuild_20161006.ListBuildBatches"] }
-def X-Amz-Target-completer-23 [] { ["CodeBuild_20161006.ListBuildBatchesForProject"] }
-def X-Amz-Target-completer-24 [] { ["CodeBuild_20161006.ListBuilds"] }
-def X-Amz-Target-completer-25 [] { ["CodeBuild_20161006.ListBuildsForProject"] }
-def X-Amz-Target-completer-26 [] { ["CodeBuild_20161006.ListCuratedEnvironmentImages"] }
-def X-Amz-Target-completer-27 [] { ["CodeBuild_20161006.ListProjects"] }
-def X-Amz-Target-completer-28 [] { ["CodeBuild_20161006.ListReportGroups"] }
-def X-Amz-Target-completer-29 [] { ["CodeBuild_20161006.ListReports"] }
-def X-Amz-Target-completer-30 [] { ["CodeBuild_20161006.ListReportsForReportGroup"] }
-def X-Amz-Target-completer-31 [] { ["CodeBuild_20161006.ListSharedProjects"] }
-def X-Amz-Target-completer-32 [] { ["CodeBuild_20161006.ListSharedReportGroups"] }
-def X-Amz-Target-completer-33 [] { ["CodeBuild_20161006.ListSourceCredentials"] }
-def X-Amz-Target-completer-34 [] { ["CodeBuild_20161006.PutResourcePolicy"] }
-def X-Amz-Target-completer-35 [] { ["CodeBuild_20161006.RetryBuild"] }
-def X-Amz-Target-completer-36 [] { ["CodeBuild_20161006.RetryBuildBatch"] }
-def X-Amz-Target-completer-37 [] { ["CodeBuild_20161006.StartBuild"] }
-def X-Amz-Target-completer-38 [] { ["CodeBuild_20161006.StartBuildBatch"] }
-def X-Amz-Target-completer-39 [] { ["CodeBuild_20161006.StopBuild"] }
-def X-Amz-Target-completer-40 [] { ["CodeBuild_20161006.StopBuildBatch"] }
-def X-Amz-Target-completer-41 [] { ["CodeBuild_20161006.UpdateProject"] }
-def projectVisibility-completer [] { ["PRIVATE" "PUBLIC_READ"] }
-def X-Amz-Target-completer-42 [] { ["CodeBuild_20161006.UpdateProjectVisibility"] }
-def X-Amz-Target-completer-43 [] { ["CodeBuild_20161006.UpdateReportGroup"] }
-def X-Amz-Target-completer-44 [] { ["CodeBuild_20161006.UpdateWebhook"] }
+def x-amz-target-completer [] { ["CodeBuild_20161006.BatchDeleteBuilds"] }
+def x-amz-target-completer-1 [] { ["CodeBuild_20161006.BatchGetBuildBatches"] }
+def x-amz-target-completer-2 [] { ["CodeBuild_20161006.BatchGetBuilds"] }
+def x-amz-target-completer-3 [] { ["CodeBuild_20161006.BatchGetProjects"] }
+def x-amz-target-completer-4 [] { ["CodeBuild_20161006.BatchGetReportGroups"] }
+def x-amz-target-completer-5 [] { ["CodeBuild_20161006.BatchGetReports"] }
+def x-amz-target-completer-6 [] { ["CodeBuild_20161006.CreateProject"] }
+def x-amz-target-completer-7 [] { ["CodeBuild_20161006.CreateReportGroup"] }
+def x-amz-target-completer-8 [] { ["CodeBuild_20161006.CreateWebhook"] }
+def x-amz-target-completer-9 [] { ["CodeBuild_20161006.DeleteBuildBatch"] }
+def x-amz-target-completer-10 [] { ["CodeBuild_20161006.DeleteProject"] }
+def x-amz-target-completer-11 [] { ["CodeBuild_20161006.DeleteReport"] }
+def x-amz-target-completer-12 [] { ["CodeBuild_20161006.DeleteReportGroup"] }
+def x-amz-target-completer-13 [] { ["CodeBuild_20161006.DeleteResourcePolicy"] }
+def x-amz-target-completer-14 [] { ["CodeBuild_20161006.DeleteSourceCredentials"] }
+def x-amz-target-completer-15 [] { ["CodeBuild_20161006.DeleteWebhook"] }
+def x-amz-target-completer-16 [] { ["CodeBuild_20161006.DescribeCodeCoverages"] }
+def x-amz-target-completer-17 [] { ["CodeBuild_20161006.DescribeTestCases"] }
+def x-amz-target-completer-18 [] { ["CodeBuild_20161006.GetReportGroupTrend"] }
+def x-amz-target-completer-19 [] { ["CodeBuild_20161006.GetResourcePolicy"] }
+def x-amz-target-completer-20 [] { ["CodeBuild_20161006.ImportSourceCredentials"] }
+def x-amz-target-completer-21 [] { ["CodeBuild_20161006.InvalidateProjectCache"] }
+def x-amz-target-completer-22 [] { ["CodeBuild_20161006.ListBuildBatches"] }
+def x-amz-target-completer-23 [] { ["CodeBuild_20161006.ListBuildBatchesForProject"] }
+def x-amz-target-completer-24 [] { ["CodeBuild_20161006.ListBuilds"] }
+def x-amz-target-completer-25 [] { ["CodeBuild_20161006.ListBuildsForProject"] }
+def x-amz-target-completer-26 [] { ["CodeBuild_20161006.ListCuratedEnvironmentImages"] }
+def x-amz-target-completer-27 [] { ["CodeBuild_20161006.ListProjects"] }
+def x-amz-target-completer-28 [] { ["CodeBuild_20161006.ListReportGroups"] }
+def x-amz-target-completer-29 [] { ["CodeBuild_20161006.ListReports"] }
+def x-amz-target-completer-30 [] { ["CodeBuild_20161006.ListReportsForReportGroup"] }
+def x-amz-target-completer-31 [] { ["CodeBuild_20161006.ListSharedProjects"] }
+def x-amz-target-completer-32 [] { ["CodeBuild_20161006.ListSharedReportGroups"] }
+def x-amz-target-completer-33 [] { ["CodeBuild_20161006.ListSourceCredentials"] }
+def x-amz-target-completer-34 [] { ["CodeBuild_20161006.PutResourcePolicy"] }
+def x-amz-target-completer-35 [] { ["CodeBuild_20161006.RetryBuild"] }
+def x-amz-target-completer-36 [] { ["CodeBuild_20161006.RetryBuildBatch"] }
+def x-amz-target-completer-37 [] { ["CodeBuild_20161006.StartBuild"] }
+def x-amz-target-completer-38 [] { ["CodeBuild_20161006.StartBuildBatch"] }
+def x-amz-target-completer-39 [] { ["CodeBuild_20161006.StopBuild"] }
+def x-amz-target-completer-40 [] { ["CodeBuild_20161006.StopBuildBatch"] }
+def x-amz-target-completer-41 [] { ["CodeBuild_20161006.UpdateProject"] }
+def project-visibility-completer [] { ["PRIVATE" "PUBLIC_READ"] }
+def x-amz-target-completer-42 [] { ["CodeBuild_20161006.UpdateProjectVisibility"] }
+def x-amz-target-completer-43 [] { ["CodeBuild_20161006.UpdateReportGroup"] }
+def x-amz-target-completer-44 [] { ["CodeBuild_20161006.UpdateWebhook"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-code-build-20161006batch-delete-builds BatchDeleteBuilds" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-code-build-20161006batch-delete-builds post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.BatchDeleteBuilds
 # operationId: BatchDeleteBuilds
-export def "x-amz-target-code-build-20161006batch-delete-builds BatchDeleteBuilds" [
+export def "x-amz-target-code-build-20161006batch-delete-builds post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -149,23 +149,23 @@ export def "x-amz-target-code-build-20161006batch-delete-builds BatchDeleteBuild
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
   ids: any
 ]: any -> record<buildsDeleted: record, buildsNotDeleted: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.BatchDeleteBuilds")
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -176,7 +176,7 @@ export def "x-amz-target-code-build-20161006batch-delete-builds BatchDeleteBuild
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.BatchGetBuildBatches
 # operationId: BatchGetBuildBatches
-export def "x-amz-target-code-build-20161006batch-get-build-batches BatchGetBuildBatches" [
+export def "x-amz-target-code-build-20161006batch-get-build-batches post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,23 +185,23 @@ export def "x-amz-target-code-build-20161006batch-get-build-batches BatchGetBuil
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
   ids: any
 ]: any -> record<buildBatches: record, buildBatchesNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.BatchGetBuildBatches")
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,7 +212,7 @@ export def "x-amz-target-code-build-20161006batch-get-build-batches BatchGetBuil
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.BatchGetBuilds
 # operationId: BatchGetBuilds
-export def "x-amz-target-code-build-20161006batch-get-builds BatchGetBuilds" [
+export def "x-amz-target-code-build-20161006batch-get-builds post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,23 +221,23 @@ export def "x-amz-target-code-build-20161006batch-get-builds BatchGetBuilds" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
   ids: any
 ]: any -> record<builds: record, buildsNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.BatchGetBuilds")
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -248,7 +248,7 @@ export def "x-amz-target-code-build-20161006batch-get-builds BatchGetBuilds" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.BatchGetProjects
 # operationId: BatchGetProjects
-export def "x-amz-target-code-build-20161006batch-get-projects BatchGetProjects" [
+export def "x-amz-target-code-build-20161006batch-get-projects post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,23 +257,23 @@ export def "x-amz-target-code-build-20161006batch-get-projects BatchGetProjects"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
   names: any
 ]: any -> record<projects: record, projectsNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.BatchGetProjects")
-  let body = {names: $names} | compact
+  let body = {"names": $names} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -284,7 +284,7 @@ export def "x-amz-target-code-build-20161006batch-get-projects BatchGetProjects"
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.BatchGetReportGroups
 # operationId: BatchGetReportGroups
-export def "x-amz-target-code-build-20161006batch-get-report-groups BatchGetReportGroups" [
+export def "x-amz-target-code-build-20161006batch-get-report-groups post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,23 +293,23 @@ export def "x-amz-target-code-build-20161006batch-get-report-groups BatchGetRepo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  reportGroupArns: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  report_group_arns: any
 ]: any -> record<reportGroups: record, reportGroupsNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.BatchGetReportGroups")
-  let body = {reportGroupArns: $reportGroupArns} | compact
+  let body = {"reportGroupArns": $report_group_arns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -320,7 +320,7 @@ export def "x-amz-target-code-build-20161006batch-get-report-groups BatchGetRepo
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.BatchGetReports
 # operationId: BatchGetReports
-export def "x-amz-target-code-build-20161006batch-get-reports BatchGetReports" [
+export def "x-amz-target-code-build-20161006batch-get-reports post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,23 +329,23 @@ export def "x-amz-target-code-build-20161006batch-get-reports BatchGetReports" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  reportArns: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  report_arns: any
 ]: any -> record<reports: record, reportsNotFound: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.BatchGetReports")
-  let body = {reportArns: $reportArns} | compact
+  let body = {"reportArns": $report_arns} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -356,7 +356,7 @@ export def "x-amz-target-code-build-20161006batch-get-reports BatchGetReports" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.CreateProject
 # operationId: CreateProject
-export def "x-amz-target-code-build-20161006create-project CreateProject" [
+export def "x-amz-target-code-build-20161006create-project create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,43 +365,43 @@ export def "x-amz-target-code-build-20161006create-project CreateProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
   name: any
   --description: any
   --body-source: any
-  --secondarySources: any
-  --sourceVersion: any
-  --secondarySourceVersions: any
+  --secondary-sources: any
+  --source-version: any
+  --secondary-source-versions: any
   artifacts: any
-  --secondaryArtifacts: any
+  --secondary-artifacts: any
   --cache: any
   environment: any
-  serviceRole: any
-  --timeoutInMinutes: any
-  --queuedTimeoutInMinutes: any
-  --encryptionKey: any
+  service_role: any
+  --timeout-in-minutes: any
+  --queued-timeout-in-minutes: any
+  --encryption-key: any
   --tags: any
-  --vpcConfig: any
-  --badgeEnabled: any
-  --logsConfig: any
-  --fileSystemLocations: any
-  --buildBatchConfig: any
-  --concurrentBuildLimit: any
+  --vpc-config: any
+  --badge-enabled: any
+  --logs-config: any
+  --file-system-locations: any
+  --build-batch-config: any
+  --concurrent-build-limit: any
 ]: any -> record<project: record<name: record, arn: record, description: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, sourceVersion: record, secondarySourceVersions: record, artifacts: record<type: record, location: record, path: record, namespaceType: record, name: record, packaging: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, timeoutInMinutes: record, queuedTimeoutInMinutes: record, encryptionKey: record, tags: record, created: record, lastModified: record, webhook: record<url: record, payloadUrl: record, secret: record, branchFilter: record, filterGroups: record, buildType: record, lastModifiedSecret: record>, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, badge: record<badgeEnabled: record, badgeRequestUrl: record>, logsConfig: record<cloudWatchLogs: record, s3Logs: record>, fileSystemLocations: record, buildBatchConfig: record<serviceRole: record, combineArtifacts: record, restrictions: record, timeoutInMins: record, batchReportMode: record>, concurrentBuildLimit: record, projectVisibility: string, publicProjectAlias: record, resourceAccessRole: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.CreateProject")
-  let body = {name: $name, description: $description, source: $body_source, secondarySources: $secondarySources, sourceVersion: $sourceVersion, secondarySourceVersions: $secondarySourceVersions, artifacts: $artifacts, secondaryArtifacts: $secondaryArtifacts, cache: $cache, environment: $environment, serviceRole: $serviceRole, timeoutInMinutes: $timeoutInMinutes, queuedTimeoutInMinutes: $queuedTimeoutInMinutes, encryptionKey: $encryptionKey, tags: $tags, vpcConfig: $vpcConfig, badgeEnabled: $badgeEnabled, logsConfig: $logsConfig, fileSystemLocations: $fileSystemLocations, buildBatchConfig: $buildBatchConfig, concurrentBuildLimit: $concurrentBuildLimit} | compact
+  let body = {"name": $name, "description": $description, "source": $body_source, "secondarySources": $secondary_sources, "sourceVersion": $source_version, "secondarySourceVersions": $secondary_source_versions, "artifacts": $artifacts, "secondaryArtifacts": $secondary_artifacts, "cache": $cache, "environment": $environment, "serviceRole": $service_role, "timeoutInMinutes": $timeout_in_minutes, "queuedTimeoutInMinutes": $queued_timeout_in_minutes, "encryptionKey": $encryption_key, "tags": $tags, "vpcConfig": $vpc_config, "badgeEnabled": $badge_enabled, "logsConfig": $logs_config, "fileSystemLocations": $file_system_locations, "buildBatchConfig": $build_batch_config, "concurrentBuildLimit": $concurrent_build_limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -412,7 +412,7 @@ export def "x-amz-target-code-build-20161006create-project CreateProject" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.CreateReportGroup
 # operationId: CreateReportGroup
-export def "x-amz-target-code-build-20161006create-report-group CreateReportGroup" [
+export def "x-amz-target-code-build-20161006create-report-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,26 +421,26 @@ export def "x-amz-target-code-build-20161006create-report-group CreateReportGrou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
   name: any
   type: any
-  exportConfig: any
+  export_config: any
   --tags: any
 ]: any -> record<reportGroup: record<arn: record, name: record, type: record, exportConfig: record<exportConfigType: record, s3Destination: record>, created: record, lastModified: record, tags: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.CreateReportGroup")
-  let body = {name: $name, type: $type, exportConfig: $exportConfig, tags: $tags} | compact
+  let body = {"name": $name, "type": $type, "exportConfig": $export_config, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -451,7 +451,7 @@ export def "x-amz-target-code-build-20161006create-report-group CreateReportGrou
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.CreateWebhook
 # operationId: CreateWebhook
-export def "x-amz-target-code-build-20161006create-webhook CreateWebhook" [
+export def "x-amz-target-code-build-20161006create-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,26 +460,26 @@ export def "x-amz-target-code-build-20161006create-webhook CreateWebhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  projectName: any
-  --branchFilter: any
-  --filterGroups: any
-  --buildType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  project_name: any
+  --branch-filter: any
+  --filter-groups: any
+  --build-type: any
 ]: any -> record<webhook: record<url: record, payloadUrl: record, secret: record, branchFilter: record, filterGroups: record, buildType: record, lastModifiedSecret: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.CreateWebhook")
-  let body = {projectName: $projectName, branchFilter: $branchFilter, filterGroups: $filterGroups, buildType: $buildType} | compact
+  let body = {"projectName": $project_name, "branchFilter": $branch_filter, "filterGroups": $filter_groups, "buildType": $build_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -490,7 +490,7 @@ export def "x-amz-target-code-build-20161006create-webhook CreateWebhook" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.DeleteBuildBatch
 # operationId: DeleteBuildBatch
-export def "x-amz-target-code-build-20161006delete-build-batch DeleteBuildBatch" [
+export def "x-amz-target-code-build-20161006delete-build-batch delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,23 +499,23 @@ export def "x-amz-target-code-build-20161006delete-build-batch DeleteBuildBatch"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
   id: any
 ]: any -> record<statusCode: record, buildsDeleted: record, buildsNotDeleted: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.DeleteBuildBatch")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -526,7 +526,7 @@ export def "x-amz-target-code-build-20161006delete-build-batch DeleteBuildBatch"
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.DeleteProject
 # operationId: DeleteProject
-export def "x-amz-target-code-build-20161006delete-project DeleteProject" [
+export def "x-amz-target-code-build-20161006delete-project delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,23 +535,23 @@ export def "x-amz-target-code-build-20161006delete-project DeleteProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
   name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.DeleteProject")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -562,7 +562,7 @@ export def "x-amz-target-code-build-20161006delete-project DeleteProject" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.DeleteReport
 # operationId: DeleteReport
-export def "x-amz-target-code-build-20161006delete-report DeleteReport" [
+export def "x-amz-target-code-build-20161006delete-report delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,23 +571,23 @@ export def "x-amz-target-code-build-20161006delete-report DeleteReport" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
   arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.DeleteReport")
-  let body = {arn: $arn} | compact
+  let body = {"arn": $arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -598,7 +598,7 @@ export def "x-amz-target-code-build-20161006delete-report DeleteReport" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.DeleteReportGroup
 # operationId: DeleteReportGroup
-export def "x-amz-target-code-build-20161006delete-report-group DeleteReportGroup" [
+export def "x-amz-target-code-build-20161006delete-report-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,24 +607,24 @@ export def "x-amz-target-code-build-20161006delete-report-group DeleteReportGrou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
   arn: any
-  --deleteReports: any
+  --delete-reports: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.DeleteReportGroup")
-  let body = {arn: $arn, deleteReports: $deleteReports} | compact
+  let body = {"arn": $arn, "deleteReports": $delete_reports} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -635,7 +635,7 @@ export def "x-amz-target-code-build-20161006delete-report-group DeleteReportGrou
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.DeleteResourcePolicy
 # operationId: DeleteResourcePolicy
-export def "x-amz-target-code-build-20161006delete-resource-policy DeleteResourcePolicy" [
+export def "x-amz-target-code-build-20161006delete-resource-policy delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,23 +644,23 @@ export def "x-amz-target-code-build-20161006delete-resource-policy DeleteResourc
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  resource_arn: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.DeleteResourcePolicy")
-  let body = {resourceArn: $resourceArn} | compact
+  let body = {"resourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -671,7 +671,7 @@ export def "x-amz-target-code-build-20161006delete-resource-policy DeleteResourc
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.DeleteSourceCredentials
 # operationId: DeleteSourceCredentials
-export def "x-amz-target-code-build-20161006delete-source-credentials DeleteSourceCredentials" [
+export def "x-amz-target-code-build-20161006delete-source-credentials delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,23 +680,23 @@ export def "x-amz-target-code-build-20161006delete-source-credentials DeleteSour
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
   arn: any
 ]: any -> record<arn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.DeleteSourceCredentials")
-  let body = {arn: $arn} | compact
+  let body = {"arn": $arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -707,7 +707,7 @@ export def "x-amz-target-code-build-20161006delete-source-credentials DeleteSour
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.DeleteWebhook
 # operationId: DeleteWebhook
-export def "x-amz-target-code-build-20161006delete-webhook DeleteWebhook" [
+export def "x-amz-target-code-build-20161006delete-webhook delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,23 +716,23 @@ export def "x-amz-target-code-build-20161006delete-webhook DeleteWebhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  projectName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  project_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.DeleteWebhook")
-  let body = {projectName: $projectName} | compact
+  let body = {"projectName": $project_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -743,7 +743,7 @@ export def "x-amz-target-code-build-20161006delete-webhook DeleteWebhook" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.DescribeCodeCoverages
 # operationId: DescribeCodeCoverages
-export def "x-amz-target-code-build-20161006describe-code-coverages DescribeCodeCoverages" [
+export def "x-amz-target-code-build-20161006describe-code-coverages post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,32 +752,32 @@ export def "x-amz-target-code-build-20161006describe-code-coverages DescribeCode
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  reportArn: any
-  --nextToken: any
-  --maxResults: any
-  --sortOrder: any
-  --sortBy: any
-  --minLineCoveragePercentage: any
-  --maxLineCoveragePercentage: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  report_arn: any
+  --next-token: any
+  --max-results: any
+  --sort-order: any
+  --sort-by: any
+  --min-line-coverage-percentage: any
+  --max-line-coverage-percentage: any
 ]: any -> record<nextToken: record, codeCoverages: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.DescribeCodeCoverages" $qp)
-  let body = {reportArn: $reportArn, nextToken: $nextToken, maxResults: $maxResults, sortOrder: $sortOrder, sortBy: $sortBy, minLineCoveragePercentage: $minLineCoveragePercentage, maxLineCoveragePercentage: $maxLineCoveragePercentage} | compact
+  let body = {"reportArn": $report_arn, "nextToken": $next_token, "maxResults": $max_results, "sortOrder": $sort_order, "sortBy": $sort_by, "minLineCoveragePercentage": $min_line_coverage_percentage, "maxLineCoveragePercentage": $max_line_coverage_percentage} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -788,7 +788,7 @@ export def "x-amz-target-code-build-20161006describe-code-coverages DescribeCode
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.DescribeTestCases
 # operationId: DescribeTestCases
-export def "x-amz-target-code-build-20161006describe-test-cases DescribeTestCases" [
+export def "x-amz-target-code-build-20161006describe-test-cases post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,29 +797,29 @@ export def "x-amz-target-code-build-20161006describe-test-cases DescribeTestCase
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  reportArn: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  report_arn: any
+  --next-token: any
+  --max-results: any
   --filter: any
 ]: any -> record<nextToken: record, testCases: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.DescribeTestCases" $qp)
-  let body = {reportArn: $reportArn, nextToken: $nextToken, maxResults: $maxResults, filter: $filter} | compact
+  let body = {"reportArn": $report_arn, "nextToken": $next_token, "maxResults": $max_results, "filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -830,7 +830,7 @@ export def "x-amz-target-code-build-20161006describe-test-cases DescribeTestCase
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.GetReportGroupTrend
 # operationId: GetReportGroupTrend
-export def "x-amz-target-code-build-20161006get-report-group-trend GetReportGroupTrend" [
+export def "x-amz-target-code-build-20161006get-report-group-trend get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,25 +839,25 @@ export def "x-amz-target-code-build-20161006get-report-group-trend GetReportGrou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  reportGroupArn: any
-  --numOfReports: any
-  trendField: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  report_group_arn: any
+  --num-of-reports: any
+  trend_field: any
 ]: any -> record<stats: record<average: record, max: record, min: record>, rawData: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.GetReportGroupTrend")
-  let body = {reportGroupArn: $reportGroupArn, numOfReports: $numOfReports, trendField: $trendField} | compact
+  let body = {"reportGroupArn": $report_group_arn, "numOfReports": $num_of_reports, "trendField": $trend_field} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -868,7 +868,7 @@ export def "x-amz-target-code-build-20161006get-report-group-trend GetReportGrou
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.GetResourcePolicy
 # operationId: GetResourcePolicy
-export def "x-amz-target-code-build-20161006get-resource-policy GetResourcePolicy" [
+export def "x-amz-target-code-build-20161006get-resource-policy get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -877,23 +877,23 @@ export def "x-amz-target-code-build-20161006get-resource-policy GetResourcePolic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  resourceArn: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  resource_arn: any
 ]: any -> record<policy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.GetResourcePolicy")
-  let body = {resourceArn: $resourceArn} | compact
+  let body = {"resourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -904,7 +904,7 @@ export def "x-amz-target-code-build-20161006get-resource-policy GetResourcePolic
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ImportSourceCredentials
 # operationId: ImportSourceCredentials
-export def "x-amz-target-code-build-20161006import-source-credentials ImportSourceCredentials" [
+export def "x-amz-target-code-build-20161006import-source-credentials import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,27 +913,27 @@ export def "x-amz-target-code-build-20161006import-source-credentials ImportSour
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
   --username: any
   --body-token: any
-  serverType: any
-  authType: any
-  --shouldOverwrite: any
+  server_type: any
+  auth_type: any
+  --should-overwrite: any
 ]: any -> record<arn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ImportSourceCredentials")
-  let body = {username: $username, token: $body_token, serverType: $serverType, authType: $authType, shouldOverwrite: $shouldOverwrite} | compact
+  let body = {"username": $username, "token": $body_token, "serverType": $server_type, "authType": $auth_type, "shouldOverwrite": $should_overwrite} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -944,7 +944,7 @@ export def "x-amz-target-code-build-20161006import-source-credentials ImportSour
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.InvalidateProjectCache
 # operationId: InvalidateProjectCache
-export def "x-amz-target-code-build-20161006invalidate-project-cache InvalidateProjectCache" [
+export def "x-amz-target-code-build-20161006invalidate-project-cache post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -953,23 +953,23 @@ export def "x-amz-target-code-build-20161006invalidate-project-cache InvalidateP
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
-  projectName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
+  project_name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.InvalidateProjectCache")
-  let body = {projectName: $projectName} | compact
+  let body = {"projectName": $project_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -980,7 +980,7 @@ export def "x-amz-target-code-build-20161006invalidate-project-cache InvalidateP
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListBuildBatches
 # operationId: ListBuildBatches
-export def "x-amz-target-code-build-20161006list-build-batches ListBuildBatches" [
+export def "x-amz-target-code-build-20161006list-build-batches list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -989,29 +989,29 @@ export def "x-amz-target-code-build-20161006list-build-batches ListBuildBatches"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
   --filter: any
-  --maxResults: any
-  --sortOrder: any
-  --nextToken: any
+  --max-results: any
+  --sort-order: any
+  --next-token: any
 ]: any -> record<ids: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListBuildBatches" $qp)
-  let body = {filter: $filter, maxResults: $maxResults, sortOrder: $sortOrder, nextToken: $nextToken} | compact
+  let body = {"filter": $filter, "maxResults": $max_results, "sortOrder": $sort_order, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1022,7 +1022,7 @@ export def "x-amz-target-code-build-20161006list-build-batches ListBuildBatches"
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListBuildBatchesForProject
 # operationId: ListBuildBatchesForProject
-export def "x-amz-target-code-build-20161006list-build-batches-for-project ListBuildBatchesForProject" [
+export def "x-amz-target-code-build-20161006list-build-batches-for-project list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,30 +1031,30 @@ export def "x-amz-target-code-build-20161006list-build-batches-for-project ListB
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --projectName: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --project-name: any
   --filter: any
-  --maxResults: any
-  --sortOrder: any
-  --nextToken: any
+  --max-results: any
+  --sort-order: any
+  --next-token: any
 ]: any -> record<ids: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListBuildBatchesForProject" $qp)
-  let body = {projectName: $projectName, filter: $filter, maxResults: $maxResults, sortOrder: $sortOrder, nextToken: $nextToken} | compact
+  let body = {"projectName": $project_name, "filter": $filter, "maxResults": $max_results, "sortOrder": $sort_order, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1065,7 +1065,7 @@ export def "x-amz-target-code-build-20161006list-build-batches-for-project ListB
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListBuilds
 # operationId: ListBuilds
-export def "x-amz-target-code-build-20161006list-builds ListBuilds" [
+export def "x-amz-target-code-build-20161006list-builds list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1074,26 +1074,26 @@ export def "x-amz-target-code-build-20161006list-builds ListBuilds" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  --sortOrder: any
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  --sort-order: any
+  --next-token: any
 ]: any -> record<ids: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListBuilds" $qp)
-  let body = {sortOrder: $sortOrder, nextToken: $nextToken} | compact
+  let body = {"sortOrder": $sort_order, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1104,7 +1104,7 @@ export def "x-amz-target-code-build-20161006list-builds ListBuilds" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListBuildsForProject
 # operationId: ListBuildsForProject
-export def "x-amz-target-code-build-20161006list-builds-for-project ListBuildsForProject" [
+export def "x-amz-target-code-build-20161006list-builds-for-project list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1113,27 +1113,27 @@ export def "x-amz-target-code-build-20161006list-builds-for-project ListBuildsFo
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  projectName: any
-  --sortOrder: any
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  project_name: any
+  --sort-order: any
+  --next-token: any
 ]: any -> record<ids: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListBuildsForProject" $qp)
-  let body = {projectName: $projectName, sortOrder: $sortOrder, nextToken: $nextToken} | compact
+  let body = {"projectName": $project_name, "sortOrder": $sort_order, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1144,7 +1144,7 @@ export def "x-amz-target-code-build-20161006list-builds-for-project ListBuildsFo
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListCuratedEnvironmentImages
 # operationId: ListCuratedEnvironmentImages
-export def "x-amz-target-code-build-20161006list-curated-environment-images ListCuratedEnvironmentImages" [
+export def "x-amz-target-code-build-20161006list-curated-environment-images list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1153,14 +1153,14 @@ export def "x-amz-target-code-build-20161006list-curated-environment-images List
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
   --body: record
 ]: any -> record<platforms: record> {
   let input = $in
@@ -1168,7 +1168,7 @@ export def "x-amz-target-code-build-20161006list-curated-environment-images List
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListCuratedEnvironmentImages")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1179,7 +1179,7 @@ export def "x-amz-target-code-build-20161006list-curated-environment-images List
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListProjects
 # operationId: ListProjects
-export def "x-amz-target-code-build-20161006list-projects ListProjects" [
+export def "x-amz-target-code-build-20161006list-projects list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1188,27 +1188,27 @@ export def "x-amz-target-code-build-20161006list-projects ListProjects" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  --sortBy: any
-  --sortOrder: any
-  --nextToken: any
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  --sort-by: any
+  --sort-order: any
+  --next-token: any
 ]: any -> record<nextToken: record, projects: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListProjects" $qp)
-  let body = {sortBy: $sortBy, sortOrder: $sortOrder, nextToken: $nextToken} | compact
+  let body = {"sortBy": $sort_by, "sortOrder": $sort_order, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1219,7 +1219,7 @@ export def "x-amz-target-code-build-20161006list-projects ListProjects" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListReportGroups
 # operationId: ListReportGroups
-export def "x-amz-target-code-build-20161006list-report-groups ListReportGroups" [
+export def "x-amz-target-code-build-20161006list-report-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1228,29 +1228,29 @@ export def "x-amz-target-code-build-20161006list-report-groups ListReportGroups"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --sortOrder: any
-  --sortBy: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --sort-order: any
+  --sort-by: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<nextToken: record, reportGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListReportGroups" $qp)
-  let body = {sortOrder: $sortOrder, sortBy: $sortBy, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"sortOrder": $sort_order, "sortBy": $sort_by, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1261,7 +1261,7 @@ export def "x-amz-target-code-build-20161006list-report-groups ListReportGroups"
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListReports
 # operationId: ListReports
-export def "x-amz-target-code-build-20161006list-reports ListReports" [
+export def "x-amz-target-code-build-20161006list-reports list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1270,29 +1270,29 @@ export def "x-amz-target-code-build-20161006list-reports ListReports" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  --sortOrder: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  --sort-order: any
+  --next-token: any
+  --max-results: any
   --filter: any
 ]: any -> record<nextToken: record, reports: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListReports" $qp)
-  let body = {sortOrder: $sortOrder, nextToken: $nextToken, maxResults: $maxResults, filter: $filter} | compact
+  let body = {"sortOrder": $sort_order, "nextToken": $next_token, "maxResults": $max_results, "filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1303,7 +1303,7 @@ export def "x-amz-target-code-build-20161006list-reports ListReports" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListReportsForReportGroup
 # operationId: ListReportsForReportGroup
-export def "x-amz-target-code-build-20161006list-reports-for-report-group ListReportsForReportGroup" [
+export def "x-amz-target-code-build-20161006list-reports-for-report-group list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1312,30 +1312,30 @@ export def "x-amz-target-code-build-20161006list-reports-for-report-group ListRe
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  reportGroupArn: any
-  --nextToken: any
-  --sortOrder: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  report_group_arn: any
+  --next-token: any
+  --sort-order: any
+  --max-results: any
   --filter: any
 ]: any -> record<nextToken: record, reports: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListReportsForReportGroup" $qp)
-  let body = {reportGroupArn: $reportGroupArn, nextToken: $nextToken, sortOrder: $sortOrder, maxResults: $maxResults, filter: $filter} | compact
+  let body = {"reportGroupArn": $report_group_arn, "nextToken": $next_token, "sortOrder": $sort_order, "maxResults": $max_results, "filter": $filter} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1346,7 +1346,7 @@ export def "x-amz-target-code-build-20161006list-reports-for-report-group ListRe
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListSharedProjects
 # operationId: ListSharedProjects
-export def "x-amz-target-code-build-20161006list-shared-projects ListSharedProjects" [
+export def "x-amz-target-code-build-20161006list-shared-projects list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1355,29 +1355,29 @@ export def "x-amz-target-code-build-20161006list-shared-projects ListSharedProje
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  --sortBy: any
-  --sortOrder: any
-  --maxResults: any
-  --nextToken: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  --sort-by: any
+  --sort-order: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<nextToken: record, projects: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListSharedProjects" $qp)
-  let body = {sortBy: $sortBy, sortOrder: $sortOrder, maxResults: $maxResults, nextToken: $nextToken} | compact
+  let body = {"sortBy": $sort_by, "sortOrder": $sort_order, "maxResults": $max_results, "nextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1388,7 +1388,7 @@ export def "x-amz-target-code-build-20161006list-shared-projects ListSharedProje
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListSharedReportGroups
 # operationId: ListSharedReportGroups
-export def "x-amz-target-code-build-20161006list-shared-report-groups ListSharedReportGroups" [
+export def "x-amz-target-code-build-20161006list-shared-report-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1397,29 +1397,29 @@ export def "x-amz-target-code-build-20161006list-shared-report-groups ListShared
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --sortOrder: any
-  --sortBy: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --sort-order: any
+  --sort-by: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<nextToken: record, reportGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListSharedReportGroups" $qp)
-  let body = {sortOrder: $sortOrder, sortBy: $sortBy, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"sortOrder": $sort_order, "sortBy": $sort_by, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1430,7 +1430,7 @@ export def "x-amz-target-code-build-20161006list-shared-report-groups ListShared
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.ListSourceCredentials
 # operationId: ListSourceCredentials
-export def "x-amz-target-code-build-20161006list-source-credentials ListSourceCredentials" [
+export def "x-amz-target-code-build-20161006list-source-credentials list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1439,14 +1439,14 @@ export def "x-amz-target-code-build-20161006list-source-credentials ListSourceCr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
   --body: record
 ]: any -> record<sourceCredentialsInfos: record> {
   let input = $in
@@ -1454,7 +1454,7 @@ export def "x-amz-target-code-build-20161006list-source-credentials ListSourceCr
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.ListSourceCredentials")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1465,7 +1465,7 @@ export def "x-amz-target-code-build-20161006list-source-credentials ListSourceCr
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.PutResourcePolicy
 # operationId: PutResourcePolicy
-export def "x-amz-target-code-build-20161006put-resource-policy PutResourcePolicy" [
+export def "x-amz-target-code-build-20161006put-resource-policy update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1474,24 +1474,24 @@ export def "x-amz-target-code-build-20161006put-resource-policy PutResourcePolic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
   policy: any
-  resourceArn: any
+  resource_arn: any
 ]: any -> record<resourceArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.PutResourcePolicy")
-  let body = {policy: $policy, resourceArn: $resourceArn} | compact
+  let body = {"policy": $policy, "resourceArn": $resource_arn} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1502,7 +1502,7 @@ export def "x-amz-target-code-build-20161006put-resource-policy PutResourcePolic
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.RetryBuild
 # operationId: RetryBuild
-export def "x-amz-target-code-build-20161006retry-build RetryBuild" [
+export def "x-amz-target-code-build-20161006retry-build post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1511,23 +1511,23 @@ export def "x-amz-target-code-build-20161006retry-build RetryBuild" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-35
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-35
   --id: any
 ]: any -> record<build: record<id: record, arn: record, buildNumber: record, startTime: record, endTime: record, currentPhase: record, buildStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logs: record<groupName: record, streamName: record, deepLink: record, s3DeepLink: record, cloudWatchLogsArn: record, s3LogsArn: record, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: record, queuedTimeoutInMinutes: record, buildComplete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, networkInterface: record<subnetId: record, networkInterfaceId: record>, encryptionKey: record, exportedEnvironmentVariables: record, reportArns: record, fileSystemLocations: record, debugSession: record<sessionEnabled: record, sessionTarget: record>, buildBatchArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.RetryBuild")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1538,7 +1538,7 @@ export def "x-amz-target-code-build-20161006retry-build RetryBuild" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.RetryBuildBatch
 # operationId: RetryBuildBatch
-export def "x-amz-target-code-build-20161006retry-build-batch RetryBuildBatch" [
+export def "x-amz-target-code-build-20161006retry-build-batch post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1547,24 +1547,24 @@ export def "x-amz-target-code-build-20161006retry-build-batch RetryBuildBatch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-36
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-36
   --id: any
-  --retryType: any
+  --retry-type: any
 ]: any -> record<buildBatch: record<id: record, arn: record, startTime: record, endTime: record, currentPhase: record, buildBatchStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: record, queuedTimeoutInMinutes: record, complete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, encryptionKey: record, buildBatchNumber: record, fileSystemLocations: record, buildBatchConfig: record<serviceRole: record, combineArtifacts: record, restrictions: record, timeoutInMins: record, batchReportMode: record>, buildGroups: record, debugSessionEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.RetryBuildBatch")
-  let body = {id: $id, retryType: $retryType} | compact
+  let body = {"id": $id, "retryType": $retry_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1575,7 +1575,7 @@ export def "x-amz-target-code-build-20161006retry-build-batch RetryBuildBatch" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.StartBuild
 # operationId: StartBuild
-export def "x-amz-target-code-build-20161006start-build StartBuild" [
+export def "x-amz-target-code-build-20161006start-build start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1584,52 +1584,52 @@ export def "x-amz-target-code-build-20161006start-build StartBuild" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-37
-  projectName: any
-  --secondarySourcesOverride: any
-  --secondarySourcesVersionOverride: any
-  --sourceVersion: any
-  --artifactsOverride: any
-  --secondaryArtifactsOverride: any
-  --environmentVariablesOverride: any
-  --sourceTypeOverride: any
-  --sourceLocationOverride: any
-  --sourceAuthOverride: any
-  --gitCloneDepthOverride: any
-  --gitSubmodulesConfigOverride: any
-  --buildspecOverride: any
-  --insecureSslOverride: any
-  --reportBuildStatusOverride: any
-  --buildStatusConfigOverride: any
-  --environmentTypeOverride: any
-  --imageOverride: any
-  --computeTypeOverride: any
-  --certificateOverride: any
-  --cacheOverride: any
-  --serviceRoleOverride: any
-  --privilegedModeOverride: any
-  --timeoutInMinutesOverride: any
-  --queuedTimeoutInMinutesOverride: any
-  --encryptionKeyOverride: any
-  --logsConfigOverride: any
-  --registryCredentialOverride: any
-  --imagePullCredentialsTypeOverride: any
-  --debugSessionEnabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-37
+  project_name: any
+  --secondary-sources-override: any
+  --secondary-sources-version-override: any
+  --source-version: any
+  --artifacts-override: any
+  --secondary-artifacts-override: any
+  --environment-variables-override: any
+  --source-type-override: any
+  --source-location-override: any
+  --source-auth-override: any
+  --git-clone-depth-override: any
+  --git-submodules-config-override: any
+  --buildspec-override: any
+  --insecure-ssl-override: any
+  --report-build-status-override: any
+  --build-status-config-override: any
+  --environment-type-override: any
+  --image-override: any
+  --compute-type-override: any
+  --certificate-override: any
+  --cache-override: any
+  --service-role-override: any
+  --privileged-mode-override: any
+  --timeout-in-minutes-override: any
+  --queued-timeout-in-minutes-override: any
+  --encryption-key-override: any
+  --logs-config-override: any
+  --registry-credential-override: any
+  --image-pull-credentials-type-override: any
+  --debug-session-enabled: any
 ]: any -> record<build: record<id: record, arn: record, buildNumber: record, startTime: record, endTime: record, currentPhase: record, buildStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logs: record<groupName: record, streamName: record, deepLink: record, s3DeepLink: record, cloudWatchLogsArn: record, s3LogsArn: record, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: record, queuedTimeoutInMinutes: record, buildComplete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, networkInterface: record<subnetId: record, networkInterfaceId: record>, encryptionKey: record, exportedEnvironmentVariables: record, reportArns: record, fileSystemLocations: record, debugSession: record<sessionEnabled: record, sessionTarget: record>, buildBatchArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.StartBuild")
-  let body = {projectName: $projectName, secondarySourcesOverride: $secondarySourcesOverride, secondarySourcesVersionOverride: $secondarySourcesVersionOverride, sourceVersion: $sourceVersion, artifactsOverride: $artifactsOverride, secondaryArtifactsOverride: $secondaryArtifactsOverride, environmentVariablesOverride: $environmentVariablesOverride, sourceTypeOverride: $sourceTypeOverride, sourceLocationOverride: $sourceLocationOverride, sourceAuthOverride: $sourceAuthOverride, gitCloneDepthOverride: $gitCloneDepthOverride, gitSubmodulesConfigOverride: $gitSubmodulesConfigOverride, buildspecOverride: $buildspecOverride, insecureSslOverride: $insecureSslOverride, reportBuildStatusOverride: $reportBuildStatusOverride, buildStatusConfigOverride: $buildStatusConfigOverride, environmentTypeOverride: $environmentTypeOverride, imageOverride: $imageOverride, computeTypeOverride: $computeTypeOverride, certificateOverride: $certificateOverride, cacheOverride: $cacheOverride, serviceRoleOverride: $serviceRoleOverride, privilegedModeOverride: $privilegedModeOverride, timeoutInMinutesOverride: $timeoutInMinutesOverride, queuedTimeoutInMinutesOverride: $queuedTimeoutInMinutesOverride, encryptionKeyOverride: $encryptionKeyOverride, logsConfigOverride: $logsConfigOverride, registryCredentialOverride: $registryCredentialOverride, imagePullCredentialsTypeOverride: $imagePullCredentialsTypeOverride, debugSessionEnabled: $debugSessionEnabled} | compact
+  let body = {"projectName": $project_name, "secondarySourcesOverride": $secondary_sources_override, "secondarySourcesVersionOverride": $secondary_sources_version_override, "sourceVersion": $source_version, "artifactsOverride": $artifacts_override, "secondaryArtifactsOverride": $secondary_artifacts_override, "environmentVariablesOverride": $environment_variables_override, "sourceTypeOverride": $source_type_override, "sourceLocationOverride": $source_location_override, "sourceAuthOverride": $source_auth_override, "gitCloneDepthOverride": $git_clone_depth_override, "gitSubmodulesConfigOverride": $git_submodules_config_override, "buildspecOverride": $buildspec_override, "insecureSslOverride": $insecure_ssl_override, "reportBuildStatusOverride": $report_build_status_override, "buildStatusConfigOverride": $build_status_config_override, "environmentTypeOverride": $environment_type_override, "imageOverride": $image_override, "computeTypeOverride": $compute_type_override, "certificateOverride": $certificate_override, "cacheOverride": $cache_override, "serviceRoleOverride": $service_role_override, "privilegedModeOverride": $privileged_mode_override, "timeoutInMinutesOverride": $timeout_in_minutes_override, "queuedTimeoutInMinutesOverride": $queued_timeout_in_minutes_override, "encryptionKeyOverride": $encryption_key_override, "logsConfigOverride": $logs_config_override, "registryCredentialOverride": $registry_credential_override, "imagePullCredentialsTypeOverride": $image_pull_credentials_type_override, "debugSessionEnabled": $debug_session_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1640,7 +1640,7 @@ export def "x-amz-target-code-build-20161006start-build StartBuild" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.StartBuildBatch
 # operationId: StartBuildBatch
-export def "x-amz-target-code-build-20161006start-build-batch StartBuildBatch" [
+export def "x-amz-target-code-build-20161006start-build-batch start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1649,52 +1649,52 @@ export def "x-amz-target-code-build-20161006start-build-batch StartBuildBatch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-38
-  projectName: any
-  --secondarySourcesOverride: any
-  --secondarySourcesVersionOverride: any
-  --sourceVersion: any
-  --artifactsOverride: any
-  --secondaryArtifactsOverride: any
-  --environmentVariablesOverride: any
-  --sourceTypeOverride: any
-  --sourceLocationOverride: any
-  --sourceAuthOverride: any
-  --gitCloneDepthOverride: any
-  --gitSubmodulesConfigOverride: any
-  --buildspecOverride: any
-  --insecureSslOverride: any
-  --reportBuildBatchStatusOverride: any
-  --environmentTypeOverride: any
-  --imageOverride: any
-  --computeTypeOverride: any
-  --certificateOverride: any
-  --cacheOverride: any
-  --serviceRoleOverride: any
-  --privilegedModeOverride: any
-  --buildTimeoutInMinutesOverride: any
-  --queuedTimeoutInMinutesOverride: any
-  --encryptionKeyOverride: any
-  --logsConfigOverride: any
-  --registryCredentialOverride: any
-  --imagePullCredentialsTypeOverride: any
-  --buildBatchConfigOverride: any
-  --debugSessionEnabled: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-38
+  project_name: any
+  --secondary-sources-override: any
+  --secondary-sources-version-override: any
+  --source-version: any
+  --artifacts-override: any
+  --secondary-artifacts-override: any
+  --environment-variables-override: any
+  --source-type-override: any
+  --source-location-override: any
+  --source-auth-override: any
+  --git-clone-depth-override: any
+  --git-submodules-config-override: any
+  --buildspec-override: any
+  --insecure-ssl-override: any
+  --report-build-batch-status-override: any
+  --environment-type-override: any
+  --image-override: any
+  --compute-type-override: any
+  --certificate-override: any
+  --cache-override: any
+  --service-role-override: any
+  --privileged-mode-override: any
+  --build-timeout-in-minutes-override: any
+  --queued-timeout-in-minutes-override: any
+  --encryption-key-override: any
+  --logs-config-override: any
+  --registry-credential-override: any
+  --image-pull-credentials-type-override: any
+  --build-batch-config-override: any
+  --debug-session-enabled: any
 ]: any -> record<buildBatch: record<id: record, arn: record, startTime: record, endTime: record, currentPhase: record, buildBatchStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: record, queuedTimeoutInMinutes: record, complete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, encryptionKey: record, buildBatchNumber: record, fileSystemLocations: record, buildBatchConfig: record<serviceRole: record, combineArtifacts: record, restrictions: record, timeoutInMins: record, batchReportMode: record>, buildGroups: record, debugSessionEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.StartBuildBatch")
-  let body = {projectName: $projectName, secondarySourcesOverride: $secondarySourcesOverride, secondarySourcesVersionOverride: $secondarySourcesVersionOverride, sourceVersion: $sourceVersion, artifactsOverride: $artifactsOverride, secondaryArtifactsOverride: $secondaryArtifactsOverride, environmentVariablesOverride: $environmentVariablesOverride, sourceTypeOverride: $sourceTypeOverride, sourceLocationOverride: $sourceLocationOverride, sourceAuthOverride: $sourceAuthOverride, gitCloneDepthOverride: $gitCloneDepthOverride, gitSubmodulesConfigOverride: $gitSubmodulesConfigOverride, buildspecOverride: $buildspecOverride, insecureSslOverride: $insecureSslOverride, reportBuildBatchStatusOverride: $reportBuildBatchStatusOverride, environmentTypeOverride: $environmentTypeOverride, imageOverride: $imageOverride, computeTypeOverride: $computeTypeOverride, certificateOverride: $certificateOverride, cacheOverride: $cacheOverride, serviceRoleOverride: $serviceRoleOverride, privilegedModeOverride: $privilegedModeOverride, buildTimeoutInMinutesOverride: $buildTimeoutInMinutesOverride, queuedTimeoutInMinutesOverride: $queuedTimeoutInMinutesOverride, encryptionKeyOverride: $encryptionKeyOverride, logsConfigOverride: $logsConfigOverride, registryCredentialOverride: $registryCredentialOverride, imagePullCredentialsTypeOverride: $imagePullCredentialsTypeOverride, buildBatchConfigOverride: $buildBatchConfigOverride, debugSessionEnabled: $debugSessionEnabled} | compact
+  let body = {"projectName": $project_name, "secondarySourcesOverride": $secondary_sources_override, "secondarySourcesVersionOverride": $secondary_sources_version_override, "sourceVersion": $source_version, "artifactsOverride": $artifacts_override, "secondaryArtifactsOverride": $secondary_artifacts_override, "environmentVariablesOverride": $environment_variables_override, "sourceTypeOverride": $source_type_override, "sourceLocationOverride": $source_location_override, "sourceAuthOverride": $source_auth_override, "gitCloneDepthOverride": $git_clone_depth_override, "gitSubmodulesConfigOverride": $git_submodules_config_override, "buildspecOverride": $buildspec_override, "insecureSslOverride": $insecure_ssl_override, "reportBuildBatchStatusOverride": $report_build_batch_status_override, "environmentTypeOverride": $environment_type_override, "imageOverride": $image_override, "computeTypeOverride": $compute_type_override, "certificateOverride": $certificate_override, "cacheOverride": $cache_override, "serviceRoleOverride": $service_role_override, "privilegedModeOverride": $privileged_mode_override, "buildTimeoutInMinutesOverride": $build_timeout_in_minutes_override, "queuedTimeoutInMinutesOverride": $queued_timeout_in_minutes_override, "encryptionKeyOverride": $encryption_key_override, "logsConfigOverride": $logs_config_override, "registryCredentialOverride": $registry_credential_override, "imagePullCredentialsTypeOverride": $image_pull_credentials_type_override, "buildBatchConfigOverride": $build_batch_config_override, "debugSessionEnabled": $debug_session_enabled} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1705,7 +1705,7 @@ export def "x-amz-target-code-build-20161006start-build-batch StartBuildBatch" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.StopBuild
 # operationId: StopBuild
-export def "x-amz-target-code-build-20161006stop-build StopBuild" [
+export def "x-amz-target-code-build-20161006stop-build stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1714,23 +1714,23 @@ export def "x-amz-target-code-build-20161006stop-build StopBuild" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-39
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-39
   id: any
 ]: any -> record<build: record<id: record, arn: record, buildNumber: record, startTime: record, endTime: record, currentPhase: record, buildStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logs: record<groupName: record, streamName: record, deepLink: record, s3DeepLink: record, cloudWatchLogsArn: record, s3LogsArn: record, cloudWatchLogs: record, s3Logs: record>, timeoutInMinutes: record, queuedTimeoutInMinutes: record, buildComplete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, networkInterface: record<subnetId: record, networkInterfaceId: record>, encryptionKey: record, exportedEnvironmentVariables: record, reportArns: record, fileSystemLocations: record, debugSession: record<sessionEnabled: record, sessionTarget: record>, buildBatchArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.StopBuild")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1741,7 +1741,7 @@ export def "x-amz-target-code-build-20161006stop-build StopBuild" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.StopBuildBatch
 # operationId: StopBuildBatch
-export def "x-amz-target-code-build-20161006stop-build-batch StopBuildBatch" [
+export def "x-amz-target-code-build-20161006stop-build-batch stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1750,23 +1750,23 @@ export def "x-amz-target-code-build-20161006stop-build-batch StopBuildBatch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-40
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-40
   id: any
 ]: any -> record<buildBatch: record<id: record, arn: record, startTime: record, endTime: record, currentPhase: record, buildBatchStatus: record, sourceVersion: record, resolvedSourceVersion: record, projectName: record, phases: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, secondarySourceVersions: record, artifacts: record<location: record, sha256sum: record, md5sum: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, logConfig: record<cloudWatchLogs: record, s3Logs: record>, buildTimeoutInMinutes: record, queuedTimeoutInMinutes: record, complete: record, initiator: record, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, encryptionKey: record, buildBatchNumber: record, fileSystemLocations: record, buildBatchConfig: record<serviceRole: record, combineArtifacts: record, restrictions: record, timeoutInMins: record, batchReportMode: record>, buildGroups: record, debugSessionEnabled: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.StopBuildBatch")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1778,7 +1778,7 @@ export def "x-amz-target-code-build-20161006stop-build-batch StopBuildBatch" [
 # POST /#X-Amz-Target=CodeBuild_20161006.UpdateProject
 # operationId: UpdateProject
 # --buildBatchConfig shape: {serviceRole?: any, combineArtifacts?: any, restrictions?: any, timeoutInMins?: any, batchReportMode?: any}
-export def "x-amz-target-code-build-20161006update-project UpdateProject" [
+export def "x-amz-target-code-build-20161006update-project update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1787,43 +1787,43 @@ export def "x-amz-target-code-build-20161006update-project UpdateProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-41
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-41
   name: any
   --description: any
   --body-source: any
-  --secondarySources: any
-  --sourceVersion: any
-  --secondarySourceVersions: any
+  --secondary-sources: any
+  --source-version: any
+  --secondary-source-versions: any
   --artifacts: any
-  --secondaryArtifacts: any
+  --secondary-artifacts: any
   --cache: any
   --environment: any
-  --serviceRole: any
-  --timeoutInMinutes: any
-  --queuedTimeoutInMinutes: any
-  --encryptionKey: any
+  --service-role: any
+  --timeout-in-minutes: any
+  --queued-timeout-in-minutes: any
+  --encryption-key: any
   --tags: any
-  --vpcConfig: any
-  --badgeEnabled: any
-  --logsConfig: any
-  --fileSystemLocations: any
-  --buildBatchConfig: record # Contains configuration information about a batch build project. — shape: {serviceRole?: any, combineArtifacts?: any, restrictions?: any, timeoutInMins?: any, batchReportMode?: any}
-  --concurrentBuildLimit: any
+  --vpc-config: any
+  --badge-enabled: any
+  --logs-config: any
+  --file-system-locations: any
+  --build-batch-config: record # Contains configuration information about a batch build project. — shape: {serviceRole?: any, combineArtifacts?: any, restrictions?: any, timeoutInMins?: any, batchReportMode?: any}
+  --concurrent-build-limit: any
 ]: any -> record<project: record<name: record, arn: record, description: record, source: record<type: record, location: record, gitCloneDepth: record, gitSubmodulesConfig: record, buildspec: record, auth: record, reportBuildStatus: record, buildStatusConfig: record, insecureSsl: record, sourceIdentifier: record>, secondarySources: record, sourceVersion: record, secondarySourceVersions: record, artifacts: record<type: record, location: record, path: record, namespaceType: record, name: record, packaging: record, overrideArtifactName: record, encryptionDisabled: record, artifactIdentifier: record, bucketOwnerAccess: string>, secondaryArtifacts: record, cache: record<type: record, location: record, modes: record>, environment: record<type: record, image: record, computeType: record, environmentVariables: record, privilegedMode: record, certificate: record, registryCredential: record, imagePullCredentialsType: record>, serviceRole: record, timeoutInMinutes: record, queuedTimeoutInMinutes: record, encryptionKey: record, tags: record, created: record, lastModified: record, webhook: record<url: record, payloadUrl: record, secret: record, branchFilter: record, filterGroups: record, buildType: record, lastModifiedSecret: record>, vpcConfig: record<vpcId: record, subnets: record, securityGroupIds: record>, badge: record<badgeEnabled: record, badgeRequestUrl: record>, logsConfig: record<cloudWatchLogs: record, s3Logs: record>, fileSystemLocations: record, buildBatchConfig: record<serviceRole: record, combineArtifacts: record, restrictions: record, timeoutInMins: record, batchReportMode: record>, concurrentBuildLimit: record, projectVisibility: string, publicProjectAlias: record, resourceAccessRole: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.UpdateProject")
-  let body = {name: $name, description: $description, source: $body_source, secondarySources: $secondarySources, sourceVersion: $sourceVersion, secondarySourceVersions: $secondarySourceVersions, artifacts: $artifacts, secondaryArtifacts: $secondaryArtifacts, cache: $cache, environment: $environment, serviceRole: $serviceRole, timeoutInMinutes: $timeoutInMinutes, queuedTimeoutInMinutes: $queuedTimeoutInMinutes, encryptionKey: $encryptionKey, tags: $tags, vpcConfig: $vpcConfig, badgeEnabled: $badgeEnabled, logsConfig: $logsConfig, fileSystemLocations: $fileSystemLocations, buildBatchConfig: $buildBatchConfig, concurrentBuildLimit: $concurrentBuildLimit} | compact
+  let body = {"name": $name, "description": $description, "source": $body_source, "secondarySources": $secondary_sources, "sourceVersion": $source_version, "secondarySourceVersions": $secondary_source_versions, "artifacts": $artifacts, "secondaryArtifacts": $secondary_artifacts, "cache": $cache, "environment": $environment, "serviceRole": $service_role, "timeoutInMinutes": $timeout_in_minutes, "queuedTimeoutInMinutes": $queued_timeout_in_minutes, "encryptionKey": $encryption_key, "tags": $tags, "vpcConfig": $vpc_config, "badgeEnabled": $badge_enabled, "logsConfig": $logs_config, "fileSystemLocations": $file_system_locations, "buildBatchConfig": $build_batch_config, "concurrentBuildLimit": $concurrent_build_limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1834,7 +1834,7 @@ export def "x-amz-target-code-build-20161006update-project UpdateProject" [
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.UpdateProjectVisibility
 # operationId: UpdateProjectVisibility
-export def "x-amz-target-code-build-20161006update-project-visibility UpdateProjectVisibility" [
+export def "x-amz-target-code-build-20161006update-project-visibility update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1843,25 +1843,25 @@ export def "x-amz-target-code-build-20161006update-project-visibility UpdateProj
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-42
-  projectArn: any
-  projectVisibility: string@projectVisibility-completer # <p>Specifies the visibility of the project's builds. Possible values are:</p> <dl> <dt>PUBLIC_READ</dt> <dd> <p>The project builds are visible to the public.</p> </dd> <dt>PRIVATE</dt> <dd> <p>The project builds are not visible to the public.</p> </dd> </dl>
-  --resourceAccessRole: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-42
+  project_arn: any
+  project_visibility: string@project-visibility-completer # <p>Specifies the visibility of the project's builds. Possible values are:</p> <dl> <dt>PUBLIC_READ</dt> <dd> <p>The project builds are visible to the public.</p> </dd> <dt>PRIVATE</dt> <dd> <p>The project builds are not visible to the public.</p> </dd> </dl>
+  --resource-access-role: any
 ]: any -> record<projectArn: record, publicProjectAlias: record, projectVisibility: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.UpdateProjectVisibility")
-  let body = {projectArn: $projectArn, projectVisibility: $projectVisibility, resourceAccessRole: $resourceAccessRole} | compact
+  let body = {"projectArn": $project_arn, "projectVisibility": $project_visibility, "resourceAccessRole": $resource_access_role} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1872,7 +1872,7 @@ export def "x-amz-target-code-build-20161006update-project-visibility UpdateProj
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.UpdateReportGroup
 # operationId: UpdateReportGroup
-export def "x-amz-target-code-build-20161006update-report-group UpdateReportGroup" [
+export def "x-amz-target-code-build-20161006update-report-group update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1881,25 +1881,25 @@ export def "x-amz-target-code-build-20161006update-report-group UpdateReportGrou
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-43
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-43
   arn: any
-  --exportConfig: any
+  --export-config: any
   --tags: any
 ]: any -> record<reportGroup: record<arn: record, name: record, type: record, exportConfig: record<exportConfigType: record, s3Destination: record>, created: record, lastModified: record, tags: record, status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.UpdateReportGroup")
-  let body = {arn: $arn, exportConfig: $exportConfig, tags: $tags} | compact
+  let body = {"arn": $arn, "exportConfig": $export_config, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1910,7 +1910,7 @@ export def "x-amz-target-code-build-20161006update-report-group UpdateReportGrou
 #
 # POST /#X-Amz-Target=CodeBuild_20161006.UpdateWebhook
 # operationId: UpdateWebhook
-export def "x-amz-target-code-build-20161006update-webhook UpdateWebhook" [
+export def "x-amz-target-code-build-20161006update-webhook update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1919,27 +1919,27 @@ export def "x-amz-target-code-build-20161006update-webhook UpdateWebhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-44
-  projectName: any
-  --branchFilter: any
-  --rotateSecret: any
-  --filterGroups: any
-  --buildType: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-44
+  project_name: any
+  --branch-filter: any
+  --rotate-secret: any
+  --filter-groups: any
+  --build-type: any
 ]: any -> record<webhook: record<url: record, payloadUrl: record, secret: record, branchFilter: record, filterGroups: record, buildType: record, lastModifiedSecret: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=CodeBuild_20161006.UpdateWebhook")
-  let body = {projectName: $projectName, branchFilter: $branchFilter, rotateSecret: $rotateSecret, filterGroups: $filterGroups, buildType: $buildType} | compact
+  let body = {"projectName": $project_name, "branchFilter": $branch_filter, "rotateSecret": $rotate_secret, "filterGroups": $filter_groups, "buildType": $build_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

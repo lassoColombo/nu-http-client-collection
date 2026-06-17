@@ -68,13 +68,12 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def scope-completer [] { ["shared" "user"] }
 def type-completer [] { ["folder" "function" "none" "query" "recent"] }
-def Scope-completer [] { ["shared" "user"] }
-def Type-completer [] { ["folder" "function" "query" "recent"] }
+def type-completer-1 [] { ["folder" "function" "query" "recent"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoftinsights-components List" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoftinsights-components list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -98,11 +97,11 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/{scopePath}
 # operationId: AnalyticsItems_List
-export def "subscriptions-resource-groups-providers-microsoftinsights-components List" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  scopePath: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-components list" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  scope_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -114,12 +113,12 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-components
   --api-version: string # The API version to use for this operation.
   --scope: string@scope-completer # Enum indicating if this item definition is owned by a specific user or is shared between all users with access to the Application Insights component. (default: shared)
   --type: string@type-completer # Enum indicating the type of the Analytics item. (default: none)
-  --includeContent: oneof<nothing, bool> # Flag indicating whether or not to return the content of each applicable item. If false, only return the item information.
+  --include-content: oneof<nothing, bool> # Flag indicating whether or not to return the content of each applicable item. If false, only return the item information.
 ]: nothing -> table<Content: string, Id: string, Name: string, Properties: record<functionAlias: string>, Scope: string, TimeCreated: string, TimeModified: string, Type: string, Version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "includeContent" $includeContent "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/components/($resourceName)/($scopePath)" $qp)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "includeContent" $include_content "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, scope_path: $scope_path} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/components/{resource_name}/{scope_path}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -129,11 +128,11 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-components
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/{scopePath}/item
 # operationId: AnalyticsItems_Delete
-export def "subscriptions-resource-groups-providers-microsoftinsights-components-item Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  scopePath: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-components-item delete" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  scope_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -149,7 +148,7 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-components
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/components/($resourceName)/($scopePath)/item" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, scope_path: $scope_path} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/components/{resource_name}/{scope_path}/item") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -159,11 +158,11 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-components
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/{scopePath}/item
 # operationId: AnalyticsItems_Get
-export def "subscriptions-resource-groups-providers-microsoftinsights-components-item Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  scopePath: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-components-item get" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  scope_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,7 +178,7 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-components
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/components/($resourceName)/($scopePath)/item" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, scope_path: $scope_path} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/components/{resource_name}/{scope_path}/item") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -190,11 +189,11 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-components
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/{scopePath}/item
 # operationId: AnalyticsItems_Put
 # --Properties shape: {functionAlias?: string}
-export def "subscriptions-resource-groups-providers-microsoftinsights-components-item Put" [
-  subscriptionId: string
-  resourceGroupName: string
-  resourceName: string
-  scopePath: string
+export def "subscriptions-resource-groups-providers-microsoftinsights-components-item update" [
+  subscription_id: string
+  resource_group_name: string
+  resource_name: string
+  scope_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,20 +203,20 @@ export def "subscriptions-resource-groups-providers-microsoftinsights-components
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation.
-  --overrideItem: oneof<nothing, bool> # Flag indicating whether or not to force save an item. This allows overriding an item if it already exists.
-  --Content: string # The content of this item
-  --Id: string # Internally assigned unique id of the item definition.
-  --Name: string # The user-defined name of the item.
-  --Properties: record # A set of properties that can be defined in the context of a specific item type. Each type may have its own properties. — shape: {functionAlias?: string}
-  --Scope: string@Scope-completer # Enum indicating if this item definition is owned by a specific user or is shared between all users with access to the Application Insights component.
-  --Type: string@Type-completer # Enum indicating the type of the Analytics item.
+  --override-item: oneof<nothing, bool> # Flag indicating whether or not to force save an item. This allows overriding an item if it already exists.
+  --content: string # The content of this item
+  --id: string # Internally assigned unique id of the item definition.
+  --name: string # The user-defined name of the item.
+  --properties: record # A set of properties that can be defined in the context of a specific item type. Each type may have its own properties. — shape: {functionAlias?: string}
+  --scope: string@scope-completer # Enum indicating if this item definition is owned by a specific user or is shared between all users with access to the Application Insights component.
+  --type: string@type-completer-1 # Enum indicating the type of the Analytics item.
 ]: any -> record<Content: string, Id: string, Name: string, Properties: record<functionAlias: string>, Scope: string, TimeCreated: string, TimeModified: string, Type: string, Version: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "overrideItem" $overrideItem "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/microsoft.insights/components/($resourceName)/($scopePath)/item" $qp)
-  let body = {Content: $Content, Id: $Id, Name: $Name, Properties: $Properties, Scope: $Scope, Type: $Type} | compact
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "overrideItem" $override_item "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, resource_name: $resource_name, scope_path: $scope_path} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/microsoft.insights/components/{resource_name}/{scope_path}/item") $qp)
+  let body = {"Content": $content, "Id": $id, "Name": $name, "Properties": $properties, "Scope": $scope, "Type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

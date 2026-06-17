@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "start-screenshot-test Start-Screenshot-Test" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "start-screenshot-test post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 # POST /
 # operationId: Start Screenshot Test
 # --configs shape: {macos mojave?: record, windows 10?: record}
-export def "start-screenshot-test Start-Screenshot-Test" [
+export def "start-screenshot-test post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,7 +119,7 @@ export def "start-screenshot-test Start-Screenshot-Test" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
-  let body = {callback_url: $callback_url, configs: $configs, defer_time: $defer_time, email: $email, mac_res: $mac_res, password: $password, tunnel: $tunnel, tunnel_identifier: $tunnel_identifier, url: $body_url, username: $username, win_res: $win_res} | compact
+  let body = {"callback_url": $callback_url, "configs": $configs, "defer_time": $defer_time, "email": $email, "mac_res": $mac_res, "password": $password, "tunnel": $tunnel, "tunnel_identifier": $tunnel_identifier, "url": $body_url, "username": $username, "win_res": $win_res} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -130,7 +130,7 @@ export def "start-screenshot-test Start-Screenshot-Test" [
 #
 # GET /devices
 # operationId: devices
-export def "devices devices" [
+export def "devices get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -154,7 +154,7 @@ export def "devices devices" [
 #
 # GET /locations
 # operationId: Locations
-export def "locations Locations" [
+export def "locations get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "locations Locations" [
 #
 # GET /os-browsers
 # operationId: os-browsers
-export def "os-browsers os-browsers" [
+export def "os-browsers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "os-browsers os-browsers" [
 #
 # GET /profiles
 # operationId: Profiles
-export def "profiles Profiles" [
+export def "profiles get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "profiles Profiles" [
 #
 # GET /resolutions
 # operationId: Resolutions
-export def "resolutions Resolutions" [
+export def "resolutions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +257,7 @@ export def "stop stop-screenshots-test" [
 ]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/stop/($test_id)")
+  let full_url = (build-url $base ({test_id: $test_id} | format pattern "/stop/{test_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -280,7 +280,7 @@ export def "get-screenshots screenshots" [
 ]: nothing -> record<callback_url: string, defer_time: float, screenshots: table<activity_id: string, browser: string, browser_version: string, os: string, resolution: string, screenshot_url: string, status: string, thumbnail_url: string>, test_id: string, test_status: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($test_id)")
+  let full_url = (build-url $base ({test_id: $test_id} | format pattern "/{test_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -290,7 +290,7 @@ export def "get-screenshots screenshots" [
 #
 # GET /{test_id}/zip
 # operationId: ZippedScreenshots
-export def "zip ZippedScreenshots" [
+export def "zip get" [
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "zip ZippedScreenshots" [
 ]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/($test_id)/zip")
+  let full_url = (build-url $base ({test_id: $test_id} | format pattern "/{test_id}/zip"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "schedule-flights get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "schedule-flights get-flights-status" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # GET /schedule/flights
 # operationId: getFlightsStatus
-export def "schedule-flights get" [
+export def "schedule-flights get-flights-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -101,14 +101,14 @@ export def "schedule-flights get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --carrierCode: string # 2 to 3-character IATA carrier code ([IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx)).  (e.g. TP)
-  --flightNumber: string # 1 to 4-digit number of the flight. e.g. 4537 (e.g. 487)
-  --scheduledDepartureDate: string # scheduled departure date of the flight, local to the departure airport, format YYYY-MM-DD. (format: date, e.g. 2023-08-01)
-  --operationalSuffix: string # 1-letter operational suffix assigned by the carrier to differentiate flight in case of delay changing the departure date e.g. A
+  --carrier-code: string # 2 to 3-character IATA carrier code ([IATA table codes](http://www.iata.org/publications/Pages/code-search.aspx)).  (e.g. TP)
+  --flight-number: string # 1 to 4-digit number of the flight. e.g. 4537 (e.g. 487)
+  --scheduled-departure-date: string # scheduled departure date of the flight, local to the departure airport, format YYYY-MM-DD. (format: date, e.g. 2023-08-01)
+  --operational-suffix: string # 1-letter operational suffix assigned by the carrier to differentiate flight in case of delay changing the departure date e.g. A
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "carrierCode" $carrierCode "scalar") (serialize-qp "flightNumber" $flightNumber "scalar") (serialize-qp "scheduledDepartureDate" $scheduledDepartureDate "scalar") (serialize-qp "operationalSuffix" $operationalSuffix "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "carrierCode" $carrier_code "scalar") (serialize-qp "flightNumber" $flight_number "scalar") (serialize-qp "scheduledDepartureDate" $scheduled_departure_date "scalar") (serialize-qp "operationalSuffix" $operational_suffix "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/schedule/flights" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-openid-configuration FetchOpenidDiscovery" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "well-known-openid-configuration get-openid-discovery" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -93,7 +93,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/.well-known/openid-configuration
 # operationId: FetchOpenidDiscovery
-export def "well-known-openid-configuration FetchOpenidDiscovery" [
+export def "well-known-openid-configuration get-openid-discovery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -115,7 +115,7 @@ export def "well-known-openid-configuration FetchOpenidDiscovery" [
 #
 # GET /v1/certs
 # operationId: FetchCerts
-export def "certs FetchCerts" [
+export def "certs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "certs FetchCerts" [
 #
 # POST /v1/device/code
 # operationId: CreateDeviceCode
-export def "device-code CreateDeviceCode" [
+export def "device-code create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -146,15 +146,15 @@ export def "device-code CreateDeviceCode" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Audiences: list # An array of intended audiences for token requests
-  ClientSid: string # A 34 character string that uniquely identifies this OAuth App.
-  Scopes: list # An Array of scopes for authorization request
+  --audiences: list # An array of intended audiences for token requests
+  client_sid: string # A 34 character string that uniquely identifies this OAuth App.
+  scopes: list # An Array of scopes for authorization request
 ]: any -> record<device_code: string, expires_in: int, interval: int, user_code: string, verification_uri: string, verification_uri_complete: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://oauth.twilio.com")
   let full_url = (build-url $base "/v1/device/code")
-  let body = {Audiences: $Audiences, ClientSid: $ClientSid, Scopes: $Scopes} | compact
+  let body = {"Audiences": $audiences, "ClientSid": $client_sid, "Scopes": $scopes} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -165,7 +165,7 @@ export def "device-code CreateDeviceCode" [
 #
 # POST /v1/token
 # operationId: CreateToken
-export def "token CreateToken" [
+export def "token create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,20 +174,20 @@ export def "token CreateToken" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --ClientSecret: string # The credential for confidential OAuth App.
-  ClientSid: string # A 34 character string that uniquely identifies this OAuth App.
-  --Code: string # JWT token related to the authorization code grant type.
-  --CodeVerifier: string # A code which is generation cryptographically.
-  --DeviceCode: string # JWT token related to the device code grant type.
-  --DeviceId: string # The Id of the device associated with the token (refresh token).
-  GrantType: string # Grant type is a credential representing resource owner's authorization which can be used by client to obtain access token.
-  --RefreshToken: string # JWT token related to the refresh token grant type.
+  --client-secret: string # The credential for confidential OAuth App.
+  client_sid: string # A 34 character string that uniquely identifies this OAuth App.
+  --code: string # JWT token related to the authorization code grant type.
+  --code-verifier: string # A code which is generation cryptographically.
+  --device-code: string # JWT token related to the device code grant type.
+  --device-id: string # The Id of the device associated with the token (refresh token).
+  grant_type: string # Grant type is a credential representing resource owner's authorization which can be used by client to obtain access token.
+  --refresh-token: string # JWT token related to the refresh token grant type.
 ]: any -> record<access_token: string, access_token_expires_at: string, id_token: string, refresh_token: string, refresh_token_expires_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://oauth.twilio.com")
   let full_url = (build-url $base "/v1/token")
-  let body = {ClientSecret: $ClientSecret, ClientSid: $ClientSid, Code: $Code, CodeVerifier: $CodeVerifier, DeviceCode: $DeviceCode, DeviceId: $DeviceId, GrantType: $GrantType, RefreshToken: $RefreshToken} | compact
+  let body = {"ClientSecret": $client_secret, "ClientSid": $client_sid, "Code": $code, "CodeVerifier": $code_verifier, "DeviceCode": $device_code, "DeviceId": $device_id, "GrantType": $grant_type, "RefreshToken": $refresh_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -198,7 +198,7 @@ export def "token CreateToken" [
 #
 # GET /v1/userinfo
 # operationId: FetchUserInfo
-export def "userinfo FetchUserInfo" [
+export def "userinfo get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

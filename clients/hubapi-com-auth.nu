@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # operationId: get-/oauth/v1/access-tokens/{token}_get
 export def "oauth-access-tokens get" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -106,7 +106,7 @@ export def "oauth-access-tokens get" [
 ]: nothing -> record<app_id: int, expires_in: int, hub_domain: string, hub_id: int, scope_to_scope_group_pks: list<int>, scopes: list<string>, token: string, token_type: string, trial_scope_to_scope_group_pks: list<int>, trial_scopes: list<string>, user: string, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/oauth/v1/access-tokens/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/oauth/v1/access-tokens/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -116,7 +116,7 @@ export def "oauth-access-tokens get" [
 #
 # operationId: delete-/oauth/v1/refresh-tokens/{token}_archive
 export def "oauth-refresh-tokens archive" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -128,7 +128,7 @@ export def "oauth-refresh-tokens archive" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/oauth/v1/refresh-tokens/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/oauth/v1/refresh-tokens/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -138,7 +138,7 @@ export def "oauth-refresh-tokens archive" [
 #
 # operationId: get-/oauth/v1/refresh-tokens/{token}_get
 export def "oauth-refresh-tokens get" [
-  token: string
+  token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -150,7 +150,7 @@ export def "oauth-refresh-tokens get" [
 ]: nothing -> record<client_id: string, hub_domain: string, hub_id: int, scopes: list<string>, token: string, token_type: string, user: string, user_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/oauth/v1/refresh-tokens/($token)")
+  let full_url = (build-url $base ({token_arg: $token_arg} | format pattern "/oauth/v1/refresh-tokens/{token_arg}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,7 +179,7 @@ export def "oauth-token create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/v1/token")
-  let body = {client_id: $client_id, client_secret: $client_secret, code: $code, grant_type: $grant_type, redirect_uri: $redirect_uri, refresh_token: $refresh_token} | compact
+  let body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code, "grant_type": $grant_type, "redirect_uri": $redirect_uri, "refresh_token": $refresh_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

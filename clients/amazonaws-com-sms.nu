@@ -66,46 +66,46 @@ def base-url-completer [] { ["http://sms.us-east-1.amazonaws.com" "http://sms.us
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AWSServerMigrationService_V2016_10_24.CreateApp"] }
-def X-Amz-Target-completer-1 [] { ["AWSServerMigrationService_V2016_10_24.CreateReplicationJob"] }
-def X-Amz-Target-completer-2 [] { ["AWSServerMigrationService_V2016_10_24.DeleteApp"] }
-def X-Amz-Target-completer-3 [] { ["AWSServerMigrationService_V2016_10_24.DeleteAppLaunchConfiguration"] }
-def X-Amz-Target-completer-4 [] { ["AWSServerMigrationService_V2016_10_24.DeleteAppReplicationConfiguration"] }
-def X-Amz-Target-completer-5 [] { ["AWSServerMigrationService_V2016_10_24.DeleteAppValidationConfiguration"] }
-def X-Amz-Target-completer-6 [] { ["AWSServerMigrationService_V2016_10_24.DeleteReplicationJob"] }
-def X-Amz-Target-completer-7 [] { ["AWSServerMigrationService_V2016_10_24.DeleteServerCatalog"] }
-def X-Amz-Target-completer-8 [] { ["AWSServerMigrationService_V2016_10_24.DisassociateConnector"] }
-def X-Amz-Target-completer-9 [] { ["AWSServerMigrationService_V2016_10_24.GenerateChangeSet"] }
-def X-Amz-Target-completer-10 [] { ["AWSServerMigrationService_V2016_10_24.GenerateTemplate"] }
-def X-Amz-Target-completer-11 [] { ["AWSServerMigrationService_V2016_10_24.GetApp"] }
-def X-Amz-Target-completer-12 [] { ["AWSServerMigrationService_V2016_10_24.GetAppLaunchConfiguration"] }
-def X-Amz-Target-completer-13 [] { ["AWSServerMigrationService_V2016_10_24.GetAppReplicationConfiguration"] }
-def X-Amz-Target-completer-14 [] { ["AWSServerMigrationService_V2016_10_24.GetAppValidationConfiguration"] }
-def X-Amz-Target-completer-15 [] { ["AWSServerMigrationService_V2016_10_24.GetAppValidationOutput"] }
-def X-Amz-Target-completer-16 [] { ["AWSServerMigrationService_V2016_10_24.GetConnectors"] }
-def X-Amz-Target-completer-17 [] { ["AWSServerMigrationService_V2016_10_24.GetReplicationJobs"] }
-def X-Amz-Target-completer-18 [] { ["AWSServerMigrationService_V2016_10_24.GetReplicationRuns"] }
-def X-Amz-Target-completer-19 [] { ["AWSServerMigrationService_V2016_10_24.GetServers"] }
-def X-Amz-Target-completer-20 [] { ["AWSServerMigrationService_V2016_10_24.ImportAppCatalog"] }
-def X-Amz-Target-completer-21 [] { ["AWSServerMigrationService_V2016_10_24.ImportServerCatalog"] }
-def X-Amz-Target-completer-22 [] { ["AWSServerMigrationService_V2016_10_24.LaunchApp"] }
-def X-Amz-Target-completer-23 [] { ["AWSServerMigrationService_V2016_10_24.ListApps"] }
-def X-Amz-Target-completer-24 [] { ["AWSServerMigrationService_V2016_10_24.NotifyAppValidationOutput"] }
-def X-Amz-Target-completer-25 [] { ["AWSServerMigrationService_V2016_10_24.PutAppLaunchConfiguration"] }
-def X-Amz-Target-completer-26 [] { ["AWSServerMigrationService_V2016_10_24.PutAppReplicationConfiguration"] }
-def X-Amz-Target-completer-27 [] { ["AWSServerMigrationService_V2016_10_24.PutAppValidationConfiguration"] }
-def X-Amz-Target-completer-28 [] { ["AWSServerMigrationService_V2016_10_24.StartAppReplication"] }
-def X-Amz-Target-completer-29 [] { ["AWSServerMigrationService_V2016_10_24.StartOnDemandAppReplication"] }
-def X-Amz-Target-completer-30 [] { ["AWSServerMigrationService_V2016_10_24.StartOnDemandReplicationRun"] }
-def X-Amz-Target-completer-31 [] { ["AWSServerMigrationService_V2016_10_24.StopAppReplication"] }
-def X-Amz-Target-completer-32 [] { ["AWSServerMigrationService_V2016_10_24.TerminateApp"] }
-def X-Amz-Target-completer-33 [] { ["AWSServerMigrationService_V2016_10_24.UpdateApp"] }
-def X-Amz-Target-completer-34 [] { ["AWSServerMigrationService_V2016_10_24.UpdateReplicationJob"] }
+def x-amz-target-completer [] { ["AWSServerMigrationService_V2016_10_24.CreateApp"] }
+def x-amz-target-completer-1 [] { ["AWSServerMigrationService_V2016_10_24.CreateReplicationJob"] }
+def x-amz-target-completer-2 [] { ["AWSServerMigrationService_V2016_10_24.DeleteApp"] }
+def x-amz-target-completer-3 [] { ["AWSServerMigrationService_V2016_10_24.DeleteAppLaunchConfiguration"] }
+def x-amz-target-completer-4 [] { ["AWSServerMigrationService_V2016_10_24.DeleteAppReplicationConfiguration"] }
+def x-amz-target-completer-5 [] { ["AWSServerMigrationService_V2016_10_24.DeleteAppValidationConfiguration"] }
+def x-amz-target-completer-6 [] { ["AWSServerMigrationService_V2016_10_24.DeleteReplicationJob"] }
+def x-amz-target-completer-7 [] { ["AWSServerMigrationService_V2016_10_24.DeleteServerCatalog"] }
+def x-amz-target-completer-8 [] { ["AWSServerMigrationService_V2016_10_24.DisassociateConnector"] }
+def x-amz-target-completer-9 [] { ["AWSServerMigrationService_V2016_10_24.GenerateChangeSet"] }
+def x-amz-target-completer-10 [] { ["AWSServerMigrationService_V2016_10_24.GenerateTemplate"] }
+def x-amz-target-completer-11 [] { ["AWSServerMigrationService_V2016_10_24.GetApp"] }
+def x-amz-target-completer-12 [] { ["AWSServerMigrationService_V2016_10_24.GetAppLaunchConfiguration"] }
+def x-amz-target-completer-13 [] { ["AWSServerMigrationService_V2016_10_24.GetAppReplicationConfiguration"] }
+def x-amz-target-completer-14 [] { ["AWSServerMigrationService_V2016_10_24.GetAppValidationConfiguration"] }
+def x-amz-target-completer-15 [] { ["AWSServerMigrationService_V2016_10_24.GetAppValidationOutput"] }
+def x-amz-target-completer-16 [] { ["AWSServerMigrationService_V2016_10_24.GetConnectors"] }
+def x-amz-target-completer-17 [] { ["AWSServerMigrationService_V2016_10_24.GetReplicationJobs"] }
+def x-amz-target-completer-18 [] { ["AWSServerMigrationService_V2016_10_24.GetReplicationRuns"] }
+def x-amz-target-completer-19 [] { ["AWSServerMigrationService_V2016_10_24.GetServers"] }
+def x-amz-target-completer-20 [] { ["AWSServerMigrationService_V2016_10_24.ImportAppCatalog"] }
+def x-amz-target-completer-21 [] { ["AWSServerMigrationService_V2016_10_24.ImportServerCatalog"] }
+def x-amz-target-completer-22 [] { ["AWSServerMigrationService_V2016_10_24.LaunchApp"] }
+def x-amz-target-completer-23 [] { ["AWSServerMigrationService_V2016_10_24.ListApps"] }
+def x-amz-target-completer-24 [] { ["AWSServerMigrationService_V2016_10_24.NotifyAppValidationOutput"] }
+def x-amz-target-completer-25 [] { ["AWSServerMigrationService_V2016_10_24.PutAppLaunchConfiguration"] }
+def x-amz-target-completer-26 [] { ["AWSServerMigrationService_V2016_10_24.PutAppReplicationConfiguration"] }
+def x-amz-target-completer-27 [] { ["AWSServerMigrationService_V2016_10_24.PutAppValidationConfiguration"] }
+def x-amz-target-completer-28 [] { ["AWSServerMigrationService_V2016_10_24.StartAppReplication"] }
+def x-amz-target-completer-29 [] { ["AWSServerMigrationService_V2016_10_24.StartOnDemandAppReplication"] }
+def x-amz-target-completer-30 [] { ["AWSServerMigrationService_V2016_10_24.StartOnDemandReplicationRun"] }
+def x-amz-target-completer-31 [] { ["AWSServerMigrationService_V2016_10_24.StopAppReplication"] }
+def x-amz-target-completer-32 [] { ["AWSServerMigrationService_V2016_10_24.TerminateApp"] }
+def x-amz-target-completer-33 [] { ["AWSServerMigrationService_V2016_10_24.UpdateApp"] }
+def x-amz-target-completer-34 [] { ["AWSServerMigrationService_V2016_10_24.UpdateReplicationJob"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-server-migration-service-v2016-10-24create-app CreateApp" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-aws-server-migration-service-v2016-10-24create-app create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.CreateApp
 # operationId: CreateApp
-export def "x-amz-target-aws-server-migration-service-v2016-10-24create-app CreateApp" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24create-app create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -138,28 +138,28 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24create-app Crea
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
   --name: any
   --description: any
-  --roleName: any
-  --clientToken: any
-  --serverGroups: any
+  --role-name: any
+  --client-token: any
+  --server-groups: any
   --tags: any
 ]: any -> record<appSummary: record<appId: record, importedAppId: record, name: record, description: record, status: record, statusMessage: record, replicationConfigurationStatus: record, replicationStatus: record, replicationStatusMessage: record, latestReplicationTime: record, launchConfigurationStatus: record, launchStatus: record, launchStatusMessage: record, launchDetails: record<latestLaunchTime: record, stackName: record, stackId: record>, creationTime: record, lastModified: record, roleName: record, totalServerGroups: record, totalServers: record>, serverGroups: record, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.CreateApp")
-  let body = {name: $name, description: $description, roleName: $roleName, clientToken: $clientToken, serverGroups: $serverGroups, tags: $tags} | compact
+  let body = {"name": $name, "description": $description, "roleName": $role_name, "clientToken": $client_token, "serverGroups": $server_groups, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -170,7 +170,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24create-app Crea
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.CreateReplicationJob
 # operationId: CreateReplicationJob
-export def "x-amz-target-aws-server-migration-service-v2016-10-24create-replication-job CreateReplicationJob" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24create-replication-job create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -179,32 +179,32 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24create-replicat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  serverId: any
-  seedReplicationTime: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  server_id: any
+  seed_replication_time: any
   --frequency: any
-  --runOnce: any
-  --licenseType: any
-  --roleName: any
+  --run-once: any
+  --license-type: any
+  --role-name: any
   --description: any
-  --numberOfRecentAmisToKeep: any
+  --number-of-recent-amis-to-keep: any
   --encrypted: any
-  --kmsKeyId: any
+  --kms-key-id: any
 ]: any -> record<replicationJobId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.CreateReplicationJob")
-  let body = {serverId: $serverId, seedReplicationTime: $seedReplicationTime, frequency: $frequency, runOnce: $runOnce, licenseType: $licenseType, roleName: $roleName, description: $description, numberOfRecentAmisToKeep: $numberOfRecentAmisToKeep, encrypted: $encrypted, kmsKeyId: $kmsKeyId} | compact
+  let body = {"serverId": $server_id, "seedReplicationTime": $seed_replication_time, "frequency": $frequency, "runOnce": $run_once, "licenseType": $license_type, "roleName": $role_name, "description": $description, "numberOfRecentAmisToKeep": $number_of_recent_amis_to_keep, "encrypted": $encrypted, "kmsKeyId": $kms_key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -215,7 +215,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24create-replicat
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteApp
 # operationId: DeleteApp
-export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app DeleteApp" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,25 +224,25 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app Dele
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  --appId: any
-  --forceStopAppReplication: any
-  --forceTerminateApp: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  --app-id: any
+  --force-stop-app-replication: any
+  --force-terminate-app: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteApp")
-  let body = {appId: $appId, forceStopAppReplication: $forceStopAppReplication, forceTerminateApp: $forceTerminateApp} | compact
+  let body = {"appId": $app_id, "forceStopAppReplication": $force_stop_app_replication, "forceTerminateApp": $force_terminate_app} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +253,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app Dele
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteAppLaunchConfiguration
 # operationId: DeleteAppLaunchConfiguration
-export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-launch-configuration DeleteAppLaunchConfiguration" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-launch-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,23 +262,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-laun
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  --appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  --app-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteAppLaunchConfiguration")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,7 +289,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-laun
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteAppReplicationConfiguration
 # operationId: DeleteAppReplicationConfiguration
-export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-replication-configuration DeleteAppReplicationConfiguration" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-replication-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,23 +298,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-repl
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  --appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  --app-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteAppReplicationConfiguration")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -325,7 +325,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-repl
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteAppValidationConfiguration
 # operationId: DeleteAppValidationConfiguration
-export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-validation-configuration DeleteAppValidationConfiguration" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-validation-configuration delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,23 +334,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-vali
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  app_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteAppValidationConfiguration")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -361,7 +361,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-app-vali
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteReplicationJob
 # operationId: DeleteReplicationJob
-export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-replication-job DeleteReplicationJob" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-replication-job delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,23 +370,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-replicat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-6
-  replicationJobId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-6
+  replication_job_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteReplicationJob")
-  let body = {replicationJobId: $replicationJobId} | compact
+  let body = {"replicationJobId": $replication_job_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -397,7 +397,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-replicat
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteServerCatalog
 # operationId: DeleteServerCatalog
-export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-server-catalog DeleteServerCatalog" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-server-catalog delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,14 +406,14 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-server-c
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-7
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-7
   --body: record
 ]: any -> record {
   let input = $in
@@ -421,7 +421,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-server-c
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DeleteServerCatalog")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -432,7 +432,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24delete-server-c
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DisassociateConnector
 # operationId: DisassociateConnector
-export def "x-amz-target-aws-server-migration-service-v2016-10-24disassociate-connector DisassociateConnector" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24disassociate-connector post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,23 +441,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24disassociate-co
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-8
-  connectorId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-8
+  connector_id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.DisassociateConnector")
-  let body = {connectorId: $connectorId} | compact
+  let body = {"connectorId": $connector_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -468,7 +468,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24disassociate-co
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GenerateChangeSet
 # operationId: GenerateChangeSet
-export def "x-amz-target-aws-server-migration-service-v2016-10-24generate-change-set GenerateChangeSet" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24generate-change-set post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,24 +477,24 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24generate-change
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-9
-  --appId: any
-  --changesetFormat: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-9
+  --app-id: any
+  --changeset-format: any
 ]: any -> record<s3Location: record<bucket: record, key: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GenerateChangeSet")
-  let body = {appId: $appId, changesetFormat: $changesetFormat} | compact
+  let body = {"appId": $app_id, "changesetFormat": $changeset_format} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -505,7 +505,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24generate-change
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GenerateTemplate
 # operationId: GenerateTemplate
-export def "x-amz-target-aws-server-migration-service-v2016-10-24generate-template GenerateTemplate" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24generate-template post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,24 +514,24 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24generate-templa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-10
-  --appId: any
-  --templateFormat: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-10
+  --app-id: any
+  --template-format: any
 ]: any -> record<s3Location: record<bucket: record, key: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GenerateTemplate")
-  let body = {appId: $appId, templateFormat: $templateFormat} | compact
+  let body = {"appId": $app_id, "templateFormat": $template_format} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -542,7 +542,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24generate-templa
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetApp
 # operationId: GetApp
-export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app GetApp" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -551,23 +551,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app GetApp"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-11
-  --appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-11
+  --app-id: any
 ]: any -> record<appSummary: record<appId: record, importedAppId: record, name: record, description: record, status: record, statusMessage: record, replicationConfigurationStatus: record, replicationStatus: record, replicationStatusMessage: record, latestReplicationTime: record, launchConfigurationStatus: record, launchStatus: record, launchStatusMessage: record, launchDetails: record<latestLaunchTime: record, stackName: record, stackId: record>, creationTime: record, lastModified: record, roleName: record, totalServerGroups: record, totalServers: record>, serverGroups: record, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetApp")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -578,7 +578,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app GetApp"
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetAppLaunchConfiguration
 # operationId: GetAppLaunchConfiguration
-export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-launch-configuration GetAppLaunchConfiguration" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-launch-configuration get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -587,23 +587,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-launch-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-12
-  --appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-12
+  --app-id: any
 ]: any -> record<appId: record, roleName: record, autoLaunch: record, serverGroupLaunchConfigurations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetAppLaunchConfiguration")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -614,7 +614,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-launch-
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetAppReplicationConfiguration
 # operationId: GetAppReplicationConfiguration
-export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-replication-configuration GetAppReplicationConfiguration" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-replication-configuration get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -623,23 +623,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-replica
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-13
-  --appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-13
+  --app-id: any
 ]: any -> record<serverGroupReplicationConfigurations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetAppReplicationConfiguration")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -650,7 +650,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-replica
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetAppValidationConfiguration
 # operationId: GetAppValidationConfiguration
-export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-validation-configuration GetAppValidationConfiguration" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-validation-configuration get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,23 +659,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-validat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-14
-  appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-14
+  app_id: any
 ]: any -> record<appValidationConfigurations: record, serverGroupValidationConfigurations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetAppValidationConfiguration")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -686,7 +686,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-validat
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetAppValidationOutput
 # operationId: GetAppValidationOutput
-export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-validation-output GetAppValidationOutput" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-validation-output get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,23 +695,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-validat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-15
-  appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-15
+  app_id: any
 ]: any -> record<validationOutputList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetAppValidationOutput")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -722,7 +722,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-app-validat
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetConnectors
 # operationId: GetConnectors
-export def "x-amz-target-aws-server-migration-service-v2016-10-24get-connectors GetConnectors" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24get-connectors get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -731,27 +731,27 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-connectors 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-16
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-16
+  --next-token: any
+  --max-results: any
 ]: any -> record<connectorList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetConnectors" $qp)
-  let body = {nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -762,7 +762,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-connectors 
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetReplicationJobs
 # operationId: GetReplicationJobs
-export def "x-amz-target-aws-server-migration-service-v2016-10-24get-replication-jobs GetReplicationJobs" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24get-replication-jobs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,28 +771,28 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-replication
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-17
-  --replicationJobId: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-17
+  --replication-job-id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<replicationJobList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetReplicationJobs" $qp)
-  let body = {replicationJobId: $replicationJobId, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"replicationJobId": $replication_job_id, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -803,7 +803,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-replication
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetReplicationRuns
 # operationId: GetReplicationRuns
-export def "x-amz-target-aws-server-migration-service-v2016-10-24get-replication-runs GetReplicationRuns" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24get-replication-runs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -812,28 +812,28 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-replication
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-18
-  replicationJobId: any
-  --nextToken: any
-  --maxResults: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-18
+  replication_job_id: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<replicationJob: record<replicationJobId: record, serverId: record, serverType: record, vmServer: record<vmServerAddress: record, vmName: record, vmManagerName: record, vmManagerType: record, vmPath: record>, seedReplicationTime: record, frequency: record, runOnce: record, nextReplicationRunStartTime: record, licenseType: record, roleName: record, latestAmiId: record, state: record, statusMessage: record, description: record, numberOfRecentAmisToKeep: record, encrypted: record, kmsKeyId: record, replicationRunList: record>, replicationRunList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetReplicationRuns" $qp)
-  let body = {replicationJobId: $replicationJobId, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"replicationJobId": $replication_job_id, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -844,7 +844,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-replication
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetServers
 # operationId: GetServers
-export def "x-amz-target-aws-server-migration-service-v2016-10-24get-servers GetServers" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24get-servers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -853,28 +853,28 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-servers Get
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: string # Pagination limit
-  --nextToken: string # Pagination token
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-19
-  --nextToken: any
-  --maxResults: any
-  --vmServerAddressList: any
+  --max-results: string # Pagination limit
+  --next-token: string # Pagination token
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-19
+  --next-token: any
+  --max-results: any
+  --vm-server-address-list: any
 ]: any -> record<lastModifiedOn: record, serverCatalogStatus: record, serverList: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "nextToken" $nextToken "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.GetServers" $qp)
-  let body = {nextToken: $nextToken, maxResults: $maxResults, vmServerAddressList: $vmServerAddressList} | compact
+  let body = {"nextToken": $next_token, "maxResults": $max_results, "vmServerAddressList": $vm_server_address_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -885,7 +885,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24get-servers Get
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.ImportAppCatalog
 # operationId: ImportAppCatalog
-export def "x-amz-target-aws-server-migration-service-v2016-10-24import-app-catalog ImportAppCatalog" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24import-app-catalog import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,23 +894,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24import-app-cata
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-20
-  --roleName: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-20
+  --role-name: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.ImportAppCatalog")
-  let body = {roleName: $roleName} | compact
+  let body = {"roleName": $role_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -921,7 +921,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24import-app-cata
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.ImportServerCatalog
 # operationId: ImportServerCatalog
-export def "x-amz-target-aws-server-migration-service-v2016-10-24import-server-catalog ImportServerCatalog" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24import-server-catalog import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,14 +930,14 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24import-server-c
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-21
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-21
   --body: record
 ]: any -> record {
   let input = $in
@@ -945,7 +945,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24import-server-c
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.ImportServerCatalog")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -956,7 +956,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24import-server-c
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.LaunchApp
 # operationId: LaunchApp
-export def "x-amz-target-aws-server-migration-service-v2016-10-24launch-app LaunchApp" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24launch-app post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -965,23 +965,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24launch-app Laun
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-22
-  --appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-22
+  --app-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.LaunchApp")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -992,7 +992,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24launch-app Laun
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.ListApps
 # operationId: ListApps
-export def "x-amz-target-aws-server-migration-service-v2016-10-24list-apps ListApps" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24list-apps list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,25 +1001,25 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24list-apps ListA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-23
-  --appIds: any
-  --nextToken: any
-  --maxResults: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-23
+  --app-ids: any
+  --next-token: any
+  --max-results: any
 ]: any -> record<apps: record, nextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.ListApps")
-  let body = {appIds: $appIds, nextToken: $nextToken, maxResults: $maxResults} | compact
+  let body = {"appIds": $app_ids, "nextToken": $next_token, "maxResults": $max_results} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1030,7 +1030,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24list-apps ListA
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.NotifyAppValidationOutput
 # operationId: NotifyAppValidationOutput
-export def "x-amz-target-aws-server-migration-service-v2016-10-24notify-app-validation-output NotifyAppValidationOutput" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24notify-app-validation-output post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,24 +1039,24 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24notify-app-vali
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-24
-  appId: any
-  --notificationContext: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-24
+  app_id: any
+  --notification-context: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.NotifyAppValidationOutput")
-  let body = {appId: $appId, notificationContext: $notificationContext} | compact
+  let body = {"appId": $app_id, "notificationContext": $notification_context} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1067,7 +1067,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24notify-app-vali
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.PutAppLaunchConfiguration
 # operationId: PutAppLaunchConfiguration
-export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-launch-configuration PutAppLaunchConfiguration" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-launch-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,26 +1076,26 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-launch-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-25
-  --appId: any
-  --roleName: any
-  --autoLaunch: any
-  --serverGroupLaunchConfigurations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-25
+  --app-id: any
+  --role-name: any
+  --auto-launch: any
+  --server-group-launch-configurations: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.PutAppLaunchConfiguration")
-  let body = {appId: $appId, roleName: $roleName, autoLaunch: $autoLaunch, serverGroupLaunchConfigurations: $serverGroupLaunchConfigurations} | compact
+  let body = {"appId": $app_id, "roleName": $role_name, "autoLaunch": $auto_launch, "serverGroupLaunchConfigurations": $server_group_launch_configurations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1106,7 +1106,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-launch-
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.PutAppReplicationConfiguration
 # operationId: PutAppReplicationConfiguration
-export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-replication-configuration PutAppReplicationConfiguration" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-replication-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1115,24 +1115,24 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-replica
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-26
-  --appId: any
-  --serverGroupReplicationConfigurations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-26
+  --app-id: any
+  --server-group-replication-configurations: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.PutAppReplicationConfiguration")
-  let body = {appId: $appId, serverGroupReplicationConfigurations: $serverGroupReplicationConfigurations} | compact
+  let body = {"appId": $app_id, "serverGroupReplicationConfigurations": $server_group_replication_configurations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1143,7 +1143,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-replica
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.PutAppValidationConfiguration
 # operationId: PutAppValidationConfiguration
-export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-validation-configuration PutAppValidationConfiguration" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-validation-configuration update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,25 +1152,25 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-validat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-27
-  appId: any
-  --appValidationConfigurations: any
-  --serverGroupValidationConfigurations: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-27
+  app_id: any
+  --app-validation-configurations: any
+  --server-group-validation-configurations: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.PutAppValidationConfiguration")
-  let body = {appId: $appId, appValidationConfigurations: $appValidationConfigurations, serverGroupValidationConfigurations: $serverGroupValidationConfigurations} | compact
+  let body = {"appId": $app_id, "appValidationConfigurations": $app_validation_configurations, "serverGroupValidationConfigurations": $server_group_validation_configurations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1181,7 +1181,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24put-app-validat
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.StartAppReplication
 # operationId: StartAppReplication
-export def "x-amz-target-aws-server-migration-service-v2016-10-24start-app-replication StartAppReplication" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24start-app-replication start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1190,23 +1190,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24start-app-repli
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-28
-  --appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-28
+  --app-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.StartAppReplication")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1217,7 +1217,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24start-app-repli
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.StartOnDemandAppReplication
 # operationId: StartOnDemandAppReplication
-export def "x-amz-target-aws-server-migration-service-v2016-10-24start-on-demand-app-replication StartOnDemandAppReplication" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24start-on-demand-app-replication start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,24 +1226,24 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24start-on-demand
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-29
-  appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-29
+  app_id: any
   --description: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.StartOnDemandAppReplication")
-  let body = {appId: $appId, description: $description} | compact
+  let body = {"appId": $app_id, "description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1254,7 +1254,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24start-on-demand
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.StartOnDemandReplicationRun
 # operationId: StartOnDemandReplicationRun
-export def "x-amz-target-aws-server-migration-service-v2016-10-24start-on-demand-replication-run StartOnDemandReplicationRun" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24start-on-demand-replication-run start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1263,24 +1263,24 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24start-on-demand
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-30
-  replicationJobId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-30
+  replication_job_id: any
   --description: any
 ]: any -> record<replicationRunId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.StartOnDemandReplicationRun")
-  let body = {replicationJobId: $replicationJobId, description: $description} | compact
+  let body = {"replicationJobId": $replication_job_id, "description": $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1291,7 +1291,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24start-on-demand
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.StopAppReplication
 # operationId: StopAppReplication
-export def "x-amz-target-aws-server-migration-service-v2016-10-24stop-app-replication StopAppReplication" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24stop-app-replication stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,23 +1300,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24stop-app-replic
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-31
-  --appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-31
+  --app-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.StopAppReplication")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1327,7 +1327,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24stop-app-replic
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.TerminateApp
 # operationId: TerminateApp
-export def "x-amz-target-aws-server-migration-service-v2016-10-24terminate-app TerminateApp" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24terminate-app post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1336,23 +1336,23 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24terminate-app T
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-32
-  --appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-32
+  --app-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.TerminateApp")
-  let body = {appId: $appId} | compact
+  let body = {"appId": $app_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1363,7 +1363,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24terminate-app T
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.UpdateApp
 # operationId: UpdateApp
-export def "x-amz-target-aws-server-migration-service-v2016-10-24update-app UpdateApp" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24update-app update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1372,28 +1372,28 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24update-app Upda
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-33
-  --appId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-33
+  --app-id: any
   --name: any
   --description: any
-  --roleName: any
-  --serverGroups: any
+  --role-name: any
+  --server-groups: any
   --tags: any
 ]: any -> record<appSummary: record<appId: record, importedAppId: record, name: record, description: record, status: record, statusMessage: record, replicationConfigurationStatus: record, replicationStatus: record, replicationStatusMessage: record, latestReplicationTime: record, launchConfigurationStatus: record, launchStatus: record, launchStatusMessage: record, launchDetails: record<latestLaunchTime: record, stackName: record, stackId: record>, creationTime: record, lastModified: record, roleName: record, totalServerGroups: record, totalServers: record>, serverGroups: record, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.UpdateApp")
-  let body = {appId: $appId, name: $name, description: $description, roleName: $roleName, serverGroups: $serverGroups, tags: $tags} | compact
+  let body = {"appId": $app_id, "name": $name, "description": $description, "roleName": $role_name, "serverGroups": $server_groups, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1404,7 +1404,7 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24update-app Upda
 #
 # POST /#X-Amz-Target=AWSServerMigrationService_V2016_10_24.UpdateReplicationJob
 # operationId: UpdateReplicationJob
-export def "x-amz-target-aws-server-migration-service-v2016-10-24update-replication-job UpdateReplicationJob" [
+export def "x-amz-target-aws-server-migration-service-v2016-10-24update-replication-job update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1413,31 +1413,31 @@ export def "x-amz-target-aws-server-migration-service-v2016-10-24update-replicat
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-34
-  replicationJobId: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-34
+  replication_job_id: any
   --frequency: any
-  --nextReplicationRunStartTime: any
-  --licenseType: any
-  --roleName: any
+  --next-replication-run-start-time: any
+  --license-type: any
+  --role-name: any
   --description: any
-  --numberOfRecentAmisToKeep: any
+  --number-of-recent-amis-to-keep: any
   --encrypted: any
-  --kmsKeyId: any
+  --kms-key-id: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AWSServerMigrationService_V2016_10_24.UpdateReplicationJob")
-  let body = {replicationJobId: $replicationJobId, frequency: $frequency, nextReplicationRunStartTime: $nextReplicationRunStartTime, licenseType: $licenseType, roleName: $roleName, description: $description, numberOfRecentAmisToKeep: $numberOfRecentAmisToKeep, encrypted: $encrypted, kmsKeyId: $kmsKeyId} | compact
+  let body = {"replicationJobId": $replication_job_id, "frequency": $frequency, "nextReplicationRunStartTime": $next_replication_run_start_time, "licenseType": $license_type, "roleName": $role_name, "description": $description, "numberOfRecentAmisToKeep": $number_of_recent_amis_to_keep, "encrypted": $encrypted, "kmsKeyId": $kms_key_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

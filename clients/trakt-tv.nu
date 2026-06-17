@@ -114,7 +114,7 @@ export def "calendars-all-dvd get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/all/dvd/($start_date)/($days)")
+  let full_url = (build-url $base ({start_date: $start_date, days: $days} | format pattern "/calendars/all/dvd/{start_date}/{days}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -141,7 +141,7 @@ export def "calendars-all-movies get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/all/movies/($start_date)/($days)")
+  let full_url = (build-url $base ({start_date: $start_date, days: $days} | format pattern "/calendars/all/movies/{start_date}/{days}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -168,7 +168,7 @@ export def "calendars-all-shows-new get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/all/shows/new/($start_date)/($days)")
+  let full_url = (build-url $base ({start_date: $start_date, days: $days} | format pattern "/calendars/all/shows/new/{start_date}/{days}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -195,7 +195,7 @@ export def "calendars-all-shows-premieres get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/all/shows/premieres/($start_date)/($days)")
+  let full_url = (build-url $base ({start_date: $start_date, days: $days} | format pattern "/calendars/all/shows/premieres/{start_date}/{days}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -222,7 +222,7 @@ export def "calendars-all-shows get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/all/shows/($start_date)/($days)")
+  let full_url = (build-url $base ({start_date: $start_date, days: $days} | format pattern "/calendars/all/shows/{start_date}/{days}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -234,7 +234,7 @@ export def "calendars-all-shows get" [
 #
 # GET /calendars/my/dvd/{start_date}/{days}
 # operationId: Get DVD releases
-export def "calendars-my-dvd Get-DVD-releases" [
+export def "calendars-my-dvd get" [
   start_date: string
   days: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -250,7 +250,7 @@ export def "calendars-my-dvd Get-DVD-releases" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/my/dvd/($start_date)/($days)")
+  let full_url = (build-url $base ({start_date: $start_date, days: $days} | format pattern "/calendars/my/dvd/{start_date}/{days}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -262,7 +262,7 @@ export def "calendars-my-dvd Get-DVD-releases" [
 #
 # GET /calendars/my/movies/{start_date}/{days}
 # operationId: Get movies
-export def "calendars-my-movies Get-movies" [
+export def "calendars-my-movies get" [
   start_date: string
   days: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -278,7 +278,7 @@ export def "calendars-my-movies Get-movies" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/my/movies/($start_date)/($days)")
+  let full_url = (build-url $base ({start_date: $start_date, days: $days} | format pattern "/calendars/my/movies/{start_date}/{days}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -290,7 +290,7 @@ export def "calendars-my-movies Get-movies" [
 #
 # GET /calendars/my/shows/new/{start_date}/{days}
 # operationId: Get new shows
-export def "calendars-my-shows-new Get-new-shows" [
+export def "calendars-my-shows-new get" [
   start_date: string
   days: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -306,7 +306,7 @@ export def "calendars-my-shows-new Get-new-shows" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/my/shows/new/($start_date)/($days)")
+  let full_url = (build-url $base ({start_date: $start_date, days: $days} | format pattern "/calendars/my/shows/new/{start_date}/{days}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -318,7 +318,7 @@ export def "calendars-my-shows-new Get-new-shows" [
 #
 # GET /calendars/my/shows/premieres/{start_date}/{days}
 # operationId: Get season premieres
-export def "calendars-my-shows-premieres Get-season-premieres" [
+export def "calendars-my-shows-premieres get" [
   start_date: string
   days: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -334,7 +334,7 @@ export def "calendars-my-shows-premieres Get-season-premieres" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/my/shows/premieres/($start_date)/($days)")
+  let full_url = (build-url $base ({start_date: $start_date, days: $days} | format pattern "/calendars/my/shows/premieres/{start_date}/{days}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -346,7 +346,7 @@ export def "calendars-my-shows-premieres Get-season-premieres" [
 #
 # GET /calendars/my/shows/{start_date}/{days}
 # operationId: Get shows
-export def "calendars-my-shows Get-shows" [
+export def "calendars-my-shows get" [
   start_date: string
   days: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -362,7 +362,7 @@ export def "calendars-my-shows Get-shows" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/calendars/my/shows/($start_date)/($days)")
+  let full_url = (build-url $base ({start_date: $start_date, days: $days} | format pattern "/calendars/my/shows/{start_date}/{days}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -374,7 +374,7 @@ export def "calendars-my-shows Get-shows" [
 #
 # GET /certifications/{type}
 # operationId: Get certifications
-export def "certifications Get-certifications" [
+export def "certifications get" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,7 +389,7 @@ export def "certifications Get-certifications" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/certifications/($type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/certifications/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -401,7 +401,7 @@ export def "certifications Get-certifications" [
 #
 # DELETE /checkin
 # operationId: Delete any active checkins
-export def "checkin Delete-any-active-checkins" [
+export def "checkin delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "checkin Delete-any-active-checkins" [
 # operationId: Check into an item
 # --movie shape: {ids?: record, title?: string, year?: float}
 # --sharing shape: {tumblr?: bool, twitter?: bool}
-export def "checkin Check-into-an-item" [
+export def "checkin post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "checkin Check-into-an-item" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/checkin")
-  let body = {app_date: $app_date, app_version: $app_version, message: $message, movie: $movie, sharing: $sharing} | compact
+  let body = {"app_date": $app_date, "app_version": $app_version, "message": $message, "movie": $movie, "sharing": $sharing} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -465,7 +465,7 @@ export def "checkin Check-into-an-item" [
 # operationId: Post a comment
 # --movie shape: {ids?: record, title?: string, year?: float}
 # --sharing shape: {medium?: bool, tumblr?: bool, twitter?: bool}
-export def "comments Post-a-comment" [
+export def "comments post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "comments Post-a-comment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/comments")
-  let body = {comment: $comment, movie: $movie, sharing: $sharing, spoiler: $spoiler} | compact
+  let body = {"comment": $comment, "movie": $movie, "sharing": $sharing, "spoiler": $spoiler} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -498,7 +498,7 @@ export def "comments Post-a-comment" [
 #
 # GET /comments/recent/{comment_type}/{type}
 # operationId: Get recently created comments
-export def "comments-recent Get-recently-created-comments" [
+export def "comments-recent get" [
   comment_type: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -516,7 +516,7 @@ export def "comments-recent Get-recently-created-comments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/comments/recent/($comment_type)/($type)" $qp)
+  let full_url = (build-url $base ({comment_type: $comment_type, type: $type} | format pattern "/comments/recent/{comment_type}/{type}") $qp)
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -528,7 +528,7 @@ export def "comments-recent Get-recently-created-comments" [
 #
 # GET /comments/trending/{comment_type}/{type}
 # operationId: Get trending comments
-export def "comments-trending Get-trending-comments" [
+export def "comments-trending get" [
   comment_type: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -546,7 +546,7 @@ export def "comments-trending Get-trending-comments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/comments/trending/($comment_type)/($type)" $qp)
+  let full_url = (build-url $base ({comment_type: $comment_type, type: $type} | format pattern "/comments/trending/{comment_type}/{type}") $qp)
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -558,7 +558,7 @@ export def "comments-trending Get-trending-comments" [
 #
 # GET /comments/updates/{comment_type}/{type}
 # operationId: Get recently updated comments
-export def "comments-updates Get-recently-updated-comments" [
+export def "comments-updates get" [
   comment_type: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -576,7 +576,7 @@ export def "comments-updates Get-recently-updated-comments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/comments/updates/($comment_type)/($type)" $qp)
+  let full_url = (build-url $base ({comment_type: $comment_type, type: $type} | format pattern "/comments/updates/{comment_type}/{type}") $qp)
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -588,7 +588,7 @@ export def "comments-updates Get-recently-updated-comments" [
 #
 # DELETE /comments/{id}
 # operationId: Delete a comment or reply
-export def "comments Delete-a-comment-or-reply" [
+export def "comments delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -603,7 +603,7 @@ export def "comments Delete-a-comment-or-reply" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -615,7 +615,7 @@ export def "comments Delete-a-comment-or-reply" [
 #
 # GET /comments/{id}
 # operationId: Get a comment or reply
-export def "comments Get-a-comment-or-reply" [
+export def "comments get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -630,7 +630,7 @@ export def "comments Get-a-comment-or-reply" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -642,7 +642,7 @@ export def "comments Get-a-comment-or-reply" [
 #
 # PUT /comments/{id}
 # operationId: Update a comment or reply
-export def "comments Update-a-comment-or-reply" [
+export def "comments put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,8 +660,8 @@ export def "comments Update-a-comment-or-reply" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)")
-  let body = {comment: $comment, spoiler: $spoiler} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}"))
+  let body = {"comment": $comment, "spoiler": $spoiler} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -674,7 +674,7 @@ export def "comments Update-a-comment-or-reply" [
 #
 # GET /comments/{id}/item
 # operationId: Get the attached media item
-export def "comments-item Get-the-attached-media-item" [
+export def "comments-item get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -689,7 +689,7 @@ export def "comments-item Get-the-attached-media-item" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)/item")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}/item"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -701,7 +701,7 @@ export def "comments-item Get-the-attached-media-item" [
 #
 # DELETE /comments/{id}/like
 # operationId: Remove like on a comment
-export def "comments-like Remove-like-on-a-comment" [
+export def "comments-like delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "comments-like Remove-like-on-a-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)/like")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}/like"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -728,7 +728,7 @@ export def "comments-like Remove-like-on-a-comment" [
 #
 # POST /comments/{id}/like
 # operationId: Like a comment
-export def "comments-like Like-a-comment" [
+export def "comments-like post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -743,7 +743,7 @@ export def "comments-like Like-a-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)/like")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}/like"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -755,7 +755,7 @@ export def "comments-like Like-a-comment" [
 #
 # GET /comments/{id}/likes
 # operationId: Get all users who liked a comment
-export def "comments-likes Get-all-users-who-liked-a-comment" [
+export def "comments-likes get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,7 +770,7 @@ export def "comments-likes Get-all-users-who-liked-a-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)/likes")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}/likes"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -782,7 +782,7 @@ export def "comments-likes Get-all-users-who-liked-a-comment" [
 #
 # GET /comments/{id}/replies
 # operationId: Get replies for a comment
-export def "comments-replies Get-replies-for-a-comment" [
+export def "comments-replies get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,7 +797,7 @@ export def "comments-replies Get-replies-for-a-comment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)/replies")
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}/replies"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -809,7 +809,7 @@ export def "comments-replies Get-replies-for-a-comment" [
 #
 # POST /comments/{id}/replies
 # operationId: Post a reply for a comment
-export def "comments-replies Post-a-reply-for-a-comment" [
+export def "comments-replies post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -827,8 +827,8 @@ export def "comments-replies Post-a-reply-for-a-comment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/comments/($id)/replies")
-  let body = {comment: $comment, spoiler: $spoiler} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/comments/{id}/replies"))
+  let body = {"comment": $comment, "spoiler": $spoiler} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -841,7 +841,7 @@ export def "comments-replies Post-a-reply-for-a-comment" [
 #
 # GET /countries/{type}
 # operationId: Get countries
-export def "countries Get-countries" [
+export def "countries get" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -856,7 +856,7 @@ export def "countries Get-countries" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/countries/($type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/countries/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -868,7 +868,7 @@ export def "countries Get-countries" [
 #
 # GET /genres/{type}
 # operationId: Get genres
-export def "genres Get-genres" [
+export def "genres get" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -883,7 +883,7 @@ export def "genres Get-genres" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/genres/($type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/genres/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -895,7 +895,7 @@ export def "genres Get-genres" [
 #
 # GET /languages/{type}
 # operationId: Get languages
-export def "languages Get-languages" [
+export def "languages get" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +910,7 @@ export def "languages Get-languages" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/languages/($type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/languages/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -922,7 +922,7 @@ export def "languages Get-languages" [
 #
 # GET /lists/popular
 # operationId: Get popular lists
-export def "lists-popular Get-popular-lists" [
+export def "lists-popular get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -948,7 +948,7 @@ export def "lists-popular Get-popular-lists" [
 #
 # GET /lists/trending
 # operationId: Get trending lists
-export def "lists-trending Get-trending-lists" [
+export def "lists-trending get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -974,7 +974,7 @@ export def "lists-trending Get-trending-lists" [
 #
 # GET /lists/{id}
 # operationId: Get list
-export def "lists Get-list" [
+export def "lists get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -989,7 +989,7 @@ export def "lists Get-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lists/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/lists/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1001,7 +1001,7 @@ export def "lists Get-list" [
 #
 # GET /lists/{id}/comments/{sort}
 # operationId: Get all list comments
-export def "lists-comments Get-all-list-comments" [
+export def "lists-comments get" [
   id: int
   sort: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1017,7 +1017,7 @@ export def "lists-comments Get-all-list-comments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lists/($id)/comments/($sort)")
+  let full_url = (build-url $base ({id: $id, sort: $sort} | format pattern "/lists/{id}/comments/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1029,7 +1029,7 @@ export def "lists-comments Get-all-list-comments" [
 #
 # GET /lists/{id}/items/{type}
 # operationId: Get items on a list
-export def "lists-items Get-items-on-a-list" [
+export def "lists-items get" [
   id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1045,7 +1045,7 @@ export def "lists-items Get-items-on-a-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lists/($id)/items/($type)")
+  let full_url = (build-url $base ({id: $id, type: $type} | format pattern "/lists/{id}/items/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1057,7 +1057,7 @@ export def "lists-items Get-items-on-a-list" [
 #
 # GET /lists/{id}/likes
 # operationId: Get all users who liked a list
-export def "lists-likes Get-all-users-who-liked-a-list" [
+export def "lists-likes get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1072,7 +1072,7 @@ export def "lists-likes Get-all-users-who-liked-a-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/lists/($id)/likes")
+  let full_url = (build-url $base ({id: $id} | format pattern "/lists/{id}/likes"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1084,7 +1084,7 @@ export def "lists-likes Get-all-users-who-liked-a-list" [
 #
 # GET /movies/anticipated
 # operationId: Get the most anticipated movies
-export def "movies-anticipated Get-the-most-anticipated-movies" [
+export def "movies-anticipated get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1110,7 +1110,7 @@ export def "movies-anticipated Get-the-most-anticipated-movies" [
 #
 # GET /movies/boxoffice
 # operationId: Get the weekend box office
-export def "movies-boxoffice Get-the-weekend-box-office" [
+export def "movies-boxoffice get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1136,7 +1136,7 @@ export def "movies-boxoffice Get-the-weekend-box-office" [
 #
 # GET /movies/collected/{period}
 # operationId: Get the most Collected movies
-export def "movies-collected Get-the-most-Collected-movies" [
+export def "movies-collected get" [
   period: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1151,7 +1151,7 @@ export def "movies-collected Get-the-most-Collected-movies" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/collected/($period)")
+  let full_url = (build-url $base ({period: $period} | format pattern "/movies/collected/{period}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1163,7 +1163,7 @@ export def "movies-collected Get-the-most-Collected-movies" [
 #
 # GET /movies/played/{period}
 # operationId: Get the most played movies
-export def "movies-played Get-the-most-played-movies" [
+export def "movies-played get" [
   period: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1178,7 +1178,7 @@ export def "movies-played Get-the-most-played-movies" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/played/($period)")
+  let full_url = (build-url $base ({period: $period} | format pattern "/movies/played/{period}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1190,7 +1190,7 @@ export def "movies-played Get-the-most-played-movies" [
 #
 # GET /movies/popular
 # operationId: Get popular movies
-export def "movies-popular Get-popular-movies" [
+export def "movies-popular get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1216,7 +1216,7 @@ export def "movies-popular Get-popular-movies" [
 #
 # GET /movies/recommended/{period}
 # operationId: Get the most recommended movies
-export def "movies-recommended Get-the-most-recommended-movies" [
+export def "movies-recommended get" [
   period: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1231,7 +1231,7 @@ export def "movies-recommended Get-the-most-recommended-movies" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/recommended/($period)")
+  let full_url = (build-url $base ({period: $period} | format pattern "/movies/recommended/{period}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1243,7 +1243,7 @@ export def "movies-recommended Get-the-most-recommended-movies" [
 #
 # GET /movies/trending
 # operationId: Get trending movies
-export def "movies-trending Get-trending-movies" [
+export def "movies-trending get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,7 +1269,7 @@ export def "movies-trending Get-trending-movies" [
 #
 # GET /movies/updates/id/{start_date}
 # operationId: Get recently updated movie Trakt IDs
-export def "movies-updates-id Get-recently-updated-movie-Trakt-IDs" [
+export def "movies-updates-id get" [
   start_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1284,7 +1284,7 @@ export def "movies-updates-id Get-recently-updated-movie-Trakt-IDs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/updates/id/($start_date)")
+  let full_url = (build-url $base ({start_date: $start_date} | format pattern "/movies/updates/id/{start_date}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1296,7 +1296,7 @@ export def "movies-updates-id Get-recently-updated-movie-Trakt-IDs" [
 #
 # GET /movies/updates/{start_date}
 # operationId: Get recently updated movies
-export def "movies-updates Get-recently-updated-movies" [
+export def "movies-updates get" [
   start_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1311,7 +1311,7 @@ export def "movies-updates Get-recently-updated-movies" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/updates/($start_date)")
+  let full_url = (build-url $base ({start_date: $start_date} | format pattern "/movies/updates/{start_date}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1323,7 +1323,7 @@ export def "movies-updates Get-recently-updated-movies" [
 #
 # GET /movies/watched/{period}
 # operationId: Get the most watched movies
-export def "movies-watched Get-the-most-watched-movies" [
+export def "movies-watched get" [
   period: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1338,7 +1338,7 @@ export def "movies-watched Get-the-most-watched-movies" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/watched/($period)")
+  let full_url = (build-url $base ({period: $period} | format pattern "/movies/watched/{period}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1350,7 +1350,7 @@ export def "movies-watched Get-the-most-watched-movies" [
 #
 # GET /movies/{id}
 # operationId: Get a movie
-export def "movies Get-a-movie" [
+export def "movies get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1365,7 +1365,7 @@ export def "movies Get-a-movie" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1377,7 +1377,7 @@ export def "movies Get-a-movie" [
 #
 # GET /movies/{id}/aliases
 # operationId: Get all movie aliases
-export def "movies-aliases Get-all-movie-aliases" [
+export def "movies-aliases get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1392,7 +1392,7 @@ export def "movies-aliases Get-all-movie-aliases" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/aliases")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/aliases"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1404,7 +1404,7 @@ export def "movies-aliases Get-all-movie-aliases" [
 #
 # GET /movies/{id}/comments/{sort}
 # operationId: Get all movie comments
-export def "movies-comments Get-all-movie-comments" [
+export def "movies-comments get" [
   id: string
   sort: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1420,7 +1420,7 @@ export def "movies-comments Get-all-movie-comments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/comments/($sort)")
+  let full_url = (build-url $base ({id: $id, sort: $sort} | format pattern "/movies/{id}/comments/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1432,7 +1432,7 @@ export def "movies-comments Get-all-movie-comments" [
 #
 # GET /movies/{id}/lists/{type}/{sort}
 # operationId: Get lists containing this movie
-export def "movies-lists Get-lists-containing-this-movie" [
+export def "movies-lists get" [
   id: string
   type: string
   sort: string
@@ -1449,7 +1449,7 @@ export def "movies-lists Get-lists-containing-this-movie" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/lists/($type)/($sort)")
+  let full_url = (build-url $base ({id: $id, type: $type, sort: $sort} | format pattern "/movies/{id}/lists/{type}/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1461,7 +1461,7 @@ export def "movies-lists Get-lists-containing-this-movie" [
 #
 # GET /movies/{id}/people
 # operationId: Get all people for a movie
-export def "movies-people Get-all-people-for-a-movie" [
+export def "movies-people get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1476,7 +1476,7 @@ export def "movies-people Get-all-people-for-a-movie" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/people")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/people"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1488,7 +1488,7 @@ export def "movies-people Get-all-people-for-a-movie" [
 #
 # GET /movies/{id}/ratings
 # operationId: Get movie ratings
-export def "movies-ratings Get-movie-ratings" [
+export def "movies-ratings get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1503,7 +1503,7 @@ export def "movies-ratings Get-movie-ratings" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/ratings")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/ratings"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1515,7 +1515,7 @@ export def "movies-ratings Get-movie-ratings" [
 #
 # GET /movies/{id}/related
 # operationId: Get related movies
-export def "movies-related Get-related-movies" [
+export def "movies-related get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1530,7 +1530,7 @@ export def "movies-related Get-related-movies" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/related")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/related"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1542,7 +1542,7 @@ export def "movies-related Get-related-movies" [
 #
 # GET /movies/{id}/releases/{country}
 # operationId: Get all movie releases
-export def "movies-releases Get-all-movie-releases" [
+export def "movies-releases get" [
   id: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1558,7 +1558,7 @@ export def "movies-releases Get-all-movie-releases" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/releases/($country)")
+  let full_url = (build-url $base ({id: $id, country: $country} | format pattern "/movies/{id}/releases/{country}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1570,7 +1570,7 @@ export def "movies-releases Get-all-movie-releases" [
 #
 # GET /movies/{id}/stats
 # operationId: Get movie stats
-export def "movies-stats Get-movie-stats" [
+export def "movies-stats get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1585,7 +1585,7 @@ export def "movies-stats Get-movie-stats" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/stats")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/stats"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1597,7 +1597,7 @@ export def "movies-stats Get-movie-stats" [
 #
 # GET /movies/{id}/studios
 # operationId: Get movie studios
-export def "movies-studios Get-movie-studios" [
+export def "movies-studios get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1612,7 +1612,7 @@ export def "movies-studios Get-movie-studios" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/studios")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/studios"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1624,7 +1624,7 @@ export def "movies-studios Get-movie-studios" [
 #
 # GET /movies/{id}/translations/{language}
 # operationId: Get all movie translations
-export def "movies-translations Get-all-movie-translations" [
+export def "movies-translations get" [
   id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1640,7 +1640,7 @@ export def "movies-translations Get-all-movie-translations" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/translations/($language)")
+  let full_url = (build-url $base ({id: $id, language: $language} | format pattern "/movies/{id}/translations/{language}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1652,7 +1652,7 @@ export def "movies-translations Get-all-movie-translations" [
 #
 # GET /movies/{id}/watching
 # operationId: Get users watching right now
-export def "movies-watching Get-users-watching-right-now" [
+export def "movies-watching get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1667,7 +1667,7 @@ export def "movies-watching Get-users-watching-right-now" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/movies/($id)/watching")
+  let full_url = (build-url $base ({id: $id} | format pattern "/movies/{id}/watching"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1679,7 +1679,7 @@ export def "movies-watching Get-users-watching-right-now" [
 #
 # GET /networks
 # operationId: Get networks
-export def "networks Get-networks" [
+export def "networks get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1705,7 +1705,7 @@ export def "networks Get-networks" [
 #
 # GET /oauth/authorize
 # operationId: Authorize Application
-export def "oauth-authorize Authorize-Application" [
+export def "oauth-authorize get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1735,7 +1735,7 @@ export def "oauth-authorize Authorize-Application" [
 #
 # POST /oauth/device/code
 # operationId: Generate new device codes
-export def "oauth-device-code Generate-new-device-codes" [
+export def "oauth-device-code post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1750,7 +1750,7 @@ export def "oauth-device-code Generate-new-device-codes" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/device/code")
-  let body = {client_id: $client_id} | compact
+  let body = {"client_id": $client_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1778,7 +1778,7 @@ export def "oauth-device-token token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/device/token")
-  let body = {client_id: $client_id, client_secret: $client_secret, code: $code} | compact
+  let body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1806,7 +1806,7 @@ export def "oauth-revoke token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/revoke")
-  let body = {client_id: $client_id, client_secret: $client_secret, token: $body_token} | compact
+  let body = {"client_id": $client_id, "client_secret": $client_secret, "token": $body_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1836,7 +1836,7 @@ export def "oauth-token token" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/token")
-  let body = {client_id: $client_id, client_secret: $client_secret, grant_type: $grant_type, redirect_uri: $redirect_uri, refresh_token: $refresh_token} | compact
+  let body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "redirect_uri": $redirect_uri, "refresh_token": $refresh_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1847,7 +1847,7 @@ export def "oauth-token token" [
 #
 # GET /people/updates/id/{start_date}
 # operationId: Get recently updated people Trakt IDs
-export def "people-updates-id Get-recently-updated-people-Trakt-IDs" [
+export def "people-updates-id get" [
   start_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1862,7 +1862,7 @@ export def "people-updates-id Get-recently-updated-people-Trakt-IDs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/people/updates/id/($start_date)")
+  let full_url = (build-url $base ({start_date: $start_date} | format pattern "/people/updates/id/{start_date}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1874,7 +1874,7 @@ export def "people-updates-id Get-recently-updated-people-Trakt-IDs" [
 #
 # GET /people/updates/{start_date}
 # operationId: Get recently updated people
-export def "people-updates Get-recently-updated-people" [
+export def "people-updates get" [
   start_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1889,7 +1889,7 @@ export def "people-updates Get-recently-updated-people" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/people/updates/($start_date)")
+  let full_url = (build-url $base ({start_date: $start_date} | format pattern "/people/updates/{start_date}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1901,7 +1901,7 @@ export def "people-updates Get-recently-updated-people" [
 #
 # GET /people/{id}
 # operationId: Get a single person
-export def "people Get-a-single-person" [
+export def "people get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1916,7 +1916,7 @@ export def "people Get-a-single-person" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/people/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/people/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1928,7 +1928,7 @@ export def "people Get-a-single-person" [
 #
 # GET /people/{id}/lists/{type}/{sort}
 # operationId: Get lists containing this person
-export def "people-lists Get-lists-containing-this-person" [
+export def "people-lists get" [
   id: string
   type: string
   sort: string
@@ -1945,7 +1945,7 @@ export def "people-lists Get-lists-containing-this-person" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/people/($id)/lists/($type)/($sort)")
+  let full_url = (build-url $base ({id: $id, type: $type, sort: $sort} | format pattern "/people/{id}/lists/{type}/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1957,7 +1957,7 @@ export def "people-lists Get-lists-containing-this-person" [
 #
 # GET /people/{id}/movies
 # operationId: Get movie credits
-export def "people-movies Get-movie-credits" [
+export def "people-movies get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1972,7 +1972,7 @@ export def "people-movies Get-movie-credits" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/people/($id)/movies")
+  let full_url = (build-url $base ({id: $id} | format pattern "/people/{id}/movies"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1984,7 +1984,7 @@ export def "people-movies Get-movie-credits" [
 #
 # GET /people/{id}/shows
 # operationId: Get show credits
-export def "people-shows Get-show-credits" [
+export def "people-shows get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1999,7 +1999,7 @@ export def "people-shows Get-show-credits" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/people/($id)/shows")
+  let full_url = (build-url $base ({id: $id} | format pattern "/people/{id}/shows"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2011,7 +2011,7 @@ export def "people-shows Get-show-credits" [
 #
 # GET /recommendations/movies
 # operationId: Get movie recommendations
-export def "recommendations-movies Get-movie-recommendations" [
+export def "recommendations-movies get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2040,7 +2040,7 @@ export def "recommendations-movies Get-movie-recommendations" [
 #
 # DELETE /recommendations/movies/{id}
 # operationId: Hide a movie recommendation
-export def "recommendations-movies Hide-a-movie-recommendation" [
+export def "recommendations-movies delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2055,7 +2055,7 @@ export def "recommendations-movies Hide-a-movie-recommendation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recommendations/movies/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/recommendations/movies/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2067,7 +2067,7 @@ export def "recommendations-movies Hide-a-movie-recommendation" [
 #
 # GET /recommendations/shows
 # operationId: Get show recommendations
-export def "recommendations-shows Get-show-recommendations" [
+export def "recommendations-shows get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2096,7 +2096,7 @@ export def "recommendations-shows Get-show-recommendations" [
 #
 # DELETE /recommendations/shows/{id}
 # operationId: Hide a show recommendation
-export def "recommendations-shows Hide-a-show-recommendation" [
+export def "recommendations-shows delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2111,7 @@ export def "recommendations-shows Hide-a-show-recommendation" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/recommendations/shows/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/recommendations/shows/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2124,7 +2124,7 @@ export def "recommendations-shows Hide-a-show-recommendation" [
 # POST /scrobble/pause
 # operationId: Pause watching in a media center
 # --movie shape: {ids?: record, title?: string, year?: float}
-export def "scrobble-pause Pause-watching-in-a-media-center" [
+export def "scrobble-pause post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2144,7 +2144,7 @@ export def "scrobble-pause Pause-watching-in-a-media-center" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scrobble/pause")
-  let body = {app_date: $app_date, app_version: $app_version, movie: $movie, progress: $progress} | compact
+  let body = {"app_date": $app_date, "app_version": $app_version, "movie": $movie, "progress": $progress} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2158,7 +2158,7 @@ export def "scrobble-pause Pause-watching-in-a-media-center" [
 # POST /scrobble/start
 # operationId: Start watching in a media center
 # --movie shape: {ids?: record, title?: string, year?: float}
-export def "scrobble-start Start-watching-in-a-media-center" [
+export def "scrobble-start post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2178,7 +2178,7 @@ export def "scrobble-start Start-watching-in-a-media-center" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scrobble/start")
-  let body = {app_date: $app_date, app_version: $app_version, movie: $movie, progress: $progress} | compact
+  let body = {"app_date": $app_date, "app_version": $app_version, "movie": $movie, "progress": $progress} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2192,7 +2192,7 @@ export def "scrobble-start Start-watching-in-a-media-center" [
 # POST /scrobble/stop
 # operationId: Stop or finish watching in a media center
 # --movie shape: {ids?: record, title?: string, year?: float}
-export def "scrobble-stop Stop-or-finish-watching-in-a-media-center" [
+export def "scrobble-stop post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2212,7 +2212,7 @@ export def "scrobble-stop Stop-or-finish-watching-in-a-media-center" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scrobble/stop")
-  let body = {app_date: $app_date, app_version: $app_version, movie: $movie, progress: $progress} | compact
+  let body = {"app_date": $app_date, "app_version": $app_version, "movie": $movie, "progress": $progress} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2225,7 +2225,7 @@ export def "scrobble-stop Stop-or-finish-watching-in-a-media-center" [
 #
 # GET /search/{id_type}/{id}
 # operationId: Get ID lookup results
-export def "search Get-ID-lookup-results" [
+export def "search get" [
   id_type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2243,7 +2243,7 @@ export def "search Get-ID-lookup-results" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($id_type)/($id)" $qp)
+  let full_url = (build-url $base ({id_type: $id_type, id: $id} | format pattern "/search/{id_type}/{id}") $qp)
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2255,7 +2255,7 @@ export def "search Get-ID-lookup-results" [
 #
 # GET /search/{type}
 # operationId: Get text query results
-export def "search Get-text-query-results" [
+export def "search list" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2274,7 +2274,7 @@ export def "search Get-text-query-results" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/search/($type)" $qp)
+  let full_url = (build-url $base ({type: $type} | format pattern "/search/{type}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2287,7 +2287,7 @@ export def "search Get-text-query-results" [
 #
 # GET /shows/anticipated
 # operationId: Get the most anticipated shows
-export def "shows-anticipated Get-the-most-anticipated-shows" [
+export def "shows-anticipated get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2313,7 +2313,7 @@ export def "shows-anticipated Get-the-most-anticipated-shows" [
 #
 # GET /shows/collected/{period}
 # operationId: Get the most collected shows
-export def "shows-collected Get-the-most-collected-shows" [
+export def "shows-collected get" [
   period: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2328,7 +2328,7 @@ export def "shows-collected Get-the-most-collected-shows" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/collected/($period)")
+  let full_url = (build-url $base ({period: $period} | format pattern "/shows/collected/{period}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2340,7 +2340,7 @@ export def "shows-collected Get-the-most-collected-shows" [
 #
 # GET /shows/played/{period}
 # operationId: Get the most played shows
-export def "shows-played Get-the-most-played-shows" [
+export def "shows-played get" [
   period: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2355,7 +2355,7 @@ export def "shows-played Get-the-most-played-shows" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/played/($period)")
+  let full_url = (build-url $base ({period: $period} | format pattern "/shows/played/{period}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2367,7 +2367,7 @@ export def "shows-played Get-the-most-played-shows" [
 #
 # GET /shows/popular
 # operationId: Get popular shows
-export def "shows-popular Get-popular-shows" [
+export def "shows-popular get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2393,7 +2393,7 @@ export def "shows-popular Get-popular-shows" [
 #
 # GET /shows/recommended/{period}
 # operationId: Get the most recommended shows
-export def "shows-recommended Get-the-most-recommended-shows" [
+export def "shows-recommended get" [
   period: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2408,7 +2408,7 @@ export def "shows-recommended Get-the-most-recommended-shows" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/recommended/($period)")
+  let full_url = (build-url $base ({period: $period} | format pattern "/shows/recommended/{period}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2420,7 +2420,7 @@ export def "shows-recommended Get-the-most-recommended-shows" [
 #
 # GET /shows/trending
 # operationId: Get trending shows
-export def "shows-trending Get-trending-shows" [
+export def "shows-trending get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,7 +2446,7 @@ export def "shows-trending Get-trending-shows" [
 #
 # GET /shows/updates/id/{start_date}
 # operationId: Get recently updated show Trakt IDs
-export def "shows-updates-id Get-recently-updated-show-Trakt-IDs" [
+export def "shows-updates-id get" [
   start_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2461,7 +2461,7 @@ export def "shows-updates-id Get-recently-updated-show-Trakt-IDs" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/updates/id/($start_date)")
+  let full_url = (build-url $base ({start_date: $start_date} | format pattern "/shows/updates/id/{start_date}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2473,7 +2473,7 @@ export def "shows-updates-id Get-recently-updated-show-Trakt-IDs" [
 #
 # GET /shows/updates/{start_date}
 # operationId: Get recently updated shows
-export def "shows-updates Get-recently-updated-shows" [
+export def "shows-updates get" [
   start_date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2488,7 +2488,7 @@ export def "shows-updates Get-recently-updated-shows" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/updates/($start_date)")
+  let full_url = (build-url $base ({start_date: $start_date} | format pattern "/shows/updates/{start_date}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2500,7 +2500,7 @@ export def "shows-updates Get-recently-updated-shows" [
 #
 # GET /shows/watched/{period}
 # operationId: Get the most watched shows
-export def "shows-watched Get-the-most-watched-shows" [
+export def "shows-watched get" [
   period: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2515,7 +2515,7 @@ export def "shows-watched Get-the-most-watched-shows" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/watched/($period)")
+  let full_url = (build-url $base ({period: $period} | format pattern "/shows/watched/{period}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2527,7 +2527,7 @@ export def "shows-watched Get-the-most-watched-shows" [
 #
 # GET /shows/{id}
 # operationId: Get a single show
-export def "shows Get-a-single-show" [
+export def "shows get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2542,7 +2542,7 @@ export def "shows Get-a-single-show" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2554,7 +2554,7 @@ export def "shows Get-a-single-show" [
 #
 # GET /shows/{id}/aliases
 # operationId: Get all show aliases
-export def "shows-aliases Get-all-show-aliases" [
+export def "shows-aliases get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2569,7 +2569,7 @@ export def "shows-aliases Get-all-show-aliases" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/aliases")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/aliases"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2581,7 +2581,7 @@ export def "shows-aliases Get-all-show-aliases" [
 #
 # GET /shows/{id}/certifications
 # operationId: Get all show certifications
-export def "shows-certifications Get-all-show-certifications" [
+export def "shows-certifications get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2596,7 +2596,7 @@ export def "shows-certifications Get-all-show-certifications" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/certifications")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/certifications"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2608,7 +2608,7 @@ export def "shows-certifications Get-all-show-certifications" [
 #
 # GET /shows/{id}/comments/{sort}
 # operationId: Get all show comments
-export def "shows-comments Get-all-show-comments" [
+export def "shows-comments get" [
   id: string
   sort: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2624,7 +2624,7 @@ export def "shows-comments Get-all-show-comments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/comments/($sort)")
+  let full_url = (build-url $base ({id: $id, sort: $sort} | format pattern "/shows/{id}/comments/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2636,7 +2636,7 @@ export def "shows-comments Get-all-show-comments" [
 #
 # GET /shows/{id}/last_episode
 # operationId: Get last episode
-export def "shows-last-episode Get-last-episode" [
+export def "shows-last-episode get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2651,7 +2651,7 @@ export def "shows-last-episode Get-last-episode" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/last_episode")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/last_episode"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2663,7 +2663,7 @@ export def "shows-last-episode Get-last-episode" [
 #
 # GET /shows/{id}/lists/{type}/{sort}
 # operationId: Get lists containing this show
-export def "shows-lists Get-lists-containing-this-show" [
+export def "shows-lists get" [
   id: string
   type: string
   sort: string
@@ -2680,7 +2680,7 @@ export def "shows-lists Get-lists-containing-this-show" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/lists/($type)/($sort)")
+  let full_url = (build-url $base ({id: $id, type: $type, sort: $sort} | format pattern "/shows/{id}/lists/{type}/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2692,7 +2692,7 @@ export def "shows-lists Get-lists-containing-this-show" [
 #
 # GET /shows/{id}/next_episode
 # operationId: Get next episode
-export def "shows-next-episode Get-next-episode" [
+export def "shows-next-episode get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2707,7 +2707,7 @@ export def "shows-next-episode Get-next-episode" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/next_episode")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/next_episode"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2719,7 +2719,7 @@ export def "shows-next-episode Get-next-episode" [
 #
 # GET /shows/{id}/people
 # operationId: Get all people for a show
-export def "shows-people Get-all-people-for-a-show" [
+export def "shows-people get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2734,7 +2734,7 @@ export def "shows-people Get-all-people-for-a-show" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/people")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/people"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2746,7 +2746,7 @@ export def "shows-people Get-all-people-for-a-show" [
 #
 # GET /shows/{id}/progress/collection
 # operationId: Get show collection progress
-export def "shows-progress-collection Get-show-collection-progress" [
+export def "shows-progress-collection get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2767,7 +2767,7 @@ export def "shows-progress-collection Get-show-collection-progress" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hidden" $hidden "scalar") (serialize-qp "specials" $specials "scalar") (serialize-qp "count_specials" $count_specials "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/shows/($id)/progress/collection" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/progress/collection") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2780,7 +2780,7 @@ export def "shows-progress-collection Get-show-collection-progress" [
 #
 # GET /shows/{id}/progress/watched
 # operationId: Get show watched progress
-export def "shows-progress-watched Get-show-watched-progress" [
+export def "shows-progress-watched get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2801,7 +2801,7 @@ export def "shows-progress-watched Get-show-watched-progress" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hidden" $hidden "scalar") (serialize-qp "specials" $specials "scalar") (serialize-qp "count_specials" $count_specials "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/shows/($id)/progress/watched" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/progress/watched") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -2814,7 +2814,7 @@ export def "shows-progress-watched Get-show-watched-progress" [
 #
 # DELETE /shows/{id}/progress/watched/reset
 # operationId: Undo reset show progress
-export def "shows-progress-watched-reset Undo-reset-show-progress" [
+export def "shows-progress-watched-reset delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2829,7 +2829,7 @@ export def "shows-progress-watched-reset Undo-reset-show-progress" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/progress/watched/reset")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/progress/watched/reset"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2841,7 +2841,7 @@ export def "shows-progress-watched-reset Undo-reset-show-progress" [
 #
 # POST /shows/{id}/progress/watched/reset
 # operationId: Reset show progress
-export def "shows-progress-watched-reset Reset-show-progress" [
+export def "shows-progress-watched-reset post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2856,7 +2856,7 @@ export def "shows-progress-watched-reset Reset-show-progress" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/progress/watched/reset")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/progress/watched/reset"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2868,7 +2868,7 @@ export def "shows-progress-watched-reset Reset-show-progress" [
 #
 # GET /shows/{id}/ratings
 # operationId: Get show ratings
-export def "shows-ratings Get-show-ratings" [
+export def "shows-ratings get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2883,7 +2883,7 @@ export def "shows-ratings Get-show-ratings" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/ratings")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/ratings"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2895,7 +2895,7 @@ export def "shows-ratings Get-show-ratings" [
 #
 # GET /shows/{id}/related
 # operationId: Get related shows
-export def "shows-related Get-related-shows" [
+export def "shows-related get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2910,7 +2910,7 @@ export def "shows-related Get-related-shows" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/related")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/related"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2922,7 +2922,7 @@ export def "shows-related Get-related-shows" [
 #
 # GET /shows/{id}/seasons
 # operationId: Get all seasons for a show
-export def "shows-seasons Get-all-seasons-for-a-show" [
+export def "shows-seasons list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2937,7 +2937,7 @@ export def "shows-seasons Get-all-seasons-for-a-show" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/seasons"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2949,7 +2949,7 @@ export def "shows-seasons Get-all-seasons-for-a-show" [
 #
 # GET /shows/{id}/seasons/{season}
 # operationId: Get single season for a show
-export def "shows-seasons Get-single-season-for-a-show" [
+export def "shows-seasons get" [
   id: string
   season: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2967,7 +2967,7 @@ export def "shows-seasons Get-single-season-for-a-show" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "translations" $translations "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)" $qp)
+  let full_url = (build-url $base ({id: $id, season: $season} | format pattern "/shows/{id}/seasons/{season}") $qp)
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -2979,7 +2979,7 @@ export def "shows-seasons Get-single-season-for-a-show" [
 #
 # GET /shows/{id}/seasons/{season}/comments/{sort}
 # operationId: Get all season comments
-export def "shows-seasons-comments Get-all-season-comments" [
+export def "shows-seasons-comments get" [
   id: string
   season: int
   sort: string
@@ -2996,7 +2996,7 @@ export def "shows-seasons-comments Get-all-season-comments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/comments/($sort)")
+  let full_url = (build-url $base ({id: $id, season: $season, sort: $sort} | format pattern "/shows/{id}/seasons/{season}/comments/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3008,7 +3008,7 @@ export def "shows-seasons-comments Get-all-season-comments" [
 #
 # GET /shows/{id}/seasons/{season}/episodes/{episode}
 # operationId: Get a single episode for a show
-export def "shows-seasons-episodes Get-a-single-episode-for-a-show" [
+export def "shows-seasons-episodes get" [
   id: string
   season: int
   episode: int
@@ -3025,7 +3025,7 @@ export def "shows-seasons-episodes Get-a-single-episode-for-a-show" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/episodes/($episode)")
+  let full_url = (build-url $base ({id: $id, season: $season, episode: $episode} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3037,7 +3037,7 @@ export def "shows-seasons-episodes Get-a-single-episode-for-a-show" [
 #
 # GET /shows/{id}/seasons/{season}/episodes/{episode}/comments/{sort}
 # operationId: Get all episode comments
-export def "shows-seasons-episodes-comments Get-all-episode-comments" [
+export def "shows-seasons-episodes-comments get" [
   id: string
   season: int
   episode: int
@@ -3055,7 +3055,7 @@ export def "shows-seasons-episodes-comments Get-all-episode-comments" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/episodes/($episode)/comments/($sort)")
+  let full_url = (build-url $base ({id: $id, season: $season, episode: $episode, sort: $sort} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/comments/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3067,7 +3067,7 @@ export def "shows-seasons-episodes-comments Get-all-episode-comments" [
 #
 # GET /shows/{id}/seasons/{season}/episodes/{episode}/lists/{type}/{sort}
 # operationId: Get lists containing this episode
-export def "shows-seasons-episodes-lists Get-lists-containing-this-episode" [
+export def "shows-seasons-episodes-lists get" [
   id: string
   season: int
   episode: int
@@ -3086,7 +3086,7 @@ export def "shows-seasons-episodes-lists Get-lists-containing-this-episode" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/episodes/($episode)/lists/($type)/($sort)")
+  let full_url = (build-url $base ({id: $id, season: $season, episode: $episode, type: $type, sort: $sort} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/lists/{type}/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3098,7 +3098,7 @@ export def "shows-seasons-episodes-lists Get-lists-containing-this-episode" [
 #
 # GET /shows/{id}/seasons/{season}/episodes/{episode}/people
 # operationId: Get all people for an episode
-export def "shows-seasons-episodes-people Get-all-people-for-an-episode" [
+export def "shows-seasons-episodes-people get" [
   id: string
   season: int
   episode: int
@@ -3115,7 +3115,7 @@ export def "shows-seasons-episodes-people Get-all-people-for-an-episode" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/episodes/($episode)/people")
+  let full_url = (build-url $base ({id: $id, season: $season, episode: $episode} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/people"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3127,7 +3127,7 @@ export def "shows-seasons-episodes-people Get-all-people-for-an-episode" [
 #
 # GET /shows/{id}/seasons/{season}/episodes/{episode}/ratings
 # operationId: Get episode ratings
-export def "shows-seasons-episodes-ratings Get-episode-ratings" [
+export def "shows-seasons-episodes-ratings get" [
   id: string
   season: int
   episode: int
@@ -3144,7 +3144,7 @@ export def "shows-seasons-episodes-ratings Get-episode-ratings" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/episodes/($episode)/ratings")
+  let full_url = (build-url $base ({id: $id, season: $season, episode: $episode} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/ratings"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3156,7 +3156,7 @@ export def "shows-seasons-episodes-ratings Get-episode-ratings" [
 #
 # GET /shows/{id}/seasons/{season}/episodes/{episode}/stats
 # operationId: Get episode stats
-export def "shows-seasons-episodes-stats Get-episode-stats" [
+export def "shows-seasons-episodes-stats get" [
   id: string
   season: int
   episode: int
@@ -3173,7 +3173,7 @@ export def "shows-seasons-episodes-stats Get-episode-stats" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/episodes/($episode)/stats")
+  let full_url = (build-url $base ({id: $id, season: $season, episode: $episode} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/stats"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3185,7 +3185,7 @@ export def "shows-seasons-episodes-stats Get-episode-stats" [
 #
 # GET /shows/{id}/seasons/{season}/episodes/{episode}/translations/{language}
 # operationId: Get all episode translations
-export def "shows-seasons-episodes-translations Get-all-episode-translations" [
+export def "shows-seasons-episodes-translations get" [
   id: string
   season: int
   episode: int
@@ -3203,7 +3203,7 @@ export def "shows-seasons-episodes-translations Get-all-episode-translations" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/episodes/($episode)/translations/($language)")
+  let full_url = (build-url $base ({id: $id, season: $season, episode: $episode, language: $language} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/translations/{language}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3231,7 +3231,7 @@ export def "shows-seasons-episodes-watching get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/episodes/($episode)/watching")
+  let full_url = (build-url $base ({id: $id, season: $season, episode: $episode} | format pattern "/shows/{id}/seasons/{season}/episodes/{episode}/watching"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3243,7 +3243,7 @@ export def "shows-seasons-episodes-watching get" [
 #
 # GET /shows/{id}/seasons/{season}/lists/{type}/{sort}
 # operationId: Get lists containing this season
-export def "shows-seasons-lists Get-lists-containing-this-season" [
+export def "shows-seasons-lists get" [
   id: string
   season: int
   type: string
@@ -3261,7 +3261,7 @@ export def "shows-seasons-lists Get-lists-containing-this-season" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/lists/($type)/($sort)")
+  let full_url = (build-url $base ({id: $id, season: $season, type: $type, sort: $sort} | format pattern "/shows/{id}/seasons/{season}/lists/{type}/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3273,7 +3273,7 @@ export def "shows-seasons-lists Get-lists-containing-this-season" [
 #
 # GET /shows/{id}/seasons/{season}/people
 # operationId: Get all people for a season
-export def "shows-seasons-people Get-all-people-for-a-season" [
+export def "shows-seasons-people get" [
   id: string
   season: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3289,7 +3289,7 @@ export def "shows-seasons-people Get-all-people-for-a-season" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/people")
+  let full_url = (build-url $base ({id: $id, season: $season} | format pattern "/shows/{id}/seasons/{season}/people"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3301,7 +3301,7 @@ export def "shows-seasons-people Get-all-people-for-a-season" [
 #
 # GET /shows/{id}/seasons/{season}/ratings
 # operationId: Get season ratings
-export def "shows-seasons-ratings Get-season-ratings" [
+export def "shows-seasons-ratings get" [
   id: string
   season: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3317,7 +3317,7 @@ export def "shows-seasons-ratings Get-season-ratings" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/ratings")
+  let full_url = (build-url $base ({id: $id, season: $season} | format pattern "/shows/{id}/seasons/{season}/ratings"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3329,7 +3329,7 @@ export def "shows-seasons-ratings Get-season-ratings" [
 #
 # GET /shows/{id}/seasons/{season}/stats
 # operationId: Get season stats
-export def "shows-seasons-stats Get-season-stats" [
+export def "shows-seasons-stats get" [
   id: string
   season: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3345,7 +3345,7 @@ export def "shows-seasons-stats Get-season-stats" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/stats")
+  let full_url = (build-url $base ({id: $id, season: $season} | format pattern "/shows/{id}/seasons/{season}/stats"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3357,7 +3357,7 @@ export def "shows-seasons-stats Get-season-stats" [
 #
 # GET /shows/{id}/seasons/{season}/translations/{language}
 # operationId: Get all season translations
-export def "shows-seasons-translations Get-all-season-translations" [
+export def "shows-seasons-translations get" [
   id: string
   season: int
   language: string
@@ -3374,7 +3374,7 @@ export def "shows-seasons-translations Get-all-season-translations" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/translations/($language)")
+  let full_url = (build-url $base ({id: $id, season: $season, language: $language} | format pattern "/shows/{id}/seasons/{season}/translations/{language}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3401,7 +3401,7 @@ export def "shows-seasons-watching get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/seasons/($season)/watching")
+  let full_url = (build-url $base ({id: $id, season: $season} | format pattern "/shows/{id}/seasons/{season}/watching"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3413,7 +3413,7 @@ export def "shows-seasons-watching get" [
 #
 # GET /shows/{id}/stats
 # operationId: Get show stats
-export def "shows-stats Get-show-stats" [
+export def "shows-stats get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3428,7 +3428,7 @@ export def "shows-stats Get-show-stats" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/stats")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/stats"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3440,7 +3440,7 @@ export def "shows-stats Get-show-stats" [
 #
 # GET /shows/{id}/studios
 # operationId: Get show studios
-export def "shows-studios Get-show-studios" [
+export def "shows-studios get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3455,7 +3455,7 @@ export def "shows-studios Get-show-studios" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/studios")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/studios"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3467,7 +3467,7 @@ export def "shows-studios Get-show-studios" [
 #
 # GET /shows/{id}/translations/{language}
 # operationId: Get all show translations
-export def "shows-translations Get-all-show-translations" [
+export def "shows-translations get" [
   id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3483,7 +3483,7 @@ export def "shows-translations Get-all-show-translations" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/translations/($language)")
+  let full_url = (build-url $base ({id: $id, language: $language} | format pattern "/shows/{id}/translations/{language}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3509,7 +3509,7 @@ export def "shows-watching get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/shows/($id)/watching")
+  let full_url = (build-url $base ({id: $id} | format pattern "/shows/{id}/watching"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3525,7 +3525,7 @@ export def "shows-watching get" [
 # --movies item shape: {audio?: string, audio_channels?: string, collected_at?: string, hdr?: string, ids: record, media_type?: string, resolution?: string, title?: string, year?: float}
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, seasons: list, title: string, year: float}
-export def "sync-collection Add-items-to-collection" [
+export def "sync-collection post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3545,7 +3545,7 @@ export def "sync-collection Add-items-to-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/collection")
-  let body = {episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows} | compact
+  let body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3562,7 +3562,7 @@ export def "sync-collection Add-items-to-collection" [
 # --movies item shape: {ids: record, title?: string, year?: float}
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, seasons: list, title: string, year: float}
-export def "sync-collection-remove Remove-items-from-collection" [
+export def "sync-collection-remove post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3582,7 +3582,7 @@ export def "sync-collection-remove Remove-items-from-collection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/collection/remove")
-  let body = {episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows} | compact
+  let body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3595,7 +3595,7 @@ export def "sync-collection-remove Remove-items-from-collection" [
 #
 # GET /sync/collection/{type}
 # operationId: Get collection
-export def "sync-collection Get-collection" [
+export def "sync-collection get" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3610,7 +3610,7 @@ export def "sync-collection Get-collection" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sync/collection/($type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/sync/collection/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3626,7 +3626,7 @@ export def "sync-collection Get-collection" [
 # --movies item shape: {ids: record, title?: string, watched_at?: string, year?: float}
 # --seasons item shape: {ids?: record, watched_at?: string}
 # --shows item shape: {ids: record, seasons: list, title: string, year: float}
-export def "sync-history Add-items-to-watched-history" [
+export def "sync-history post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3646,7 +3646,7 @@ export def "sync-history Add-items-to-watched-history" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/history")
-  let body = {episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows} | compact
+  let body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3663,7 +3663,7 @@ export def "sync-history Add-items-to-watched-history" [
 # --movies item shape: {ids: record, title?: string, year?: float}
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, seasons: list, title: string, year: float}
-export def "sync-history-remove Remove-items-from-history" [
+export def "sync-history-remove post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3684,7 +3684,7 @@ export def "sync-history-remove Remove-items-from-history" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/history/remove")
-  let body = {episodes: $episodes, ids: $ids, movies: $movies, seasons: $seasons, shows: $shows} | compact
+  let body = {"episodes": $episodes, "ids": $ids, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3697,7 +3697,7 @@ export def "sync-history-remove Remove-items-from-history" [
 #
 # GET /sync/history/{type}/{id}
 # operationId: Get watched history
-export def "sync-history Get-watched-history" [
+export def "sync-history get" [
   type: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3716,7 +3716,7 @@ export def "sync-history Get-watched-history" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sync/history/($type)/($id)" $qp)
+  let full_url = (build-url $base ({type: $type, id: $id} | format pattern "/sync/history/{type}/{id}") $qp)
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3728,7 +3728,7 @@ export def "sync-history Get-watched-history" [
 #
 # GET /sync/last_activities
 # operationId: Get last activity
-export def "sync-last-activities Get-last-activity" [
+export def "sync-last-activities get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3754,7 +3754,7 @@ export def "sync-last-activities Get-last-activity" [
 #
 # DELETE /sync/playback/{id}
 # operationId: Remove a playback item
-export def "sync-playback Remove-a-playback-item" [
+export def "sync-playback delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3769,7 +3769,7 @@ export def "sync-playback Remove-a-playback-item" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sync/playback/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sync/playback/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3781,7 +3781,7 @@ export def "sync-playback Remove-a-playback-item" [
 #
 # GET /sync/playback/{type}
 # operationId: Get playback progress
-export def "sync-playback Get-playback-progress" [
+export def "sync-playback get" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3799,7 +3799,7 @@ export def "sync-playback Get-playback-progress" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/sync/playback/($type)" $qp)
+  let full_url = (build-url $base ({type: $type} | format pattern "/sync/playback/{type}") $qp)
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3815,7 +3815,7 @@ export def "sync-playback Get-playback-progress" [
 # --movies item shape: {ids: record, rated_at?: string, rating: float, title?: string, year?: float}
 # --seasons item shape: {ids?: record, rating?: float}
 # --shows item shape: {ids: record, rating?: float, seasons: list, title: string, year: float}
-export def "sync-ratings Add-new-ratings" [
+export def "sync-ratings post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3835,7 +3835,7 @@ export def "sync-ratings Add-new-ratings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/ratings")
-  let body = {episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows} | compact
+  let body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3852,7 +3852,7 @@ export def "sync-ratings Add-new-ratings" [
 # --movies item shape: {ids: record, title?: string, year?: float}
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, seasons: list, title: string, year: float}
-export def "sync-ratings-remove Remove-ratings" [
+export def "sync-ratings-remove post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3872,7 +3872,7 @@ export def "sync-ratings-remove Remove-ratings" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/ratings/remove")
-  let body = {episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows} | compact
+  let body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3885,7 +3885,7 @@ export def "sync-ratings-remove Remove-ratings" [
 #
 # GET /sync/ratings/{type}/{rating}
 # operationId: Get ratings
-export def "sync-ratings Get-ratings" [
+export def "sync-ratings get" [
   type: string
   rating: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3901,7 +3901,7 @@ export def "sync-ratings Get-ratings" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sync/ratings/($type)/($rating)")
+  let full_url = (build-url $base ({type: $type, rating: $rating} | format pattern "/sync/ratings/{type}/{rating}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -3915,7 +3915,7 @@ export def "sync-ratings Get-ratings" [
 # operationId: Add items to personal recommendations
 # --movies item shape: {ids: record, notes?: string, title?: string, year?: float}
 # --shows item shape: {ids: record, notes?: string, title: string, year: float}
-export def "sync-recommendations Add-items-to-personal-recommendations" [
+export def "sync-recommendations post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3933,7 +3933,7 @@ export def "sync-recommendations Add-items-to-personal-recommendations" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/recommendations")
-  let body = {movies: $movies, shows: $shows} | compact
+  let body = {"movies": $movies, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3948,7 +3948,7 @@ export def "sync-recommendations Add-items-to-personal-recommendations" [
 # operationId: Remove items from personal recommendations
 # --movies item shape: {ids: record, title?: string, year?: float}
 # --shows item shape: {ids?: record, title?: string, year?: float}
-export def "sync-recommendations-remove Remove-items-from-personal-recommendations" [
+export def "sync-recommendations-remove post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3966,7 +3966,7 @@ export def "sync-recommendations-remove Remove-items-from-personal-recommendatio
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/recommendations/remove")
-  let body = {movies: $movies, shows: $shows} | compact
+  let body = {"movies": $movies, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -3979,7 +3979,7 @@ export def "sync-recommendations-remove Remove-items-from-personal-recommendatio
 #
 # POST /sync/recommendations/reorder
 # operationId: Reorder personally recommended items
-export def "sync-recommendations-reorder Reorder-personally-recommended-items" [
+export def "sync-recommendations-reorder post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3996,7 +3996,7 @@ export def "sync-recommendations-reorder Reorder-personally-recommended-items" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/recommendations/reorder")
-  let body = {rank: $rank} | compact
+  let body = {"rank": $rank} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4009,7 +4009,7 @@ export def "sync-recommendations-reorder Reorder-personally-recommended-items" [
 #
 # GET /sync/recommendations/{type}/{sort}
 # operationId: Get personal recommendations
-export def "sync-recommendations Get-personal-recommendations" [
+export def "sync-recommendations get" [
   type: string
   sort: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4025,7 +4025,7 @@ export def "sync-recommendations Get-personal-recommendations" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sync/recommendations/($type)/($sort)")
+  let full_url = (build-url $base ({type: $type, sort: $sort} | format pattern "/sync/recommendations/{type}/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4037,7 +4037,7 @@ export def "sync-recommendations Get-personal-recommendations" [
 #
 # GET /sync/watched/{type}
 # operationId: Get watched
-export def "sync-watched Get-watched" [
+export def "sync-watched get" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4052,7 +4052,7 @@ export def "sync-watched Get-watched" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sync/watched/($type)")
+  let full_url = (build-url $base ({type: $type} | format pattern "/sync/watched/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4068,7 +4068,7 @@ export def "sync-watched Get-watched" [
 # --movies item shape: {ids: record, notes?: string, title?: string, year?: float}
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, notes?: string, seasons: list, title: string, year: float}
-export def "sync-watchlist Add-items-to-watchlist" [
+export def "sync-watchlist post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4088,7 +4088,7 @@ export def "sync-watchlist Add-items-to-watchlist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/watchlist")
-  let body = {episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows} | compact
+  let body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4105,7 +4105,7 @@ export def "sync-watchlist Add-items-to-watchlist" [
 # --movies item shape: {ids: record, title?: string, year?: float}
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, seasons: list, title: string, year: float}
-export def "sync-watchlist-remove Remove-items-from-watchlist" [
+export def "sync-watchlist-remove post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4125,7 +4125,7 @@ export def "sync-watchlist-remove Remove-items-from-watchlist" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/watchlist/remove")
-  let body = {episodes: $episodes, movies: $movies, seasons: $seasons, shows: $shows} | compact
+  let body = {"episodes": $episodes, "movies": $movies, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4138,7 +4138,7 @@ export def "sync-watchlist-remove Remove-items-from-watchlist" [
 #
 # POST /sync/watchlist/reorder
 # operationId: Reorder watchlist items
-export def "sync-watchlist-reorder Reorder-watchlist-items" [
+export def "sync-watchlist-reorder post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4155,7 +4155,7 @@ export def "sync-watchlist-reorder Reorder-watchlist-items" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sync/watchlist/reorder")
-  let body = {rank: $rank} | compact
+  let body = {"rank": $rank} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4168,7 +4168,7 @@ export def "sync-watchlist-reorder Reorder-watchlist-items" [
 #
 # GET /sync/watchlist/{type}/{sort}
 # operationId: Get watchlist
-export def "sync-watchlist Get-watchlist" [
+export def "sync-watchlist get" [
   type: string
   sort: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4184,7 +4184,7 @@ export def "sync-watchlist Get-watchlist" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sync/watchlist/($type)/($sort)")
+  let full_url = (build-url $base ({type: $type, sort: $sort} | format pattern "/sync/watchlist/{type}/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4196,7 +4196,7 @@ export def "sync-watchlist Get-watchlist" [
 #
 # GET /users/hidden/{section}
 # operationId: Get hidden items
-export def "users-hidden Get-hidden-items" [
+export def "users-hidden get" [
   section: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4213,7 +4213,7 @@ export def "users-hidden Get-hidden-items" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/hidden/($section)" $qp)
+  let full_url = (build-url $base ({section: $section} | format pattern "/users/hidden/{section}") $qp)
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4228,7 +4228,7 @@ export def "users-hidden Get-hidden-items" [
 # --movies item shape: {ids: record, title?: string, year?: float}
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, seasons?: list, title: string, year: float}
-export def "users-hidden Add-hidden-items" [
+export def "users-hidden post" [
   section: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4247,8 +4247,8 @@ export def "users-hidden Add-hidden-items" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/hidden/($section)")
-  let body = {movies: $movies, seasons: $seasons, shows: $shows} | compact
+  let full_url = (build-url $base ({section: $section} | format pattern "/users/hidden/{section}"))
+  let body = {"movies": $movies, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4264,7 +4264,7 @@ export def "users-hidden Add-hidden-items" [
 # --movies item shape: {ids: record, title?: string, year?: float}
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, seasons?: list, title: string, year: float}
-export def "users-hidden-remove Remove-hidden-items" [
+export def "users-hidden-remove post" [
   section: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4283,8 +4283,8 @@ export def "users-hidden-remove Remove-hidden-items" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/hidden/($section)/remove")
-  let body = {movies: $movies, seasons: $seasons, shows: $shows} | compact
+  let full_url = (build-url $base ({section: $section} | format pattern "/users/hidden/{section}/remove"))
+  let body = {"movies": $movies, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4297,7 +4297,7 @@ export def "users-hidden-remove Remove-hidden-items" [
 #
 # GET /users/requests
 # operationId: Get follow requests
-export def "users-requests Get-follow-requests" [
+export def "users-requests get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4323,7 +4323,7 @@ export def "users-requests Get-follow-requests" [
 #
 # GET /users/requests/following
 # operationId: Get pending following requests
-export def "users-requests-following Get-pending-following-requests" [
+export def "users-requests-following get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4349,7 +4349,7 @@ export def "users-requests-following Get-pending-following-requests" [
 #
 # DELETE /users/requests/{id}
 # operationId: Deny follow request
-export def "users-requests Deny-follow-request" [
+export def "users-requests delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4364,7 +4364,7 @@ export def "users-requests Deny-follow-request" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/requests/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/requests/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4376,7 +4376,7 @@ export def "users-requests Deny-follow-request" [
 #
 # POST /users/requests/{id}
 # operationId: Approve follow request
-export def "users-requests Approve-follow-request" [
+export def "users-requests post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4391,7 +4391,7 @@ export def "users-requests Approve-follow-request" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/requests/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/requests/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4403,7 +4403,7 @@ export def "users-requests Approve-follow-request" [
 #
 # GET /users/saved_filters/{section}
 # operationId: Get saved filters
-export def "users-saved-filters Get-saved-filters" [
+export def "users-saved-filters get" [
   section: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4418,7 +4418,7 @@ export def "users-saved-filters Get-saved-filters" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/saved_filters/($section)")
+  let full_url = (build-url $base ({section: $section} | format pattern "/users/saved_filters/{section}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4430,7 +4430,7 @@ export def "users-saved-filters Get-saved-filters" [
 #
 # GET /users/settings
 # operationId: Retrieve settings
-export def "users-settings Retrieve-settings" [
+export def "users-settings get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4456,7 +4456,7 @@ export def "users-settings Retrieve-settings" [
 #
 # GET /users/{id}
 # operationId: Get user profile
-export def "users Get-user-profile" [
+export def "users get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4471,7 +4471,7 @@ export def "users Get-user-profile" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4498,7 +4498,7 @@ export def "users-collection get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/collection/($type)")
+  let full_url = (build-url $base ({id: $id, type: $type} | format pattern "/users/{id}/collection/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4510,7 +4510,7 @@ export def "users-collection get" [
 #
 # GET /users/{id}/comments/{comment_type}/{type}
 # operationId: Get comments
-export def "users-comments Get-comments" [
+export def "users-comments get" [
   id: string
   comment_type: string
   type: string
@@ -4529,7 +4529,7 @@ export def "users-comments Get-comments" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_replies" $include_replies "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/comments/($comment_type)/($type)" $qp)
+  let full_url = (build-url $base ({id: $id, comment_type: $comment_type, type: $type} | format pattern "/users/{id}/comments/{comment_type}/{type}") $qp)
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4541,7 +4541,7 @@ export def "users-comments Get-comments" [
 #
 # DELETE /users/{id}/follow
 # operationId: Unfollow this user
-export def "users-follow Unfollow-this-user" [
+export def "users-follow delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4556,7 +4556,7 @@ export def "users-follow Unfollow-this-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/follow")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/follow"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4568,7 +4568,7 @@ export def "users-follow Unfollow-this-user" [
 #
 # POST /users/{id}/follow
 # operationId: Follow this user
-export def "users-follow Follow-this-user" [
+export def "users-follow post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4583,7 +4583,7 @@ export def "users-follow Follow-this-user" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/follow")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/follow"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4595,7 +4595,7 @@ export def "users-follow Follow-this-user" [
 #
 # GET /users/{id}/followers
 # operationId: Get followers
-export def "users-followers Get-followers" [
+export def "users-followers get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4610,7 +4610,7 @@ export def "users-followers Get-followers" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/followers")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/followers"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4622,7 +4622,7 @@ export def "users-followers Get-followers" [
 #
 # GET /users/{id}/following
 # operationId: Get following
-export def "users-following Get-following" [
+export def "users-following get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4637,7 +4637,7 @@ export def "users-following Get-following" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/following")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/following"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4649,7 +4649,7 @@ export def "users-following Get-following" [
 #
 # GET /users/{id}/friends
 # operationId: Get friends
-export def "users-friends Get-friends" [
+export def "users-friends get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4664,7 +4664,7 @@ export def "users-friends Get-friends" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/friends")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/friends"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4695,7 +4695,7 @@ export def "users-history get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/users/($id)/history/($type)/($item_id)" $qp)
+  let full_url = (build-url $base ({id: $id, type: $type, item_id: $item_id} | format pattern "/users/{id}/history/{type}/{item_id}") $qp)
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4707,7 +4707,7 @@ export def "users-history get" [
 #
 # GET /users/{id}/likes/{type}
 # operationId: Get likes
-export def "users-likes Get-likes" [
+export def "users-likes get" [
   id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4723,7 +4723,7 @@ export def "users-likes Get-likes" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/likes/($type)")
+  let full_url = (build-url $base ({id: $id, type: $type} | format pattern "/users/{id}/likes/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4735,7 +4735,7 @@ export def "users-likes Get-likes" [
 #
 # GET /users/{id}/lists
 # operationId: Get a user's personal lists
-export def "users-lists Get-a-users-personal-lists" [
+export def "users-lists list" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4750,7 +4750,7 @@ export def "users-lists Get-a-users-personal-lists" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/lists"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4762,7 +4762,7 @@ export def "users-lists Get-a-users-personal-lists" [
 #
 # POST /users/{id}/lists
 # operationId: Create personal list
-export def "users-lists Create-personal-list" [
+export def "users-lists post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4785,8 +4785,8 @@ export def "users-lists Create-personal-list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists")
-  let body = {allow_comments: $allow_comments, description: $description, display_numbers: $display_numbers, name: $name, privacy: $privacy, sort_by: $sort_by, sort_how: $sort_how} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/lists"))
+  let body = {"allow_comments": $allow_comments, "description": $description, "display_numbers": $display_numbers, "name": $name, "privacy": $privacy, "sort_by": $sort_by, "sort_how": $sort_how} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4799,7 +4799,7 @@ export def "users-lists Create-personal-list" [
 #
 # GET /users/{id}/lists/collaborations
 # operationId: Get all lists a user can collaborate on
-export def "users-lists-collaborations Get-all-lists-a-user-can-collaborate-on" [
+export def "users-lists-collaborations get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4814,7 +4814,7 @@ export def "users-lists-collaborations Get-all-lists-a-user-can-collaborate-on" 
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/collaborations")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/lists/collaborations"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4826,7 +4826,7 @@ export def "users-lists-collaborations Get-all-lists-a-user-can-collaborate-on" 
 #
 # POST /users/{id}/lists/reorder
 # operationId: Reorder a user's lists
-export def "users-lists-reorder Reorder-a-users-lists" [
+export def "users-lists-reorder post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4843,8 +4843,8 @@ export def "users-lists-reorder Reorder-a-users-lists" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/reorder")
-  let body = {rank: $rank} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/lists/reorder"))
+  let body = {"rank": $rank} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4857,7 +4857,7 @@ export def "users-lists-reorder Reorder-a-users-lists" [
 #
 # DELETE /users/{id}/lists/{list_id}
 # operationId: Delete a user's personal list
-export def "users-lists Delete-a-users-personal-list" [
+export def "users-lists delete" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4873,7 +4873,7 @@ export def "users-lists Delete-a-users-personal-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)")
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/users/{id}/lists/{list_id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4885,7 +4885,7 @@ export def "users-lists Delete-a-users-personal-list" [
 #
 # GET /users/{id}/lists/{list_id}
 # operationId: Get personal list
-export def "users-lists Get-personal-list" [
+export def "users-lists get" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4901,7 +4901,7 @@ export def "users-lists Get-personal-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)")
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/users/{id}/lists/{list_id}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4913,7 +4913,7 @@ export def "users-lists Get-personal-list" [
 #
 # PUT /users/{id}/lists/{list_id}
 # operationId: Update personal list
-export def "users-lists Update-personal-list" [
+export def "users-lists put" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4935,8 +4935,8 @@ export def "users-lists Update-personal-list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)")
-  let body = {display_numbers: $display_numbers, name: $name, privacy: $privacy, sort_by: $sort_by, sort_how: $sort_how} | compact
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/users/{id}/lists/{list_id}"))
+  let body = {"display_numbers": $display_numbers, "name": $name, "privacy": $privacy, "sort_by": $sort_by, "sort_how": $sort_how} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -4965,7 +4965,7 @@ export def "users-lists-comments get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)/comments/($sort)")
+  let full_url = (build-url $base ({id: $id, list_id: $list_id, sort: $sort} | format pattern "/users/{id}/lists/{list_id}/comments/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -4982,7 +4982,7 @@ export def "users-lists-comments get" [
 # --people item shape: {ids?: record, name?: string}
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, notes?: string, seasons: list}
-export def "users-lists-items Add-items-to-personal-list" [
+export def "users-lists-items post" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5004,8 +5004,8 @@ export def "users-lists-items Add-items-to-personal-list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)/items")
-  let body = {episodes: $episodes, movies: $movies, people: $people, seasons: $seasons, shows: $shows} | compact
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/users/{id}/lists/{list_id}/items"))
+  let body = {"episodes": $episodes, "movies": $movies, "people": $people, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5023,7 +5023,7 @@ export def "users-lists-items Add-items-to-personal-list" [
 # --people item shape: {ids?: record, name?: string}
 # --seasons item shape: {ids?: record}
 # --shows item shape: {ids: record, seasons: list}
-export def "users-lists-items-remove Remove-items-from-personal-list" [
+export def "users-lists-items-remove post" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5045,8 +5045,8 @@ export def "users-lists-items-remove Remove-items-from-personal-list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)/items/remove")
-  let body = {episodes: $episodes, movies: $movies, people: $people, seasons: $seasons, shows: $shows} | compact
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/users/{id}/lists/{list_id}/items/remove"))
+  let body = {"episodes": $episodes, "movies": $movies, "people": $people, "seasons": $seasons, "shows": $shows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5059,7 +5059,7 @@ export def "users-lists-items-remove Remove-items-from-personal-list" [
 #
 # POST /users/{id}/lists/{list_id}/items/reorder
 # operationId: Reorder items on a list
-export def "users-lists-items-reorder Reorder-items-on-a-list" [
+export def "users-lists-items-reorder post" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5077,8 +5077,8 @@ export def "users-lists-items-reorder Reorder-items-on-a-list" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)/items/reorder")
-  let body = {rank: $rank} | compact
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/users/{id}/lists/{list_id}/items/reorder"))
+  let body = {"rank": $rank} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -5091,7 +5091,7 @@ export def "users-lists-items-reorder Reorder-items-on-a-list" [
 #
 # GET /users/{id}/lists/{list_id}/items/{type}
 # operationId: Get items on a personal list
-export def "users-lists-items Get-items-on-a-personal-list" [
+export def "users-lists-items get" [
   id: string
   list_id: string
   type: string
@@ -5108,7 +5108,7 @@ export def "users-lists-items Get-items-on-a-personal-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)/items/($type)")
+  let full_url = (build-url $base ({id: $id, list_id: $list_id, type: $type} | format pattern "/users/{id}/lists/{list_id}/items/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -5120,7 +5120,7 @@ export def "users-lists-items Get-items-on-a-personal-list" [
 #
 # DELETE /users/{id}/lists/{list_id}/like
 # operationId: Remove like on a list
-export def "users-lists-like Remove-like-on-a-list" [
+export def "users-lists-like delete" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5136,7 +5136,7 @@ export def "users-lists-like Remove-like-on-a-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)/like")
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/users/{id}/lists/{list_id}/like"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -5148,7 +5148,7 @@ export def "users-lists-like Remove-like-on-a-list" [
 #
 # POST /users/{id}/lists/{list_id}/like
 # operationId: Like a list
-export def "users-lists-like Like-a-list" [
+export def "users-lists-like post" [
   id: string
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5164,7 +5164,7 @@ export def "users-lists-like Like-a-list" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)/like")
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/users/{id}/lists/{list_id}/like"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -5191,7 +5191,7 @@ export def "users-lists-likes get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/lists/($list_id)/likes")
+  let full_url = (build-url $base ({id: $id, list_id: $list_id} | format pattern "/users/{id}/lists/{list_id}/likes"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -5219,7 +5219,7 @@ export def "users-ratings get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/ratings/($type)/($rating)")
+  let full_url = (build-url $base ({id: $id, type: $type, rating: $rating} | format pattern "/users/{id}/ratings/{type}/{rating}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -5247,7 +5247,7 @@ export def "users-recommendations get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/recommendations/($type)/($sort)")
+  let full_url = (build-url $base ({id: $id, type: $type, sort: $sort} | format pattern "/users/{id}/recommendations/{type}/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -5259,7 +5259,7 @@ export def "users-recommendations get" [
 #
 # GET /users/{id}/stats
 # operationId: Get stats
-export def "users-stats Get-stats" [
+export def "users-stats get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5274,7 +5274,7 @@ export def "users-stats Get-stats" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/stats")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/stats"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -5301,7 +5301,7 @@ export def "users-watched get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/watched/($type)")
+  let full_url = (build-url $base ({id: $id, type: $type} | format pattern "/users/{id}/watched/{type}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -5313,7 +5313,7 @@ export def "users-watched get" [
 #
 # GET /users/{id}/watching
 # operationId: Get watching
-export def "users-watching Get-watching" [
+export def "users-watching get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5328,7 +5328,7 @@ export def "users-watching Get-watching" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/watching")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}/watching"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -5356,7 +5356,7 @@ export def "users-watchlist get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)/watchlist/($type)/($sort)")
+  let full_url = (build-url $base ({id: $id, type: $type, sort: $sort} | format pattern "/users/{id}/watchlist/{type}/{sort}"))
   let extra_headers = {"trakt-api-version": $trakt_api_version, "trakt-api-key": $trakt_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"

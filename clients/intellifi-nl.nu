@@ -68,8 +68,8 @@ def base-url-completer [] { ["https://brain.intellifi.cloud/api" "http://brain.i
 def auth-scheme-completer [] { ["cookie-brain.sid" "x-api-key" "query-key"] }
 
 # Completers for enum parameters
-def topicresource-type-completer [] { ["blobs" "items" "keys" "kvpairs" "locations" "presences" "services" "spots" "subscriptions" "users"] }
-def topicaction-completer [] { ["connection-rssi-changed" "created" "deleted" "disappeared" "updated"] }
+def topic-resource-type-completer [] { ["blobs" "items" "keys" "kvpairs" "locations" "presences" "services" "spots" "subscriptions" "users"] }
+def topic-action-completer [] { ["connection-rssi-changed" "created" "deleted" "disappeared" "updated"] }
 def protocol-completer [] { ["altbeacon" "eddystone" "epcgen2" "generic" "ibeacon" "nanoble" "nfc" "uniwear"] }
 def technology-completer [] { ["bluetooth" "optical" "rfid"] }
 def type-completer [] { ["barcode" "bluetitan" "gbtag" "relay" "smarttag" "tag"] }
@@ -125,7 +125,7 @@ export def "authinfo get" [
 #
 # GET /blobs
 # operationId: getBlobs
-export def "blobs list" [
+export def "blobs get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "blobs list" [
 #
 # POST /blobs
 # operationId: addBlob
-export def "blobs addBlob" [
+export def "blobs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "blobs addBlob" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/blobs")
-  let body = {blob_key: $blob_key, content_type: $content_type, filename: $filename} | compact
+  let body = {"blob_key": $blob_key, "content_type": $content_type, "filename": $filename} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,7 +212,7 @@ export def "blobs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/blobs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/blobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -222,7 +222,7 @@ export def "blobs delete" [
 #
 # GET /blobs/{id}
 # operationId: getBlobMetadataById
-export def "blobs get" [
+export def "blobs get-blob-metadata" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,7 +235,7 @@ export def "blobs get" [
 ]: nothing -> record<blob_key: string, content_type: string, download_url: string, filename: string, hash: string, id: string, time_created: string, time_last_accessed: string, time_updated: string, upload_url: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/blobs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/blobs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -259,7 +259,7 @@ export def "blobs-download get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/blobs/($id)/download/($filename)")
+  let full_url = (build-url $base ({id: $id, filename: $filename} | format pattern "/blobs/{id}/download/{filename}"))
   let accept_val = "image/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -269,7 +269,7 @@ export def "blobs-download get" [
 #
 # POST /blobs/{id}/upload
 # operationId: uploadBlobById
-export def "blobs-upload uploadBlobById" [
+export def "blobs-upload upload" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,8 +284,8 @@ export def "blobs-upload uploadBlobById" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/blobs/($id)/upload")
-  let body = {file: $file} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/blobs/{id}/upload"))
+  let body = {"file": $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -321,15 +321,15 @@ export def "events list" [
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
   --id: string # Unique identifier (e.g. 5b7d6cbd7503c445552a1664)
   --time-created: string # Filter on the time the resource was created. (format: dateTime, e.g. 2018-08-30T09:51:59.737Z)
-  --topicresource-type: string@topicresource-type-completer # Filter on the topic resource type (e.g. items)
-  --topicaction: string@topicaction-completer # Filter on the topic action (e.g. created)
-  --topicresource: string # Filter on the topic resource id (e.g. 5b7d6cbd7503c445552a1664)
+  --topic-resource-type: string@topic-resource-type-completer # Filter on the topic resource type (e.g. items)
+  --topic-action: string@topic-action-completer # Filter on the topic action (e.g. created)
+  --topic-resource: string # Filter on the topic resource id (e.g. 5b7d6cbd7503c445552a1664)
   --time-event: string # Filter on the time the event was generated on the device. (format: dateTime, e.g. 2018-08-30T09:51:59.737Z)
   --time-expire: string # Filter on the time the event will expire. (format: dateTime, e.g. 2018-08-30T09:51:59.737Z)
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<id: string, payload: any, time_created: string, time_event: string, time_expire: string, topic: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topicresource_type "scalar") (serialize-qp "topic.action" $topicaction "scalar") (serialize-qp "topic.resource" $topicresource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topic_resource_type "scalar") (serialize-qp "topic.action" $topic_action "scalar") (serialize-qp "topic.resource" $topic_resource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -353,7 +353,7 @@ export def "events get" [
 ]: nothing -> record<id: string, payload: any, time_created: string, time_event: string, time_expire: string, topic: record<action: string, arguments: any, resource_id: string, resource_type: string, resource_url: string>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/events/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/events/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -421,7 +421,7 @@ export def "items list" [
 #
 # POST /items
 # operationId: addItem
-export def "items addItem" [
+export def "items create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "items addItem" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/items")
-  let body = {config_request: $config_request, custom: $custom, label: $label, location_request: $location_request, metadata: $metadata, code_hex: $code_hex, protocol: $protocol, technology: $technology, type: $type} | compact
+  let body = {"config_request": $config_request, "custom": $custom, "label": $label, "location_request": $location_request, "metadata": $metadata, "code_hex": $code_hex, "protocol": $protocol, "technology": $technology, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -468,7 +468,7 @@ export def "items delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/items/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/items/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -491,7 +491,7 @@ export def "items get" [
 ]: nothing -> record<config_request: record, custom: any, label: string, location_request: string, metadata: record, code_hex: string, geo_coords: record<lat: float, lng: float, time_updated: string>, id: string, is_present: bool, move_count: int, protocol: string, sets: list<string>, technology: string, time_created: string, time_last_present: string, time_moved: string, time_updated: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/items/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/items/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -501,7 +501,7 @@ export def "items get" [
 #
 # PUT /items/{id}
 # operationId: updateItem
-export def "items updateItem" [
+export def "items update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,8 +520,8 @@ export def "items updateItem" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/items/($id)")
-  let body = {config_request: $config_request, custom: $custom, label: $label, location_request: $location_request, metadata: $metadata} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/items/{id}"))
+  let body = {"config_request": $config_request, "custom": $custom, "label": $label, "location_request": $location_request, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -576,7 +576,7 @@ export def "keys list" [
 #
 # POST /keys
 # operationId: addKey
-export def "keys addKey" [
+export def "keys create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,7 +592,7 @@ export def "keys addKey" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/keys")
-  let body = {is_read_only: $is_read_only, label: $label} | compact
+  let body = {"is_read_only": $is_read_only, "label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -616,7 +616,7 @@ export def "keys delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/keys/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -639,7 +639,7 @@ export def "keys get" [
 ]: nothing -> record<id: string, is_read_only: bool, label: string, secret: string, time_created: string, time_updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/keys/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/keys/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -649,7 +649,7 @@ export def "keys get" [
 #
 # PUT /keys/{id}
 # operationId: updateKey
-export def "keys updateKey" [
+export def "keys update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,8 +665,8 @@ export def "keys updateKey" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/keys/($id)")
-  let body = {is_read_only: $is_read_only, label: $label} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/keys/{id}"))
+  let body = {"is_read_only": $is_read_only, "label": $label} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -719,7 +719,7 @@ export def "kvpairs list" [
 #
 # POST /kvpairs
 # operationId: addKvPairs
-export def "kvpairs addKvPairs" [
+export def "kvpairs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,7 +735,7 @@ export def "kvpairs addKvPairs" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kvpairs")
-  let body = {kv_value: $kv_value, kv_key: $kv_key} | compact
+  let body = {"kv_value": $kv_value, "kv_key": $kv_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -759,7 +759,7 @@ export def "kvpairs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/kvpairs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/kvpairs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -782,7 +782,7 @@ export def "kvpairs get" [
 ]: nothing -> record<kv_value: any, id: string, kv_key: string, time_created: string, time_updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/kvpairs/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/kvpairs/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -792,7 +792,7 @@ export def "kvpairs get" [
 #
 # PUT /kvpairs/{id}
 # operationId: updateKvPair
-export def "kvpairs updateKvPair" [
+export def "kvpairs update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -807,8 +807,8 @@ export def "kvpairs updateKvPair" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/kvpairs/($id)")
-  let body = {kv_value: $kv_value} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/kvpairs/{id}"))
+  let body = {"kv_value": $kv_value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -864,7 +864,7 @@ export def "locationrules list" [
 # POST /locationrules
 # operationId: addLocationRule
 # --conditions shape: {from_location?: string, to_location?: string}
-export def "locationrules addLocationRule" [
+export def "locationrules create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,7 +883,7 @@ export def "locationrules addLocationRule" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locationrules")
-  let body = {conditions: $conditions, enabled: $enabled, label: $label, parameters: $parameters, type: $type} | compact
+  let body = {"conditions": $conditions, "enabled": $enabled, "label": $label, "parameters": $parameters, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -907,7 +907,7 @@ export def "locationrules delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/locationrules/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/locationrules/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -930,7 +930,7 @@ export def "locationrules get" [
 ]: nothing -> record<conditions: any, enabled: bool, id: string, label: string, parameters: record, time_created: string, time_updated: string, type: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/locationrules/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/locationrules/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -941,7 +941,7 @@ export def "locationrules get" [
 # PUT /locationrules/{id}
 # operationId: updateLocationRule
 # --conditions shape: {from_location?: string, to_location?: string}
-export def "locationrules updateLocationRule" [
+export def "locationrules update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -960,8 +960,8 @@ export def "locationrules updateLocationRule" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/locationrules/($id)")
-  let body = {conditions: $conditions, enabled: $enabled, label: $label, parameters: $parameters, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/locationrules/{id}"))
+  let body = {"conditions": $conditions, "enabled": $enabled, "label": $label, "parameters": $parameters, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1016,7 +1016,7 @@ export def "locations list" [
 #
 # POST /locations
 # operationId: addLocation
-export def "locations addLocation" [
+export def "locations create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1033,7 +1033,7 @@ export def "locations addLocation" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locations")
-  let body = {custom: $custom, label: $label, metadata: $metadata} | compact
+  let body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1057,7 +1057,7 @@ export def "locations delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/locations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/locations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1080,7 +1080,7 @@ export def "locations get" [
 ]: nothing -> record<custom: any, id: string, label: string, metadata: record, time_created: string, time_updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/locations/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/locations/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1090,7 +1090,7 @@ export def "locations get" [
 #
 # PUT /locations/{id}
 # operationId: updateLocation
-export def "locations updateLocation" [
+export def "locations update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1107,8 +1107,8 @@ export def "locations updateLocation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/locations/($id)")
-  let body = {custom: $custom, label: $label, metadata: $metadata} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/locations/{id}"))
+  let body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1177,7 +1177,7 @@ export def "presences get" [
 ]: nothing -> record<id: string, item: record<config_request: record, custom: any, label: string, location_request: string, metadata: record, code_hex: string, geo_coords: record<lat: float, lng: float, time_updated: string>, id: string, is_present: bool, move_count: int, protocol: string, sets: list<string>, technology: string, time_created: string, time_last_present: string, time_moved: string, time_updated: string, type: string, url: string>, item_id: string, item_url: string, location: record<custom: any, id: string, label: string, metadata: record, time_created: string, time_updated: string, url: string>, location_id: string, location_url: string, proximity: string, technology: string, time_created: string, time_updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/presences/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/presences/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1242,7 +1242,7 @@ export def "services get" [
 ]: nothing -> record<boot_count: int, config: record, config_request: record, id: string, name: string, restart_request: bool, time_created: string, time_updated: string, url: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/services/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/services/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1252,7 +1252,7 @@ export def "services get" [
 #
 # PUT /services/{id}
 # operationId: updateService
-export def "services updateService" [
+export def "services update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1268,8 +1268,8 @@ export def "services updateService" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/services/($id)")
-  let body = {config_request: $config_request, restart_request: $restart_request} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/services/{id}"))
+  let body = {"config_request": $config_request, "restart_request": $restart_request} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1326,7 +1326,7 @@ export def "sets-itemlists list" [
 #
 # POST /sets/itemlists
 # operationId: addItemList
-export def "sets-itemlists addItemList" [
+export def "sets-itemlists create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1343,7 +1343,7 @@ export def "sets-itemlists addItemList" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sets/itemlists")
-  let body = {custom: $custom, label: $label, metadata: $metadata} | compact
+  let body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1354,7 +1354,7 @@ export def "sets-itemlists addItemList" [
 #
 # DELETE /sets/itemlists/{id}
 # operationId: deleteItemSet
-export def "sets-itemlists delete" [
+export def "sets-itemlists delete-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1367,7 @@ export def "sets-itemlists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/itemlists/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sets/itemlists/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1390,7 +1390,7 @@ export def "sets-itemlists get" [
 ]: nothing -> record<custom: any, id: string, label: string, list: string, metadata: record, sha1: string, time_created: string, time_updated: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/itemlists/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sets/itemlists/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1400,7 +1400,7 @@ export def "sets-itemlists get" [
 #
 # PUT /sets/itemlists/{id}
 # operationId: updateItemList
-export def "sets-itemlists updateItemList" [
+export def "sets-itemlists update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1417,8 +1417,8 @@ export def "sets-itemlists updateItemList" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/itemlists/($id)")
-  let body = {custom: $custom, label: $label, metadata: $metadata} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/sets/itemlists/{id}"))
+  let body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1442,7 +1442,7 @@ export def "sets-itemlists-ids get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/itemlists/($id)/ids")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sets/itemlists/{id}/ids"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1452,7 +1452,7 @@ export def "sets-itemlists-ids get" [
 #
 # POST /sets/itemlists/{id}/ids
 # operationId: addItemIdsList
-export def "sets-itemlists-ids addItemIdsList" [
+export def "sets-itemlists-ids create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1467,7 +1467,7 @@ export def "sets-itemlists-ids addItemIdsList" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/itemlists/($id)/ids")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sets/itemlists/{id}/ids"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1478,9 +1478,9 @@ export def "sets-itemlists-ids addItemIdsList" [
 #
 # DELETE /sets/itemlists/{id}/ids/{itemId}
 # operationId: deleteItemIdFromItemList
-export def "sets-itemlists-ids delete" [
+export def "sets-itemlists-ids delete-item-from" [
   id: string
-  itemId: string
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1492,7 +1492,7 @@ export def "sets-itemlists-ids delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/itemlists/($id)/ids/($itemId)")
+  let full_url = (build-url $base ({id: $id, item_id: $item_id} | format pattern "/sets/itemlists/{id}/ids/{item_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1547,7 +1547,7 @@ export def "sets-spotlists list" [
 #
 # POST /sets/spotlists
 # operationId: addSpotList
-export def "sets-spotlists addSpotList" [
+export def "sets-spotlists create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1564,7 +1564,7 @@ export def "sets-spotlists addSpotList" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sets/spotlists")
-  let body = {custom: $custom, label: $label, metadata: $metadata} | compact
+  let body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1588,7 +1588,7 @@ export def "sets-spotlists delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/spotlists/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sets/spotlists/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1611,7 +1611,7 @@ export def "sets-spotlists get" [
 ]: nothing -> record<custom: any, id: string, label: string, list: string, metadata: record, time_created: string, time_updated: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/spotlists/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sets/spotlists/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1621,7 +1621,7 @@ export def "sets-spotlists get" [
 #
 # PUT /sets/spotlists/{id}
 # operationId: updateSpotList
-export def "sets-spotlists updateSpotList" [
+export def "sets-spotlists update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,8 +1638,8 @@ export def "sets-spotlists updateSpotList" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/spotlists/($id)")
-  let body = {custom: $custom, label: $label, metadata: $metadata} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/sets/spotlists/{id}"))
+  let body = {"custom": $custom, "label": $label, "metadata": $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1663,7 +1663,7 @@ export def "sets-spotlists-ids get" [
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/spotlists/($id)/ids")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sets/spotlists/{id}/ids"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1673,7 +1673,7 @@ export def "sets-spotlists-ids get" [
 #
 # POST /sets/spotlists/{id}/ids
 # operationId: addItemIdsSpotList
-export def "sets-spotlists-ids addItemIdsSpotList" [
+export def "sets-spotlists-ids create-item" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1688,7 +1688,7 @@ export def "sets-spotlists-ids addItemIdsSpotList" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/spotlists/($id)/ids")
+  let full_url = (build-url $base ({id: $id} | format pattern "/sets/spotlists/{id}/ids"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1699,9 +1699,9 @@ export def "sets-spotlists-ids addItemIdsSpotList" [
 #
 # DELETE /sets/spotlists/{id}/ids/{itemId}
 # operationId: deleteItemIdFromSpotList
-export def "sets-spotlists-ids delete" [
+export def "sets-spotlists-ids delete-item-from" [
   id: string
-  itemId: string
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1713,7 +1713,7 @@ export def "sets-spotlists-ids delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/sets/spotlists/($id)/ids/($itemId)")
+  let full_url = (build-url $base ({id: $id, item_id: $item_id} | format pattern "/sets/spotlists/{id}/ids/{item_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1780,7 +1780,7 @@ export def "spots get" [
 ]: nothing -> record<antenna_report_locations: table<antenna_number: int, report_location: record, report_location_id: string, report_location_url: string>, config: record, config_request: record, geo_coords: record<lat: float, lng: float, time_updated: string>, id: string, is_online: bool, request_counter: int, senses: record, senses_request: record, serial_number: int, status: any, time_created: string, time_updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spots/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1792,7 +1792,7 @@ export def "spots get" [
 # operationId: updateSpot
 # --antenna_report_locations item shape: {antenna_number?: int}
 # --geo_coords shape: {lat?: float, lng?: float}
-export def "spots updateSpot" [
+export def "spots update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1811,8 +1811,8 @@ export def "spots updateSpot" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spots/($id)")
-  let body = {antenna_report_locations: $antenna_report_locations, config_request: $config_request, geo_coords: $geo_coords, senses_request: $senses_request, report_location: $report_location} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}"))
+  let body = {"antenna_report_locations": $antenna_report_locations, "config_request": $config_request, "geo_coords": $geo_coords, "senses_request": $senses_request, "report_location": $report_location} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1836,7 +1836,7 @@ export def "spots-sets list" [
 ]: nothing -> record<created_by: string, id: string, setid: int, spot_id: string, time_created: string, time_updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spots/($id)/sets")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}/sets"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1846,7 +1846,7 @@ export def "spots-sets list" [
 #
 # POST /spots/{id}/sets
 # operationId: addSpotSet
-export def "spots-sets addSpotSet" [
+export def "spots-sets create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1861,8 +1861,8 @@ export def "spots-sets addSpotSet" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spots/($id)/sets")
-  let body = {setid: $setid} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spots/{id}/sets"))
+  let body = {"setid": $setid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1875,7 +1875,7 @@ export def "spots-sets addSpotSet" [
 # operationId: getSpotSetById
 export def "spots-sets get" [
   id: string
-  setId: string
+  set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1887,7 +1887,7 @@ export def "spots-sets get" [
 ]: nothing -> record<created_by: string, id: string, setid: int, spot_id: string, time_created: string, time_updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spots/($id)/sets/($setId)")
+  let full_url = (build-url $base ({id: $id, set_id: $set_id} | format pattern "/spots/{id}/sets/{set_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1897,9 +1897,9 @@ export def "spots-sets get" [
 #
 # PUT /spots/{id}/sets/{setId}
 # operationId: updateSpotSet
-export def "spots-sets updateSpotSet" [
+export def "spots-sets update" [
   id: string
-  setId: string
+  set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1913,8 +1913,8 @@ export def "spots-sets updateSpotSet" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spots/($id)/sets/($setId)")
-  let body = {delete: $delete} | compact
+  let full_url = (build-url $base ({id: $id, set_id: $set_id} | format pattern "/spots/{id}/sets/{set_id}"))
+  let body = {"delete": $delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1960,7 +1960,7 @@ export def "spotsets post" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/spotsets")
-  let body = {setid: $setid} | compact
+  let body = {"setid": $setid} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1983,7 +1983,7 @@ export def "spotsets get" [
 ]: nothing -> record<created_by: string, id: string, setid: int, spot_id: string, time_created: string, time_updated: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spotsets/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/spotsets/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2007,8 +2007,8 @@ export def "spotsets put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/spotsets/($id)")
-  let body = {delete: $delete} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/spotsets/{id}"))
+  let body = {"delete": $delete} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2065,7 +2065,7 @@ export def "subscriptions list" [
 #
 # POST /subscriptions
 # operationId: addSubscription
-export def "subscriptions addSubscription" [
+export def "subscriptions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2087,7 +2087,7 @@ export def "subscriptions addSubscription" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions")
-  let body = {custom: $custom, database_hold_time_h: $database_hold_time_h, description: $description, populate_events: $populate_events, target_retry: $target_retry, target_url: $target_url, topic_filter: $topic_filter, verify_target_certificate: $verify_target_certificate} | compact
+  let body = {"custom": $custom, "database_hold_time_h": $database_hold_time_h, "description": $description, "populate_events": $populate_events, "target_retry": $target_retry, "target_url": $target_url, "topic_filter": $topic_filter, "verify_target_certificate": $verify_target_certificate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2111,7 +2111,7 @@ export def "subscriptions delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/subscriptions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2134,7 +2134,7 @@ export def "subscriptions get" [
 ]: nothing -> record<custom: any, database_hold_time_h: int, description: string, events_url: string, id: string, populate_events: bool, target_delivery_last_failure: record, target_delivery_status: record, target_retry: bool, target_url: string, time_created: string, time_updated: string, topic_filter: string, url: string, verify_target_certificate: bool> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/subscriptions/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2144,7 +2144,7 @@ export def "subscriptions get" [
 #
 # PUT /subscriptions/{id}
 # operationId: updateSubscription
-export def "subscriptions updateSubscription" [
+export def "subscriptions update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2166,8 +2166,8 @@ export def "subscriptions updateSubscription" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/subscriptions/($id)")
-  let body = {custom: $custom, database_hold_time_h: $database_hold_time_h, description: $description, populate_events: $populate_events, target_retry: $target_retry, target_url: $target_url, topic_filter: $topic_filter, verify_target_certificate: $verify_target_certificate} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/subscriptions/{id}"))
+  let body = {"custom": $custom, "database_hold_time_h": $database_hold_time_h, "description": $description, "populate_events": $populate_events, "target_retry": $target_retry, "target_url": $target_url, "topic_filter": $topic_filter, "verify_target_certificate": $verify_target_certificate} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2178,7 +2178,7 @@ export def "subscriptions updateSubscription" [
 #
 # GET /subscriptions/{id}/events
 # operationId: getEventsForSubscriptionById
-export def "subscriptions-events get" [
+export def "subscriptions-events get-events-for" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2205,16 +2205,16 @@ export def "subscriptions-events get" [
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
   --id: string # Unique identifier (e.g. 5b7d6cbd7503c445552a1664)
   --time-created: string # Filter on the time the resource was created. (format: dateTime, e.g. 2018-08-30T09:51:59.737Z)
-  --topicresource-type: string@topicresource-type-completer # Filter on the topic resource type (e.g. items)
-  --topicaction: string@topicaction-completer # Filter on the topic action (e.g. created)
-  --topicresource: string # Filter on the topic resource id (e.g. 5b7d6cbd7503c445552a1664)
+  --topic-resource-type: string@topic-resource-type-completer # Filter on the topic resource type (e.g. items)
+  --topic-action: string@topic-action-completer # Filter on the topic action (e.g. created)
+  --topic-resource: string # Filter on the topic resource id (e.g. 5b7d6cbd7503c445552a1664)
   --time-event: string # Filter on the time the event was generated on the device. (format: dateTime, e.g. 2018-08-30T09:51:59.737Z)
   --time-expire: string # Filter on the time the event will expire. (format: dateTime, e.g. 2018-08-30T09:51:59.737Z)
 ]: nothing -> record<count: int, count_current: int, is_limited: bool, next_url: string, query_duration_ms: int, url: string, results: table<id: string, payload: any, time_created: string, time_event: string, time_expire: string, topic: record, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topicresource_type "scalar") (serialize-qp "topic.action" $topicaction "scalar") (serialize-qp "topic.resource" $topicresource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($id)/events" $qp)
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topic_resource_type "scalar") (serialize-qp "topic.action" $topic_action "scalar") (serialize-qp "topic.resource" $topic_resource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/subscriptions/{id}/events") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2270,7 +2270,7 @@ export def "users list" [
 #
 # POST /users
 # operationId: addUser
-export def "users addUser" [
+export def "users create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2290,7 +2290,7 @@ export def "users addUser" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
-  let body = {email: $email, first_name: $first_name, is_admin: $is_admin, is_locked: $is_locked, last_name: $last_name, password: $password} | compact
+  let body = {"email": $email, "first_name": $first_name, "is_admin": $is_admin, "is_locked": $is_locked, "last_name": $last_name, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2314,7 +2314,7 @@ export def "users delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2337,7 +2337,7 @@ export def "users get" [
 ]: nothing -> record<email: string, first_name: string, id: string, is_admin: bool, is_locked: bool, last_name: string, password: string, time_created: string, time_updated: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2347,7 +2347,7 @@ export def "users get" [
 #
 # PUT /users/{id}
 # operationId: updateUser
-export def "users updateUser" [
+export def "users update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2367,8 +2367,8 @@ export def "users updateUser" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/users/($id)")
-  let body = {email: $email, first_name: $first_name, is_admin: $is_admin, is_locked: $is_locked, last_name: $last_name, password: $password} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/users/{id}"))
+  let body = {"email": $email, "first_name": $first_name, "is_admin": $is_admin, "is_locked": $is_locked, "last_name": $last_name, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

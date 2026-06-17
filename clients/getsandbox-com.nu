@@ -66,16 +66,16 @@ def base-url-completer [] { ["https://getsandbox.com/api"] }
 def auth-scheme-completer [] { ["api_key"] }
 
 # Completers for enum parameters
-def transportType-completer [] { ["HTTP"] }
-def apiDefinition-completer [] { ["Apiary" "None" "RAML_V08" "Swagger_V2_Json" "WSDL"] }
-def proxyStatus-completer [] { ["STARTED" "STOPPED"] }
-def runtimeVersion-completer [] { ["VERSION_1" "VERSION_2"] }
-def stackType-completer [] { ["JavaScript"] }
+def transport-type-completer [] { ["HTTP"] }
+def api-definition-completer [] { ["Apiary" "None" "RAML_V08" "Swagger_V2_Json" "WSDL"] }
+def proxy-status-completer [] { ["STARTED" "STOPPED"] }
+def runtime-version-completer [] { ["VERSION_1" "VERSION_2"] }
+def stack-type-completer [] { ["JavaScript"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "1-activity-search get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "1-activity-search get-sandboxes" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +99,7 @@ export def commands []: nothing -> table {
 #
 # GET /1/activity/search
 # operationId: getSandboxesActivity
-export def "1-activity-search get" [
+export def "1-activity-search get-sandboxes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,15 +108,15 @@ export def "1-activity-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fromTimestamp: int # Timestamp to start search from, epoch time in milliseconds. (format: int64)
-  --sourceSandboxes: string # Comma-separated list of Sandbox names to search.
+  --from-timestamp: int # Timestamp to start search from, epoch time in milliseconds. (format: int64)
+  --source-sandboxes: string # Comma-separated list of Sandbox names to search.
   --keyword: string # A keyword to search activities by, will match any part of the ActivityMessage.
-  --allTypes: oneof<nothing, bool> # Flag to return all types of activity, defaults to just Requests
-  --maxResults: int # Maximum number of results to return (format: int32)
+  --all-types: oneof<nothing, bool> # Flag to return all types of activity, defaults to just Requests
+  --max-results: int # Maximum number of results to return (format: int32)
 ]: nothing -> table<createdTimestamp: int, message: string, messageObject: record<request: record, responses: list, sandboxName: string>, messageType: string, sandboxId: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fromTimestamp" $fromTimestamp "scalar") (serialize-qp "sourceSandboxes" $sourceSandboxes "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "allTypes" $allTypes "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fromTimestamp" $from_timestamp "scalar") (serialize-qp "sourceSandboxes" $source_sandboxes "scalar") (serialize-qp "keyword" $keyword "scalar") (serialize-qp "allTypes" $all_types "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1/activity/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,7 +127,7 @@ export def "1-activity-search get" [
 #
 # GET /1/sandboxes
 # operationId: getSandboxes
-export def "1-sandboxes list" [
+export def "1-sandboxes get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,11 +136,11 @@ export def "1-sandboxes list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterType: string
+  --filter-type: string
 ]: nothing -> table<apiDefinition: string, childSandboxes: list<any>, configuredRoutes: list<record>, description: string, gitAccessToken: string, gitUrl: string, hasRepository: bool, id: string, ipWhitelist: list<string>, name: string, parentSandbox: any, properties: record, proxyStatus: string, runtimeVersion: string, sandboxUrl: string, stackType: string, transportType: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filterType" $filterType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filterType" $filter_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/1/sandboxes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -151,7 +151,7 @@ export def "1-sandboxes list" [
 #
 # POST /1/sandboxes
 # operationId: createSandbox
-export def "1-sandboxes createSandbox" [
+export def "1-sandboxes create-sandbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,18 +160,18 @@ export def "1-sandboxes createSandbox" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --commitBaseTemplate: oneof<nothing, bool> # Whether to commit the example Sandbox definition upon creation.
+  --commit-base-template: oneof<nothing, bool> # Whether to commit the example Sandbox definition upon creation.
   --description: string # Text describing this Sandbox.
   --name: string # Optional name to give the Sandbox, will be generated if omitted.
-  --ownerOrganisationName: string # Name of the team this Sandbox should be created under.
-  --parentSandboxName: string # Name of the Sandbox this should be created under, if exists will be a 'clone'.
-  --transportType: string@transportType-completer
+  --owner-organisation-name: string # Name of the team this Sandbox should be created under.
+  --parent-sandbox-name: string # Name of the Sandbox this should be created under, if exists will be a 'clone'.
+  --transport-type: string@transport-type-completer
 ]: any -> record<apiDefinition: string, childSandboxes: list<any>, configuredRoutes: table<activeErrorOverride: bool, activeLatency: bool, defaultLatency: int, errorOverrideType: string, loadLatency: int, loadThreshold: int, method: string, path: string, properties: record, routeConfig: record, transport: string>, description: string, gitAccessToken: string, gitUrl: string, hasRepository: bool, id: string, ipWhitelist: list<string>, name: string, parentSandbox: any, properties: record, proxyStatus: string, runtimeVersion: string, sandboxUrl: string, stackType: string, transportType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1/sandboxes")
-  let body = {commitBaseTemplate: $commitBaseTemplate, description: $description, name: $name, ownerOrganisationName: $ownerOrganisationName, parentSandboxName: $parentSandboxName, transportType: $transportType} | compact
+  let body = {"commitBaseTemplate": $commit_base_template, "description": $description, "name": $name, "ownerOrganisationName": $owner_organisation_name, "parentSandboxName": $parent_sandbox_name, "transportType": $transport_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -182,8 +182,8 @@ export def "1-sandboxes createSandbox" [
 #
 # DELETE /1/sandboxes/{sandboxName}
 # operationId: deleteSandbox
-export def "1-sandboxes delete" [
-  sandboxName: string
+export def "1-sandboxes delete-sandbox" [
+  sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "1-sandboxes delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1/sandboxes/($sandboxName)")
+  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -205,8 +205,8 @@ export def "1-sandboxes delete" [
 #
 # GET /1/sandboxes/{sandboxName}
 # operationId: getSandbox
-export def "1-sandboxes get" [
-  sandboxName: string
+export def "1-sandboxes get-sandbox" [
+  sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "1-sandboxes get" [
 ]: nothing -> record<apiDefinition: string, childSandboxes: list<any>, configuredRoutes: table<activeErrorOverride: bool, activeLatency: bool, defaultLatency: int, errorOverrideType: string, loadLatency: int, loadThreshold: int, method: string, path: string, properties: record, routeConfig: record, transport: string>, description: string, gitAccessToken: string, gitUrl: string, hasRepository: bool, id: string, ipWhitelist: list<string>, name: string, parentSandbox: any, properties: record, proxyStatus: string, runtimeVersion: string, sandboxUrl: string, stackType: string, transportType: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1/sandboxes/($sandboxName)")
+  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -231,8 +231,8 @@ export def "1-sandboxes get" [
 # --childSandboxes item shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
 # --configuredRoutes item shape: {activeErrorOverride?: bool, activeLatency?: bool, defaultLatency?: int, errorOverrideType: "NONE"|"TIMEOUT"|"SERVICE_DOWN", loadLatency?: int, loadThreshold?: int, method?: string, path?: string, properties?: record, routeConfig?: record, transport?: string}
 # --parentSandbox shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
-export def "1-sandboxes updateSandbox" [
-  sandboxName: string
+export def "1-sandboxes update-sandbox" [
+  sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,29 +241,29 @@ export def "1-sandboxes updateSandbox" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiDefinition: string@apiDefinition-completer # The import source of this Sandbox.
-  --childSandboxes: list # Clones of this Sandbox. — item shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
-  --configuredRoutes: list # Extra configuration applied to some routes, delays, overrides etc. — item shape: {activeErrorOverride?: bool, activeLatency?: bool, defaultLatency?: int, errorOverrideType: "NONE"|"TIMEOUT"|"SERVICE_DOWN", loadLatency?: int, loadThreshold?: int, method?: string, path?: string, properties?: record, routeConfig?: record, transport?: string}
+  --api-definition: string@api-definition-completer # The import source of this Sandbox.
+  --child-sandboxes: list # Clones of this Sandbox. — item shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
+  --configured-routes: list # Extra configuration applied to some routes, delays, overrides etc. — item shape: {activeErrorOverride?: bool, activeLatency?: bool, defaultLatency?: int, errorOverrideType: "NONE"|"TIMEOUT"|"SERVICE_DOWN", loadLatency?: int, loadThreshold?: int, method?: string, path?: string, properties?: record, routeConfig?: record, transport?: string}
   --description: string
-  --gitAccessToken: string
-  --gitUrl: string # The git clone URL.
-  --hasRepository: oneof<nothing, bool> # Whether this Sandbox has a git repository or not.
+  --git-access-token: string
+  --git-url: string # The git clone URL.
+  --has-repository: oneof<nothing, bool> # Whether this Sandbox has a git repository or not.
   --id: string # The ID of the Sandbox.
-  --ipWhitelist: list # The list of IPs allowed to make requests, all allowed if omitted.
+  --ip-whitelist: list # The list of IPs allowed to make requests, all allowed if omitted.
   name: string
-  --parentSandbox: record # shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
+  --parent-sandbox: record # shape: {apiDefinition?: "None"|"Apiary"|"Swagger_V2_Json"|"RAML_V08"|"WSDL", childSandboxes?: list, configuredRoutes?: list, description?: string, gitAccessToken?: string, gitUrl?: string, hasRepository?: bool, id?: string, ipWhitelist?: list, name: string, parentSandbox?: record, properties?: record, proxyStatus?: "STARTED"|"STOPPED", runtimeVersion?: "VERSION_1"|"VERSION_2", sandboxUrl?: string, stackType?: "JavaScript", transportType?: "HTTP"}
   --properties: record
-  --proxyStatus: string@proxyStatus-completer # The listener status.
-  --runtimeVersion: string@runtimeVersion-completer # The library version of this Sandbox.
-  --sandboxUrl: string # The request URL for this Sandbox.
-  --stackType: string@stackType-completer
-  --transportType: string@transportType-completer # The listener transport.
+  --proxy-status: string@proxy-status-completer # The listener status.
+  --runtime-version: string@runtime-version-completer # The library version of this Sandbox.
+  --sandbox-url: string # The request URL for this Sandbox.
+  --stack-type: string@stack-type-completer
+  --transport-type: string@transport-type-completer # The listener transport.
 ]: any -> record<apiDefinition: string, childSandboxes: list<any>, configuredRoutes: table<activeErrorOverride: bool, activeLatency: bool, defaultLatency: int, errorOverrideType: string, loadLatency: int, loadThreshold: int, method: string, path: string, properties: record, routeConfig: record, transport: string>, description: string, gitAccessToken: string, gitUrl: string, hasRepository: bool, id: string, ipWhitelist: list<string>, name: string, parentSandbox: any, properties: record, proxyStatus: string, runtimeVersion: string, sandboxUrl: string, stackType: string, transportType: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1/sandboxes/($sandboxName)")
-  let body = {apiDefinition: $apiDefinition, childSandboxes: $childSandboxes, configuredRoutes: $configuredRoutes, description: $description, gitAccessToken: $gitAccessToken, gitUrl: $gitUrl, hasRepository: $hasRepository, id: $id, ipWhitelist: $ipWhitelist, name: $name, parentSandbox: $parentSandbox, properties: $properties, proxyStatus: $proxyStatus, runtimeVersion: $runtimeVersion, sandboxUrl: $sandboxUrl, stackType: $stackType, transportType: $transportType} | compact
+  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}"))
+  let body = {"apiDefinition": $api_definition, "childSandboxes": $child_sandboxes, "configuredRoutes": $configured_routes, "description": $description, "gitAccessToken": $git_access_token, "gitUrl": $git_url, "hasRepository": $has_repository, "id": $id, "ipWhitelist": $ip_whitelist, "name": $name, "parentSandbox": $parent_sandbox, "properties": $properties, "proxyStatus": $proxy_status, "runtimeVersion": $runtime_version, "sandboxUrl": $sandbox_url, "stackType": $stack_type, "transportType": $transport_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -275,7 +275,7 @@ export def "1-sandboxes updateSandbox" [
 # GET /1/sandboxes/{sandboxName}/fork
 # operationId: forkSandbox
 export def "1-sandboxes-fork forkSandbox" [
-  sandboxName: string
+  sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "1-sandboxes-fork forkSandbox" [
 ]: nothing -> record<apiDefinition: string, childSandboxes: list<any>, configuredRoutes: table<activeErrorOverride: bool, activeLatency: bool, defaultLatency: int, errorOverrideType: string, loadLatency: int, loadThreshold: int, method: string, path: string, properties: record, routeConfig: record, transport: string>, description: string, gitAccessToken: string, gitUrl: string, hasRepository: bool, id: string, ipWhitelist: list<string>, name: string, parentSandbox: any, properties: record, proxyStatus: string, runtimeVersion: string, sandboxUrl: string, stackType: string, transportType: string> {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1/sandboxes/($sandboxName)/fork")
+  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}/fork"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -297,8 +297,8 @@ export def "1-sandboxes-fork forkSandbox" [
 #
 # DELETE /1/sandboxes/{sandboxName}/state
 # operationId: deleteSandboxState
-export def "1-sandboxes-state delete" [
-  sandboxName: string
+export def "1-sandboxes-state delete-sandbox" [
+  sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -310,7 +310,7 @@ export def "1-sandboxes-state delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1/sandboxes/($sandboxName)/state")
+  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -320,8 +320,8 @@ export def "1-sandboxes-state delete" [
 #
 # GET /1/sandboxes/{sandboxName}/state
 # operationId: getSandboxState
-export def "1-sandboxes-state get" [
-  sandboxName: string
+export def "1-sandboxes-state get-sandbox" [
+  sandbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "1-sandboxes-state get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api_key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/1/sandboxes/($sandboxName)/state")
+  let full_url = (build-url $base ({sandbox_name: $sandbox_name} | format pattern "/1/sandboxes/{sandbox_name}/state"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

@@ -65,7 +65,7 @@ def base-url-completer [] { ["https://papinet.papinet.io"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def orderStatus-completer [] { ["Active" "Cancelled" "Completed"] }
+def order-status-completer [] { ["Active" "Cancelled" "Completed"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -102,13 +102,13 @@ export def "orders list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --orderStatus: string@orderStatus-completer # Filter by status
+  --order-status: string@order-status-completer # Filter by status
   --offset: string # The number of items to skip before starting to collect the result set.
   --limit: string # The maximum number of items to return. If the value exceeds the maximum, then the maximum value will be used.
 ]: nothing -> record<links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>>, orders: table<id: string, numberOfLineItems: int, orderNumber: string, orderStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "orderStatus" $orderStatus "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "orderStatus" $order_status "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -119,7 +119,7 @@ export def "orders list" [
 #
 # GET /orders/{orderId}
 export def "orders get" [
-  orderId: string
+  order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -131,7 +131,7 @@ export def "orders get" [
 ]: nothing -> record<id: string, numberOfLineItems: int, orderNumber: string, orderStatus: string, links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>>, orderLineItems: table<changeable: bool, id: string, orderLineItemNumber: float, orderLineItemStatus: string, quantities: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/orders/($orderId)")
+  let full_url = (build-url $base ({order_id: $order_id} | format pattern "/orders/{order_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

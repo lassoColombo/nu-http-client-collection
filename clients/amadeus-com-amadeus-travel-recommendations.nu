@@ -101,13 +101,13 @@ export def "reference-data-recommended-locations get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --cityCodes: string # City used by the algorythm to recommend new destination. Several cities can be specified using comma.  City codes follow [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx) (e.g. PAR)
-  --travelerCountryCode: string # Origin country of the traveler following [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) code format (e.g. US) (default: FR, e.g. FR)
-  --destinationCountryCodes: string # List of country the traveler want to visit, separated with comma.  Country codes follow [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) code format (e.g. US)
+  --city-codes: string # City used by the algorythm to recommend new destination. Several cities can be specified using comma.  City codes follow [IATA standard](http://www.iata.org/publications/Pages/code-search.aspx) (e.g. PAR)
+  --traveler-country-code: string # Origin country of the traveler following [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) code format (e.g. US) (default: FR, e.g. FR)
+  --destination-country-codes: string # List of country the traveler want to visit, separated with comma.  Country codes follow [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) code format (e.g. US)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cityCodes" $cityCodes "scalar") (serialize-qp "travelerCountryCode" $travelerCountryCode "scalar") (serialize-qp "destinationCountryCodes" $destinationCountryCodes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cityCodes" $city_codes "scalar") (serialize-qp "travelerCountryCode" $traveler_country_code "scalar") (serialize-qp "destinationCountryCodes" $destination_country_codes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reference-data/recommended-locations" $qp)
   let accept_val = "application/vnd.amadeus+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

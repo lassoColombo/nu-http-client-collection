@@ -70,7 +70,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "giftcards CreateGiftCard" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "giftcards create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,7 +94,7 @@ export def commands []: nothing -> table {
 #
 # POST /giftcards
 # operationId: CreateGiftCard
-export def "giftcards CreateGiftCard" [
+export def "giftcards create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -103,10 +103,10 @@ export def "giftcards CreateGiftCard" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --X-VTEX-API-AppKey: string # The AppKey configured by the merchant
-  --X-VTEX-API-AppToken: string # The AppToken configured by the merchant
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --x-vtex-api-app-key: string # The AppKey configured by the merchant
+  --x-vtex-api-app-token: string # The AppToken configured by the merchant
   --body: record
 ]: any -> record<balance: int, caption: string, emissionDate: string, expiringDate: string, id: string, redemptionCode: string, redemptionToken: string, relationName: string, transactions: record<href: string>> {
   let input = $in
@@ -114,7 +114,7 @@ export def "giftcards CreateGiftCard" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/giftcards")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Content-Type": $Content_Type, "Accept": $Accept, "X-VTEX-API-AppKey": $X_VTEX_API_AppKey, "X-VTEX-API-AppToken": $X_VTEX_API_AppToken} | compact
+  let extra_headers = {"Content-Type": $content_type, "Accept": $hdr_accept, "X-VTEX-API-AppKey": $x_vtex_api_app_key, "X-VTEX-API-AppToken": $x_vtex_api_app_token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -127,7 +127,7 @@ export def "giftcards CreateGiftCard" [
 # operationId: GetGiftCardusingJSON
 # --cart shape: {discounts: int, grandTotal: float, items: list, itemsTotal: int, redemptionCode: string, relationName: string, shipping: int, taxes: int}
 # --client shape: {document: string, email: string, id: string}
-export def "giftcards-search GetGiftCardusingJSON" [
+export def "giftcards-search get-gift-cardusing-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -136,9 +136,9 @@ export def "giftcards-search GetGiftCardusingJSON" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  --REST-Range: string # PaginationB control.B ThisB queryB variableB mustB followB theB formatB _resources={from}-{to}_.
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --rest-range: string # PaginationB control.B ThisB queryB variableB mustB followB theB formatB _resources={from}-{to}_.
   cart: record # e.g. {discounts: 0, grandTotal: 123.1, items: [{id: 1, name: Product Name, price: 100, productId: 1, quantity: 1, refId: 12}], itemsTotal: 100, redemptionCode: , relationName: , shipping: 0, taxes: 12} — shape: {discounts: int, grandTotal: float, items: list, itemsTotal: int, redemptionCode: string, relationName: string, shipping: int, taxes: int}
   client: record # e.g. {document: 21301923110, email: email@damoain.com, id: 019a0cc1-409a-4c16-859b-eefdb81f825e} — shape: {document: string, email: string, id: string}
 ]: any -> record<items: table<_self: record, id: string>, paging: record<page: int, pages: int, perPage: int, total: int>> {
@@ -146,9 +146,9 @@ export def "giftcards-search GetGiftCardusingJSON" [
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/giftcards/_search")
-  let body = {cart: $cart, client: $client} | compact
+  let body = {"cart": $cart, "client": $client} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type, "REST-Range": $REST_Range} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type, "REST-Range": $rest_range} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -159,8 +159,8 @@ export def "giftcards-search GetGiftCardusingJSON" [
 #
 # GET /giftcards/{giftCardID}
 # operationId: GetGiftCardbyID
-export def "giftcards GetGiftCardbyID" [
-  giftCardID: string
+export def "giftcards get-gift-cardby" [
+  gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,13 +169,13 @@ export def "giftcards GetGiftCardbyID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
 ]: nothing -> record<balance: int, caption: string, emissionDate: string, expiringDate: string, id: string, redemptionCode: string, redemptionToken: string, relationName: string, transactions: record<href: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/giftcards/($giftCardID)")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({gift_card_id: $gift_card_id} | format pattern "/giftcards/{gift_card_id}"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -186,8 +186,8 @@ export def "giftcards GetGiftCardbyID" [
 #
 # GET /giftcards/{giftCardID}/transactions
 # operationId: GetGiftCardTransactions
-export def "giftcards-transactions GetGiftCardTransactions" [
-  giftCardID: string
+export def "giftcards-transactions get" [
+  gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,13 +196,13 @@ export def "giftcards-transactions GetGiftCardTransactions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
 ]: nothing -> table<_self: record<href: string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/giftcards/($giftCardID)/transactions")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({gift_card_id: $gift_card_id} | format pattern "/giftcards/{gift_card_id}/transactions"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,8 +214,8 @@ export def "giftcards-transactions GetGiftCardTransactions" [
 # POST /giftcards/{giftCardID}/transactions
 # operationId: CreateGiftCardTransaction
 # --orderInfo shape: {cart?: record, clientProfile?: record, orderId?: string, sequence?: int, shipping?: record}
-export def "giftcards-transactions CreateGiftCardTransaction" [
-  giftCardID: string
+export def "giftcards-transactions create" [
+  gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,23 +224,23 @@ export def "giftcards-transactions CreateGiftCardTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   description: string # default: insert test here
   operation: string # default: Debit
-  --orderInfo: record # default: {cart: {discounts: 2.5, grandTotal: 0, items: [{discount: 2.5, id: 2001023, name: insert name here, price: 14.99, priceTags: [{name: insert name here, value: 0}], productId: 2000492, quantity: 1, refId: 35994, shippingDiscount: 0, value: 14.99}], itemsTotal: 14.99, shipping: 7.27, taxes: 0}, clientProfile: {birthDate: 0001-01-01T00:00:00, document: 02906792063, email: email@email.com.br, firstName: example, isCorporate: false, lastName: example, phone: +551111111111}, orderId: v500, sequence: 5006128, shipping: {city: Rio de Janeiro, complement: , country: BRA, neighborhood: example, number: 11, postalCode: 22250040, receiverName: example, reference: , state: RJ, street: Praia de Botafogo}} — shape: {cart?: record, clientProfile?: record, orderId?: string, sequence?: int, shipping?: record}
-  redemptionCode: string # default: example code
-  redemptionToken: string # default: example code
-  requestId: string # default: B56CB
+  --order-info: record # default: {cart: {discounts: 2.5, grandTotal: 0, items: [{discount: 2.5, id: 2001023, name: insert name here, price: 14.99, priceTags: [{name: insert name here, value: 0}], productId: 2000492, quantity: 1, refId: 35994, shippingDiscount: 0, value: 14.99}], itemsTotal: 14.99, shipping: 7.27, taxes: 0}, clientProfile: {birthDate: 0001-01-01T00:00:00, document: 02906792063, email: email@email.com.br, firstName: example, isCorporate: false, lastName: example, phone: +551111111111}, orderId: v500, sequence: 5006128, shipping: {city: Rio de Janeiro, complement: , country: BRA, neighborhood: example, number: 11, postalCode: 22250040, receiverName: example, reference: , state: RJ, street: Praia de Botafogo}} — shape: {cart?: record, clientProfile?: record, orderId?: string, sequence?: int, shipping?: record}
+  redemption_code: string # default: example code
+  redemption_token: string # default: example code
+  request_id: string # default: B56CB
   value: float # format: decimal, default: 800
 ]: any -> record<_self: record<href: string>, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/giftcards/($giftCardID)/transactions")
-  let body = {description: $description, operation: $operation, orderInfo: $orderInfo, redemptionCode: $redemptionCode, redemptionToken: $redemptionToken, requestId: $requestId, value: $value} | compact
+  let full_url = (build-url $base ({gift_card_id: $gift_card_id} | format pattern "/giftcards/{gift_card_id}/transactions"))
+  let body = {"description": $description, "operation": $operation, "orderInfo": $order_info, "redemptionCode": $redemption_code, "redemptionToken": $redemption_token, "requestId": $request_id, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -251,9 +251,9 @@ export def "giftcards-transactions CreateGiftCardTransaction" [
 #
 # GET /giftcards/{giftCardID}/transactions/{transactionID}
 # operationId: GetGiftCardTransactionbyID
-export def "giftcards-transactions GetGiftCardTransactionbyID" [
-  giftCardID: string
-  transactionID: string
+export def "giftcards-transactions get-gift-card-transactionby" [
+  gift_card_id: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,13 +262,13 @@ export def "giftcards-transactions GetGiftCardTransactionbyID" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
 ]: nothing -> record<date: string, description: string, redemptionMode: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/giftcards/($giftCardID)/transactions/($transactionID)")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({gift_card_id: $gift_card_id, transaction_id: $transaction_id} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -279,9 +279,9 @@ export def "giftcards-transactions GetGiftCardTransactionbyID" [
 #
 # GET /giftcards/{giftCardID}/transactions/{transactionID}/authorization
 # operationId: GetTransactionAuthorizations
-export def "giftcards-transactions-authorization GetTransactionAuthorizations" [
-  giftCardID: string
-  transactionID: string
+export def "giftcards-transactions-authorization get" [
+  gift_card_id: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,13 +290,13 @@ export def "giftcards-transactions-authorization GetTransactionAuthorizations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
 ]: nothing -> record<date: string, oid: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/giftcards/($giftCardID)/transactions/($transactionID)/authorization")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({gift_card_id: $gift_card_id, transaction_id: $transaction_id} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}/authorization"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -307,9 +307,9 @@ export def "giftcards-transactions-authorization GetTransactionAuthorizations" [
 #
 # GET /giftcards/{giftCardID}/transactions/{transactionID}/cancellations
 # operationId: GetTransactionCancellations
-export def "giftcards-transactions-cancellations GetTransactionCancellations" [
-  giftCardID: string
-  transactionID: string
+export def "giftcards-transactions-cancellations get" [
+  gift_card_id: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,13 +318,13 @@ export def "giftcards-transactions-cancellations GetTransactionCancellations" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
 ]: nothing -> table<date: string, id: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/giftcards/($giftCardID)/transactions/($transactionID)/cancellations")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({gift_card_id: $gift_card_id, transaction_id: $transaction_id} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}/cancellations"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -335,9 +335,9 @@ export def "giftcards-transactions-cancellations GetTransactionCancellations" [
 #
 # POST /giftcards/{giftCardID}/transactions/{transactionID}/cancellations
 # operationId: CancelGiftCardTransaction
-export def "giftcards-transactions-cancellations CancelGiftCardTransaction" [
-  giftCardID: string
-  transactionID: string
+export def "giftcards-transactions-cancellations cancel" [
+  gift_card_id: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,18 +346,18 @@ export def "giftcards-transactions-cancellations CancelGiftCardTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  requestId: string
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  request_id: string
   value: float
 ]: any -> record<date: string, oid: string, value: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/giftcards/($giftCardID)/transactions/($transactionID)/cancellations")
-  let body = {requestId: $requestId, value: $value} | compact
+  let full_url = (build-url $base ({gift_card_id: $gift_card_id, transaction_id: $transaction_id} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}/cancellations"))
+  let body = {"requestId": $request_id, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -368,9 +368,9 @@ export def "giftcards-transactions-cancellations CancelGiftCardTransaction" [
 #
 # GET /giftcards/{giftCardID}/transactions/{transactionID}/settlements
 # operationId: GetTransactionSettlements
-export def "giftcards-transactions-settlements GetTransactionSettlements" [
-  giftCardID: string
-  transactionID: string
+export def "giftcards-transactions-settlements get" [
+  gift_card_id: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,13 +379,13 @@ export def "giftcards-transactions-settlements GetTransactionSettlements" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
 ]: nothing -> table<date: string, oid: string, value: float> {
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/giftcards/($giftCardID)/transactions/($transactionID)/settlements")
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let full_url = (build-url $base ({gift_card_id: $gift_card_id, transaction_id: $transaction_id} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}/settlements"))
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -396,9 +396,9 @@ export def "giftcards-transactions-settlements GetTransactionSettlements" [
 #
 # POST /giftcards/{giftCardID}/transactions/{transactionID}/settlements
 # operationId: SettleGiftCardTransaction
-export def "giftcards-transactions-settlements SettleGiftCardTransaction" [
-  giftCardID: string
-  transactionID: string
+export def "giftcards-transactions-settlements post" [
+  gift_card_id: string
+  transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,18 +407,18 @@ export def "giftcards-transactions-settlements SettleGiftCardTransaction" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-  --Content-Type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
-  requestId: string
+  --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
+  --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
+  request_id: string
   value: float
 ]: any -> record<date: string, oid: string, value: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/giftcards/($giftCardID)/transactions/($transactionID)/settlements")
-  let body = {requestId: $requestId, value: $value} | compact
+  let full_url = (build-url $base ({gift_card_id: $gift_card_id, transaction_id: $transaction_id} | format pattern "/giftcards/{gift_card_id}/transactions/{transaction_id}/settlements"))
+  let body = {"requestId": $request_id, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Accept": $Accept, "Content-Type": $Content_Type} | compact
+  let extra_headers = {"Accept": $hdr_accept, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

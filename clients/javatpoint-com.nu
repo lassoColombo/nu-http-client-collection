@@ -114,19 +114,19 @@ export def "messages-send fcmprojectsmessagessend" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --message: record # Message to send by Firebase Cloud Messaging Service. — shape: {android?: record, apns?: record, condition?: string, data?: record, fcmOptions?: record, name?: string, notification?: record, token?: string, topic?: string, webpush?: record}
-  --validateOnly: oneof<nothing, bool> # Flag for testing the request without actually delivering the message.
+  --validate-only: oneof<nothing, bool> # Flag for testing the request without actually delivering the message.
 ]: any -> record<android: record<collapseKey: string, data: record, directBootOk: bool, fcmOptions: record<analyticsLabel: string>, notification: record<body: string, bodyLocArgs: list, bodyLocKey: string, bypassProxyNotification: bool, channelId: string, clickAction: string, color: string, defaultLightSettings: bool, defaultSound: bool, defaultVibrateTimings: bool, eventTime: string, icon: string, image: string, lightSettings: record, localOnly: bool, notificationCount: int, notificationPriority: string, sound: string, sticky: bool, tag: string, ticker: string, title: string, titleLocArgs: list, titleLocKey: string, vibrateTimings: list, visibility: string>, priority: string, restrictedPackageName: string, ttl: string>, apns: record<fcmOptions: record<analyticsLabel: string, image: string>, headers: record, payload: record>, condition: string, data: record, fcmOptions: record<analyticsLabel: string>, name: string, notification: record<body: string, image: string, title: string>, token: string, topic: string, webpush: record<data: record, fcmOptions: record<analyticsLabel: string, link: string>, headers: record, notification: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($parent)/messages:send" $qp)
-  let body = {message: $message, validateOnly: $validateOnly} | compact
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({parent: $parent} | format pattern "/v1/{parent}/messages:send") $qp)
+  let body = {"message": $message, "validateOnly": $validate_only} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

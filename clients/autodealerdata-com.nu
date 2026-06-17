@@ -102,12 +102,12 @@ export def "days-supply get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --brandName: string
-  --regionName: string # default: REGION_STATE_CA
+  --brand-name: string
+  --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brandName "scalar") (serialize-qp "regionName" $regionName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/daysSupply" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -128,12 +128,12 @@ export def "days-to-sell get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --brandName: string
-  --regionName: string # default: REGION_STATE_CA
+  --brand-name: string
+  --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brandName "scalar") (serialize-qp "regionName" $regionName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/daysToSell" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -178,11 +178,11 @@ export def "get-dealers get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --zipCode: int
+  --zip-code: int
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<address: string, dealerName: string, ids: list, state: string, zipCode: int>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zipCode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getDealers" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -203,11 +203,11 @@ export def "get-dealers-by-id get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --dealerID: int
+  --dealer-id: int
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<address: string, dealerName: string, ids: list, state: string, zipCode: int>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealerID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getDealersByID" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -228,12 +228,12 @@ export def "get-dealers-by-region get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --regionName: string # default: REGION_STATE_CA
+  --region-name: string # default: REGION_STATE_CA
   --page: int # default: 1
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<dealers: list<record>, maxPages: int, page: int>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $regionName "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getDealersByRegion" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -254,11 +254,11 @@ export def "get-inactive-models get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --brandName: string
+  --brand-name: string
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<modelName: string>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brandName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getInactiveModels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -279,11 +279,11 @@ export def "get-models get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --brandName: string
+  --brand-name: string
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<modelName: string>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brandName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getModels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -304,12 +304,12 @@ export def "get-region-brand-market-share get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --brandName: string
-  --regionName: string # default: REGION_STATE_CA
+  --brand-name: string
+  --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brandName "scalar") (serialize-qp "regionName" $regionName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRegionBrandMarketShare" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -330,11 +330,11 @@ export def "get-region-market-share get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --regionName: string # default: REGION_STATE_CA
+  --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $regionName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getRegionMarketShare" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -378,12 +378,12 @@ export def "get-sub-user-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiID: string
-  --apiKey: string
+  --api-id: string
+  --api-key: string
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiID" $apiID "scalar") (serialize-qp "apiKey" $apiKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getSubUserKeys" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -403,12 +403,12 @@ export def "get-token get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiID: string
-  --apiKey: string
+  --api-id: string
+  --api-key: string
 ]: nothing -> record<createdOn: int, expires: int, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiID" $apiID "scalar") (serialize-qp "apiKey" $apiKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getToken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -428,12 +428,12 @@ export def "get-token post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiID: string
-  --apiKey: string
+  --api-id: string
+  --api-key: string
 ]: nothing -> record<createdOn: int, expires: int, token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiID" $apiID "scalar") (serialize-qp "apiKey" $apiKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/getToken" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -454,12 +454,12 @@ export def "list-price get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --brandName: string
-  --regionName: string # default: REGION_STATE_CA
+  --brand-name: string
+  --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<average: float, median: float, name: string, pVariance: float, stdDev: float>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brandName "scalar") (serialize-qp "regionName" $regionName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listPrice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -480,13 +480,13 @@ export def "listings get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --dealerID: int
+  --dealer-id: int
   --page: int # default: 1
-  --newCars: oneof<nothing, bool> # default: true
+  --new-cars: oneof<nothing, bool> # default: true
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealerID "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $newCars "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listings" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -507,27 +507,27 @@ export def "listings2 get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --dealerID: int # default: 0
-  --zipCode: int # default: 0
+  --dealer-id: int # default: 0
+  --zip-code: int # default: 0
   --latitude: float # default: 0
   --longitude: float # default: 0
   --radius: float # default: 0
-  --regionName: string
-  --brandName: string
-  --modelName: string
-  --modelYear: int # default: 0
-  --mileageLow: int # default: 0
-  --mileageHigh: int # default: 0
-  --startDate: string # format: date
-  --endDate: string # format: date
-  --daysBack: int # default: 45
+  --region-name: string
+  --brand-name: string
+  --model-name: string
+  --model-year: int # default: 0
+  --mileage-low: int # default: 0
+  --mileage-high: int # default: 0
+  --start-date: string # format: date
+  --end-date: string # format: date
+  --days-back: int # default: 45
   --page: int # default: 1
-  --newCars: oneof<nothing, bool> # default: true
-  --extendedSearch: oneof<nothing, bool> # default: false
+  --new-cars: oneof<nothing, bool> # default: true
+  --extended-search: oneof<nothing, bool> # default: false
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealerID "scalar") (serialize-qp "zipCode" $zipCode "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "regionName" $regionName "scalar") (serialize-qp "brandName" $brandName "scalar") (serialize-qp "modelName" $modelName "scalar") (serialize-qp "modelYear" $modelYear "scalar") (serialize-qp "mileageLow" $mileageLow "scalar") (serialize-qp "mileageHigh" $mileageHigh "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "daysBack" $daysBack "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $newCars "scalar") (serialize-qp "extendedSearch" $extendedSearch "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "modelYear" $model_year "scalar") (serialize-qp "mileageLow" $mileage_low "scalar") (serialize-qp "mileageHigh" $mileage_high "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "extendedSearch" $extended_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listings2" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -548,15 +548,15 @@ export def "listings-by-date get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --dealerID: int
-  --startDate: string # format: date
-  --endDate: string # format: date
+  --dealer-id: int
+  --start-date: string # format: date
+  --end-date: string # format: date
   --page: int # default: 1
-  --newCars: oneof<nothing, bool> # default: true
+  --new-cars: oneof<nothing, bool> # default: true
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealerID "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $newCars "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByDate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -577,15 +577,15 @@ export def "listings-by-region get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --regionName: string
-  --modelName: string
-  --daysBack: int # default: 10
+  --region-name: string
+  --model-name: string
+  --days-back: int # default: 10
   --page: int # default: 1
-  --newCars: oneof<nothing, bool> # default: true
+  --new-cars: oneof<nothing, bool> # default: true
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $regionName "scalar") (serialize-qp "modelName" $modelName "scalar") (serialize-qp "daysBack" $daysBack "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $newCars "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByRegion" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -606,16 +606,16 @@ export def "listings-by-region-and-date get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --regionName: string
-  --modelName: string
-  --startDate: string # format: date
-  --endDate: string # format: date
+  --region-name: string
+  --model-name: string
+  --start-date: string # format: date
+  --end-date: string # format: date
   --page: int # default: 1
-  --newCars: oneof<nothing, bool> # default: true
+  --new-cars: oneof<nothing, bool> # default: true
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $regionName "scalar") (serialize-qp "modelName" $modelName "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $newCars "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByRegionAndDate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -636,14 +636,14 @@ export def "listings-by-zip-code get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --zipCode: int
+  --zip-code: int
   --page: int # default: 1
-  --newCars: oneof<nothing, bool> # default: true
-  --modelName: string
+  --new-cars: oneof<nothing, bool> # default: true
+  --model-name: string
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zipCode "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $newCars "scalar") (serialize-qp "modelName" $modelName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "modelName" $model_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByZipCode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -664,16 +664,16 @@ export def "listings-by-zip-code-and-date get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --zipCode: int
-  --startDate: string # format: date
-  --endDate: string # format: date
+  --zip-code: int
+  --start-date: string # format: date
+  --end-date: string # format: date
   --page: int # default: 1
-  --newCars: oneof<nothing, bool> # default: true
-  --modelName: string
+  --new-cars: oneof<nothing, bool> # default: true
+  --model-name: string
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<listings: list<record>, maxPages: int, page: int>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zipCode "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $newCars "scalar") (serialize-qp "modelName" $modelName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "modelName" $model_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/listingsByZipCodeAndDate" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -693,17 +693,17 @@ export def "make-sub-user-key post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiID: string
-  --apiKey: string
-  --siteName: string # default: localhost
-  --endPoints: list # default: [*]
+  --api-id: string
+  --api-key: string
+  --site-name: string # default: localhost
+  --end-points: list # default: [*]
 ]: any -> record<createdOn: int, domain: string, endPoints: list<string>, expires: int, token: string, uuid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiID" $apiID "scalar") (serialize-qp "apiKey" $apiKey "scalar") (serialize-qp "siteName" $siteName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "siteName" $site_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/makeSubUserKey" $qp)
-  let body = {endPoints: $endPoints} | compact
+  let body = {"endPoints": $end_points} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -724,13 +724,13 @@ export def "model-year-dist get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --modelName: string
-  --brandName: string
-  --regionName: string # default: REGION_STATE_CA
+  --model-name: string
+  --brand-name: string
+  --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<brandName: string, modelName: string, percentOfMarket: float, year: int>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "modelName" $modelName "scalar") (serialize-qp "brandName" $brandName "scalar") (serialize-qp "regionName" $regionName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/modelYearDist" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -751,13 +751,13 @@ export def "region-daily-sales get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --brandName: string
-  --regionName: string
+  --brand-name: string
+  --region-name: string
   --day: string # format: date
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brandName "scalar") (serialize-qp "regionName" $regionName "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "day" $day "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/regionDailySales" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -778,13 +778,13 @@ export def "region-sales get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --brandName: string
-  --regionName: string
+  --brand-name: string
+  --region-name: string
   --month: string # format: date
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brandName "scalar") (serialize-qp "regionName" $regionName "scalar") (serialize-qp "month" $month "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "month" $month "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/regionSales" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -804,13 +804,13 @@ export def "revoke-sub-user-key put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --apiID: string
-  --apiKey: string
-  --subUserKeyUUID: string
+  --api-id: string
+  --api-key: string
+  --sub-user-key-uuid: string
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "apiID" $apiID "scalar") (serialize-qp "apiKey" $apiKey "scalar") (serialize-qp "subUserKeyUUID" $subUserKeyUUID "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "apiID" $api_id "scalar") (serialize-qp "apiKey" $api_key "scalar") (serialize-qp "subUserKeyUUID" $sub_user_key_uuid "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/revokeSubUserKey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -831,12 +831,12 @@ export def "sale-price get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --brandName: string
-  --regionName: string # default: REGION_STATE_CA
+  --brand-name: string
+  --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<average: float, median: float, name: string, pVariance: float, stdDev: float>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brandName "scalar") (serialize-qp "regionName" $regionName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/salePrice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -857,13 +857,13 @@ export def "sale-price-histogram get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --modelName: string
-  --brandName: string
-  --regionName: string # default: REGION_STATE_CA
+  --model-name: string
+  --brand-name: string
+  --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<bucket: float, modelName: string, percentOfMarket: float>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "modelName" $modelName "scalar") (serialize-qp "brandName" $brandName "scalar") (serialize-qp "regionName" $regionName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "modelName" $model_name "scalar") (serialize-qp "brandName" $brand_name "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/salePriceHistogram" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -885,13 +885,13 @@ export def "similar-sale-price get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
   --vin: string
-  --regionName: string # default: REGION_STATE_CA
-  --daysBack: int # default: 45
-  --sameYear: oneof<nothing, bool> # default: false
+  --region-name: string # default: REGION_STATE_CA
+  --days-back: int # default: 45
+  --same-year: oneof<nothing, bool> # default: false
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<daysBack: int, mileCount: int, milesAvg: float, milesStdDev: float, newCount: int, newSaleAvg: float, newSaleStdDev: float, usedCount: int, usedSaleAvg: float, usedSaleStdDev: float>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "regionName" $regionName "scalar") (serialize-qp "daysBack" $daysBack "scalar") (serialize-qp "sameYear" $sameYear "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "sameYear" $same_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/similarSalePrice" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -912,11 +912,11 @@ export def "top-models get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
-  --regionName: string # default: REGION_STATE_CA
+  --region-name: string # default: REGION_STATE_CA
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: table<brandMarketShare: float, brandName: string, modelName: string, percentOfBrandSales: float, percentOfTopSales: float>, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $regionName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "regionName" $region_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/topModels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -938,24 +938,24 @@ export def "valuation get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
   --vin: string
-  --dealerID: int # default: 0
-  --zipCode: int # default: 0
+  --dealer-id: int # default: 0
+  --zip-code: int # default: 0
   --latitude: float # default: 0
   --longitude: float # default: 0
   --radius: float # default: 0
-  --regionName: string
-  --mileageLow: int # default: 0
-  --mileageHigh: int # default: 0
-  --startDate: string # format: date
-  --endDate: string # format: date
-  --daysBack: int # default: 45
-  --newCars: oneof<nothing, bool> # default: false
-  --extendedSearch: oneof<nothing, bool> # default: false
-  --sameYear: oneof<nothing, bool> # default: false
+  --region-name: string
+  --mileage-low: int # default: 0
+  --mileage-high: int # default: 0
+  --start-date: string # format: date
+  --end-date: string # format: date
+  --days-back: int # default: 45
+  --new-cars: oneof<nothing, bool> # default: false
+  --extended-search: oneof<nothing, bool> # default: false
+  --same-year: oneof<nothing, bool> # default: false
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: record<daysBack: int, mileCount: int, milesAvg: float, milesStdDev: float, newCount: int, newSaleAvg: float, newSaleStdDev: float, usedCount: int, usedSaleAvg: float, usedSaleStdDev: float>, endDate: string, modelName: string, msg: string, regionName: string, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "dealerID" $dealerID "scalar") (serialize-qp "zipCode" $zipCode "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "regionName" $regionName "scalar") (serialize-qp "mileageLow" $mileageLow "scalar") (serialize-qp "mileageHigh" $mileageHigh "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "daysBack" $daysBack "scalar") (serialize-qp "newCars" $newCars "scalar") (serialize-qp "extendedSearch" $extendedSearch "scalar") (serialize-qp "sameYear" $sameYear "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "dealerID" $dealer_id "scalar") (serialize-qp "zipCode" $zip_code "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "regionName" $region_name "scalar") (serialize-qp "mileageLow" $mileage_low "scalar") (serialize-qp "mileageHigh" $mileage_high "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "daysBack" $days_back "scalar") (serialize-qp "newCars" $new_cars "scalar") (serialize-qp "extendedSearch" $extended_search "scalar") (serialize-qp "sameYear" $same_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/valuation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1002,11 +1002,11 @@ export def "vehicle-seen get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
   --vin: string
-  --afterDate: string # format: date
+  --after-date: string # format: date
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: bool, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "afterDate" $afterDate "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "afterDate" $after_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vehicleSeen" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1028,12 +1028,12 @@ export def "vin-decode get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --jwt: string
   --vin: string
-  --passEmpty: oneof<nothing, bool> # default: false
-  --includeRecall: oneof<nothing, bool> # default: true
+  --pass-empty: oneof<nothing, bool> # default: false
+  --include-recall: oneof<nothing, bool> # default: true
 ]: nothing -> record<brandName: string, cacheTimeLimit: int, condition: string, data: any, modelName: string, msg: string, regionName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "passEmpty" $passEmpty "scalar") (serialize-qp "includeRecall" $includeRecall "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jwt" $jwt "scalar") (serialize-qp "vin" $vin "scalar") (serialize-qp "passEmpty" $pass_empty "scalar") (serialize-qp "includeRecall" $include_recall "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vinDecode" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

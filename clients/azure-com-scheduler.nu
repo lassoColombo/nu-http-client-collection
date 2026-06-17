@@ -70,7 +70,7 @@ def accept-completer [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-scheduler-job-collections ListBySubscription" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-scheduler-job-collections list-by" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,8 +94,8 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Scheduler/jobCollections
 # operationId: JobCollections_ListBySubscription
-export def "subscriptions-providers-microsoft-scheduler-job-collections ListBySubscription" [
-  subscriptionId: string
+export def "subscriptions-providers-microsoft-scheduler-job-collections list-by" [
+  subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -110,7 +110,7 @@ export def "subscriptions-providers-microsoft-scheduler-job-collections ListBySu
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Scheduler/jobCollections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id} | format pattern "/subscriptions/{subscription_id}/providers/Microsoft.Scheduler/jobCollections") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -120,9 +120,9 @@ export def "subscriptions-providers-microsoft-scheduler-job-collections ListBySu
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections
 # operationId: JobCollections_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections ListByResourceGroup" [
-  subscriptionId: string
-  resourceGroupName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections list-by" [
+  subscription_id: string
+  resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -137,7 +137,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -147,10 +147,10 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}
 # operationId: JobCollections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections delete" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -175,10 +175,10 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}
 # operationId: JobCollections_Get
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections get" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,10 +204,10 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}
 # operationId: JobCollections_Patch
 # --properties shape: {quota?: any, sku?: any, state?: "Enabled"|"Disabled"|"Suspended"|"Deleted"}
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections Patch" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections update" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,8 +227,8 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)" $qp)
-  let body = {location: $location, name: $name, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}") $qp)
+  let body = {"location": $location, "name": $name, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -240,10 +240,10 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}
 # operationId: JobCollections_CreateOrUpdate
 # --properties shape: {quota?: any, sku?: any, state?: "Enabled"|"Disabled"|"Suspended"|"Deleted"}
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,8 +263,8 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)" $qp)
-  let body = {location: $location, name: $name, properties: $properties, tags: $tags} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}") $qp)
+  let body = {"location": $location, "name": $name, "properties": $properties, "tags": $tags} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -275,10 +275,10 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/disable
 # operationId: JobCollections_Disable
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-disable Disable" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-disable disable" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)/disable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}/disable") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -303,10 +303,10 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/enable
 # operationId: JobCollections_Enable
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-enable Enable" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-enable enable" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)/enable" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}/enable") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -331,10 +331,10 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs
 # operationId: Jobs_List
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs List" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs list" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)/jobs" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}/jobs") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -362,11 +362,11 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}
 # operationId: Jobs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs Delete" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs delete" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)/jobs/($jobName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}/jobs/{job_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -391,11 +391,11 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs Get" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs get" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)/jobs/($jobName)" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}/jobs/{job_name}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -421,11 +421,11 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}
 # operationId: Jobs_Patch
 # --properties shape: {action?: any, recurrence?: any, startTime?: string, state?: "Enabled"|"Disabled"|"Faulted"|"Completed", status?: any}
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs Patch" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs update" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,8 +442,8 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)/jobs/($jobName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}/jobs/{job_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -455,11 +455,11 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}
 # operationId: Jobs_CreateOrUpdate
 # --properties shape: {action?: any, recurrence?: any, startTime?: string, state?: "Enabled"|"Disabled"|"Faulted"|"Completed", status?: any}
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs CreateOrUpdate" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs create-or-update" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,8 +476,8 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)/jobs/($jobName)" $qp)
-  let body = {properties: $properties} | compact
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}/jobs/{job_name}") $qp)
+  let body = {"properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -488,11 +488,11 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}/history
 # operationId: Jobs_ListJobHistory
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs-history ListJobHistory" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs-history list" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "$top" $top "scalar") (serialize-qp "$skip" $skip "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)/jobs/($jobName)/history" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}/jobs/{job_name}/history") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -520,11 +520,11 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Scheduler/jobCollections/{jobCollectionName}/jobs/{jobName}/run
 # operationId: Jobs_Run
-export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs-run Run" [
-  subscriptionId: string
-  resourceGroupName: string
-  jobCollectionName: string
-  jobName: string
+export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-collections-jobs-run post" [
+  subscription_id: string
+  resource_group_name: string
+  job_collection_name: string
+  job_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "subscriptions-resource-groups-providers-microsoft-scheduler-job-coll
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Scheduler/jobCollections/($jobCollectionName)/jobs/($jobName)/run" $qp)
+  let full_url = (build-url $base ({subscription_id: $subscription_id, resource_group_name: $resource_group_name, job_collection_name: $job_collection_name, job_name: $job_name} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Scheduler/jobCollections/{job_collection_name}/jobs/{job_name}/run") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

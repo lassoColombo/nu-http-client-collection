@@ -68,7 +68,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "10-adult-content-detectionjson AdultContentDetection" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "10-adult-content-detectionjson post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -92,7 +92,7 @@ export def commands []: nothing -> table {
 #
 # POST /1.0/AdultContentDetection.json
 # operationId: AdultContentDetection
-export def "10-adult-content-detectionjson AdultContentDetection" [
+export def "10-adult-content-detectionjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,7 +108,7 @@ export def "10-adult-content-detectionjson AdultContentDetection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/AdultContentDetection.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -119,7 +119,7 @@ export def "10-adult-content-detectionjson AdultContentDetection" [
 #
 # POST /1.0/CommercialDetection.json
 # operationId: CommercialDetection
-export def "10-commercial-detectionjson CommercialDetection" [
+export def "10-commercial-detectionjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -135,7 +135,7 @@ export def "10-commercial-detectionjson CommercialDetection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/CommercialDetection.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -146,7 +146,7 @@ export def "10-commercial-detectionjson CommercialDetection" [
 #
 # POST /1.0/DocumentSimilarity.json
 # operationId: DocumentSimilarity
-export def "10-document-similarityjson DocumentSimilarity" [
+export def "10-document-similarityjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "10-document-similarityjson DocumentSimilarity" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/DocumentSimilarity.json")
-  let body = {api_key: $api_key, copy: $copy, original: $original} | compact
+  let body = {"api_key": $api_key, "copy": $copy, "original": $original} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -174,7 +174,7 @@ export def "10-document-similarityjson DocumentSimilarity" [
 #
 # POST /1.0/EducationalDetection.json
 # operationId: EducationalDetection
-export def "10-educational-detectionjson EducationalDetection" [
+export def "10-educational-detectionjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "10-educational-detectionjson EducationalDetection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/EducationalDetection.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -201,7 +201,7 @@ export def "10-educational-detectionjson EducationalDetection" [
 #
 # POST /1.0/GenderDetection.json
 # operationId: GenderDetection
-export def "10-gender-detectionjson GenderDetection" [
+export def "10-gender-detectionjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "10-gender-detectionjson GenderDetection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/GenderDetection.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -228,7 +228,7 @@ export def "10-gender-detectionjson GenderDetection" [
 #
 # POST /1.0/KeywordExtraction.json
 # operationId: KeywordExtraction
-export def "10-keyword-extractionjson KeywordExtraction" [
+export def "10-keyword-extractionjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "10-keyword-extractionjson KeywordExtraction" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/KeywordExtraction.json")
-  let body = {api_key: $api_key, n: $n, text: $text} | compact
+  let body = {"api_key": $api_key, "n": $n, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -256,7 +256,7 @@ export def "10-keyword-extractionjson KeywordExtraction" [
 #
 # POST /1.0/LanguageDetection.json
 # operationId: LanguageDetection
-export def "10-language-detectionjson LanguageDetection" [
+export def "10-language-detectionjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "10-language-detectionjson LanguageDetection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/LanguageDetection.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,7 +283,7 @@ export def "10-language-detectionjson LanguageDetection" [
 #
 # POST /1.0/ReadabilityAssessment.json
 # operationId: ReadabilityAssessment
-export def "10-readability-assessmentjson ReadabilityAssessment" [
+export def "10-readability-assessmentjson get-ability-assessment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "10-readability-assessmentjson ReadabilityAssessment" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/ReadabilityAssessment.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -310,7 +310,7 @@ export def "10-readability-assessmentjson ReadabilityAssessment" [
 #
 # POST /1.0/SentimentAnalysis.json
 # operationId: SentimentAnalysis
-export def "10-sentiment-analysisjson SentimentAnalysis" [
+export def "10-sentiment-analysisjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "10-sentiment-analysisjson SentimentAnalysis" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/SentimentAnalysis.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -337,7 +337,7 @@ export def "10-sentiment-analysisjson SentimentAnalysis" [
 #
 # POST /1.0/SpamDetection.json
 # operationId: SpamDetection
-export def "10-spam-detectionjson SpamDetection" [
+export def "10-spam-detectionjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "10-spam-detectionjson SpamDetection" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/SpamDetection.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -364,7 +364,7 @@ export def "10-spam-detectionjson SpamDetection" [
 #
 # POST /1.0/SubjectivityAnalysis.json
 # operationId: SubjectivityAnalysis
-export def "10-subjectivity-analysisjson SubjectivityAnalysis" [
+export def "10-subjectivity-analysisjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "10-subjectivity-analysisjson SubjectivityAnalysis" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/SubjectivityAnalysis.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -391,7 +391,7 @@ export def "10-subjectivity-analysisjson SubjectivityAnalysis" [
 #
 # POST /1.0/TextExtraction.json
 # operationId: TextExtraction
-export def "10-text-extractionjson TextExtraction" [
+export def "10-text-extractionjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "10-text-extractionjson TextExtraction" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/TextExtraction.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -418,7 +418,7 @@ export def "10-text-extractionjson TextExtraction" [
 #
 # POST /1.0/TopicClassification.json
 # operationId: TopicClassification
-export def "10-topic-classificationjson TopicClassification" [
+export def "10-topic-classificationjson top-ic-classification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "10-topic-classificationjson TopicClassification" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/TopicClassification.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -445,7 +445,7 @@ export def "10-topic-classificationjson TopicClassification" [
 #
 # POST /1.0/TwitterSentimentAnalysis.json
 # operationId: TwitterSentimentAnalysis
-export def "10-twitter-sentiment-analysisjson TwitterSentimentAnalysis" [
+export def "10-twitter-sentiment-analysisjson post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "10-twitter-sentiment-analysisjson TwitterSentimentAnalysis" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/1.0/TwitterSentimentAnalysis.json")
-  let body = {api_key: $api_key, text: $text} | compact
+  let body = {"api_key": $api_key, "text": $text} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -68,8 +68,8 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def xgafv-completer [] { ["1" "2"] }
 def alt-completer [] { ["json" "media" "proto"] }
-def retrievalMethod-completer [] { ["EXPLICIT_STRONG_AFTER_WEAK_MATCH" "EXPLICIT_WEAK_MATCH" "IMPLICIT_WEAK_MATCH" "UNKNOWN_PAYLOAD_RETRIEVAL_METHOD"] }
-def visualStyle-completer [] { ["CUSTOM_STYLE" "DEFAULT_STYLE" "UNKNOWN_VISUAL_STYLE"] }
+def retrieval-method-completer [] { ["EXPLICIT_STRONG_AFTER_WEAK_MATCH" "EXPLICIT_WEAK_MATCH" "IMPLICIT_WEAK_MATCH" "UNKNOWN_PAYLOAD_RETRIEVAL_METHOD"] }
+def visual-style-completer [] { ["CUSTOM_STYLE" "DEFAULT_STYLE" "UNKNOWN_VISUAL_STYLE"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -115,25 +115,25 @@ export def "install-attribution firebasedynamiclinksinstallAttribution" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --appInstallationTime: string # App installation epoch time (https://en.wikipedia.org/wiki/Unix_time). This is a client signal for a more accurate weak match. (format: int64)
-  --bundleId: string # APP bundle ID.
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --app-installation-time: string # App installation epoch time (https://en.wikipedia.org/wiki/Unix_time). This is a client signal for a more accurate weak match. (format: int64)
+  --bundle-id: string # APP bundle ID.
   --device: record # Signals associated with the device making the request. — shape: {deviceModelName?: string, languageCode?: string, languageCodeFromWebview?: string, languageCodeRaw?: string, screenResolutionHeight?: string, screenResolutionWidth?: string, timezone?: string}
-  --iosVersion: string # iOS version, ie: 9.3.5. Consider adding "build".
-  --retrievalMethod: string@retrievalMethod-completer # App post install attribution retrieval information. Disambiguates mechanism (iSDK or developer invoked) to retrieve payload from clicked link.
-  --sdkVersion: string # Google SDK version. Version takes the form "$major.$minor.$patch"
-  --uniqueMatchLinkToCheck: string # Possible unique matched link that server need to check before performing fingerprint match. If passed link is short server need to expand the link. If link is long server need to vslidate the link.
-  --visualStyle: string@visualStyle-completer # Strong match page information. Disambiguates between default UI and custom page to present when strong match succeeds/fails to find cookie.
+  --ios-version: string # iOS version, ie: 9.3.5. Consider adding "build".
+  --retrieval-method: string@retrieval-method-completer # App post install attribution retrieval information. Disambiguates mechanism (iSDK or developer invoked) to retrieve payload from clicked link.
+  --sdk-version: string # Google SDK version. Version takes the form "$major.$minor.$patch"
+  --unique-match-link-to-check: string # Possible unique matched link that server need to check before performing fingerprint match. If passed link is short server need to expand the link. If link is long server need to vslidate the link.
+  --visual-style: string@visual-style-completer # Strong match page information. Disambiguates between default UI and custom page to present when strong match succeeds/fails to find cookie.
 ]: any -> record<appMinimumVersion: string, attributionConfidence: string, deepLink: string, externalBrowserDestinationLink: string, fallbackLink: string, invitationId: string, isStrongMatchExecutable: bool, matchMessage: string, requestIpVersion: string, requestedLink: string, resolvedLink: string, utmCampaign: string, utmContent: string, utmMedium: string, utmSource: string, utmTerm: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/installAttribution" $qp)
-  let body = {appInstallationTime: $appInstallationTime, bundleId: $bundleId, device: $device, iosVersion: $iosVersion, retrievalMethod: $retrievalMethod, sdkVersion: $sdkVersion, uniqueMatchLinkToCheck: $uniqueMatchLinkToCheck, visualStyle: $visualStyle} | compact
+  let body = {"appInstallationTime": $app_installation_time, "bundleId": $bundle_id, "device": $device, "iosVersion": $ios_version, "retrievalMethod": $retrieval_method, "sdkVersion": $sdk_version, "uniqueMatchLinkToCheck": $unique_match_link_to_check, "visualStyle": $visual_style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -162,22 +162,22 @@ export def "managed-short-links-create firebasedynamiclinksmanagedShortLinkscrea
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dynamicLinkInfo: record # Information about a Dynamic Link. — shape: {analyticsInfo?: record, androidInfo?: record, desktopInfo?: record, domainUriPrefix?: string, dynamicLinkDomain?: string, iosInfo?: record, link?: string, navigationInfo?: record, socialMetaTagInfo?: record}
-  --longDynamicLink: string # Full long Dynamic Link URL with desired query parameters specified. For example, "https://sample.app.goo.gl/?link=http://www.google.com&apn=com.sample", [Learn more](https://firebase.google.com/docs/reference/dynamic-links/link-shortener).
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --dynamic-link-info: record # Information about a Dynamic Link. — shape: {analyticsInfo?: record, androidInfo?: record, desktopInfo?: record, domainUriPrefix?: string, dynamicLinkDomain?: string, iosInfo?: record, link?: string, navigationInfo?: record, socialMetaTagInfo?: record}
+  --long-dynamic-link: string # Full long Dynamic Link URL with desired query parameters specified. For example, "https://sample.app.goo.gl/?link=http://www.google.com&apn=com.sample", [Learn more](https://firebase.google.com/docs/reference/dynamic-links/link-shortener).
   --name: string # Link name to associate with the link. It's used for marketer to identify manually-created links in the Firebase console (https://console.firebase.google.com/). Links must be named to be tracked.
-  --sdkVersion: string # Google SDK version. Version takes the form "$major.$minor.$patch"
+  --sdk-version: string # Google SDK version. Version takes the form "$major.$minor.$patch"
   --suffix: record # Short Dynamic Link suffix. — shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
 ]: any -> record<managedShortLink: record<creationTime: string, flaggedAttribute: list<string>, info: record<analyticsInfo: record, androidInfo: record, desktopInfo: record, domainUriPrefix: string, dynamicLinkDomain: string, iosInfo: record, link: string, navigationInfo: record, socialMetaTagInfo: record>, link: string, linkName: string, visibility: string>, previewLink: string, warning: table<warningCode: string, warningDocumentLink: string, warningMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/managedShortLinks:create" $qp)
-  let body = {dynamicLinkInfo: $dynamicLinkInfo, longDynamicLink: $longDynamicLink, name: $name, sdkVersion: $sdkVersion, suffix: $suffix} | compact
+  let body = {"dynamicLinkInfo": $dynamic_link_info, "longDynamicLink": $long_dynamic_link, "name": $name, "sdkVersion": $sdk_version, "suffix": $suffix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -204,20 +204,20 @@ export def "reopen-attribution firebasedynamiclinksreopenAttribution" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --bundleId: string # APP bundle ID.
-  --requestedLink: string # FDL link to be verified from an app universal link open. The FDL link can be one of: 1) short FDL. e.g. .page.link/, or 2) long FDL. e.g. .page.link/?{query params}, or 3) Invite FDL. e.g. .page.link/i/
-  --sdkVersion: string # Google SDK version. Version takes the form "$major.$minor.$patch"
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --bundle-id: string # APP bundle ID.
+  --requested-link: string # FDL link to be verified from an app universal link open. The FDL link can be one of: 1) short FDL. e.g. .page.link/, or 2) long FDL. e.g. .page.link/?{query params}, or 3) Invite FDL. e.g. .page.link/i/
+  --sdk-version: string # Google SDK version. Version takes the form "$major.$minor.$patch"
 ]: any -> record<deepLink: string, invitationId: string, iosMinAppVersion: string, resolvedLink: string, utmCampaign: string, utmContent: string, utmMedium: string, utmSource: string, utmTerm: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/reopenAttribution" $qp)
-  let body = {bundleId: $bundleId, requestedLink: $requestedLink, sdkVersion: $sdkVersion} | compact
+  let body = {"bundleId": $bundle_id, "requestedLink": $requested_link, "sdkVersion": $sdk_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -246,21 +246,21 @@ export def "short-links firebasedynamiclinksshortLinkscreate" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --dynamicLinkInfo: record # Information about a Dynamic Link. — shape: {analyticsInfo?: record, androidInfo?: record, desktopInfo?: record, domainUriPrefix?: string, dynamicLinkDomain?: string, iosInfo?: record, link?: string, navigationInfo?: record, socialMetaTagInfo?: record}
-  --longDynamicLink: string # Full long Dynamic Link URL with desired query parameters specified. For example, "https://sample.app.goo.gl/?link=http://www.google.com&apn=com.sample", [Learn more](https://firebase.google.com/docs/reference/dynamic-links/link-shortener).
-  --sdkVersion: string # Google SDK version. Version takes the form "$major.$minor.$patch"
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --dynamic-link-info: record # Information about a Dynamic Link. — shape: {analyticsInfo?: record, androidInfo?: record, desktopInfo?: record, domainUriPrefix?: string, dynamicLinkDomain?: string, iosInfo?: record, link?: string, navigationInfo?: record, socialMetaTagInfo?: record}
+  --long-dynamic-link: string # Full long Dynamic Link URL with desired query parameters specified. For example, "https://sample.app.goo.gl/?link=http://www.google.com&apn=com.sample", [Learn more](https://firebase.google.com/docs/reference/dynamic-links/link-shortener).
+  --sdk-version: string # Google SDK version. Version takes the form "$major.$minor.$patch"
   --suffix: record # Short Dynamic Link suffix. — shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
 ]: any -> record<previewLink: string, shortLink: string, warning: table<warningCode: string, warningDocumentLink: string, warningMessage: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/shortLinks" $qp)
-  let body = {dynamicLinkInfo: $dynamicLinkInfo, longDynamicLink: $longDynamicLink, sdkVersion: $sdkVersion, suffix: $suffix} | compact
+  let body = {"dynamicLinkInfo": $dynamic_link_info, "longDynamicLink": $long_dynamic_link, "sdkVersion": $sdk_version, "suffix": $suffix} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -272,7 +272,7 @@ export def "short-links firebasedynamiclinksshortLinkscreate" [
 # GET /v1/{dynamicLink}/linkStats
 # operationId: firebasedynamiclinks.getLinkStats
 export def "link-stats firebasedynamiclinksgetLinkStats" [
-  dynamicLink: string
+  dynamic_link: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -288,17 +288,17 @@ export def "link-stats firebasedynamiclinksgetLinkStats" [
   --fields: string # Selector specifying which fields to include in a partial response.
   --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
   --oauth-token: string # OAuth 2.0 token for the current user.
-  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
-  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
-  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
-  --durationDays: string # The span of time requested in days.
-  --sdkVersion: string # Google SDK version. Version takes the form "$major.$minor.$patch"
+  --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --duration-days: string # The span of time requested in days.
+  --sdk-version: string # Google SDK version. Version takes the form "$major.$minor.$patch"
 ]: nothing -> record<linkEventStats: table<count: string, event: string, platform: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "durationDays" $durationDays "scalar") (serialize-qp "sdkVersion" $sdkVersion "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/v1/($dynamicLink)/linkStats" $qp)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "durationDays" $duration_days "scalar") (serialize-qp "sdkVersion" $sdk_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({dynamic_link: $dynamic_link} | format pattern "/v1/{dynamic_link}/linkStats") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

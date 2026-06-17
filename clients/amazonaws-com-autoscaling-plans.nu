@@ -66,17 +66,17 @@ def base-url-completer [] { ["http://autoscaling-plans.us-east-1.amazonaws.com" 
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
-def X-Amz-Target-completer [] { ["AnyScaleScalingPlannerFrontendService.CreateScalingPlan"] }
-def X-Amz-Target-completer-1 [] { ["AnyScaleScalingPlannerFrontendService.DeleteScalingPlan"] }
-def X-Amz-Target-completer-2 [] { ["AnyScaleScalingPlannerFrontendService.DescribeScalingPlanResources"] }
-def X-Amz-Target-completer-3 [] { ["AnyScaleScalingPlannerFrontendService.DescribeScalingPlans"] }
-def X-Amz-Target-completer-4 [] { ["AnyScaleScalingPlannerFrontendService.GetScalingPlanResourceForecastData"] }
-def X-Amz-Target-completer-5 [] { ["AnyScaleScalingPlannerFrontendService.UpdateScalingPlan"] }
+def x-amz-target-completer [] { ["AnyScaleScalingPlannerFrontendService.CreateScalingPlan"] }
+def x-amz-target-completer-1 [] { ["AnyScaleScalingPlannerFrontendService.DeleteScalingPlan"] }
+def x-amz-target-completer-2 [] { ["AnyScaleScalingPlannerFrontendService.DescribeScalingPlanResources"] }
+def x-amz-target-completer-3 [] { ["AnyScaleScalingPlannerFrontendService.DescribeScalingPlans"] }
+def x-amz-target-completer-4 [] { ["AnyScaleScalingPlannerFrontendService.GetScalingPlanResourceForecastData"] }
+def x-amz-target-completer-5 [] { ["AnyScaleScalingPlannerFrontendService.UpdateScalingPlan"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-any-scale-scaling-planner-frontend-service-create-scaling-plan CreateScalingPlan" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "x-amz-target-any-scale-scaling-planner-frontend-service-create-scaling-plan create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -100,7 +100,7 @@ export def commands []: nothing -> table {
 #
 # POST /#X-Amz-Target=AnyScaleScalingPlannerFrontendService.CreateScalingPlan
 # operationId: CreateScalingPlan
-export def "x-amz-target-any-scale-scaling-planner-frontend-service-create-scaling-plan CreateScalingPlan" [
+export def "x-amz-target-any-scale-scaling-planner-frontend-service-create-scaling-plan create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,25 +109,25 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-create-scali
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer
-  ScalingPlanName: any
-  ApplicationSource: any
-  ScalingInstructions: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer
+  scaling_plan_name: any
+  application_source: any
+  scaling_instructions: any
 ]: any -> record<ScalingPlanVersion: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleScalingPlannerFrontendService.CreateScalingPlan")
-  let body = {ScalingPlanName: $ScalingPlanName, ApplicationSource: $ApplicationSource, ScalingInstructions: $ScalingInstructions} | compact
+  let body = {"ScalingPlanName": $scaling_plan_name, "ApplicationSource": $application_source, "ScalingInstructions": $scaling_instructions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -138,7 +138,7 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-create-scali
 #
 # POST /#X-Amz-Target=AnyScaleScalingPlannerFrontendService.DeleteScalingPlan
 # operationId: DeleteScalingPlan
-export def "x-amz-target-any-scale-scaling-planner-frontend-service-delete-scaling-plan DeleteScalingPlan" [
+export def "x-amz-target-any-scale-scaling-planner-frontend-service-delete-scaling-plan delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -147,24 +147,24 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-delete-scali
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-1
-  ScalingPlanName: any
-  ScalingPlanVersion: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-1
+  scaling_plan_name: any
+  scaling_plan_version: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleScalingPlannerFrontendService.DeleteScalingPlan")
-  let body = {ScalingPlanName: $ScalingPlanName, ScalingPlanVersion: $ScalingPlanVersion} | compact
+  let body = {"ScalingPlanName": $scaling_plan_name, "ScalingPlanVersion": $scaling_plan_version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -175,7 +175,7 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-delete-scali
 #
 # POST /#X-Amz-Target=AnyScaleScalingPlannerFrontendService.DescribeScalingPlanResources
 # operationId: DescribeScalingPlanResources
-export def "x-amz-target-any-scale-scaling-planner-frontend-service-describe-scaling-plan-resources DescribeScalingPlanResources" [
+export def "x-amz-target-any-scale-scaling-planner-frontend-service-describe-scaling-plan-resources post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,26 +184,26 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-describe-sca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-2
-  ScalingPlanName: any
-  ScalingPlanVersion: any
-  --MaxResults: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-2
+  scaling_plan_name: any
+  scaling_plan_version: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ScalingPlanResources: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleScalingPlannerFrontendService.DescribeScalingPlanResources")
-  let body = {ScalingPlanName: $ScalingPlanName, ScalingPlanVersion: $ScalingPlanVersion, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ScalingPlanName": $scaling_plan_name, "ScalingPlanVersion": $scaling_plan_version, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -214,7 +214,7 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-describe-sca
 #
 # POST /#X-Amz-Target=AnyScaleScalingPlannerFrontendService.DescribeScalingPlans
 # operationId: DescribeScalingPlans
-export def "x-amz-target-any-scale-scaling-planner-frontend-service-describe-scaling-plans DescribeScalingPlans" [
+export def "x-amz-target-any-scale-scaling-planner-frontend-service-describe-scaling-plans post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,27 +223,27 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-describe-sca
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-3
-  --ScalingPlanNames: any
-  --ScalingPlanVersion: any
-  --ApplicationSources: any
-  --MaxResults: any
-  --NextToken: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-3
+  --scaling-plan-names: any
+  --scaling-plan-version: any
+  --application-sources: any
+  --max-results: any
+  --next-token: any
 ]: any -> record<ScalingPlans: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleScalingPlannerFrontendService.DescribeScalingPlans")
-  let body = {ScalingPlanNames: $ScalingPlanNames, ScalingPlanVersion: $ScalingPlanVersion, ApplicationSources: $ApplicationSources, MaxResults: $MaxResults, NextToken: $NextToken} | compact
+  let body = {"ScalingPlanNames": $scaling_plan_names, "ScalingPlanVersion": $scaling_plan_version, "ApplicationSources": $application_sources, "MaxResults": $max_results, "NextToken": $next_token} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -254,7 +254,7 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-describe-sca
 #
 # POST /#X-Amz-Target=AnyScaleScalingPlannerFrontendService.GetScalingPlanResourceForecastData
 # operationId: GetScalingPlanResourceForecastData
-export def "x-amz-target-any-scale-scaling-planner-frontend-service-get-scaling-plan-resource-forecast-data GetScalingPlanResourceForecastData" [
+export def "x-amz-target-any-scale-scaling-planner-frontend-service-get-scaling-plan-resource-forecast-data get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,30 +263,30 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-get-scaling-
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-4
-  ScalingPlanName: any
-  ScalingPlanVersion: any
-  ServiceNamespace: any
-  ResourceId: any
-  ScalableDimension: any
-  ForecastDataType: any
-  StartTime: any
-  EndTime: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-4
+  scaling_plan_name: any
+  scaling_plan_version: any
+  service_namespace: any
+  resource_id: any
+  scalable_dimension: any
+  forecast_data_type: any
+  start_time: any
+  end_time: any
 ]: any -> record<Datapoints: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleScalingPlannerFrontendService.GetScalingPlanResourceForecastData")
-  let body = {ScalingPlanName: $ScalingPlanName, ScalingPlanVersion: $ScalingPlanVersion, ServiceNamespace: $ServiceNamespace, ResourceId: $ResourceId, ScalableDimension: $ScalableDimension, ForecastDataType: $ForecastDataType, StartTime: $StartTime, EndTime: $EndTime} | compact
+  let body = {"ScalingPlanName": $scaling_plan_name, "ScalingPlanVersion": $scaling_plan_version, "ServiceNamespace": $service_namespace, "ResourceId": $resource_id, "ScalableDimension": $scalable_dimension, "ForecastDataType": $forecast_data_type, "StartTime": $start_time, "EndTime": $end_time} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,7 +297,7 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-get-scaling-
 #
 # POST /#X-Amz-Target=AnyScaleScalingPlannerFrontendService.UpdateScalingPlan
 # operationId: UpdateScalingPlan
-export def "x-amz-target-any-scale-scaling-planner-frontend-service-update-scaling-plan UpdateScalingPlan" [
+export def "x-amz-target-any-scale-scaling-planner-frontend-service-update-scaling-plan update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,26 +306,26 @@ export def "x-amz-target-any-scale-scaling-planner-frontend-service-update-scali
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --X-Amz-Content-Sha256: string
-  --X-Amz-Date: string
-  --X-Amz-Algorithm: string
-  --X-Amz-Credential: string
-  --X-Amz-Security-Token: string
-  --X-Amz-Signature: string
-  --X-Amz-SignedHeaders: string
-  --X-Amz-Target: string@X-Amz-Target-completer-5
-  ScalingPlanName: any
-  ScalingPlanVersion: any
-  --ApplicationSource: any
-  --ScalingInstructions: any
+  --x-amz-content-sha256: string
+  --x-amz-date: string
+  --x-amz-algorithm: string
+  --x-amz-credential: string
+  --x-amz-security-token: string
+  --x-amz-signature: string
+  --x-amz-signed-headers: string
+  --x-amz-target: string@x-amz-target-completer-5
+  scaling_plan_name: any
+  scaling_plan_version: any
+  --application-source: any
+  --scaling-instructions: any
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/#X-Amz-Target=AnyScaleScalingPlannerFrontendService.UpdateScalingPlan")
-  let body = {ScalingPlanName: $ScalingPlanName, ScalingPlanVersion: $ScalingPlanVersion, ApplicationSource: $ApplicationSource, ScalingInstructions: $ScalingInstructions} | compact
+  let body = {"ScalingPlanName": $scaling_plan_name, "ScalingPlanVersion": $scaling_plan_version, "ApplicationSource": $application_source, "ScalingInstructions": $scaling_instructions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"X-Amz-Content-Sha256": $X_Amz_Content_Sha256, "X-Amz-Date": $X_Amz_Date, "X-Amz-Algorithm": $X_Amz_Algorithm, "X-Amz-Credential": $X_Amz_Credential, "X-Amz-Security-Token": $X_Amz_Security_Token, "X-Amz-Signature": $X_Amz_Signature, "X-Amz-SignedHeaders": $X_Amz_SignedHeaders, "X-Amz-Target": $X_Amz_Target} | compact
+  let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "X-Amz-Target": $x_amz_target} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

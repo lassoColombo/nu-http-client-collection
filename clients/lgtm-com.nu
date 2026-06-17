@@ -73,7 +73,7 @@ def source-completer [] { ["administrator" "repository"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-root get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api-root get-version" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -97,7 +97,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getVersion
-export def "api-root get" [
+export def "api-root get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -119,7 +119,7 @@ export def "api-root get" [
 #
 # GET /analyses/{analysis-id}
 # operationId: getAnalysis
-export def "analyses get" [
+export def "analyses get-analysis" [
   analysis_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -132,7 +132,7 @@ export def "analyses get" [
 ]: nothing -> record<commit_id: string, id: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string>, log_url: string, project: record<id: int, name: string, url: string, url_identifier: string>, results_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/analyses/($analysis_id)")
+  let full_url = (build-url $base ({analysis_id: $analysis_id} | format pattern "/analyses/{analysis_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -159,7 +159,7 @@ export def "analyses-alerts get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sarif-version" $sarif_version "scalar") (serialize-qp "excluded-files" $excluded_files "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/analyses/($analysis_id)/alerts" $qp)
+  let full_url = (build-url $base ({analysis_id: $analysis_id} | format pattern "/analyses/{analysis_id}/alerts") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -169,7 +169,7 @@ export def "analyses-alerts get" [
 #
 # POST /analyses/{project-id}
 # operationId: requestAnalysis
-export def "analyses requestAnalysis" [
+export def "analyses request-analysis" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "analyses requestAnalysis" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "commit" $commit "scalar") (serialize-qp "language" $language "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/analyses/($project_id)" $qp)
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/analyses/{project_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -195,7 +195,7 @@ export def "analyses requestAnalysis" [
 #
 # GET /analyses/{project-id}/commits/{commit-id}
 # operationId: getAnalysisForCommit
-export def "analyses-commits get" [
+export def "analyses-commits get-analysis-for" [
   project_id: int
   commit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -209,7 +209,7 @@ export def "analyses-commits get" [
 ]: nothing -> record<commit_id: string, id: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string>, log_url: string, project: record<id: int, name: string, url: string, url_identifier: string>, results_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/analyses/($project_id)/commits/($commit_id)")
+  let full_url = (build-url $base ({project_id: $project_id, commit_id: $commit_id} | format pattern "/analyses/{project_id}/commits/{commit_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -219,7 +219,7 @@ export def "analyses-commits get" [
 #
 # POST /codereviews/{project-id}
 # operationId: requestReview
-export def "codereviews requestReview" [
+export def "codereviews request-review" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "codereviews requestReview" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "base" $qp_base "scalar") (serialize-qp "external-id" $external_id "scalar") (serialize-qp "review-url" $review_url "scalar") (serialize-qp "callback-url" $callback_url "scalar") (serialize-qp "callback-secret" $callback_secret "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/codereviews/($project_id)" $qp)
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/codereviews/{project_id}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -264,7 +264,7 @@ export def "codereviews get" [
 ]: nothing -> table<id: string, languages: list<record>, results_url: string, status: string, status_message: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/codereviews/($review_id)")
+  let full_url = (build-url $base ({review_id: $review_id} | format pattern "/codereviews/{review_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -288,7 +288,7 @@ export def "issues get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/issues/($project_id)/($alert_key)")
+  let full_url = (build-url $base ({project_id: $project_id, alert_key: $alert_key} | format pattern "/issues/{project_id}/{alert_key}"))
   let accept_val = "application/sarif+json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -298,7 +298,7 @@ export def "issues get" [
 #
 # GET /openapi
 # operationId: getSpec
-export def "openapi get" [
+export def "openapi get-spec" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "operations get" [
 ]: nothing -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/operations/($operation_id)")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/operations/{operation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -368,7 +368,7 @@ export def "projects get" [
 #
 # POST /projects
 # operationId: addProject
-export def "projects addProject" [
+export def "projects create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +413,7 @@ export def "projects delete" [
 ]: nothing -> record<id: int, name: string, url: string, url_identifier: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string, grade: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($project_id)")
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -436,7 +436,7 @@ export def "projects get-by-project_id" [
 ]: nothing -> record<id: int, name: string, url: string, url_identifier: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string, grade: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($project_id)")
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -446,7 +446,7 @@ export def "projects get-by-project_id" [
 #
 # GET /projects/{project-id}/settings/analysis-configuration
 # operationId: getProjectConfig
-export def "projects-settings-analysis-configuration get" [
+export def "projects-settings-analysis-configuration get-project-config" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -461,7 +461,7 @@ export def "projects-settings-analysis-configuration get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "source" $qp_source "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/projects/($project_id)/settings/analysis-configuration" $qp)
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/settings/analysis-configuration") $qp)
   let accept_val = "application/x-yaml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -486,7 +486,7 @@ export def "projects-settings-analysis-configuration setProjectConfig" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($project_id)/settings/analysis-configuration")
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/projects/{project_id}/settings/analysis-configuration"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/x-yaml"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -512,7 +512,7 @@ export def "projects get-by-provider-org-name" [
 ]: nothing -> record<id: int, name: string, url: string, url_identifier: string, languages: table<alerts: int, analysis_date: string, commit_date: string, commit_id: string, language: string, lines: int, status: string, grade: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/projects/($provider)/($org)/($name)")
+  let full_url = (build-url $base ({provider: $provider, org: $org, name: $name} | format pattern "/projects/{provider}/{org}/{name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -522,7 +522,7 @@ export def "projects get-by-provider-org-name" [
 #
 # POST /queryjobs
 # operationId: createQueryJob
-export def "queryjobs createQueryJob" [
+export def "queryjobs create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "queryjobs get" [
 ]: nothing -> record<id: string, result_url: string, stats: record<failed: int, pending: int, success_with_result: int, success_without_result: int, successful: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/queryjobs/($queryjob_id)")
+  let full_url = (build-url $base ({queryjob_id: $queryjob_id} | format pattern "/queryjobs/{queryjob_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -574,7 +574,7 @@ export def "queryjobs get" [
 #
 # GET /queryjobs/{queryjob-id}/results
 # operationId: getQueryJobResultsOverview
-export def "queryjobs-results list" [
+export def "queryjobs-results get-query-job-results-overview" [
   queryjob_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +591,7 @@ export def "queryjobs-results list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/queryjobs/($queryjob_id)/results" $qp)
+  let full_url = (build-url $base ({queryjob_id: $queryjob_id} | format pattern "/queryjobs/{queryjob_id}/results") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -601,7 +601,7 @@ export def "queryjobs-results list" [
 #
 # GET /queryjobs/{queryjob-id}/results/{project-id}
 # operationId: getQueryJobResultsForProject
-export def "queryjobs-results get" [
+export def "queryjobs-results get-query-job-results-for-project" [
   queryjob_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -619,7 +619,7 @@ export def "queryjobs-results get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "nofilter" $nofilter "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/queryjobs/($queryjob_id)/results/($project_id)" $qp)
+  let full_url = (build-url $base ({queryjob_id: $queryjob_id, project_id: $project_id} | format pattern "/queryjobs/{queryjob_id}/results/{project_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -629,7 +629,7 @@ export def "queryjobs-results get" [
 #
 # DELETE /snapshots/uploads/{session-id}
 # operationId: abortUpload
-export def "snapshots-uploads abortUpload" [
+export def "snapshots-uploads abort" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,7 +642,7 @@ export def "snapshots-uploads abortUpload" [
 ]: nothing -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snapshots/uploads/($session_id)")
+  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/snapshots/uploads/{session_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -665,7 +665,7 @@ export def "snapshots-uploads completeUpload" [
 ]: nothing -> record<id: int, status: string, task_result: any, task_result_url: string, task_type: string, uploads: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snapshots/uploads/($session_id)")
+  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/snapshots/uploads/{session_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -675,7 +675,7 @@ export def "snapshots-uploads completeUpload" [
 #
 # PUT /snapshots/uploads/{session-id}
 # operationId: uploadPart
-export def "snapshots-uploads uploadPart" [
+export def "snapshots-uploads upload-part" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -690,7 +690,7 @@ export def "snapshots-uploads uploadPart" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snapshots/uploads/($session_id)")
+  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/snapshots/uploads/{session_id}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -715,7 +715,7 @@ export def "snapshots get" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snapshots/($project_id)/($language)")
+  let full_url = (build-url $base ({project_id: $project_id, language: $language} | format pattern "/snapshots/{project_id}/{language}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -742,7 +742,7 @@ export def "snapshots initSnapshotUpload" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "commit" $commit "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/snapshots/($project_id)/($language)" $qp)
+  let full_url = (build-url $base ({project_id: $project_id, language: $language} | format pattern "/snapshots/{project_id}/{language}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -809,7 +809,7 @@ export def "system-metrics get" [
 ]: nothing -> record<measurements: table<timestamp: string, value: float>, metric_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/system/metrics/($metric_id)")
+  let full_url = (build-url $base ({metric_id: $metric_id} | format pattern "/system/metrics/{metric_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

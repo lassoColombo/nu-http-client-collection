@@ -70,7 +70,7 @@ def accept-completer [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-division GetDivisionById" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-division get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -94,8 +94,8 @@ export def commands []: nothing -> table {
 #
 # GET /data/division/{divisionId}.{format}
 # operationId: Divisions_GetDivisionById
-export def "data-division GetDivisionById" [
-  divisionId: int
+export def "data-division get" [
+  division_id: int
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -109,7 +109,7 @@ export def "data-division GetDivisionById" [
 ]: nothing -> record<AyeCount: int, AyeTellers: table<ListAs: string, MemberFrom: string, MemberId: int, Name: string, Party: string, PartyAbbreviation: string, PartyColour: string, ProxyName: string, SubParty: string>, Ayes: table<ListAs: string, MemberFrom: string, MemberId: int, Name: string, Party: string, PartyAbbreviation: string, PartyColour: string, ProxyName: string, SubParty: string>, Date: string, DivisionId: int, DoubleMajorityAyeCount: int, DoubleMajorityNoCount: int, EVELCountry: string, EVELType: string, FriendlyDescription: string, FriendlyTitle: string, IsDeferred: bool, NoCount: int, NoTellers: table<ListAs: string, MemberFrom: string, MemberId: int, Name: string, Party: string, PartyAbbreviation: string, PartyColour: string, ProxyName: string, SubParty: string>, NoVoteRecorded: table<ListAs: string, MemberFrom: string, MemberId: int, Name: string, Party: string, PartyAbbreviation: string, PartyColour: string, ProxyName: string, SubParty: string>, Noes: table<ListAs: string, MemberFrom: string, MemberId: int, Name: string, Party: string, PartyAbbreviation: string, PartyColour: string, ProxyName: string, SubParty: string>, Number: int, PublicationUpdated: string, RemoteVotingEnd: string, RemoteVotingStart: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/data/division/($divisionId).($format)")
+  let full_url = (build-url $base ({division_id: $division_id, format: $format} | format pattern "/data/division/{division_id}.{format}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -119,7 +119,7 @@ export def "data-division GetDivisionById" [
 #
 # GET /data/divisions.{format}/groupedbyparty
 # operationId: Divisions_GetDivisionsGroupsByParty
-export def "data-divisions-format-groupedbyparty GetDivisionsGroupsByParty" [
+export def "data-divisions-format-groupedbyparty get-divisions-groups" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -130,17 +130,17 @@ export def "data-divisions-format-groupedbyparty GetDivisionsGroupsByParty" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --queryParameterssearchTerm: string # Divisions containing search term within title or number
-  --queryParametersmemberId: int # Divisions returning Member with Member ID voting records (format: int32)
-  --queryParametersincludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted
-  --queryParametersstartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (format: date-time)
-  --queryParametersendDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (format: date-time)
-  --queryParametersdivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (format: int32)
+  --query-parameters-search-term: string # Divisions containing search term within title or number
+  --query-parameters-member-id: int # Divisions returning Member with Member ID voting records (format: int32)
+  --query-parameters-include-when-member-was-teller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted
+  --query-parameters-start-date: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (format: date-time)
+  --query-parameters-end-date: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (format: date-time)
+  --query-parameters-division-number: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (format: int32)
 ]: nothing -> table<AyeCount: int, Ayes: list<record>, Date: string, DivisionId: int, NoCount: int, Noes: list<record>, Number: int, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "queryParameters.searchTerm" $queryParameterssearchTerm "scalar") (serialize-qp "queryParameters.memberId" $queryParametersmemberId "scalar") (serialize-qp "queryParameters.includeWhenMemberWasTeller" $queryParametersincludeWhenMemberWasTeller "scalar") (serialize-qp "queryParameters.startDate" $queryParametersstartDate "scalar") (serialize-qp "queryParameters.endDate" $queryParametersendDate "scalar") (serialize-qp "queryParameters.divisionNumber" $queryParametersdivisionNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/divisions.($format)/groupedbyparty" $qp)
+  let qp = [(serialize-qp "queryParameters.searchTerm" $query_parameters_search_term "scalar") (serialize-qp "queryParameters.memberId" $query_parameters_member_id "scalar") (serialize-qp "queryParameters.includeWhenMemberWasTeller" $query_parameters_include_when_member_was_teller "scalar") (serialize-qp "queryParameters.startDate" $query_parameters_start_date "scalar") (serialize-qp "queryParameters.endDate" $query_parameters_end_date "scalar") (serialize-qp "queryParameters.divisionNumber" $query_parameters_division_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({format: $format} | format pattern "/data/divisions.{format}/groupedbyparty") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -150,7 +150,7 @@ export def "data-divisions-format-groupedbyparty GetDivisionsGroupsByParty" [
 #
 # GET /data/divisions.{format}/membervoting
 # operationId: Divisions_GetVotingRecordsForMember
-export def "data-divisions-format-membervoting GetVotingRecordsForMember" [
+export def "data-divisions-format-membervoting get-voting-records-for-member" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,19 +161,19 @@ export def "data-divisions-format-membervoting GetVotingRecordsForMember" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --queryParametersmemberId: int # Id number of a Member whose voting records are to be returned (format: int32)
-  --queryParametersskip: int # The number of records to skip. Default is 0 (format: int32)
-  --queryParameterstake: int # The number of records to return per page. Default is 25 (format: int32)
-  --queryParameterssearchTerm: string # Divisions containing search term within title or number
-  --queryParametersincludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted
-  --queryParametersstartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (format: date-time)
-  --queryParametersendDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (format: date-time)
-  --queryParametersdivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (format: int32)
+  --query-parameters-member-id: int # Id number of a Member whose voting records are to be returned (format: int32)
+  --query-parameters-skip: int # The number of records to skip. Default is 0 (format: int32)
+  --query-parameters-take: int # The number of records to return per page. Default is 25 (format: int32)
+  --query-parameters-search-term: string # Divisions containing search term within title or number
+  --query-parameters-include-when-member-was-teller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted
+  --query-parameters-start-date: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (format: date-time)
+  --query-parameters-end-date: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (format: date-time)
+  --query-parameters-division-number: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (format: int32)
 ]: nothing -> table<MemberId: int, MemberVotedAye: bool, MemberWasTeller: bool, PublishedDivision: record<AyeCount: int, AyeTellers: list, Ayes: list, Date: string, DivisionId: int, DoubleMajorityAyeCount: int, DoubleMajorityNoCount: int, EVELCountry: string, EVELType: string, FriendlyDescription: string, FriendlyTitle: string, IsDeferred: bool, NoCount: int, NoTellers: list, NoVoteRecorded: list, Noes: list, Number: int, PublicationUpdated: string, RemoteVotingEnd: string, RemoteVotingStart: string, Title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "queryParameters.memberId" $queryParametersmemberId "scalar") (serialize-qp "queryParameters.skip" $queryParametersskip "scalar") (serialize-qp "queryParameters.take" $queryParameterstake "scalar") (serialize-qp "queryParameters.searchTerm" $queryParameterssearchTerm "scalar") (serialize-qp "queryParameters.includeWhenMemberWasTeller" $queryParametersincludeWhenMemberWasTeller "scalar") (serialize-qp "queryParameters.startDate" $queryParametersstartDate "scalar") (serialize-qp "queryParameters.endDate" $queryParametersendDate "scalar") (serialize-qp "queryParameters.divisionNumber" $queryParametersdivisionNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/divisions.($format)/membervoting" $qp)
+  let qp = [(serialize-qp "queryParameters.memberId" $query_parameters_member_id "scalar") (serialize-qp "queryParameters.skip" $query_parameters_skip "scalar") (serialize-qp "queryParameters.take" $query_parameters_take "scalar") (serialize-qp "queryParameters.searchTerm" $query_parameters_search_term "scalar") (serialize-qp "queryParameters.includeWhenMemberWasTeller" $query_parameters_include_when_member_was_teller "scalar") (serialize-qp "queryParameters.startDate" $query_parameters_start_date "scalar") (serialize-qp "queryParameters.endDate" $query_parameters_end_date "scalar") (serialize-qp "queryParameters.divisionNumber" $query_parameters_division_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({format: $format} | format pattern "/data/divisions.{format}/membervoting") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -183,7 +183,7 @@ export def "data-divisions-format-membervoting GetVotingRecordsForMember" [
 #
 # GET /data/divisions.{format}/search
 # operationId: Divisions_SearchDivisions
-export def "data-divisions-format-search SearchDivisions" [
+export def "data-divisions-format-search list" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -194,19 +194,19 @@ export def "data-divisions-format-search SearchDivisions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --queryParametersskip: int # The number of records to skip. Default is 0 (format: int32)
-  --queryParameterstake: int # The number of records to return per page. Default is 25 (format: int32)
-  --queryParameterssearchTerm: string # Divisions containing search term within title or number
-  --queryParametersmemberId: int # Divisions returning Member with Member ID voting records (format: int32)
-  --queryParametersincludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted
-  --queryParametersstartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (format: date-time)
-  --queryParametersendDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (format: date-time)
-  --queryParametersdivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (format: int32)
+  --query-parameters-skip: int # The number of records to skip. Default is 0 (format: int32)
+  --query-parameters-take: int # The number of records to return per page. Default is 25 (format: int32)
+  --query-parameters-search-term: string # Divisions containing search term within title or number
+  --query-parameters-member-id: int # Divisions returning Member with Member ID voting records (format: int32)
+  --query-parameters-include-when-member-was-teller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted
+  --query-parameters-start-date: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (format: date-time)
+  --query-parameters-end-date: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (format: date-time)
+  --query-parameters-division-number: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (format: int32)
 ]: nothing -> table<AyeCount: int, AyeTellers: list<record>, Ayes: list<record>, Date: string, DivisionId: int, DoubleMajorityAyeCount: int, DoubleMajorityNoCount: int, EVELCountry: string, EVELType: string, FriendlyDescription: string, FriendlyTitle: string, IsDeferred: bool, NoCount: int, NoTellers: list<record>, NoVoteRecorded: list<record>, Noes: list<record>, Number: int, PublicationUpdated: string, RemoteVotingEnd: string, RemoteVotingStart: string, Title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "queryParameters.skip" $queryParametersskip "scalar") (serialize-qp "queryParameters.take" $queryParameterstake "scalar") (serialize-qp "queryParameters.searchTerm" $queryParameterssearchTerm "scalar") (serialize-qp "queryParameters.memberId" $queryParametersmemberId "scalar") (serialize-qp "queryParameters.includeWhenMemberWasTeller" $queryParametersincludeWhenMemberWasTeller "scalar") (serialize-qp "queryParameters.startDate" $queryParametersstartDate "scalar") (serialize-qp "queryParameters.endDate" $queryParametersendDate "scalar") (serialize-qp "queryParameters.divisionNumber" $queryParametersdivisionNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/divisions.($format)/search" $qp)
+  let qp = [(serialize-qp "queryParameters.skip" $query_parameters_skip "scalar") (serialize-qp "queryParameters.take" $query_parameters_take "scalar") (serialize-qp "queryParameters.searchTerm" $query_parameters_search_term "scalar") (serialize-qp "queryParameters.memberId" $query_parameters_member_id "scalar") (serialize-qp "queryParameters.includeWhenMemberWasTeller" $query_parameters_include_when_member_was_teller "scalar") (serialize-qp "queryParameters.startDate" $query_parameters_start_date "scalar") (serialize-qp "queryParameters.endDate" $query_parameters_end_date "scalar") (serialize-qp "queryParameters.divisionNumber" $query_parameters_division_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({format: $format} | format pattern "/data/divisions.{format}/search") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -216,7 +216,7 @@ export def "data-divisions-format-search SearchDivisions" [
 #
 # GET /data/divisions.{format}/searchTotalResults
 # operationId: Divisions_SearchTotalResults
-export def "data-divisions-format-search-total-results SearchTotalResults" [
+export def "data-divisions-format-search-total-results list" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,17 +227,17 @@ export def "data-divisions-format-search-total-results SearchTotalResults" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --queryParameterssearchTerm: string # Divisions containing search term within title or number
-  --queryParametersmemberId: int # Divisions returning Member with Member ID voting records (format: int32)
-  --queryParametersincludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted
-  --queryParametersstartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (format: date-time)
-  --queryParametersendDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (format: date-time)
-  --queryParametersdivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (format: int32)
+  --query-parameters-search-term: string # Divisions containing search term within title or number
+  --query-parameters-member-id: int # Divisions returning Member with Member ID voting records (format: int32)
+  --query-parameters-include-when-member-was-teller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted
+  --query-parameters-start-date: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (format: date-time)
+  --query-parameters-end-date: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (format: date-time)
+  --query-parameters-division-number: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (format: int32)
 ]: nothing -> int {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "queryParameters.searchTerm" $queryParameterssearchTerm "scalar") (serialize-qp "queryParameters.memberId" $queryParametersmemberId "scalar") (serialize-qp "queryParameters.includeWhenMemberWasTeller" $queryParametersincludeWhenMemberWasTeller "scalar") (serialize-qp "queryParameters.startDate" $queryParametersstartDate "scalar") (serialize-qp "queryParameters.endDate" $queryParametersendDate "scalar") (serialize-qp "queryParameters.divisionNumber" $queryParametersdivisionNumber "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/data/divisions.($format)/searchTotalResults" $qp)
+  let qp = [(serialize-qp "queryParameters.searchTerm" $query_parameters_search_term "scalar") (serialize-qp "queryParameters.memberId" $query_parameters_member_id "scalar") (serialize-qp "queryParameters.includeWhenMemberWasTeller" $query_parameters_include_when_member_was_teller "scalar") (serialize-qp "queryParameters.startDate" $query_parameters_start_date "scalar") (serialize-qp "queryParameters.endDate" $query_parameters_end_date "scalar") (serialize-qp "queryParameters.divisionNumber" $query_parameters_division_number "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({format: $format} | format pattern "/data/divisions.{format}/searchTotalResults") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"

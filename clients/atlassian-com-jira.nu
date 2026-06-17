@@ -67,43 +67,43 @@ def base-url-completer [] { ["https://your-domain.atlassian.net"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
 # Completers for enum parameters
-def assigneeType-completer [] { ["COMPONENT_LEAD" "PROJECT_DEFAULT" "PROJECT_LEAD" "UNASSIGNED"] }
-def defaultUnit-completer [] { ["day" "hour" "minute" "week"] }
-def timeFormat-completer [] { ["days" "hours" "pretty"] }
+def assignee-type-completer [] { ["COMPONENT_LEAD" "PROJECT_DEFAULT" "PROJECT_LEAD" "UNASSIGNED"] }
+def default-unit-completer [] { ["day" "hour" "minute" "week"] }
+def time-format-completer [] { ["days" "hours" "pretty"] }
 def filter-completer [] { ["favourite" "my"] }
-def orderBy-completer [] { ["+description" "+favorite_count" "+id" "+is_favorite" "+name" "+owner" "-description" "-favorite_count" "-id" "-is_favorite" "-name" "-owner" "description" "favorite_count" "id" "is_favorite" "name" "owner"] }
+def order-by-completer [] { ["+description" "+favorite_count" "+id" "+is_favorite" "+name" "+owner" "-description" "-favorite_count" "-id" "-is_favorite" "-name" "-owner" "description" "favorite_count" "id" "is_favorite" "name" "owner"] }
 def status-completer [] { ["active" "archived" "deleted"] }
 def check-completer [] { ["complexity" "syntax" "type"] }
-def searcherKey-completer [] { ["com.atlassian.jira.plugin.system.customfieldtypes:cascadingselectsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:daterange" "com.atlassian.jira.plugin.system.customfieldtypes:datetimerange" "com.atlassian.jira.plugin.system.customfieldtypes:exactnumber" "com.atlassian.jira.plugin.system.customfieldtypes:exacttextsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:grouppickersearcher" "com.atlassian.jira.plugin.system.customfieldtypes:labelsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:numberrange" "com.atlassian.jira.plugin.system.customfieldtypes:projectsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:textsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:userpickergroupsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:versionsearcher"] }
-def orderBy-completer-1 [] { ["+contextsCount" "+lastUsed" "+name" "+projectsCount" "+screensCount" "-contextsCount" "-lastUsed" "-name" "-projectsCount" "-screensCount" "contextsCount" "lastUsed" "name" "projectsCount" "screensCount"] }
+def searcher-key-completer [] { ["com.atlassian.jira.plugin.system.customfieldtypes:cascadingselectsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:daterange" "com.atlassian.jira.plugin.system.customfieldtypes:datetimerange" "com.atlassian.jira.plugin.system.customfieldtypes:exactnumber" "com.atlassian.jira.plugin.system.customfieldtypes:exacttextsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:grouppickersearcher" "com.atlassian.jira.plugin.system.customfieldtypes:labelsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:multiselectsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:numberrange" "com.atlassian.jira.plugin.system.customfieldtypes:projectsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:textsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:userpickergroupsearcher" "com.atlassian.jira.plugin.system.customfieldtypes:versionsearcher"] }
+def order-by-completer-1 [] { ["+contextsCount" "+lastUsed" "+name" "+projectsCount" "+screensCount" "-contextsCount" "-lastUsed" "-name" "-projectsCount" "-screensCount" "contextsCount" "lastUsed" "name" "projectsCount" "screensCount"] }
 def expand-completer [] { ["+name" "+plannedDeletionDate" "+projectsCount" "+trashDate" "-name" "-plannedDeletionDate" "-projectsCount" "-trashDate" "name" "plannedDeletionDate" "projectsCount" "trashDate"] }
 def position-completer [] { ["First" "Last"] }
 def scope-completer [] { ["AUTHENTICATED" "GLOBAL" "PRIVATE"] }
-def orderBy-completer-2 [] { ["+description" "+favourite_count" "+id" "+is_favourite" "+is_shared" "+name" "+owner" "-description" "-favourite_count" "-id" "-is_favourite" "-is_shared" "-name" "-owner" "description" "favourite_count" "id" "is_favourite" "is_shared" "name" "owner"] }
+def order-by-completer-2 [] { ["+description" "+favourite_count" "+id" "+is_favourite" "+is_shared" "+name" "+owner" "-description" "-favourite_count" "-id" "-is_favourite" "-is_shared" "-name" "-owner" "description" "favourite_count" "id" "is_favourite" "is_shared" "name" "owner"] }
 def type-completer [] { ["authenticated" "global" "group" "project" "projectRole" "user"] }
-def avatarSize-completer [] { ["large" "large@2x" "large@3x" "medium" "medium@2x" "medium@3x" "small" "small@2x" "small@3x" "xlarge" "xlarge@2x" "xlarge@3x" "xsmall" "xsmall@2x" "xsmall@3x" "xxlarge" "xxlarge@2x" "xxlarge@3x" "xxxlarge" "xxxlarge@2x" "xxxlarge@3x"] }
-def deleteSubtasks-completer [] { ["false" "true"] }
-def orderBy-completer-3 [] { ["+created" "-created" "created"] }
-def adjustEstimate-completer [] { ["auto" "leave" "manual" "new"] }
+def avatar-size-completer [] { ["large" "large@2x" "large@3x" "medium" "medium@2x" "medium@3x" "small" "small@2x" "small@3x" "xlarge" "xlarge@2x" "xlarge@3x" "xsmall" "xsmall@2x" "xsmall@3x" "xxlarge" "xxlarge@2x" "xxlarge@3x" "xxxlarge" "xxxlarge@2x" "xxxlarge@3x"] }
+def delete-subtasks-completer [] { ["false" "true"] }
+def order-by-completer-3 [] { ["+created" "-created" "created"] }
+def adjust-estimate-completer [] { ["auto" "leave" "manual" "new"] }
 def type-completer-1 [] { ["standard" "subtask"] }
-def orderBy-completer-4 [] { ["+id" "+name" "-id" "-name" "id" "name"] }
+def order-by-completer-4 [] { ["+id" "+name" "-id" "-name" "id" "name"] }
 def validation-completer [] { ["none" "strict" "warn"] }
-def iconUrl-completer [] { ["/images/icons/priorities/blocker.png" "/images/icons/priorities/critical.png" "/images/icons/priorities/high.png" "/images/icons/priorities/highest.png" "/images/icons/priorities/low.png" "/images/icons/priorities/lowest.png" "/images/icons/priorities/major.png" "/images/icons/priorities/medium.png" "/images/icons/priorities/minor.png" "/images/icons/priorities/trivial.png"] }
-def assigneeType-completer-1 [] { ["PROJECT_LEAD" "UNASSIGNED"] }
-def projectTemplateKey-completer [] { ["com.atlassian.jira-core-project-templates:jira-core-simplified-content-management" "com.atlassian.jira-core-project-templates:jira-core-simplified-document-approval" "com.atlassian.jira-core-project-templates:jira-core-simplified-lead-tracking" "com.atlassian.jira-core-project-templates:jira-core-simplified-process-control" "com.atlassian.jira-core-project-templates:jira-core-simplified-procurement" "com.atlassian.jira-core-project-templates:jira-core-simplified-project-management" "com.atlassian.jira-core-project-templates:jira-core-simplified-recruitment" "com.atlassian.jira-core-project-templates:jira-core-simplified-task-" "com.atlassian.servicedesk:simplified-analytics-service-desk" "com.atlassian.servicedesk:simplified-custom-project-service-desk" "com.atlassian.servicedesk:simplified-external-service-desk" "com.atlassian.servicedesk:simplified-facilities-service-desk" "com.atlassian.servicedesk:simplified-finance-service-desk" "com.atlassian.servicedesk:simplified-general-service-desk" "com.atlassian.servicedesk:simplified-general-service-desk-business" "com.atlassian.servicedesk:simplified-general-service-desk-it" "com.atlassian.servicedesk:simplified-halp-service-desk" "com.atlassian.servicedesk:simplified-hr-service-desk" "com.atlassian.servicedesk:simplified-internal-service-desk" "com.atlassian.servicedesk:simplified-it-service-management" "com.atlassian.servicedesk:simplified-legal-service-desk" "com.atlassian.servicedesk:simplified-marketing-service-desk" "com.pyxis.greenhopper.jira:gh-simplified-agility-kanban" "com.pyxis.greenhopper.jira:gh-simplified-agility-scrum" "com.pyxis.greenhopper.jira:gh-simplified-basic" "com.pyxis.greenhopper.jira:gh-simplified-kanban-classic" "com.pyxis.greenhopper.jira:gh-simplified-scrum-classic"] }
-def projectTypeKey-completer [] { ["business" "service_desk" "software"] }
-def orderBy-completer-5 [] { ["+archivedDate" "+category" "+deletedDate" "+issueCount" "+key" "+lastIssueUpdatedDate" "+name" "+owner" "-archivedDate" "-category" "-deletedDate" "-issueCount" "-key" "-lastIssueUpdatedDate" "-name" "-owner" "archivedDate" "category" "deletedDate" "issueCount" "key" "lastIssueUpdatedDate" "name" "owner"] }
+def icon-url-completer [] { ["/images/icons/priorities/blocker.png" "/images/icons/priorities/critical.png" "/images/icons/priorities/high.png" "/images/icons/priorities/highest.png" "/images/icons/priorities/low.png" "/images/icons/priorities/lowest.png" "/images/icons/priorities/major.png" "/images/icons/priorities/medium.png" "/images/icons/priorities/minor.png" "/images/icons/priorities/trivial.png"] }
+def assignee-type-completer-1 [] { ["PROJECT_LEAD" "UNASSIGNED"] }
+def project-template-key-completer [] { ["com.atlassian.jira-core-project-templates:jira-core-simplified-content-management" "com.atlassian.jira-core-project-templates:jira-core-simplified-document-approval" "com.atlassian.jira-core-project-templates:jira-core-simplified-lead-tracking" "com.atlassian.jira-core-project-templates:jira-core-simplified-process-control" "com.atlassian.jira-core-project-templates:jira-core-simplified-procurement" "com.atlassian.jira-core-project-templates:jira-core-simplified-project-management" "com.atlassian.jira-core-project-templates:jira-core-simplified-recruitment" "com.atlassian.jira-core-project-templates:jira-core-simplified-task-" "com.atlassian.servicedesk:simplified-analytics-service-desk" "com.atlassian.servicedesk:simplified-custom-project-service-desk" "com.atlassian.servicedesk:simplified-external-service-desk" "com.atlassian.servicedesk:simplified-facilities-service-desk" "com.atlassian.servicedesk:simplified-finance-service-desk" "com.atlassian.servicedesk:simplified-general-service-desk" "com.atlassian.servicedesk:simplified-general-service-desk-business" "com.atlassian.servicedesk:simplified-general-service-desk-it" "com.atlassian.servicedesk:simplified-halp-service-desk" "com.atlassian.servicedesk:simplified-hr-service-desk" "com.atlassian.servicedesk:simplified-internal-service-desk" "com.atlassian.servicedesk:simplified-it-service-management" "com.atlassian.servicedesk:simplified-legal-service-desk" "com.atlassian.servicedesk:simplified-marketing-service-desk" "com.pyxis.greenhopper.jira:gh-simplified-agility-kanban" "com.pyxis.greenhopper.jira:gh-simplified-agility-scrum" "com.pyxis.greenhopper.jira:gh-simplified-basic" "com.pyxis.greenhopper.jira:gh-simplified-kanban-classic" "com.pyxis.greenhopper.jira:gh-simplified-scrum-classic"] }
+def project-type-key-completer [] { ["business" "service_desk" "software"] }
+def order-by-completer-5 [] { ["+archivedDate" "+category" "+deletedDate" "+issueCount" "+key" "+lastIssueUpdatedDate" "+name" "+owner" "-archivedDate" "-category" "-deletedDate" "-issueCount" "-key" "-lastIssueUpdatedDate" "-name" "-owner" "archivedDate" "category" "deletedDate" "issueCount" "key" "lastIssueUpdatedDate" "name" "owner"] }
 def action-completer [] { ["browse" "edit" "view"] }
-def orderBy-completer-6 [] { ["+description" "+issueCount" "+lead" "+name" "-description" "-issueCount" "-lead" "-name" "description" "issueCount" "lead" "name"] }
+def order-by-completer-6 [] { ["+description" "+issueCount" "+lead" "+name" "-description" "-issueCount" "-lead" "-name" "description" "issueCount" "lead" "name"] }
 def state-completer [] { ["COMING_SOON" "DISABLED" "ENABLED"] }
-def orderBy-completer-7 [] { ["+description" "+name" "+releaseDate" "+sequence" "+startDate" "-description" "-name" "-releaseDate" "-sequence" "-startDate" "description" "name" "releaseDate" "sequence" "startDate"] }
+def order-by-completer-7 [] { ["+description" "+name" "+releaseDate" "+sequence" "+startDate" "-description" "-name" "-releaseDate" "-sequence" "-startDate" "description" "name" "releaseDate" "sequence" "startDate"] }
 def position-completer-1 [] { ["Earlier" "First" "Last" "Later"] }
-def validateQuery-completer [] { ["false" "none" "strict" "true" "warn"] }
+def validate-query-completer [] { ["false" "none" "strict" "true" "warn"] }
 def size-completer [] { ["large" "medium" "small" "xlarge" "xsmall"] }
 def format-completer [] { ["png" "svg"] }
 def accept-completer [] { ["*/*" "application/json" "image/png" "image/svg+xml"] }
-def orderBy-completer-8 [] { ["+created" "+name" "+updated" "-created" "-name" "-updated" "created" "name" "updated"] }
-def workflowMode-completer [] { ["draft" "live"] }
+def order-by-completer-8 [] { ["+created" "+name" "+updated" "-created" "-name" "-updated" "created" "name" "updated"] }
+def workflow-mode-completer [] { ["draft" "live"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -163,8 +163,8 @@ export def "rest-3-announcement-banner setBanner" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --isDismissible: oneof<nothing, bool> # Flag indicating if the announcement banner can be dismissed by the user.
-  --isEnabled: oneof<nothing, bool> # Flag indicating if the announcement banner is enabled or not.
+  --is-dismissible: oneof<nothing, bool> # Flag indicating if the announcement banner can be dismissed by the user.
+  --is-enabled: oneof<nothing, bool> # Flag indicating if the announcement banner is enabled or not.
   --message: string # The text on the announcement banner.
   --visibility: string # Visibility of the announcement banner. Can be public or private.
 ]: any -> any {
@@ -172,7 +172,7 @@ export def "rest-3-announcement-banner setBanner" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/announcementBanner")
-  let body = {isDismissible: $isDismissible, isEnabled: $isEnabled, message: $message, visibility: $visibility} | compact
+  let body = {"isDismissible": $is_dismissible, "isEnabled": $is_enabled, "message": $message, "visibility": $visibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -184,7 +184,7 @@ export def "rest-3-announcement-banner setBanner" [
 # POST /rest/api/3/app/field/value
 # operationId: updateMultipleCustomFieldValues
 # --updates item shape: {customField: string, issueIds: list, value: any}
-export def "rest-3-app-field-value updateMultipleCustomFieldValues" [
+export def "rest-3-app-field-value update-multiple-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,15 +193,15 @@ export def "rest-3-app-field-value updateMultipleCustomFieldValues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --generateChangelog: oneof<nothing, bool> # Whether to generate a changelog for this update. (default: true)
+  --generate-changelog: oneof<nothing, bool> # Whether to generate a changelog for this update. (default: true)
   --updates: list # item shape: {customField: string, issueIds: list, value: any}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "generateChangelog" $generateChangelog "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "generateChangelog" $generate_changelog "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/app/field/value" $qp)
-  let body = {updates: $updates} | compact
+  let body = {"updates": $updates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -212,8 +212,8 @@ export def "rest-3-app-field-value updateMultipleCustomFieldValues" [
 #
 # GET /rest/api/3/app/field/{fieldIdOrKey}/context/configuration
 # operationId: getCustomFieldConfiguration
-export def "rest-3-app-field-context-configuration get" [
-  fieldIdOrKey: string
+export def "rest-3-app-field-context-configuration get-custom" [
+  field_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,17 +223,17 @@ export def "rest-3-app-field-context-configuration get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list # The list of configuration IDs. To include multiple configurations, separate IDs with an ampersand: `id=10000&id=10001`. Can't be provided with `fieldContextId`, `issueId`, `projectKeyOrId`, or `issueTypeId`.
-  --fieldContextId: list # The list of field context IDs. To include multiple field contexts, separate IDs with an ampersand: `fieldContextId=10000&fieldContextId=10001`. Can't be provided with `id`, `issueId`, `projectKeyOrId`, or `issueTypeId`.
-  --issueId: int # The ID of the issue to filter results by. If the issue doesn't exist, an empty list is returned. Can't be provided with `projectKeyOrId`, or `issueTypeId`. (format: int64)
-  --projectKeyOrId: string # The ID or key of the project to filter results by. Must be provided with `issueTypeId`. Can't be provided with `issueId`.
-  --issueTypeId: string # The ID of the issue type to filter results by. Must be provided with `projectKeyOrId`. Can't be provided with `issueId`.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
+  --field-context-id: list # The list of field context IDs. To include multiple field contexts, separate IDs with an ampersand: `fieldContextId=10000&fieldContextId=10001`. Can't be provided with `id`, `issueId`, `projectKeyOrId`, or `issueTypeId`.
+  --issue-id: int # The ID of the issue to filter results by. If the issue doesn't exist, an empty list is returned. Can't be provided with `projectKeyOrId`, or `issueTypeId`. (format: int64)
+  --project-key-or-id: string # The ID or key of the project to filter results by. Must be provided with `issueTypeId`. Can't be provided with `issueId`.
+  --issue-type-id: string # The ID of the issue type to filter results by. Must be provided with `projectKeyOrId`. Can't be provided with `issueId`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<configuration: any, fieldContextId: string, id: string, schema: any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "multi") (serialize-qp "fieldContextId" $fieldContextId "multi") (serialize-qp "issueId" $issueId "scalar") (serialize-qp "projectKeyOrId" $projectKeyOrId "scalar") (serialize-qp "issueTypeId" $issueTypeId "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/app/field/($fieldIdOrKey)/context/configuration" $qp)
+  let qp = [(serialize-qp "id" $id "multi") (serialize-qp "fieldContextId" $field_context_id "multi") (serialize-qp "issueId" $issue_id "scalar") (serialize-qp "projectKeyOrId" $project_key_or_id "scalar") (serialize-qp "issueTypeId" $issue_type_id "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_id_or_key: $field_id_or_key} | format pattern "/rest/api/3/app/field/{field_id_or_key}/context/configuration") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -244,8 +244,8 @@ export def "rest-3-app-field-context-configuration get" [
 # PUT /rest/api/3/app/field/{fieldIdOrKey}/context/configuration
 # operationId: updateCustomFieldConfiguration
 # --configurations item shape: {configuration?: any, id: string, schema?: any}
-export def "rest-3-app-field-context-configuration updateCustomFieldConfiguration" [
-  fieldIdOrKey: string
+export def "rest-3-app-field-context-configuration update-custom" [
+  field_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,8 +259,8 @@ export def "rest-3-app-field-context-configuration updateCustomFieldConfiguratio
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/app/field/($fieldIdOrKey)/context/configuration")
-  let body = {configurations: $configurations} | compact
+  let full_url = (build-url $base ({field_id_or_key: $field_id_or_key} | format pattern "/rest/api/3/app/field/{field_id_or_key}/context/configuration"))
+  let body = {"configurations": $configurations} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -272,8 +272,8 @@ export def "rest-3-app-field-context-configuration updateCustomFieldConfiguratio
 # PUT /rest/api/3/app/field/{fieldIdOrKey}/value
 # operationId: updateCustomFieldValue
 # --updates item shape: {issueIds: list, value: any}
-export def "rest-3-app-field-value updateCustomFieldValue" [
-  fieldIdOrKey: string
+export def "rest-3-app-field-value update-custom" [
+  field_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,15 +282,15 @@ export def "rest-3-app-field-value updateCustomFieldValue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --generateChangelog: oneof<nothing, bool> # Whether to generate a changelog for this update. (default: true)
+  --generate-changelog: oneof<nothing, bool> # Whether to generate a changelog for this update. (default: true)
   --updates: list # The list of custom field update details. — item shape: {issueIds: list, value: any}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "generateChangelog" $generateChangelog "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/app/field/($fieldIdOrKey)/value" $qp)
-  let body = {updates: $updates} | compact
+  let qp = [(serialize-qp "generateChangelog" $generate_changelog "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_id_or_key: $field_id_or_key} | format pattern "/rest/api/3/app/field/{field_id_or_key}/value") $qp)
+  let body = {"updates": $updates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -301,7 +301,7 @@ export def "rest-3-app-field-value updateCustomFieldValue" [
 #
 # GET /rest/api/3/application-properties
 # operationId: getApplicationProperty
-export def "rest-3-application-properties get" [
+export def "rest-3-application-properties get-application-property" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,12 +311,12 @@ export def "rest-3-application-properties get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The key of the application property.
-  --permissionLevel: string # The permission level of all items being returned in the list.
-  --keyFilter: string # When a `key` isn't provided, this filters the list of results by the application property `key` using a regular expression. For example, using `jira.lf.*` will return all application properties with keys that start with *jira.lf.*.
+  --permission-level: string # The permission level of all items being returned in the list.
+  --key-filter: string # When a `key` isn't provided, this filters the list of results by the application property `key` using a regular expression. For example, using `jira.lf.*` will return all application properties with keys that start with *jira.lf.*.
 ]: nothing -> table<allowedValues: list<string>, defaultValue: string, desc: string, example: string, id: string, key: string, name: string, type: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "permissionLevel" $permissionLevel "scalar") (serialize-qp "keyFilter" $keyFilter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "permissionLevel" $permission_level "scalar") (serialize-qp "keyFilter" $key_filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/application-properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -365,8 +365,8 @@ export def "rest-3-application-properties setApplicationProperty" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/application-properties/($id)")
-  let body = {id: $body_id, value: $value} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/application-properties/{id}"))
+  let body = {"id": $body_id, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -377,7 +377,7 @@ export def "rest-3-application-properties setApplicationProperty" [
 #
 # GET /rest/api/3/applicationrole
 # operationId: getAllApplicationRoles
-export def "rest-3-applicationrole list" [
+export def "rest-3-applicationrole get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "rest-3-applicationrole get" [
 ]: nothing -> record<defaultGroups: list<string>, defaultGroupsDetails: table<groupId: string, name: string, self: string>, defined: bool, groupDetails: table<groupId: string, name: string, self: string>, groups: list<string>, hasUnlimitedSeats: bool, key: string, name: string, numberOfSeats: int, platform: bool, remainingSeats: int, selectedByDefault: bool, userCount: int, userCountDescription: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/applicationrole/($key)")
+  let full_url = (build-url $base ({key: $key} | format pattern "/rest/api/3/applicationrole/{key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -437,7 +437,7 @@ export def "rest-3-attachment-content get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "redirect" $redirect "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/attachment/content/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/attachment/content/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -480,14 +480,14 @@ export def "rest-3-attachment-thumbnail get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --redirect: oneof<nothing, bool> # Whether a redirect is provided for the attachment download. Clients that do not automatically follow redirects can set this to `false` to avoid making multiple requests to download the attachment. (default: true)
-  --fallbackToDefault: oneof<nothing, bool> # Whether a default thumbnail is returned when the requested thumbnail is not found. (default: true)
+  --fallback-to-default: oneof<nothing, bool> # Whether a default thumbnail is returned when the requested thumbnail is not found. (default: true)
   --width: int # The maximum width to scale the thumbnail to. (format: int32)
   --height: int # The maximum height to scale the thumbnail to. (format: int32)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "redirect" $redirect "scalar") (serialize-qp "fallbackToDefault" $fallbackToDefault "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/attachment/thumbnail/($id)" $qp)
+  let qp = [(serialize-qp "redirect" $redirect "scalar") (serialize-qp "fallbackToDefault" $fallback_to_default "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/attachment/thumbnail/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -497,7 +497,7 @@ export def "rest-3-attachment-thumbnail get" [
 #
 # DELETE /rest/api/3/attachment/{id}
 # operationId: removeAttachment
-export def "rest-3-attachment removeAttachment" [
+export def "rest-3-attachment delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "rest-3-attachment removeAttachment" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/attachment/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/attachment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -533,7 +533,7 @@ export def "rest-3-attachment get" [
 ]: nothing -> record<author: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, content: string, created: string, filename: string, id: int, mimeType: string, properties: record, self: string, size: int, thumbnail: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/attachment/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/attachment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -556,7 +556,7 @@ export def "rest-3-attachment-expand-human expandAttachmentForHumans" [
 ]: nothing -> record<entries: table<index: int, label: string, mediaType: string, path: string, size: string>, id: int, mediaType: string, name: string, totalEntryCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/attachment/($id)/expand/human")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/attachment/{id}/expand/human"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -579,7 +579,7 @@ export def "rest-3-attachment-expand-raw expandAttachmentForMachines" [
 ]: nothing -> record<entries: table<abbreviatedName: string, entryIndex: int, mediaType: string, name: string, size: int>, totalEntryCount: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/attachment/($id)/expand/raw")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/attachment/{id}/expand/raw"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -589,7 +589,7 @@ export def "rest-3-attachment-expand-raw expandAttachmentForMachines" [
 #
 # GET /rest/api/3/auditing/record
 # operationId: getAuditRecords
-export def "rest-3-auditing-record get" [
+export def "rest-3-auditing-record get-audit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "rest-3-auditing-record get" [
 #
 # GET /rest/api/3/avatar/{type}/system
 # operationId: getAllSystemAvatars
-export def "rest-3-avatar-system get" [
+export def "rest-3-avatar-system get-all" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -630,7 +630,7 @@ export def "rest-3-avatar-system get" [
 ]: nothing -> record<system: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/avatar/($type)/system")
+  let full_url = (build-url $base ({type: $type} | format pattern "/rest/api/3/avatar/{type}/system"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -640,7 +640,7 @@ export def "rest-3-avatar-system get" [
 #
 # POST /rest/api/3/comment/list
 # operationId: getCommentsByIds
-export def "rest-3-comment-list post" [
+export def "rest-3-comment-list get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,7 +657,7 @@ export def "rest-3-comment-list post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/comment/list" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -668,8 +668,8 @@ export def "rest-3-comment-list post" [
 #
 # GET /rest/api/3/comment/{commentId}/properties
 # operationId: getCommentPropertyKeys
-export def "rest-3-comment-properties list" [
-  commentId: string
+export def "rest-3-comment-properties get-comment-property-keys" [
+  comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "rest-3-comment-properties list" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/comment/($commentId)/properties")
+  let full_url = (build-url $base ({comment_id: $comment_id} | format pattern "/rest/api/3/comment/{comment_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -691,9 +691,9 @@ export def "rest-3-comment-properties list" [
 #
 # DELETE /rest/api/3/comment/{commentId}/properties/{propertyKey}
 # operationId: deleteCommentProperty
-export def "rest-3-comment-properties delete" [
-  commentId: string
-  propertyKey: string
+export def "rest-3-comment-properties delete-comment-property" [
+  comment_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "rest-3-comment-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/comment/($commentId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({comment_id: $comment_id, property_key: $property_key} | format pattern "/rest/api/3/comment/{comment_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -715,9 +715,9 @@ export def "rest-3-comment-properties delete" [
 #
 # GET /rest/api/3/comment/{commentId}/properties/{propertyKey}
 # operationId: getCommentProperty
-export def "rest-3-comment-properties get" [
-  commentId: string
-  propertyKey: string
+export def "rest-3-comment-properties get-comment-property" [
+  comment_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,7 +729,7 @@ export def "rest-3-comment-properties get" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/comment/($commentId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({comment_id: $comment_id, property_key: $property_key} | format pattern "/rest/api/3/comment/{comment_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -740,8 +740,8 @@ export def "rest-3-comment-properties get" [
 # PUT /rest/api/3/comment/{commentId}/properties/{propertyKey}
 # operationId: setCommentProperty
 export def "rest-3-comment-properties setCommentProperty" [
-  commentId: string
-  propertyKey: string
+  comment_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "rest-3-comment-properties setCommentProperty" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/comment/($commentId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({comment_id: $comment_id, property_key: $property_key} | format pattern "/rest/api/3/comment/{comment_id}/properties/{property_key}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -766,7 +766,7 @@ export def "rest-3-comment-properties setCommentProperty" [
 #
 # POST /rest/api/3/component
 # operationId: createComponent
-export def "rest-3-component createComponent" [
+export def "rest-3-component create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -775,10 +775,10 @@ export def "rest-3-component createComponent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assigneeType: string@assigneeType-completer # The nominal user type used to determine the assignee for issues created with this component. See `realAssigneeType` for details on how the type of the user, and hence the user, assigned to issues is determined. Can take the following values:   *  `PROJECT_LEAD` the assignee to any issues created with this component is nominally the lead for the project the component is in.  *  `COMPONENT_LEAD` the assignee to any issues created with this component is nominally the lead for the component.  *  `UNASSIGNED` an assignee is not set for issues created with this component.  *  `PROJECT_DEFAULT` the assignee to any issues created with this component is nominally the default assignee for the project that the component is in.  Default value: `PROJECT_DEFAULT`.   Optional when creating or updating a component.
+  --assignee-type: string@assignee-type-completer # The nominal user type used to determine the assignee for issues created with this component. See `realAssigneeType` for details on how the type of the user, and hence the user, assigned to issues is determined. Can take the following values:   *  `PROJECT_LEAD` the assignee to any issues created with this component is nominally the lead for the project the component is in.  *  `COMPONENT_LEAD` the assignee to any issues created with this component is nominally the lead for the component.  *  `UNASSIGNED` an assignee is not set for issues created with this component.  *  `PROJECT_DEFAULT` the assignee to any issues created with this component is nominally the default assignee for the project that the component is in.  Default value: `PROJECT_DEFAULT`.   Optional when creating or updating a component.
   --description: string # The description for the component. Optional when creating or updating a component.
-  --leadAccountId: string # The accountId of the component's lead user. The accountId uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
-  --leadUserName: string # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
+  --lead-account-id: string # The accountId of the component's lead user. The accountId uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
+  --lead-user-name: string # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --name: string # The unique name for the component in the project. Required when creating a component. Optional when updating a component. The maximum length is 255 characters.
   --project: string # The key of the project the component is assigned to. Required when creating a component. Can't be updated.
 ]: any -> record<assignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, realAssigneeType: string, self: string> {
@@ -786,7 +786,7 @@ export def "rest-3-component createComponent" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/component")
-  let body = {assigneeType: $assigneeType, description: $description, leadAccountId: $leadAccountId, leadUserName: $leadUserName, name: $name, project: $project} | compact
+  let body = {"assigneeType": $assignee_type, "description": $description, "leadAccountId": $lead_account_id, "leadUserName": $lead_user_name, "name": $name, "project": $project} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -807,12 +807,12 @@ export def "rest-3-component delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --moveIssuesTo: string # The ID of the component to replace the deleted component. If this value is null no replacement is made.
+  --move-issues-to: string # The ID of the component to replace the deleted component. If this value is null no replacement is made.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "moveIssuesTo" $moveIssuesTo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/component/($id)" $qp)
+  let qp = [(serialize-qp "moveIssuesTo" $move_issues_to "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/component/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -835,7 +835,7 @@ export def "rest-3-component get" [
 ]: nothing -> record<assignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, realAssigneeType: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/component/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/component/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -845,7 +845,7 @@ export def "rest-3-component get" [
 #
 # PUT /rest/api/3/component/{id}
 # operationId: updateComponent
-export def "rest-3-component updateComponent" [
+export def "rest-3-component update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -855,18 +855,18 @@ export def "rest-3-component updateComponent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assigneeType: string@assigneeType-completer # The nominal user type used to determine the assignee for issues created with this component. See `realAssigneeType` for details on how the type of the user, and hence the user, assigned to issues is determined. Can take the following values:   *  `PROJECT_LEAD` the assignee to any issues created with this component is nominally the lead for the project the component is in.  *  `COMPONENT_LEAD` the assignee to any issues created with this component is nominally the lead for the component.  *  `UNASSIGNED` an assignee is not set for issues created with this component.  *  `PROJECT_DEFAULT` the assignee to any issues created with this component is nominally the default assignee for the project that the component is in.  Default value: `PROJECT_DEFAULT`.   Optional when creating or updating a component.
+  --assignee-type: string@assignee-type-completer # The nominal user type used to determine the assignee for issues created with this component. See `realAssigneeType` for details on how the type of the user, and hence the user, assigned to issues is determined. Can take the following values:   *  `PROJECT_LEAD` the assignee to any issues created with this component is nominally the lead for the project the component is in.  *  `COMPONENT_LEAD` the assignee to any issues created with this component is nominally the lead for the component.  *  `UNASSIGNED` an assignee is not set for issues created with this component.  *  `PROJECT_DEFAULT` the assignee to any issues created with this component is nominally the default assignee for the project that the component is in.  Default value: `PROJECT_DEFAULT`.   Optional when creating or updating a component.
   --description: string # The description for the component. Optional when creating or updating a component.
-  --leadAccountId: string # The accountId of the component's lead user. The accountId uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
-  --leadUserName: string # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
+  --lead-account-id: string # The accountId of the component's lead user. The accountId uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
+  --lead-user-name: string # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --name: string # The unique name for the component in the project. Required when creating a component. Optional when updating a component. The maximum length is 255 characters.
   --project: string # The key of the project the component is assigned to. Required when creating a component. Can't be updated.
 ]: any -> record<assignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, realAssigneeType: string, self: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/component/($id)")
-  let body = {assigneeType: $assigneeType, description: $description, leadAccountId: $leadAccountId, leadUserName: $leadUserName, name: $name, project: $project} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/component/{id}"))
+  let body = {"assigneeType": $assignee_type, "description": $description, "leadAccountId": $lead_account_id, "leadUserName": $lead_user_name, "name": $name, "project": $project} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -890,7 +890,7 @@ export def "rest-3-component-related-issue-counts get" [
 ]: nothing -> record<issueCount: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/component/($id)/relatedIssueCounts")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/component/{id}/relatedIssueCounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -922,7 +922,7 @@ export def "rest-3-configuration get" [
 #
 # GET /rest/api/3/configuration/timetracking
 # operationId: getSelectedTimeTrackingImplementation
-export def "rest-3-configuration-timetracking get" [
+export def "rest-3-configuration-timetracking get-selected-time-tracking-implementation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -960,7 +960,7 @@ export def "rest-3-configuration-timetracking selectTimeTrackingImplementation" 
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/configuration/timetracking")
-  let body = {key: $key, name: $name} | compact
+  let body = {"key": $key, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -971,7 +971,7 @@ export def "rest-3-configuration-timetracking selectTimeTrackingImplementation" 
 #
 # GET /rest/api/3/configuration/timetracking/list
 # operationId: getAvailableTimeTrackingImplementations
-export def "rest-3-configuration-timetracking-list get" [
+export def "rest-3-configuration-timetracking-list get-available-time-tracking-implementations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "rest-3-configuration-timetracking-list get" [
 #
 # GET /rest/api/3/configuration/timetracking/options
 # operationId: getSharedTimeTrackingConfiguration
-export def "rest-3-configuration-timetracking-options get" [
+export def "rest-3-configuration-timetracking-options get-shared" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,16 +1024,16 @@ export def "rest-3-configuration-timetracking-options setSharedTimeTrackingConfi
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  defaultUnit: string@defaultUnit-completer # The default unit of time applied to logged time.
-  timeFormat: string@timeFormat-completer # The format that will appear on an issue's *Time Spent* field.
-  workingDaysPerWeek: float # The number of days in a working week. (format: double)
-  workingHoursPerDay: float # The number of hours in a working day. (format: double)
+  default_unit: string@default-unit-completer # The default unit of time applied to logged time.
+  time_format: string@time-format-completer # The format that will appear on an issue's *Time Spent* field.
+  working_days_per_week: float # The number of days in a working week. (format: double)
+  working_hours_per_day: float # The number of hours in a working day. (format: double)
 ]: any -> record<defaultUnit: string, timeFormat: string, workingDaysPerWeek: float, workingHoursPerDay: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/configuration/timetracking/options")
-  let body = {defaultUnit: $defaultUnit, timeFormat: $timeFormat, workingDaysPerWeek: $workingDaysPerWeek, workingHoursPerDay: $workingHoursPerDay} | compact
+  let body = {"defaultUnit": $default_unit, "timeFormat": $time_format, "workingDaysPerWeek": $working_days_per_week, "workingHoursPerDay": $working_hours_per_day} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1057,7 +1057,7 @@ export def "rest-3-custom-field-option get" [
 ]: nothing -> record<self: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/customFieldOption/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/customFieldOption/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1067,7 +1067,7 @@ export def "rest-3-custom-field-option get" [
 #
 # GET /rest/api/3/dashboard
 # operationId: getAllDashboards
-export def "rest-3-dashboard list" [
+export def "rest-3-dashboard get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1077,12 +1077,12 @@ export def "rest-3-dashboard list" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string@filter-completer # The filter applied to the list of dashboards. Valid values are:   *  `favourite` Returns dashboards the user has marked as favorite.  *  `my` Returns dashboards owned by the user.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 20)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 20)
 ]: nothing -> record<dashboards: table<automaticRefreshMs: int, description: string, editPermissions: list, id: string, isFavourite: bool, isWritable: bool, name: string, owner: record, popularity: int, rank: int, self: string, sharePermissions: list, systemDashboard: bool, view: string>, maxResults: int, next: string, prev: string, startAt: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/dashboard" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1095,7 +1095,7 @@ export def "rest-3-dashboard list" [
 # operationId: createDashboard
 # --editPermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 # --sharePermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-export def "rest-3-dashboard createDashboard" [
+export def "rest-3-dashboard create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1105,15 +1105,15 @@ export def "rest-3-dashboard createDashboard" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the dashboard.
-  editPermissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
+  edit_permissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
   name: string # The name of the dashboard.
-  sharePermissions: list # The share permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
+  share_permissions: list # The share permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 ]: any -> record<automaticRefreshMs: int, description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, id: string, isFavourite: bool, isWritable: bool, name: string, owner: record<accountId: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, key: string, name: string, self: string>, popularity: int, rank: int, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, systemDashboard: bool, view: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/dashboard")
-  let body = {description: $description, editPermissions: $editPermissions, name: $name, sharePermissions: $sharePermissions} | compact
+  let body = {"description": $description, "editPermissions": $edit_permissions, "name": $name, "sharePermissions": $share_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1124,7 +1124,7 @@ export def "rest-3-dashboard createDashboard" [
 #
 # GET /rest/api/3/dashboard/gadgets
 # operationId: getAllAvailableDashboardGadgets
-export def "rest-3-dashboard-gadgets get" [
+export def "rest-3-dashboard-gadgets get-all-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1146,7 +1146,7 @@ export def "rest-3-dashboard-gadgets get" [
 #
 # GET /rest/api/3/dashboard/search
 # operationId: getDashboardsPaginated
-export def "rest-3-dashboard-search get" [
+export def "rest-3-dashboard-search get-dashboards-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1155,21 +1155,21 @@ export def "rest-3-dashboard-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --dashboardName: string # String used to perform a case-insensitive partial match with `name`.
-  --accountId: string # User account ID used to return dashboards with the matching `owner.accountId`. This parameter cannot be used with the `owner` parameter.
+  --dashboard-name: string # String used to perform a case-insensitive partial match with `name`.
+  --account-id: string # User account ID used to return dashboards with the matching `owner.accountId`. This parameter cannot be used with the `owner` parameter.
   --owner: string # This parameter is deprecated because of privacy changes. Use `accountId` instead. See the [migration guide](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. User name used to return dashboards with the matching `owner.name`. This parameter cannot be used with the `accountId` parameter.
   --groupname: string # As a group's name can change, use of `groupId` is recommended. Group name used to return dashboards that are shared with a group that matches `sharePermissions.group.name`. This parameter cannot be used with the `groupId` parameter.
-  --groupId: string # Group ID used to return dashboards that are shared with a group that matches `sharePermissions.group.groupId`. This parameter cannot be used with the `groupname` parameter.
-  --projectId: int # Project ID used to returns dashboards that are shared with a project that matches `sharePermissions.project.id`. (format: int64)
-  --orderBy: string@orderBy-completer # [Order](#ordering) the results by a field:   *  `description` Sorts by dashboard description. Note that this sort works independently of whether the expand to display the description field is in use.  *  `favourite_count` Sorts by dashboard popularity.  *  `id` Sorts by dashboard ID.  *  `is_favourite` Sorts by whether the dashboard is marked as a favorite.  *  `name` Sorts by dashboard name.  *  `owner` Sorts by dashboard owner name. (default: name)
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --group-id: string # Group ID used to return dashboards that are shared with a group that matches `sharePermissions.group.groupId`. This parameter cannot be used with the `groupname` parameter.
+  --project-id: int # Project ID used to returns dashboards that are shared with a project that matches `sharePermissions.project.id`. (format: int64)
+  --order-by: string@order-by-completer # [Order](#ordering) the results by a field:   *  `description` Sorts by dashboard description. Note that this sort works independently of whether the expand to display the description field is in use.  *  `favourite_count` Sorts by dashboard popularity.  *  `id` Sorts by dashboard ID.  *  `is_favourite` Sorts by whether the dashboard is marked as a favorite.  *  `name` Sorts by dashboard name.  *  `owner` Sorts by dashboard owner name. (default: name)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --status: string@status-completer # The status to filter by. It may be active, archived or deleted. (default: active)
   --expand: string # Use [expand](#expansion) to include additional information about dashboard in the response. This parameter accepts a comma-separated list. Expand options include:   *  `description` Returns the description of the dashboard.  *  `owner` Returns the owner of the dashboard.  *  `viewUrl` Returns the URL that is used to view the dashboard.  *  `favourite` Returns `isFavourite`, an indicator of whether the user has set the dashboard as a favorite.  *  `favouritedCount` Returns `popularity`, a count of how many users have set this dashboard as a favorite.  *  `sharePermissions` Returns details of the share permissions defined for the dashboard.  *  `editPermissions` Returns details of the edit permissions defined for the dashboard.  *  `isWritable` Returns whether the current user has permission to edit the dashboard.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<automaticRefreshMs: int, description: string, editPermissions: list, id: string, isFavourite: bool, isWritable: bool, name: string, owner: record, popularity: int, rank: int, self: string, sharePermissions: list, systemDashboard: bool, view: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dashboardName" $dashboardName "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "projectId" $projectId "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dashboardName" $dashboard_name "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/dashboard/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1180,8 +1180,8 @@ export def "rest-3-dashboard-search get" [
 #
 # GET /rest/api/3/dashboard/{dashboardId}/gadget
 # operationId: getAllGadgets
-export def "rest-3-dashboard-gadget get" [
-  dashboardId: int
+export def "rest-3-dashboard-gadget get-all" [
+  dashboard_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1190,14 +1190,14 @@ export def "rest-3-dashboard-gadget get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --moduleKey: list # The list of gadgets module keys. To include multiple module keys, separate module keys with ampersand: `moduleKey=key:one&moduleKey=key:two`.
+  --module-key: list # The list of gadgets module keys. To include multiple module keys, separate module keys with ampersand: `moduleKey=key:one&moduleKey=key:two`.
   --uri: list # The list of gadgets URIs. To include multiple URIs, separate URIs with ampersand: `uri=/rest/example/uri/1&uri=/rest/example/uri/2`.
-  --gadgetId: list # The list of gadgets IDs. To include multiple IDs, separate IDs with ampersand: `gadgetId=10000&gadgetId=10001`.
+  --gadget-id: list # The list of gadgets IDs. To include multiple IDs, separate IDs with ampersand: `gadgetId=10000&gadgetId=10001`.
 ]: nothing -> record<gadgets: table<color: string, id: int, moduleKey: string, position: record, title: string, uri: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "moduleKey" $moduleKey "multi") (serialize-qp "uri" $uri "multi") (serialize-qp "gadgetId" $gadgetId "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/gadget" $qp)
+  let qp = [(serialize-qp "moduleKey" $module_key "multi") (serialize-qp "uri" $uri "multi") (serialize-qp "gadgetId" $gadget_id "multi")] | flatten | str join "&"
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/rest/api/3/dashboard/{dashboard_id}/gadget") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1207,8 +1207,8 @@ export def "rest-3-dashboard-gadget get" [
 #
 # POST /rest/api/3/dashboard/{dashboardId}/gadget
 # operationId: addGadget
-export def "rest-3-dashboard-gadget addGadget" [
-  dashboardId: int
+export def "rest-3-dashboard-gadget create" [
+  dashboard_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1218,8 +1218,8 @@ export def "rest-3-dashboard-gadget addGadget" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --color: string # The color of the gadget. Should be one of `blue`, `red`, `yellow`, `green`, `cyan`, `purple`, `gray`, or `white`.
-  --ignoreUriAndModuleKeyValidation: oneof<nothing, bool> # Whether to ignore the validation of module key and URI. For example, when a gadget is created that is a part of an application that isn't installed.
-  --moduleKey: string # The module key of the gadget type. Can't be provided with `uri`.
+  --ignore-uri-and-module-key-validation: oneof<nothing, bool> # Whether to ignore the validation of module key and URI. For example, when a gadget is created that is a part of an application that isn't installed.
+  --module-key: string # The module key of the gadget type. Can't be provided with `uri`.
   --position: any # The position of the gadget. When the gadget is placed into the position, other gadgets in the same column are moved down to accommodate it.
   --title: string # The title of the gadget.
   --uri: string # The URI of the gadget type. Can't be provided with `moduleKey`.
@@ -1227,8 +1227,8 @@ export def "rest-3-dashboard-gadget addGadget" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/gadget")
-  let body = {color: $color, ignoreUriAndModuleKeyValidation: $ignoreUriAndModuleKeyValidation, moduleKey: $moduleKey, position: $position, title: $title, uri: $uri} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id} | format pattern "/rest/api/3/dashboard/{dashboard_id}/gadget"))
+  let body = {"color": $color, "ignoreUriAndModuleKeyValidation": $ignore_uri_and_module_key_validation, "moduleKey": $module_key, "position": $position, "title": $title, "uri": $uri} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1239,9 +1239,9 @@ export def "rest-3-dashboard-gadget addGadget" [
 #
 # DELETE /rest/api/3/dashboard/{dashboardId}/gadget/{gadgetId}
 # operationId: removeGadget
-export def "rest-3-dashboard-gadget removeGadget" [
-  dashboardId: int
-  gadgetId: int
+export def "rest-3-dashboard-gadget delete" [
+  dashboard_id: int
+  gadget_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "rest-3-dashboard-gadget removeGadget" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/gadget/($gadgetId)")
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, gadget_id: $gadget_id} | format pattern "/rest/api/3/dashboard/{dashboard_id}/gadget/{gadget_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1263,9 +1263,9 @@ export def "rest-3-dashboard-gadget removeGadget" [
 #
 # PUT /rest/api/3/dashboard/{dashboardId}/gadget/{gadgetId}
 # operationId: updateGadget
-export def "rest-3-dashboard-gadget updateGadget" [
-  dashboardId: int
-  gadgetId: int
+export def "rest-3-dashboard-gadget update" [
+  dashboard_id: int
+  gadget_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1281,8 +1281,8 @@ export def "rest-3-dashboard-gadget updateGadget" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/gadget/($gadgetId)")
-  let body = {color: $color, position: $position, title: $title} | compact
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, gadget_id: $gadget_id} | format pattern "/rest/api/3/dashboard/{dashboard_id}/gadget/{gadget_id}"))
+  let body = {"color": $color, "position": $position, "title": $title} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1293,9 +1293,9 @@ export def "rest-3-dashboard-gadget updateGadget" [
 #
 # GET /rest/api/3/dashboard/{dashboardId}/items/{itemId}/properties
 # operationId: getDashboardItemPropertyKeys
-export def "rest-3-dashboard-items-properties list" [
-  dashboardId: string
-  itemId: string
+export def "rest-3-dashboard-items-properties get-dashboard-item-property-keys" [
+  dashboard_id: string
+  item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1307,7 +1307,7 @@ export def "rest-3-dashboard-items-properties list" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/items/($itemId)/properties")
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, item_id: $item_id} | format pattern "/rest/api/3/dashboard/{dashboard_id}/items/{item_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1317,10 +1317,10 @@ export def "rest-3-dashboard-items-properties list" [
 #
 # DELETE /rest/api/3/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
 # operationId: deleteDashboardItemProperty
-export def "rest-3-dashboard-items-properties delete" [
-  dashboardId: string
-  itemId: string
-  propertyKey: string
+export def "rest-3-dashboard-items-properties delete-dashboard-item-property" [
+  dashboard_id: string
+  item_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1332,7 +1332,7 @@ export def "rest-3-dashboard-items-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/items/($itemId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, item_id: $item_id, property_key: $property_key} | format pattern "/rest/api/3/dashboard/{dashboard_id}/items/{item_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1342,10 +1342,10 @@ export def "rest-3-dashboard-items-properties delete" [
 #
 # GET /rest/api/3/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
 # operationId: getDashboardItemProperty
-export def "rest-3-dashboard-items-properties get" [
-  dashboardId: string
-  itemId: string
-  propertyKey: string
+export def "rest-3-dashboard-items-properties get-dashboard-item-property" [
+  dashboard_id: string
+  item_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1357,7 +1357,7 @@ export def "rest-3-dashboard-items-properties get" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/items/($itemId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, item_id: $item_id, property_key: $property_key} | format pattern "/rest/api/3/dashboard/{dashboard_id}/items/{item_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1368,9 +1368,9 @@ export def "rest-3-dashboard-items-properties get" [
 # PUT /rest/api/3/dashboard/{dashboardId}/items/{itemId}/properties/{propertyKey}
 # operationId: setDashboardItemProperty
 export def "rest-3-dashboard-items-properties setDashboardItemProperty" [
-  dashboardId: string
-  itemId: string
-  propertyKey: string
+  dashboard_id: string
+  item_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1384,7 +1384,7 @@ export def "rest-3-dashboard-items-properties setDashboardItemProperty" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($dashboardId)/items/($itemId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({dashboard_id: $dashboard_id, item_id: $item_id, property_key: $property_key} | format pattern "/rest/api/3/dashboard/{dashboard_id}/items/{item_id}/properties/{property_key}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1408,7 +1408,7 @@ export def "rest-3-dashboard delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/dashboard/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1431,7 +1431,7 @@ export def "rest-3-dashboard get" [
 ]: nothing -> record<automaticRefreshMs: int, description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, id: string, isFavourite: bool, isWritable: bool, name: string, owner: record<accountId: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, key: string, name: string, self: string>, popularity: int, rank: int, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, systemDashboard: bool, view: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/dashboard/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1443,7 +1443,7 @@ export def "rest-3-dashboard get" [
 # operationId: updateDashboard
 # --editPermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 # --sharePermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-export def "rest-3-dashboard updateDashboard" [
+export def "rest-3-dashboard update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1454,15 +1454,15 @@ export def "rest-3-dashboard updateDashboard" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the dashboard.
-  editPermissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
+  edit_permissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
   name: string # The name of the dashboard.
-  sharePermissions: list # The share permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
+  share_permissions: list # The share permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 ]: any -> record<automaticRefreshMs: int, description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, id: string, isFavourite: bool, isWritable: bool, name: string, owner: record<accountId: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, key: string, name: string, self: string>, popularity: int, rank: int, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, systemDashboard: bool, view: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($id)")
-  let body = {description: $description, editPermissions: $editPermissions, name: $name, sharePermissions: $sharePermissions} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/dashboard/{id}"))
+  let body = {"description": $description, "editPermissions": $edit_permissions, "name": $name, "sharePermissions": $share_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1475,7 +1475,7 @@ export def "rest-3-dashboard updateDashboard" [
 # operationId: copyDashboard
 # --editPermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 # --sharePermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-export def "rest-3-dashboard-copy copyDashboard" [
+export def "rest-3-dashboard-copy copy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1486,15 +1486,15 @@ export def "rest-3-dashboard-copy copyDashboard" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the dashboard.
-  editPermissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
+  edit_permissions: list # The edit permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
   name: string # The name of the dashboard.
-  sharePermissions: list # The share permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
+  share_permissions: list # The share permissions for the dashboard. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 ]: any -> record<automaticRefreshMs: int, description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, id: string, isFavourite: bool, isWritable: bool, name: string, owner: record<accountId: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, key: string, name: string, self: string>, popularity: int, rank: int, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, systemDashboard: bool, view: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/dashboard/($id)/copy")
-  let body = {description: $description, editPermissions: $editPermissions, name: $name, sharePermissions: $sharePermissions} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/dashboard/{id}/copy"))
+  let body = {"description": $description, "editPermissions": $edit_permissions, "name": $name, "sharePermissions": $share_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1537,7 +1537,7 @@ export def "rest-3-expression-analyse analyseExpression" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --check: string@check-completer # The check to perform:   *  `syntax` Each expression's syntax is checked to ensure the expression can be parsed. Also, syntactic limits are validated. For example, the expression's length.  *  `type` EXPERIMENTAL. Each expression is type checked and the final type of the expression inferred. Any type errors that would result in the expression failure at runtime are reported. For example, accessing properties that don't exist or passing the wrong number of arguments to functions. Also performs the syntax check.  *  `complexity` EXPERIMENTAL. Determines the formulae for how many [expensive operations](https://developer.atlassian.com/cloud/jira/platform/jira-expressions/#expensive-operations) each expression may execute. (default: syntax)
-  --contextVariables: record # Context variables and their types. The type checker assumes that [common context variables](https://developer.atlassian.com/cloud/jira/platform/jira-expressions/#context-variables), such as `issue` or `project`, are available in context and sets their type. Use this property to override the default types or provide details of new variables.
+  --context-variables: record # Context variables and their types. The type checker assumes that [common context variables](https://developer.atlassian.com/cloud/jira/platform/jira-expressions/#context-variables), such as `issue` or `project`, are available in context and sets their type. Use this property to override the default types or provide details of new variables.
   expressions: list # The list of Jira expressions to analyse. (e.g. issues.map(issue => issue.properties['property_key']))
 ]: any -> record<results: table<complexity: record, errors: list, expression: string, type: string, valid: bool>> {
   let input = $in
@@ -1545,7 +1545,7 @@ export def "rest-3-expression-analyse analyseExpression" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "check" $check "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/expression/analyse" $qp)
-  let body = {contextVariables: $contextVariables, expressions: $expressions} | compact
+  let body = {"contextVariables": $context_variables, "expressions": $expressions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1574,7 +1574,7 @@ export def "rest-3-expression-eval evaluateJiraExpression" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/expression/eval" $qp)
-  let body = {context: $context, expression: $expression} | compact
+  let body = {"context": $context, "expression": $expression} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1607,7 +1607,7 @@ export def "rest-3-field get" [
 #
 # POST /rest/api/3/field
 # operationId: createCustomField
-export def "rest-3-field createCustomField" [
+export def "rest-3-field create-custom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1618,14 +1618,14 @@ export def "rest-3-field createCustomField" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the custom field, which is displayed in Jira.
   name: string # The name of the custom field, which is displayed in Jira. This is not the unique identifier.
-  --searcherKey: string@searcherKey-completer # The searcher defines the way the field is searched in Jira. For example, *com.atlassian.jira.plugin.system.customfieldtypes:grouppickersearcher*.   The search UI (basic search and JQL search) will display different operations and values for the field, based on the field searcher. You must specify a searcher that is valid for the field type, as listed below (abbreviated values shown):   *  `cascadingselect`: `cascadingselectsearcher`  *  `datepicker`: `daterange`  *  `datetime`: `datetimerange`  *  `float`: `exactnumber` or `numberrange`  *  `grouppicker`: `grouppickersearcher`  *  `importid`: `exactnumber` or `numberrange`  *  `labels`: `labelsearcher`  *  `multicheckboxes`: `multiselectsearcher`  *  `multigrouppicker`: `multiselectsearcher`  *  `multiselect`: `multiselectsearcher`  *  `multiuserpicker`: `userpickergroupsearcher`  *  `multiversion`: `versionsearcher`  *  `project`: `projectsearcher`  *  `radiobuttons`: `multiselectsearcher`  *  `readonlyfield`: `textsearcher`  *  `select`: `multiselectsearcher`  *  `textarea`: `textsearcher`  *  `textfield`: `textsearcher`  *  `url`: `exacttextsearcher`  *  `userpicker`: `userpickergroupsearcher`  *  `version`: `versionsearcher`  If no searcher is provided, the field isn't searchable. However, [Forge custom fields](https://developer.atlassian.com/platform/forge/manifest-reference/modules/#jira-custom-field-type--beta-) have a searcher set automatically, so are always searchable.
+  --searcher-key: string@searcher-key-completer # The searcher defines the way the field is searched in Jira. For example, *com.atlassian.jira.plugin.system.customfieldtypes:grouppickersearcher*.   The search UI (basic search and JQL search) will display different operations and values for the field, based on the field searcher. You must specify a searcher that is valid for the field type, as listed below (abbreviated values shown):   *  `cascadingselect`: `cascadingselectsearcher`  *  `datepicker`: `daterange`  *  `datetime`: `datetimerange`  *  `float`: `exactnumber` or `numberrange`  *  `grouppicker`: `grouppickersearcher`  *  `importid`: `exactnumber` or `numberrange`  *  `labels`: `labelsearcher`  *  `multicheckboxes`: `multiselectsearcher`  *  `multigrouppicker`: `multiselectsearcher`  *  `multiselect`: `multiselectsearcher`  *  `multiuserpicker`: `userpickergroupsearcher`  *  `multiversion`: `versionsearcher`  *  `project`: `projectsearcher`  *  `radiobuttons`: `multiselectsearcher`  *  `readonlyfield`: `textsearcher`  *  `select`: `multiselectsearcher`  *  `textarea`: `textsearcher`  *  `textfield`: `textsearcher`  *  `url`: `exacttextsearcher`  *  `userpicker`: `userpickergroupsearcher`  *  `version`: `versionsearcher`  If no searcher is provided, the field isn't searchable. However, [Forge custom fields](https://developer.atlassian.com/platform/forge/manifest-reference/modules/#jira-custom-field-type--beta-) have a searcher set automatically, so are always searchable.
   type: string # The type of the custom field. These built-in custom field types are available:   *  `cascadingselect`: Enables values to be selected from two levels of select lists (value: `com.atlassian.jira.plugin.system.customfieldtypes:cascadingselect`)  *  `datepicker`: Stores a date using a picker control (value: `com.atlassian.jira.plugin.system.customfieldtypes:datepicker`)  *  `datetime`: Stores a date with a time component (value: `com.atlassian.jira.plugin.system.customfieldtypes:datetime`)  *  `float`: Stores and validates a numeric (floating point) input (value: `com.atlassian.jira.plugin.system.customfieldtypes:float`)  *  `grouppicker`: Stores a user group using a picker control (value: `com.atlassian.jira.plugin.system.customfieldtypes:grouppicker`)  *  `importid`: A read-only field that stores the ID the issue had in the system it was imported from (value: `com.atlassian.jira.plugin.system.customfieldtypes:importid`)  *  `labels`: Stores labels (value: `com.atlassian.jira.plugin.system.customfieldtypes:labels`)  *  `multicheckboxes`: Stores multiple values using checkboxes (value: ``)  *  `multigrouppicker`: Stores multiple user groups using a picker control (value: ``)  *  `multiselect`: Stores multiple values using a select list (value: `com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes`)  *  `multiuserpicker`: Stores multiple users using a picker control (value: `com.atlassian.jira.plugin.system.customfieldtypes:multigrouppicker`)  *  `multiversion`: Stores multiple versions from the versions available in a project using a picker control (value: `com.atlassian.jira.plugin.system.customfieldtypes:multiversion`)  *  `project`: Stores a project from a list of projects that the user is permitted to view (value: `com.atlassian.jira.plugin.system.customfieldtypes:project`)  *  `radiobuttons`: Stores a value using radio buttons (value: `com.atlassian.jira.plugin.system.customfieldtypes:radiobuttons`)  *  `readonlyfield`: Stores a read-only text value, which can only be populated via the API (value: `com.atlassian.jira.plugin.system.customfieldtypes:readonlyfield`)  *  `select`: Stores a value from a configurable list of options (value: `com.atlassian.jira.plugin.system.customfieldtypes:select`)  *  `textarea`: Stores a long text string using a multiline text area (value: `com.atlassian.jira.plugin.system.customfieldtypes:textarea`)  *  `textfield`: Stores a text string using a single-line text box (value: `com.atlassian.jira.plugin.system.customfieldtypes:textfield`)  *  `url`: Stores a URL (value: `com.atlassian.jira.plugin.system.customfieldtypes:url`)  *  `userpicker`: Stores a user using a picker control (value: `com.atlassian.jira.plugin.system.customfieldtypes:userpicker`)  *  `version`: Stores a version using a picker control (value: `com.atlassian.jira.plugin.system.customfieldtypes:version`)  To create a field based on a [Forge custom field type](https://developer.atlassian.com/platform/forge/manifest-reference/modules/#jira-custom-field-type--beta-), use the ID of the Forge custom field type as the value. For example, `ari:cloud:ecosystem::extension/e62f20a2-4b61-4dbe-bfb9-9a88b5e3ac84/548c5df1-24aa-4f7c-bbbb-3038d947cb05/static/my-cf-type-key`.
 ]: any -> record<clauseNames: list<string>, custom: bool, id: string, key: string, name: string, navigable: bool, orderable: bool, schema: record<configuration: record, custom: string, customId: int, items: string, system: string, type: string>, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, searchable: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/field")
-  let body = {description: $description, name: $name, searcherKey: $searcherKey, type: $type} | compact
+  let body = {"description": $description, "name": $name, "searcherKey": $searcher_key, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1636,7 +1636,7 @@ export def "rest-3-field createCustomField" [
 #
 # GET /rest/api/3/field/search
 # operationId: getFieldsPaginated
-export def "rest-3-field-search get" [
+export def "rest-3-field-search get-fields-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1645,17 +1645,17 @@ export def "rest-3-field-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --type: list # The type of fields to search.
   --id: list # The IDs of the custom fields to return or, where `query` is specified, filter.
   --query: string # String used to perform a case-insensitive partial match with field names or descriptions.
-  --orderBy: string@orderBy-completer-1 # [Order](#ordering) the results by a field:   *  `contextsCount` sorts by the number of contexts related to a field  *  `lastUsed` sorts by the date when the value of the field last changed  *  `name` sorts by the field name  *  `screensCount` sorts by the number of screens related to a field
+  --order-by: string@order-by-completer-1 # [Order](#ordering) the results by a field:   *  `contextsCount` sorts by the number of contexts related to a field  *  `lastUsed` sorts by the date when the value of the field last changed  *  `name` sorts by the field name  *  `screensCount` sorts by the number of screens related to a field
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `key` returns the key for each field  *  `lastUsed` returns the date when the value of the field last changed  *  `screensCount` returns the number of screens related to a field  *  `contextsCount` returns the number of contexts related to a field  *  `isLocked` returns information about whether the field is [locked](https://confluence.atlassian.com/x/ZSN7Og)  *  `searcherKey` returns the searcher key for each custom field
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<contextsCount: int, description: string, id: string, isLocked: bool, isUnscreenable: bool, key: string, lastUsed: record, name: string, projectsCount: int, schema: record, screensCount: int, searcherKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "type" $type "multi") (serialize-qp "id" $id "multi") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "type" $type "multi") (serialize-qp "id" $id "multi") (serialize-qp "query" $query "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/field/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1666,7 +1666,7 @@ export def "rest-3-field-search get" [
 #
 # GET /rest/api/3/field/search/trashed
 # operationId: getTrashedFieldsPaginated
-export def "rest-3-field-search-trashed get" [
+export def "rest-3-field-search-trashed get-trashed-fields-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1675,16 +1675,16 @@ export def "rest-3-field-search-trashed get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list
   --query: string # String used to perform a case-insensitive partial match with field names or descriptions.
   --expand: string@expand-completer
-  --orderBy: string # [Order](#ordering) the results by a field:   *  `name` sorts by the field name  *  `trashDate` sorts by the date the field was moved to the trash  *  `plannedDeletionDate` sorts by the planned deletion date
+  --order-by: string # [Order](#ordering) the results by a field:   *  `name` sorts by the field name  *  `trashDate` sorts by the date the field was moved to the trash  *  `plannedDeletionDate` sorts by the planned deletion date
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<contextsCount: int, description: string, id: string, isLocked: bool, isUnscreenable: bool, key: string, lastUsed: record, name: string, projectsCount: int, schema: record, screensCount: int, searcherKey: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "query" $query "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "id" $id "multi") (serialize-qp "query" $query "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/field/search/trashed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1695,8 +1695,8 @@ export def "rest-3-field-search-trashed get" [
 #
 # PUT /rest/api/3/field/{fieldId}
 # operationId: updateCustomField
-export def "rest-3-field updateCustomField" [
-  fieldId: string
+export def "rest-3-field update-custom" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1707,13 +1707,13 @@ export def "rest-3-field updateCustomField" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the custom field. The maximum length is 40000 characters.
   --name: string # The name of the custom field. It doesn't have to be unique. The maximum length is 255 characters.
-  --searcherKey: string@searcherKey-completer # The searcher that defines the way the field is searched in Jira. It can be set to `null`, otherwise you must specify the valid searcher for the field type, as listed below (abbreviated values shown):   *  `cascadingselect`: `cascadingselectsearcher`  *  `datepicker`: `daterange`  *  `datetime`: `datetimerange`  *  `float`: `exactnumber` or `numberrange`  *  `grouppicker`: `grouppickersearcher`  *  `importid`: `exactnumber` or `numberrange`  *  `labels`: `labelsearcher`  *  `multicheckboxes`: `multiselectsearcher`  *  `multigrouppicker`: `multiselectsearcher`  *  `multiselect`: `multiselectsearcher`  *  `multiuserpicker`: `userpickergroupsearcher`  *  `multiversion`: `versionsearcher`  *  `project`: `projectsearcher`  *  `radiobuttons`: `multiselectsearcher`  *  `readonlyfield`: `textsearcher`  *  `select`: `multiselectsearcher`  *  `textarea`: `textsearcher`  *  `textfield`: `textsearcher`  *  `url`: `exacttextsearcher`  *  `userpicker`: `userpickergroupsearcher`  *  `version`: `versionsearcher`
+  --searcher-key: string@searcher-key-completer # The searcher that defines the way the field is searched in Jira. It can be set to `null`, otherwise you must specify the valid searcher for the field type, as listed below (abbreviated values shown):   *  `cascadingselect`: `cascadingselectsearcher`  *  `datepicker`: `daterange`  *  `datetime`: `datetimerange`  *  `float`: `exactnumber` or `numberrange`  *  `grouppicker`: `grouppickersearcher`  *  `importid`: `exactnumber` or `numberrange`  *  `labels`: `labelsearcher`  *  `multicheckboxes`: `multiselectsearcher`  *  `multigrouppicker`: `multiselectsearcher`  *  `multiselect`: `multiselectsearcher`  *  `multiuserpicker`: `userpickergroupsearcher`  *  `multiversion`: `versionsearcher`  *  `project`: `projectsearcher`  *  `radiobuttons`: `multiselectsearcher`  *  `readonlyfield`: `textsearcher`  *  `select`: `multiselectsearcher`  *  `textarea`: `textsearcher`  *  `textfield`: `textsearcher`  *  `url`: `exacttextsearcher`  *  `userpicker`: `userpickergroupsearcher`  *  `version`: `versionsearcher`
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)")
-  let body = {description: $description, name: $name, searcherKey: $searcherKey} | compact
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/field/{field_id}"))
+  let body = {"description": $description, "name": $name, "searcherKey": $searcher_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1724,8 +1724,8 @@ export def "rest-3-field updateCustomField" [
 #
 # GET /rest/api/3/field/{fieldId}/context
 # operationId: getContextsForField
-export def "rest-3-field-context get" [
-  fieldId: string
+export def "rest-3-field-context get-contexts-for" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1734,16 +1734,16 @@ export def "rest-3-field-context get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --isAnyIssueType: oneof<nothing, bool> # Whether to return contexts that apply to all issue types.
-  --isGlobalContext: oneof<nothing, bool> # Whether to return contexts that apply to all projects.
-  --contextId: list # The list of context IDs. To include multiple contexts, separate IDs with ampersand: `contextId=10000&contextId=10001`.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --is-any-issue-type: oneof<nothing, bool> # Whether to return contexts that apply to all issue types.
+  --is-global-context: oneof<nothing, bool> # Whether to return contexts that apply to all projects.
+  --context-id: list # The list of context IDs. To include multiple contexts, separate IDs with ampersand: `contextId=10000&contextId=10001`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: string, isAnyIssueType: bool, isGlobalContext: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "isAnyIssueType" $isAnyIssueType "scalar") (serialize-qp "isGlobalContext" $isGlobalContext "scalar") (serialize-qp "contextId" $contextId "multi") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context" $qp)
+  let qp = [(serialize-qp "isAnyIssueType" $is_any_issue_type "scalar") (serialize-qp "isGlobalContext" $is_global_context "scalar") (serialize-qp "contextId" $context_id "multi") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/field/{field_id}/context") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1753,8 +1753,8 @@ export def "rest-3-field-context get" [
 #
 # POST /rest/api/3/field/{fieldId}/context
 # operationId: createCustomFieldContext
-export def "rest-3-field-context createCustomFieldContext" [
-  fieldId: string
+export def "rest-3-field-context create-custom" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1764,15 +1764,15 @@ export def "rest-3-field-context createCustomFieldContext" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the context.
-  --issueTypeIds: list # The list of issue types IDs for the context. If the list is empty, the context refers to all issue types.
+  --issue-type-ids: list # The list of issue types IDs for the context. If the list is empty, the context refers to all issue types.
   name: string # The name of the context.
-  --projectIds: list # The list of project IDs associated with the context. If the list is empty, the context is global.
+  --project-ids: list # The list of project IDs associated with the context. If the list is empty, the context is global.
 ]: any -> record<description: string, id: string, issueTypeIds: list<string>, name: string, projectIds: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context")
-  let body = {description: $description, issueTypeIds: $issueTypeIds, name: $name, projectIds: $projectIds} | compact
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/field/{field_id}/context"))
+  let body = {"description": $description, "issueTypeIds": $issue_type_ids, "name": $name, "projectIds": $project_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1784,7 +1784,7 @@ export def "rest-3-field-context createCustomFieldContext" [
 # GET /rest/api/3/field/{fieldId}/context/defaultValue
 # operationId: getDefaultValues
 export def "rest-3-field-context-default-value get" [
-  fieldId: string
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1793,14 +1793,14 @@ export def "rest-3-field-context-default-value get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contextId: list # The IDs of the contexts.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --context-id: list # The IDs of the contexts.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "contextId" $contextId "multi") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/defaultValue" $qp)
+  let qp = [(serialize-qp "contextId" $context_id "multi") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/field/{field_id}/context/defaultValue") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1811,7 +1811,7 @@ export def "rest-3-field-context-default-value get" [
 # PUT /rest/api/3/field/{fieldId}/context/defaultValue
 # operationId: setDefaultValues
 export def "rest-3-field-context-default-value setDefaultValues" [
-  fieldId: string
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1820,13 +1820,13 @@ export def "rest-3-field-context-default-value setDefaultValues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultValues: list
+  --default-values: list
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/defaultValue")
-  let body = {defaultValues: $defaultValues} | compact
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/field/{field_id}/context/defaultValue"))
+  let body = {"defaultValues": $default_values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1837,8 +1837,8 @@ export def "rest-3-field-context-default-value setDefaultValues" [
 #
 # GET /rest/api/3/field/{fieldId}/context/issuetypemapping
 # operationId: getIssueTypeMappingsForContexts
-export def "rest-3-field-context-issuetypemapping get" [
-  fieldId: string
+export def "rest-3-field-context-issuetypemapping get-issue-type-mappings-for" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1847,14 +1847,14 @@ export def "rest-3-field-context-issuetypemapping get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contextId: list # The ID of the context. To include multiple contexts, provide an ampersand-separated list. For example, `contextId=10001&contextId=10002`.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --context-id: list # The ID of the context. To include multiple contexts, provide an ampersand-separated list. For example, `contextId=10001&contextId=10002`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<contextId: string, isAnyIssueType: bool, issueTypeId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "contextId" $contextId "multi") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/issuetypemapping" $qp)
+  let qp = [(serialize-qp "contextId" $context_id "multi") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/field/{field_id}/context/issuetypemapping") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1865,8 +1865,8 @@ export def "rest-3-field-context-issuetypemapping get" [
 # POST /rest/api/3/field/{fieldId}/context/mapping
 # operationId: getCustomFieldContextsForProjectsAndIssueTypes
 # --mappings item shape: {issueTypeId: string, projectId: string}
-export def "rest-3-field-context-mapping post" [
-  fieldId: string
+export def "rest-3-field-context-mapping get-custom-field-contexts-for-projects-and-issue-types" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1875,16 +1875,16 @@ export def "rest-3-field-context-mapping post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   mappings: list # The project and issue type mappings. — item shape: {issueTypeId: string, projectId: string}
 ]: any -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<contextId: string, issueTypeId: string, projectId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/mapping" $qp)
-  let body = {mappings: $mappings} | compact
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/field/{field_id}/context/mapping") $qp)
+  let body = {"mappings": $mappings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1895,8 +1895,8 @@ export def "rest-3-field-context-mapping post" [
 #
 # GET /rest/api/3/field/{fieldId}/context/projectmapping
 # operationId: getProjectContextMapping
-export def "rest-3-field-context-projectmapping get" [
-  fieldId: string
+export def "rest-3-field-context-projectmapping get-project-context-mapping" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1905,14 +1905,14 @@ export def "rest-3-field-context-projectmapping get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --contextId: list # The list of context IDs. To include multiple context, separate IDs with ampersand: `contextId=10000&contextId=10001`.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --context-id: list # The list of context IDs. To include multiple context, separate IDs with ampersand: `contextId=10000&contextId=10001`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<contextId: string, isGlobalContext: bool, projectId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "contextId" $contextId "multi") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/projectmapping" $qp)
+  let qp = [(serialize-qp "contextId" $context_id "multi") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/field/{field_id}/context/projectmapping") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1922,9 +1922,9 @@ export def "rest-3-field-context-projectmapping get" [
 #
 # DELETE /rest/api/3/field/{fieldId}/context/{contextId}
 # operationId: deleteCustomFieldContext
-export def "rest-3-field-context delete" [
-  fieldId: string
-  contextId: int
+export def "rest-3-field-context delete-custom" [
+  field_id: string
+  context_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1936,7 +1936,7 @@ export def "rest-3-field-context delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)")
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1946,9 +1946,9 @@ export def "rest-3-field-context delete" [
 #
 # PUT /rest/api/3/field/{fieldId}/context/{contextId}
 # operationId: updateCustomFieldContext
-export def "rest-3-field-context updateCustomFieldContext" [
-  fieldId: string
-  contextId: int
+export def "rest-3-field-context update-custom" [
+  field_id: string
+  context_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1963,8 +1963,8 @@ export def "rest-3-field-context updateCustomFieldContext" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1975,9 +1975,9 @@ export def "rest-3-field-context updateCustomFieldContext" [
 #
 # PUT /rest/api/3/field/{fieldId}/context/{contextId}/issuetype
 # operationId: addIssueTypesToContext
-export def "rest-3-field-context-issuetype addIssueTypesToContext" [
-  fieldId: string
-  contextId: int
+export def "rest-3-field-context-issuetype create-issue-types-to" [
+  field_id: string
+  context_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1986,13 +1986,13 @@ export def "rest-3-field-context-issuetype addIssueTypesToContext" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  issueTypeIds: list # The list of issue type IDs.
+  issue_type_ids: list # The list of issue type IDs.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/issuetype")
-  let body = {issueTypeIds: $issueTypeIds} | compact
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/issuetype"))
+  let body = {"issueTypeIds": $issue_type_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2003,9 +2003,9 @@ export def "rest-3-field-context-issuetype addIssueTypesToContext" [
 #
 # POST /rest/api/3/field/{fieldId}/context/{contextId}/issuetype/remove
 # operationId: removeIssueTypesFromContext
-export def "rest-3-field-context-issuetype-remove removeIssueTypesFromContext" [
-  fieldId: string
-  contextId: int
+export def "rest-3-field-context-issuetype-remove delete-issue-types-from" [
+  field_id: string
+  context_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2014,13 +2014,13 @@ export def "rest-3-field-context-issuetype-remove removeIssueTypesFromContext" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  issueTypeIds: list # The list of issue type IDs.
+  issue_type_ids: list # The list of issue type IDs.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/issuetype/remove")
-  let body = {issueTypeIds: $issueTypeIds} | compact
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/issuetype/remove"))
+  let body = {"issueTypeIds": $issue_type_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2031,9 +2031,9 @@ export def "rest-3-field-context-issuetype-remove removeIssueTypesFromContext" [
 #
 # GET /rest/api/3/field/{fieldId}/context/{contextId}/option
 # operationId: getOptionsForContext
-export def "rest-3-field-context-option get" [
-  fieldId: string
-  contextId: int
+export def "rest-3-field-context-option get-options-for" [
+  field_id: string
+  context_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2042,15 +2042,15 @@ export def "rest-3-field-context-option get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --optionId: int # The ID of the option. (format: int64)
-  --onlyOptions: oneof<nothing, bool> # Whether only options are returned. (default: false)
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
+  --option-id: int # The ID of the option. (format: int64)
+  --only-options: oneof<nothing, bool> # Whether only options are returned. (default: false)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<disabled: bool, id: string, optionId: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "optionId" $optionId "scalar") (serialize-qp "onlyOptions" $onlyOptions "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/option" $qp)
+  let qp = [(serialize-qp "optionId" $option_id "scalar") (serialize-qp "onlyOptions" $only_options "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/option") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2061,9 +2061,9 @@ export def "rest-3-field-context-option get" [
 # POST /rest/api/3/field/{fieldId}/context/{contextId}/option
 # operationId: createCustomFieldOption
 # --options item shape: {disabled?: bool, optionId?: string, value: string}
-export def "rest-3-field-context-option createCustomFieldOption" [
-  fieldId: string
-  contextId: int
+export def "rest-3-field-context-option create-custom" [
+  field_id: string
+  context_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2077,8 +2077,8 @@ export def "rest-3-field-context-option createCustomFieldOption" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/option")
-  let body = {options: $options} | compact
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/option"))
+  let body = {"options": $options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2090,9 +2090,9 @@ export def "rest-3-field-context-option createCustomFieldOption" [
 # PUT /rest/api/3/field/{fieldId}/context/{contextId}/option
 # operationId: updateCustomFieldOption
 # --options item shape: {disabled?: bool, id: string, value?: string}
-export def "rest-3-field-context-option updateCustomFieldOption" [
-  fieldId: string
-  contextId: int
+export def "rest-3-field-context-option update-custom" [
+  field_id: string
+  context_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2106,8 +2106,8 @@ export def "rest-3-field-context-option updateCustomFieldOption" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/option")
-  let body = {options: $options} | compact
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/option"))
+  let body = {"options": $options} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2119,8 +2119,8 @@ export def "rest-3-field-context-option updateCustomFieldOption" [
 # PUT /rest/api/3/field/{fieldId}/context/{contextId}/option/move
 # operationId: reorderCustomFieldOptions
 export def "rest-3-field-context-option-move reorderCustomFieldOptions" [
-  fieldId: string
-  contextId: int
+  field_id: string
+  context_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2130,14 +2130,14 @@ export def "rest-3-field-context-option-move reorderCustomFieldOptions" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # The ID of the custom field option or cascading option to place the moved options after. Required if `position` isn't provided.
-  customFieldOptionIds: list # A list of IDs of custom field options to move. The order of the custom field option IDs in the list is the order they are given after the move. The list must contain custom field options or cascading options, but not both.
+  custom_field_option_ids: list # A list of IDs of custom field options to move. The order of the custom field option IDs in the list is the order they are given after the move. The list must contain custom field options or cascading options, but not both.
   --position: string@position-completer # The position the custom field options should be moved to. Required if `after` isn't provided.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/option/move")
-  let body = {after: $after, customFieldOptionIds: $customFieldOptionIds, position: $position} | compact
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/option/move"))
+  let body = {"after": $after, "customFieldOptionIds": $custom_field_option_ids, "position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2148,10 +2148,10 @@ export def "rest-3-field-context-option-move reorderCustomFieldOptions" [
 #
 # DELETE /rest/api/3/field/{fieldId}/context/{contextId}/option/{optionId}
 # operationId: deleteCustomFieldOption
-export def "rest-3-field-context-option delete" [
-  fieldId: string
-  contextId: int
-  optionId: int
+export def "rest-3-field-context-option delete-custom" [
+  field_id: string
+  context_id: int
+  option_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2163,7 +2163,7 @@ export def "rest-3-field-context-option delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/option/($optionId)")
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id, option_id: $option_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/option/{option_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2174,8 +2174,8 @@ export def "rest-3-field-context-option delete" [
 # PUT /rest/api/3/field/{fieldId}/context/{contextId}/project
 # operationId: assignProjectsToCustomFieldContext
 export def "rest-3-field-context-project assignProjectsToCustomFieldContext" [
-  fieldId: string
-  contextId: int
+  field_id: string
+  context_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2184,13 +2184,13 @@ export def "rest-3-field-context-project assignProjectsToCustomFieldContext" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  projectIds: list # The IDs of projects.
+  project_ids: list # The IDs of projects.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/project")
-  let body = {projectIds: $projectIds} | compact
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/project"))
+  let body = {"projectIds": $project_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2201,9 +2201,9 @@ export def "rest-3-field-context-project assignProjectsToCustomFieldContext" [
 #
 # POST /rest/api/3/field/{fieldId}/context/{contextId}/project/remove
 # operationId: removeCustomFieldContextFromProjects
-export def "rest-3-field-context-project-remove removeCustomFieldContextFromProjects" [
-  fieldId: string
-  contextId: int
+export def "rest-3-field-context-project-remove delete-custom-field-context-from" [
+  field_id: string
+  context_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2212,13 +2212,13 @@ export def "rest-3-field-context-project-remove removeCustomFieldContextFromProj
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  projectIds: list # The IDs of projects.
+  project_ids: list # The IDs of projects.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/context/($contextId)/project/remove")
-  let body = {projectIds: $projectIds} | compact
+  let full_url = (build-url $base ({field_id: $field_id, context_id: $context_id} | format pattern "/rest/api/3/field/{field_id}/context/{context_id}/project/remove"))
+  let body = {"projectIds": $project_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2231,8 +2231,8 @@ export def "rest-3-field-context-project-remove removeCustomFieldContextFromProj
 # DEPRECATED
 # operationId: getContextsForFieldDeprecated
 @deprecated
-export def "rest-3-field-contexts get" [
-  fieldId: string
+export def "rest-3-field-contexts get-contexts-for-field-deprecated" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2241,13 +2241,13 @@ export def "rest-3-field-contexts get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 20)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 20)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<id: int, name: string, scope: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/contexts" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/field/{field_id}/contexts") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2257,8 +2257,8 @@ export def "rest-3-field-contexts get" [
 #
 # GET /rest/api/3/field/{fieldId}/screens
 # operationId: getScreensForField
-export def "rest-3-field-screens get" [
-  fieldId: string
+export def "rest-3-field-screens get-screens-for" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2267,14 +2267,14 @@ export def "rest-3-field-screens get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 100)
   --expand: string # Use [expand](#expansion) to include additional information about screens in the response. This parameter accepts `tab` which returns details about the screen tabs the field is used in.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: int, name: string, scope: record, tab: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldId)/screens" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/field/{field_id}/screens") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2284,8 +2284,8 @@ export def "rest-3-field-screens get" [
 #
 # GET /rest/api/3/field/{fieldKey}/option
 # operationId: getAllIssueFieldOptions
-export def "rest-3-field-option list" [
-  fieldKey: string
+export def "rest-3-field-option get-all-issue" [
+  field_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2294,13 +2294,13 @@ export def "rest-3-field-option list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<config: record, id: int, properties: record, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_key: $field_key} | format pattern "/rest/api/3/field/{field_key}/option") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2311,8 +2311,8 @@ export def "rest-3-field-option list" [
 # POST /rest/api/3/field/{fieldKey}/option
 # operationId: createIssueFieldOption
 # --config shape: {attributes?: list, scope?: any}
-export def "rest-3-field-option createIssueFieldOption" [
-  fieldKey: string
+export def "rest-3-field-option create-issue" [
+  field_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2328,8 +2328,8 @@ export def "rest-3-field-option createIssueFieldOption" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option")
-  let body = {config: $config, properties: $properties, value: $value} | compact
+  let full_url = (build-url $base ({field_key: $field_key} | format pattern "/rest/api/3/field/{field_key}/option"))
+  let body = {"config": $config, "properties": $properties, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2340,8 +2340,8 @@ export def "rest-3-field-option createIssueFieldOption" [
 #
 # GET /rest/api/3/field/{fieldKey}/option/suggestions/edit
 # operationId: getSelectableIssueFieldOptions
-export def "rest-3-field-option-suggestions-edit get" [
-  fieldKey: string
+export def "rest-3-field-option-suggestions-edit get-selectable-issue" [
+  field_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2350,14 +2350,14 @@ export def "rest-3-field-option-suggestions-edit get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --projectId: int # Filters the results to options that are only available in the specified project. (format: int64)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --project-id: int # Filters the results to options that are only available in the specified project. (format: int64)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<config: record, id: int, properties: record, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "projectId" $projectId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/suggestions/edit" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_key: $field_key} | format pattern "/rest/api/3/field/{field_key}/option/suggestions/edit") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2367,8 +2367,8 @@ export def "rest-3-field-option-suggestions-edit get" [
 #
 # GET /rest/api/3/field/{fieldKey}/option/suggestions/search
 # operationId: getVisibleIssueFieldOptions
-export def "rest-3-field-option-suggestions-search get" [
-  fieldKey: string
+export def "rest-3-field-option-suggestions-search get-visible-issue" [
+  field_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2377,14 +2377,14 @@ export def "rest-3-field-option-suggestions-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32)
-  --projectId: int # Filters the results to options that are only available in the specified project. (format: int64)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32)
+  --project-id: int # Filters the results to options that are only available in the specified project. (format: int64)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<config: record, id: int, properties: record, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "projectId" $projectId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/suggestions/search" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "projectId" $project_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_key: $field_key} | format pattern "/rest/api/3/field/{field_key}/option/suggestions/search") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2394,9 +2394,9 @@ export def "rest-3-field-option-suggestions-search get" [
 #
 # DELETE /rest/api/3/field/{fieldKey}/option/{optionId}
 # operationId: deleteIssueFieldOption
-export def "rest-3-field-option delete" [
-  fieldKey: string
-  optionId: int
+export def "rest-3-field-option delete-issue" [
+  field_key: string
+  option_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2408,7 +2408,7 @@ export def "rest-3-field-option delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/($optionId)")
+  let full_url = (build-url $base ({field_key: $field_key, option_id: $option_id} | format pattern "/rest/api/3/field/{field_key}/option/{option_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2418,9 +2418,9 @@ export def "rest-3-field-option delete" [
 #
 # GET /rest/api/3/field/{fieldKey}/option/{optionId}
 # operationId: getIssueFieldOption
-export def "rest-3-field-option get" [
-  fieldKey: string
-  optionId: int
+export def "rest-3-field-option get-issue" [
+  field_key: string
+  option_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2432,7 +2432,7 @@ export def "rest-3-field-option get" [
 ]: nothing -> record<config: record<attributes: list<string>, scope: record<global: record, projects: list, projects2: list>>, id: int, properties: record, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/($optionId)")
+  let full_url = (build-url $base ({field_key: $field_key, option_id: $option_id} | format pattern "/rest/api/3/field/{field_key}/option/{option_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2443,9 +2443,9 @@ export def "rest-3-field-option get" [
 # PUT /rest/api/3/field/{fieldKey}/option/{optionId}
 # operationId: updateIssueFieldOption
 # --config shape: {attributes?: list, scope?: any}
-export def "rest-3-field-option updateIssueFieldOption" [
-  fieldKey: string
-  optionId: int
+export def "rest-3-field-option update-issue" [
+  field_key: string
+  option_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2462,8 +2462,8 @@ export def "rest-3-field-option updateIssueFieldOption" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/($optionId)")
-  let body = {config: $config, id: $id, properties: $properties, value: $value} | compact
+  let full_url = (build-url $base ({field_key: $field_key, option_id: $option_id} | format pattern "/rest/api/3/field/{field_key}/option/{option_id}"))
+  let body = {"config": $config, "id": $id, "properties": $properties, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2474,9 +2474,9 @@ export def "rest-3-field-option updateIssueFieldOption" [
 #
 # DELETE /rest/api/3/field/{fieldKey}/option/{optionId}/issue
 # operationId: replaceIssueFieldOption
-export def "rest-3-field-option-issue replaceIssueFieldOption" [
-  fieldKey: string
-  optionId: int
+export def "rest-3-field-option-issue update" [
+  field_key: string
+  option_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2485,15 +2485,15 @@ export def "rest-3-field-option-issue replaceIssueFieldOption" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replaceWith: int # The ID of the option that will replace the currently selected option. (format: int64)
+  --replace-with: int # The ID of the option that will replace the currently selected option. (format: int64)
   --jql: string # A JQL query that specifies the issues to be updated. For example, *project=10000*.
-  --overrideScreenSecurity: oneof<nothing, bool> # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect and Forge app users with admin permission. (default: false)
-  --overrideEditableFlag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --override-screen-security: oneof<nothing, bool> # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect and Forge app users with admin permission. (default: false)
+  --override-editable-flag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "replaceWith" $replaceWith "scalar") (serialize-qp "jql" $jql "scalar") (serialize-qp "overrideScreenSecurity" $overrideScreenSecurity "scalar") (serialize-qp "overrideEditableFlag" $overrideEditableFlag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/field/($fieldKey)/option/($optionId)/issue" $qp)
+  let qp = [(serialize-qp "replaceWith" $replace_with "scalar") (serialize-qp "jql" $jql "scalar") (serialize-qp "overrideScreenSecurity" $override_screen_security "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({field_key: $field_key, option_id: $option_id} | format pattern "/rest/api/3/field/{field_key}/option/{option_id}/issue") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2503,7 +2503,7 @@ export def "rest-3-field-option-issue replaceIssueFieldOption" [
 #
 # DELETE /rest/api/3/field/{id}
 # operationId: deleteCustomField
-export def "rest-3-field delete" [
+export def "rest-3-field delete-custom" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2516,7 +2516,7 @@ export def "rest-3-field delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/field/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2539,7 +2539,7 @@ export def "rest-3-field-restore restoreCustomField" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($id)/restore")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/field/{id}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2562,7 +2562,7 @@ export def "rest-3-field-trash trashCustomField" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/field/($id)/trash")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/field/{id}/trash"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2572,7 +2572,7 @@ export def "rest-3-field-trash trashCustomField" [
 #
 # GET /rest/api/3/fieldconfiguration
 # operationId: getAllFieldConfigurations
-export def "rest-3-fieldconfiguration get" [
+export def "rest-3-fieldconfiguration get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2581,15 +2581,15 @@ export def "rest-3-fieldconfiguration get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list # The list of field configuration IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
-  --isDefault: oneof<nothing, bool> # If *true* returns default field configurations only. (default: false)
+  --is-default: oneof<nothing, bool> # If *true* returns default field configurations only. (default: false)
   --query: string # The query string used to match against field configuration names and descriptions. (default: )
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "isDefault" $isDefault "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "id" $id "multi") (serialize-qp "isDefault" $is_default "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/fieldconfiguration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2600,7 +2600,7 @@ export def "rest-3-fieldconfiguration get" [
 #
 # POST /rest/api/3/fieldconfiguration
 # operationId: createFieldConfiguration
-export def "rest-3-fieldconfiguration createFieldConfiguration" [
+export def "rest-3-fieldconfiguration create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2616,7 +2616,7 @@ export def "rest-3-fieldconfiguration createFieldConfiguration" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/fieldconfiguration")
-  let body = {description: $description, name: $name} | compact
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2640,7 +2640,7 @@ export def "rest-3-fieldconfiguration delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/fieldconfiguration/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/fieldconfiguration/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2650,7 +2650,7 @@ export def "rest-3-fieldconfiguration delete" [
 #
 # PUT /rest/api/3/fieldconfiguration/{id}
 # operationId: updateFieldConfiguration
-export def "rest-3-fieldconfiguration updateFieldConfiguration" [
+export def "rest-3-fieldconfiguration update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2666,8 +2666,8 @@ export def "rest-3-fieldconfiguration updateFieldConfiguration" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/fieldconfiguration/($id)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/fieldconfiguration/{id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2678,7 +2678,7 @@ export def "rest-3-fieldconfiguration updateFieldConfiguration" [
 #
 # GET /rest/api/3/fieldconfiguration/{id}/fields
 # operationId: getFieldConfigurationItems
-export def "rest-3-fieldconfiguration-fields get" [
+export def "rest-3-fieldconfiguration-fields get-field-configuration-items" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2688,13 +2688,13 @@ export def "rest-3-fieldconfiguration-fields get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: string, isHidden: bool, isRequired: bool, renderer: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/fieldconfiguration/($id)/fields" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/fieldconfiguration/{id}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2705,7 +2705,7 @@ export def "rest-3-fieldconfiguration-fields get" [
 # PUT /rest/api/3/fieldconfiguration/{id}/fields
 # operationId: updateFieldConfigurationItems
 # --fieldConfigurationItems item shape: {description?: string, id: string, isHidden?: bool, isRequired?: bool, renderer?: string}
-export def "rest-3-fieldconfiguration-fields updateFieldConfigurationItems" [
+export def "rest-3-fieldconfiguration-fields update-field-configuration-items" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2715,13 +2715,13 @@ export def "rest-3-fieldconfiguration-fields updateFieldConfigurationItems" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  fieldConfigurationItems: list # Details of fields in a field configuration. — item shape: {description?: string, id: string, isHidden?: bool, isRequired?: bool, renderer?: string}
+  field_configuration_items: list # Details of fields in a field configuration. — item shape: {description?: string, id: string, isHidden?: bool, isRequired?: bool, renderer?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/fieldconfiguration/($id)/fields")
-  let body = {fieldConfigurationItems: $fieldConfigurationItems} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/fieldconfiguration/{id}/fields"))
+  let body = {"fieldConfigurationItems": $field_configuration_items} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2732,7 +2732,7 @@ export def "rest-3-fieldconfiguration-fields updateFieldConfigurationItems" [
 #
 # GET /rest/api/3/fieldconfigurationscheme
 # operationId: getAllFieldConfigurationSchemes
-export def "rest-3-fieldconfigurationscheme get" [
+export def "rest-3-fieldconfigurationscheme get-all-field-configuration-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2741,13 +2741,13 @@ export def "rest-3-fieldconfigurationscheme get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list # The list of field configuration scheme IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "id" $id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2758,7 +2758,7 @@ export def "rest-3-fieldconfigurationscheme get" [
 #
 # POST /rest/api/3/fieldconfigurationscheme
 # operationId: createFieldConfigurationScheme
-export def "rest-3-fieldconfigurationscheme createFieldConfigurationScheme" [
+export def "rest-3-fieldconfigurationscheme create-field-configuration-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2774,7 +2774,7 @@ export def "rest-3-fieldconfigurationscheme createFieldConfigurationScheme" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme")
-  let body = {description: $description, name: $name} | compact
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2785,7 +2785,7 @@ export def "rest-3-fieldconfigurationscheme createFieldConfigurationScheme" [
 #
 # GET /rest/api/3/fieldconfigurationscheme/mapping
 # operationId: getFieldConfigurationSchemeMappings
-export def "rest-3-fieldconfigurationscheme-mapping get" [
+export def "rest-3-fieldconfigurationscheme-mapping get-field-configuration-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,13 +2794,13 @@ export def "rest-3-fieldconfigurationscheme-mapping get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --fieldConfigurationSchemeId: list # The list of field configuration scheme IDs. To include multiple field configuration schemes separate IDs with ampersand: `fieldConfigurationSchemeId=10000&fieldConfigurationSchemeId=10001`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --field-configuration-scheme-id: list # The list of field configuration scheme IDs. To include multiple field configuration schemes separate IDs with ampersand: `fieldConfigurationSchemeId=10000&fieldConfigurationSchemeId=10001`.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<fieldConfigurationId: string, fieldConfigurationSchemeId: string, issueTypeId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "fieldConfigurationSchemeId" $fieldConfigurationSchemeId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "fieldConfigurationSchemeId" $field_configuration_scheme_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme/mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2811,7 +2811,7 @@ export def "rest-3-fieldconfigurationscheme-mapping get" [
 #
 # GET /rest/api/3/fieldconfigurationscheme/project
 # operationId: getFieldConfigurationSchemeProjectMapping
-export def "rest-3-fieldconfigurationscheme-project get" [
+export def "rest-3-fieldconfigurationscheme-project get-field-configuration-scheme-project-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2820,13 +2820,13 @@ export def "rest-3-fieldconfigurationscheme-project get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --projectId: list # The list of project IDs. To include multiple projects, separate IDs with ampersand: `projectId=10000&projectId=10001`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --project-id: list # The list of project IDs. To include multiple projects, separate IDs with ampersand: `projectId=10000&projectId=10001`.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<fieldConfigurationScheme: record, projectIds: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "projectId" $projectId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "projectId" $project_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2846,14 +2846,14 @@ export def "rest-3-fieldconfigurationscheme-project assignFieldConfigurationSche
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldConfigurationSchemeId: string # The ID of the field configuration scheme. If the field configuration scheme ID is `null`, the operation assigns the default field configuration scheme.
-  projectId: string # The ID of the project.
+  --field-configuration-scheme-id: string # The ID of the field configuration scheme. If the field configuration scheme ID is `null`, the operation assigns the default field configuration scheme.
+  project_id: string # The ID of the project.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/fieldconfigurationscheme/project")
-  let body = {fieldConfigurationSchemeId: $fieldConfigurationSchemeId, projectId: $projectId} | compact
+  let body = {"fieldConfigurationSchemeId": $field_configuration_scheme_id, "projectId": $project_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2864,7 +2864,7 @@ export def "rest-3-fieldconfigurationscheme-project assignFieldConfigurationSche
 #
 # DELETE /rest/api/3/fieldconfigurationscheme/{id}
 # operationId: deleteFieldConfigurationScheme
-export def "rest-3-fieldconfigurationscheme delete" [
+export def "rest-3-fieldconfigurationscheme delete-field-configuration-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2877,7 +2877,7 @@ export def "rest-3-fieldconfigurationscheme delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/fieldconfigurationscheme/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/fieldconfigurationscheme/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -2887,7 +2887,7 @@ export def "rest-3-fieldconfigurationscheme delete" [
 #
 # PUT /rest/api/3/fieldconfigurationscheme/{id}
 # operationId: updateFieldConfigurationScheme
-export def "rest-3-fieldconfigurationscheme updateFieldConfigurationScheme" [
+export def "rest-3-fieldconfigurationscheme update-field-configuration-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2903,8 +2903,8 @@ export def "rest-3-fieldconfigurationscheme updateFieldConfigurationScheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/fieldconfigurationscheme/($id)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/fieldconfigurationscheme/{id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2931,8 +2931,8 @@ export def "rest-3-fieldconfigurationscheme-mapping setFieldConfigurationSchemeM
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/fieldconfigurationscheme/($id)/mapping")
-  let body = {mappings: $mappings} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/fieldconfigurationscheme/{id}/mapping"))
+  let body = {"mappings": $mappings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2943,7 +2943,7 @@ export def "rest-3-fieldconfigurationscheme-mapping setFieldConfigurationSchemeM
 #
 # POST /rest/api/3/fieldconfigurationscheme/{id}/mapping/delete
 # operationId: removeIssueTypesFromGlobalFieldConfigurationScheme
-export def "rest-3-fieldconfigurationscheme-mapping-delete removeIssueTypesFromGlobalFieldConfigurationScheme" [
+export def "rest-3-fieldconfigurationscheme-mapping-delete delete-issue-types-from-global-field-configuration-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2953,13 +2953,13 @@ export def "rest-3-fieldconfigurationscheme-mapping-delete removeIssueTypesFromG
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  issueTypeIds: list # The list of issue type IDs. Must contain unique values not longer than 255 characters and not be empty. Maximum of 100 IDs.
+  issue_type_ids: list # The list of issue type IDs. Must contain unique values not longer than 255 characters and not be empty. Maximum of 100 IDs.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/fieldconfigurationscheme/($id)/mapping/delete")
-  let body = {issueTypeIds: $issueTypeIds} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/fieldconfigurationscheme/{id}/mapping/delete"))
+  let body = {"issueTypeIds": $issue_type_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2998,7 +2998,7 @@ export def "rest-3-filter list" [
 # operationId: createFilter
 # --editPermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 # --sharePermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-export def "rest-3-filter createFilter" [
+export def "rest-3-filter create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3008,20 +3008,20 @@ export def "rest-3-filter createFilter" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
-  --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be created. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --override-share-permissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be created. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --description: string # A description of the filter.
-  --editPermissions: list # The groups and projects that can edit the filter. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
+  --edit-permissions: list # The groups and projects that can edit the filter. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
   --favourite: oneof<nothing, bool> # Whether the filter is selected as a favorite.
   --jql: string # The JQL query for the filter. For example, *project = SSP AND issuetype = Bug*.
   name: string # The name of the filter. Must be unique.
-  --sharePermissions: list # The groups and projects that the filter is shared with. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
+  --share-permissions: list # The groups and projects that the filter is shared with. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 ]: any -> record<description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, sharedUsers: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "overrideSharePermissions" $overrideSharePermissions "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "overrideSharePermissions" $override_share_permissions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/filter" $qp)
-  let body = {description: $description, editPermissions: $editPermissions, favourite: $favourite, jql: $jql, name: $name, sharePermissions: $sharePermissions} | compact
+  let body = {"description": $description, "editPermissions": $edit_permissions, "favourite": $favourite, "jql": $jql, "name": $name, "sharePermissions": $share_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3069,7 +3069,7 @@ export def "rest-3-filter-default-share-scope setDefaultShareScope" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/filter/defaultShareScope")
-  let body = {scope: $scope} | compact
+  let body = {"scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3114,11 +3114,11 @@ export def "rest-3-filter-my get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
-  --includeFavourites: oneof<nothing, bool> # Include the user's favorite filters in the response. (default: false)
+  --include-favourites: oneof<nothing, bool> # Include the user's favorite filters in the response. (default: false)
 ]: nothing -> table<description: string, editPermissions: list<record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: list<record>, sharedUsers: record<end_index: int, items: list, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "includeFavourites" $includeFavourites "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "includeFavourites" $include_favourites "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/filter/my" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3129,7 +3129,7 @@ export def "rest-3-filter-my get" [
 #
 # GET /rest/api/3/filter/search
 # operationId: getFiltersPaginated
-export def "rest-3-filter-search get" [
+export def "rest-3-filter-search get-filters-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3138,22 +3138,22 @@ export def "rest-3-filter-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --filterName: string # String used to perform a case-insensitive partial match with `name`.
-  --accountId: string # User account ID used to return filters with the matching `owner.accountId`. This parameter cannot be used with `owner`.
+  --filter-name: string # String used to perform a case-insensitive partial match with `name`.
+  --account-id: string # User account ID used to return filters with the matching `owner.accountId`. This parameter cannot be used with `owner`.
   --owner: string # This parameter is deprecated because of privacy changes. Use `accountId` instead. See the [migration guide](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. User name used to return filters with the matching `owner.name`. This parameter cannot be used with `accountId`.
   --groupname: string # As a group's name can change, use of `groupId` is recommended to identify a group. Group name used to returns filters that are shared with a group that matches `sharePermissions.group.groupname`. This parameter cannot be used with the `groupId` parameter.
-  --groupId: string # Group ID used to returns filters that are shared with a group that matches `sharePermissions.group.groupId`. This parameter cannot be used with the `groupname` parameter.
-  --projectId: int # Project ID used to returns filters that are shared with a project that matches `sharePermissions.project.id`. (format: int64)
+  --group-id: string # Group ID used to returns filters that are shared with a group that matches `sharePermissions.group.groupId`. This parameter cannot be used with the `groupname` parameter.
+  --project-id: int # Project ID used to returns filters that are shared with a project that matches `sharePermissions.project.id`. (format: int64)
   --id: list # The list of filter IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`. Do not exceed 200 filter IDs.
-  --orderBy: string@orderBy-completer-2 # [Order](#ordering) the results by a field:   *  `description` Sorts by filter description. Note that this sorting works independently of whether the expand to display the description field is in use.  *  `favourite_count` Sorts by the count of how many users have this filter as a favorite.  *  `is_favourite` Sorts by whether the filter is marked as a favorite.  *  `id` Sorts by filter ID.  *  `name` Sorts by filter name.  *  `owner` Sorts by the ID of the filter owner.  *  `is_shared` Sorts by whether the filter is shared. (default: name)
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --order-by: string@order-by-completer-2 # [Order](#ordering) the results by a field:   *  `description` Sorts by filter description. Note that this sorting works independently of whether the expand to display the description field is in use.  *  `favourite_count` Sorts by the count of how many users have this filter as a favorite.  *  `is_favourite` Sorts by whether the filter is marked as a favorite.  *  `id` Sorts by filter ID.  *  `name` Sorts by filter name.  *  `owner` Sorts by the ID of the filter owner.  *  `is_shared` Sorts by whether the filter is shared. (default: name)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `description` Returns the description of the filter.  *  `favourite` Returns an indicator of whether the user has set the filter as a favorite.  *  `favouritedCount` Returns a count of how many users have set this filter as a favorite.  *  `jql` Returns the JQL query that the filter uses.  *  `owner` Returns the owner of the filter.  *  `searchUrl` Returns a URL to perform the filter's JQL query.  *  `sharePermissions` Returns the share permissions defined for the filter.  *  `editPermissions` Returns the edit permissions defined for the filter.  *  `isWritable` Returns whether the current user has permission to edit the filter.  *  `subscriptions` Returns the users that are subscribed to the filter.  *  `viewUrl` Returns a URL to view the filter.
-  --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be returned. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --override-share-permissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be returned. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, editPermissions: list, expand: string, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record, searchUrl: string, self: string, sharePermissions: list, subscriptions: list, viewUrl: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filterName" $filterName "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "projectId" $projectId "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "overrideSharePermissions" $overrideSharePermissions "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filterName" $filter_name "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "owner" $owner "scalar") (serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "overrideSharePermissions" $override_share_permissions "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/filter/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3177,7 +3177,7 @@ export def "rest-3-filter delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3198,12 +3198,12 @@ export def "rest-3-filter get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
-  --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be returned. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --override-share-permissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable filters with any share permissions to be returned. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
 ]: nothing -> record<description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, sharedUsers: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "overrideSharePermissions" $overrideSharePermissions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)" $qp)
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "overrideSharePermissions" $override_share_permissions "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3215,7 +3215,7 @@ export def "rest-3-filter get" [
 # operationId: updateFilter
 # --editPermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 # --sharePermissions item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
-export def "rest-3-filter updateFilter" [
+export def "rest-3-filter update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3226,20 +3226,20 @@ export def "rest-3-filter updateFilter" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about filter in the response. This parameter accepts a comma-separated list. Expand options include:   *  `sharedUsers` Returns the users that the filter is shared with. This includes users that can browse projects that the filter is shared with. If you don't specify `sharedUsers`, then the `sharedUsers` object is returned but it doesn't list any users. The list of users returned is limited to 1000, to access additional users append `[start-index:end-index]` to the expand request. For example, to access the next 1000 users, use `?expand=sharedUsers[1001:2000]`.  *  `subscriptions` Returns the users that are subscribed to the filter. If you don't specify `subscriptions`, the `subscriptions` object is returned but it doesn't list any subscriptions. The list of subscriptions returned is limited to 1000, to access additional subscriptions append `[start-index:end-index]` to the expand request. For example, to access the next 1000 subscriptions, use `?expand=subscriptions[1001:2000]`.
-  --overrideSharePermissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable the addition of any share permissions to filters. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --override-share-permissions: oneof<nothing, bool> # EXPERIMENTAL: Whether share permissions are overridden to enable the addition of any share permissions to filters. Available to users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --description: string # A description of the filter.
-  --editPermissions: list # The groups and projects that can edit the filter. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
+  --edit-permissions: list # The groups and projects that can edit the filter. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
   --favourite: oneof<nothing, bool> # Whether the filter is selected as a favorite.
   --jql: string # The JQL query for the filter. For example, *project = SSP AND issuetype = Bug*.
   name: string # The name of the filter. Must be unique.
-  --sharePermissions: list # The groups and projects that the filter is shared with. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
+  --share-permissions: list # The groups and projects that the filter is shared with. — item shape: {group?: any, project?: any, role?: any, type: "user"|"group"|"project"|"projectRole"|"global"|"loggedin"|"authenticated"|"project-unknown", user?: any}
 ]: any -> record<description: string, editPermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, favourite: bool, favouritedCount: int, id: string, jql: string, name: string, owner: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, searchUrl: string, self: string, sharePermissions: table<group: record, id: int, project: record, role: record, type: string, user: record>, sharedUsers: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, subscriptions: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>, viewUrl: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "overrideSharePermissions" $overrideSharePermissions "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)" $qp)
-  let body = {description: $description, editPermissions: $editPermissions, favourite: $favourite, jql: $jql, name: $name, sharePermissions: $sharePermissions} | compact
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "overrideSharePermissions" $override_share_permissions "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}") $qp)
+  let body = {"description": $description, "editPermissions": $edit_permissions, "favourite": $favourite, "jql": $jql, "name": $name, "sharePermissions": $share_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3250,7 +3250,7 @@ export def "rest-3-filter updateFilter" [
 #
 # DELETE /rest/api/3/filter/{id}/columns
 # operationId: resetColumns
-export def "rest-3-filter-columns resetColumns" [
+export def "rest-3-filter-columns reset" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3263,7 +3263,7 @@ export def "rest-3-filter-columns resetColumns" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)/columns")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3286,7 +3286,7 @@ export def "rest-3-filter-columns get" [
 ]: nothing -> table<label: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)/columns")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}/columns"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3311,7 +3311,7 @@ export def "rest-3-filter-columns setColumns" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)/columns")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}/columns"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3322,7 +3322,7 @@ export def "rest-3-filter-columns setColumns" [
 #
 # DELETE /rest/api/3/filter/{id}/favourite
 # operationId: deleteFavouriteForFilter
-export def "rest-3-filter-favourite delete" [
+export def "rest-3-filter-favourite delete-favourite-for" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3337,7 +3337,7 @@ export def "rest-3-filter-favourite delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)/favourite" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}/favourite") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3362,7 +3362,7 @@ export def "rest-3-filter-favourite setFavouriteForFilter" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)/favourite" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}/favourite") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3382,13 +3382,13 @@ export def "rest-3-filter-owner changeFilterOwner" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  accountId: string # The account ID of the new owner.
+  account_id: string # The account ID of the new owner.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)/owner")
-  let body = {accountId: $accountId} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}/owner"))
+  let body = {"accountId": $account_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3412,7 +3412,7 @@ export def "rest-3-filter-permission list" [
 ]: nothing -> table<group: record<groupId: string, name: string, self: string>, id: int, project: record<archived: bool, archivedBy: record, archivedDate: string, assigneeType: string, avatarUrls: record, components: list, deleted: bool, deletedBy: record, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record, isPrivate: bool, issueTypeHierarchy: record, issueTypes: list, key: string, landingPageInfo: record, lead: record, name: string, permissions: record, projectCategory: record, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: list>, role: record<actors: list, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record, self: string, translatedName: string>, type: string, user: record<accountId: string, active: bool, avatarUrls: record, displayName: string, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)/permission")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}/permission"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3422,7 +3422,7 @@ export def "rest-3-filter-permission list" [
 #
 # POST /rest/api/3/filter/{id}/permission
 # operationId: addSharePermission
-export def "rest-3-filter-permission addSharePermission" [
+export def "rest-3-filter-permission create-share" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3432,19 +3432,19 @@ export def "rest-3-filter-permission addSharePermission" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The user account ID that the filter is shared with. For a request, specify the `accountId` property for the user.
-  --groupId: string # The ID of the group, which uniquely identifies the group across all Atlassian products.For example, *952d12c3-5b5b-4d04-bb32-44d383afc4b2*. Cannot be provided with `groupname`.
+  --account-id: string # The user account ID that the filter is shared with. For a request, specify the `accountId` property for the user.
+  --group-id: string # The ID of the group, which uniquely identifies the group across all Atlassian products.For example, *952d12c3-5b5b-4d04-bb32-44d383afc4b2*. Cannot be provided with `groupname`.
   --groupname: string # The name of the group to share the filter with. Set `type` to `group`. Please note that the name of a group is mutable, to reliably identify a group use `groupId`.
-  --projectId: string # The ID of the project to share the filter with. Set `type` to `project`.
-  --projectRoleId: string # The ID of the project role to share the filter with. Set `type` to `projectRole` and the `projectId` for the project that the role is in.
+  --project-id: string # The ID of the project to share the filter with. Set `type` to `project`.
+  --project-role-id: string # The ID of the project role to share the filter with. Set `type` to `projectRole` and the `projectId` for the project that the role is in.
   --rights: int # The rights for the share permission. (format: int32)
   type: string@type-completer # The type of the share permission.Specify the type as follows:   *  `user` Share with a user.  *  `group` Share with a group. Specify `groupname` as well.  *  `project` Share with a project. Specify `projectId` as well.  *  `projectRole` Share with a project role in a project. Specify `projectId` and `projectRoleId` as well.  *  `global` Share globally, including anonymous users. If set, this type overrides all existing share permissions and must be deleted before any non-global share permissions is set.  *  `authenticated` Share with all logged-in users. This shows as `loggedin` in the response. If set, this type overrides all existing share permissions and must be deleted before any non-global share permissions is set.
 ]: any -> table<group: record<groupId: string, name: string, self: string>, id: int, project: record<archived: bool, archivedBy: record, archivedDate: string, assigneeType: string, avatarUrls: record, components: list, deleted: bool, deletedBy: record, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record, isPrivate: bool, issueTypeHierarchy: record, issueTypes: list, key: string, landingPageInfo: record, lead: record, name: string, permissions: record, projectCategory: record, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: list>, role: record<actors: list, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record, self: string, translatedName: string>, type: string, user: record<accountId: string, active: bool, avatarUrls: record, displayName: string, key: string, name: string, self: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)/permission")
-  let body = {accountId: $accountId, groupId: $groupId, groupname: $groupname, projectId: $projectId, projectRoleId: $projectRoleId, rights: $rights, type: $type} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/filter/{id}/permission"))
+  let body = {"accountId": $account_id, "groupId": $group_id, "groupname": $groupname, "projectId": $project_id, "projectRoleId": $project_role_id, "rights": $rights, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3455,9 +3455,9 @@ export def "rest-3-filter-permission addSharePermission" [
 #
 # DELETE /rest/api/3/filter/{id}/permission/{permissionId}
 # operationId: deleteSharePermission
-export def "rest-3-filter-permission delete" [
+export def "rest-3-filter-permission delete-share" [
   id: int
-  permissionId: int
+  permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3469,7 +3469,7 @@ export def "rest-3-filter-permission delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)/permission/($permissionId)")
+  let full_url = (build-url $base ({id: $id, permission_id: $permission_id} | format pattern "/rest/api/3/filter/{id}/permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3479,9 +3479,9 @@ export def "rest-3-filter-permission delete" [
 #
 # GET /rest/api/3/filter/{id}/permission/{permissionId}
 # operationId: getSharePermission
-export def "rest-3-filter-permission get" [
+export def "rest-3-filter-permission get-share" [
   id: int
-  permissionId: int
+  permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3493,7 +3493,7 @@ export def "rest-3-filter-permission get" [
 ]: nothing -> record<group: record<groupId: string, name: string, self: string>, id: int, project: record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: list<record>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list>, issueTypes: list<record>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: list<record>>, role: record<actors: list<record>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record, type: string>, self: string, translatedName: string>, type: string, user: record<accountId: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/filter/($id)/permission/($permissionId)")
+  let full_url = (build-url $base ({id: $id, permission_id: $permission_id} | format pattern "/rest/api/3/filter/{id}/permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -3503,7 +3503,7 @@ export def "rest-3-filter-permission get" [
 #
 # DELETE /rest/api/3/group
 # operationId: removeGroup
-export def "rest-3-group removeGroup" [
+export def "rest-3-group delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3513,13 +3513,13 @@ export def "rest-3-group removeGroup" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string
-  --groupId: string # The ID of the group. This parameter cannot be used with the `groupname` parameter.
-  --swapGroup: string # As a group's name can change, use of `swapGroupId` is recommended to identify a group.   The group to transfer restrictions to. Only comments and worklogs are transferred. If restrictions are not transferred, comments and worklogs are inaccessible after the deletion. This parameter cannot be used with the `swapGroupId` parameter.
-  --swapGroupId: string # The ID of the group to transfer restrictions to. Only comments and worklogs are transferred. If restrictions are not transferred, comments and worklogs are inaccessible after the deletion. This parameter cannot be used with the `swapGroup` parameter.
+  --group-id: string # The ID of the group. This parameter cannot be used with the `groupname` parameter.
+  --swap-group: string # As a group's name can change, use of `swapGroupId` is recommended to identify a group.   The group to transfer restrictions to. Only comments and worklogs are transferred. If restrictions are not transferred, comments and worklogs are inaccessible after the deletion. This parameter cannot be used with the `swapGroupId` parameter.
+  --swap-group-id: string # The ID of the group to transfer restrictions to. Only comments and worklogs are transferred. If restrictions are not transferred, comments and worklogs are inaccessible after the deletion. This parameter cannot be used with the `swapGroup` parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "swapGroup" $swapGroup "scalar") (serialize-qp "swapGroupId" $swapGroupId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "swapGroup" $swap_group "scalar") (serialize-qp "swapGroupId" $swap_group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3542,12 +3542,12 @@ export def "rest-3-group get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # As a group's name can change, use of `groupId` is recommended to identify a group.   The name of the group. This parameter cannot be used with the `groupId` parameter.
-  --groupId: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
+  --group-id: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
   --expand: string # List of fields to expand.
 ]: nothing -> record<expand: string, groupId: string, name: string, self: string, users: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3558,7 +3558,7 @@ export def "rest-3-group get" [
 #
 # POST /rest/api/3/group
 # operationId: createGroup
-export def "rest-3-group createGroup" [
+export def "rest-3-group create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3573,7 +3573,7 @@ export def "rest-3-group createGroup" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/group")
-  let body = {name: $name} | compact
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3593,16 +3593,16 @@ export def "rest-3-group-bulk bulkGetGroups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --groupId: list # The ID of a group. To specify multiple IDs, pass multiple `groupId` parameters. For example, `groupId=5b10a2844c20165700ede21g&groupId=5b10ac8d82e05b22cc7d4ef5`. (e.g. 3571b9a7-348f-414a-9087-8e1ea03a7df8)
-  --groupName: list # The name of a group. To specify multiple names, pass multiple `groupName` parameters. For example, `groupName=administrators&groupName=jira-software-users`.
-  --accessType: string # The access level of a group. Valid values: 'site-admin', 'admin', 'user'.
-  --applicationKey: string # The application key of the product user groups to search for. Valid values: 'jira-servicedesk', 'jira-software', 'jira-product-discovery', 'jira-core'.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --group-id: list # The ID of a group. To specify multiple IDs, pass multiple `groupId` parameters. For example, `groupId=5b10a2844c20165700ede21g&groupId=5b10ac8d82e05b22cc7d4ef5`. (e.g. 3571b9a7-348f-414a-9087-8e1ea03a7df8)
+  --group-name: list # The name of a group. To specify multiple names, pass multiple `groupName` parameters. For example, `groupName=administrators&groupName=jira-software-users`.
+  --access-type: string # The access level of a group. Valid values: 'site-admin', 'admin', 'user'.
+  --application-key: string # The application key of the product user groups to search for. Valid values: 'jira-servicedesk', 'jira-software', 'jira-product-discovery', 'jira-core'.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<groupId: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "groupId" $groupId "multi") (serialize-qp "groupName" $groupName "multi") (serialize-qp "accessType" $accessType "scalar") (serialize-qp "applicationKey" $applicationKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "groupId" $group_id "multi") (serialize-qp "groupName" $group_name "multi") (serialize-qp "accessType" $access_type "scalar") (serialize-qp "applicationKey" $application_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/group/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3613,7 +3613,7 @@ export def "rest-3-group-bulk bulkGetGroups" [
 #
 # GET /rest/api/3/group/member
 # operationId: getUsersFromGroup
-export def "rest-3-group-member get" [
+export def "rest-3-group-member get-users-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3623,14 +3623,14 @@ export def "rest-3-group-member get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # As a group's name can change, use of `groupId` is recommended to identify a group.   The name of the group. This parameter cannot be used with the `groupId` parameter.
-  --groupId: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
-  --includeInactiveUsers: oneof<nothing, bool> # Include inactive users. (default: false)
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --group-id: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
+  --include-inactive-users: oneof<nothing, bool> # Include inactive users. (default: false)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<accountId: string, accountType: string, active: bool, avatarUrls: record, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "includeInactiveUsers" $includeInactiveUsers "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "includeInactiveUsers" $include_inactive_users "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/group/member" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3641,7 +3641,7 @@ export def "rest-3-group-member get" [
 #
 # DELETE /rest/api/3/group/user
 # operationId: removeUserFromGroup
-export def "rest-3-group-user removeUserFromGroup" [
+export def "rest-3-group-user delete-user-from" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3651,13 +3651,13 @@ export def "rest-3-group-user removeUserFromGroup" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # As a group's name can change, use of `groupId` is recommended to identify a group.   The name of the group. This parameter cannot be used with the `groupId` parameter.
-  --groupId: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
+  --group-id: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/group/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3668,7 +3668,7 @@ export def "rest-3-group-user removeUserFromGroup" [
 #
 # POST /rest/api/3/group/user
 # operationId: addUserToGroup
-export def "rest-3-group-user addUserToGroup" [
+export def "rest-3-group-user create-user-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3678,16 +3678,16 @@ export def "rest-3-group-user addUserToGroup" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --groupname: string # As a group's name can change, use of `groupId` is recommended to identify a group.   The name of the group. This parameter cannot be used with the `groupId` parameter.
-  --groupId: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
+  --group-id: string # The ID of the group. This parameter cannot be used with the `groupName` parameter.
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*.
   --name: string # This property is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: any -> record<expand: string, groupId: string, name: string, self: string, users: record<end_index: int, items: list<record>, max_results: int, size: int, start_index: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $groupId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "groupname" $groupname "scalar") (serialize-qp "groupId" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/group/user" $qp)
-  let body = {accountId: $accountId, name: $name} | compact
+  let body = {"accountId": $account_id, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3707,17 +3707,17 @@ export def "rest-3-groups-picker findGroups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # This parameter is deprecated, setting it does not affect the results. To find groups containing a particular user, use [Get user groups](#api-rest-api-3-user-groups-get).
+  --account-id: string # This parameter is deprecated, setting it does not affect the results. To find groups containing a particular user, use [Get user groups](#api-rest-api-3-user-groups-get).
   --query: string # The string to find in group names. (e.g. query)
   --exclude: list # As a group's name can change, use of `excludeGroupIds` is recommended to identify a group.   A group to exclude from the result. To exclude multiple groups, provide an ampersand-separated list. For example, `exclude=group1&exclude=group2`. This parameter cannot be used with the `excludeGroupIds` parameter.
-  --excludeId: list # A group ID to exclude from the result. To exclude multiple groups, provide an ampersand-separated list. For example, `excludeId=group1-id&excludeId=group2-id`. This parameter cannot be used with the `excludeGroups` parameter.
-  --maxResults: int # The maximum number of groups to return. The maximum number of groups that can be returned is limited by the system property `jira.ajax.autocomplete.limit`. (format: int32)
-  --caseInsensitive: oneof<nothing, bool> # Whether the search for groups should be case insensitive. (default: false)
-  --userName: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
+  --exclude-id: list # A group ID to exclude from the result. To exclude multiple groups, provide an ampersand-separated list. For example, `excludeId=group1-id&excludeId=group2-id`. This parameter cannot be used with the `excludeGroups` parameter.
+  --max-results: int # The maximum number of groups to return. The maximum number of groups that can be returned is limited by the system property `jira.ajax.autocomplete.limit`. (format: int32)
+  --case-insensitive: oneof<nothing, bool> # Whether the search for groups should be case insensitive. (default: false)
+  --user-name: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> record<groups: table<groupId: string, html: string, labels: list, name: string>, header: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "exclude" $exclude "multi") (serialize-qp "excludeId" $excludeId "multi") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "caseInsensitive" $caseInsensitive "scalar") (serialize-qp "userName" $userName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "exclude" $exclude "multi") (serialize-qp "excludeId" $exclude_id "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "caseInsensitive" $case_insensitive "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/groups/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3738,18 +3738,18 @@ export def "rest-3-groupuserpicker findUsersAndGroups" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The search string.
-  --maxResults: int # The maximum number of items to return in each list. (format: int32, default: 50)
-  --showAvatar: oneof<nothing, bool> # Whether the user avatar should be returned. If an invalid value is provided, the default value is used. (default: false)
-  --fieldId: string # The custom field ID of the field this request is for.
-  --projectId: list # The ID of a project that returned users and groups must have permission to view. To include multiple projects, provide an ampersand-separated list. For example, `projectId=10000&projectId=10001`. This parameter is only used when `fieldId` is present.
-  --issueTypeId: list # The ID of an issue type that returned users and groups must have permission to view. To include multiple issue types, provide an ampersand-separated list. For example, `issueTypeId=10000&issueTypeId=10001`. Special values, such as `-1` (all standard issue types) and `-2` (all subtask issue types), are supported. This parameter is only used when `fieldId` is present.
-  --avatarSize: string@avatarSize-completer # The size of the avatar to return. If an invalid value is provided, the default value is used. (default: xsmall)
-  --caseInsensitive: oneof<nothing, bool> # Whether the search for groups should be case insensitive. (default: false)
-  --excludeConnectAddons: oneof<nothing, bool> # Whether Connect app users and groups should be excluded from the search results. If an invalid value is provided, the default value is used. (default: false)
+  --max-results: int # The maximum number of items to return in each list. (format: int32, default: 50)
+  --show-avatar: oneof<nothing, bool> # Whether the user avatar should be returned. If an invalid value is provided, the default value is used. (default: false)
+  --field-id: string # The custom field ID of the field this request is for.
+  --project-id: list # The ID of a project that returned users and groups must have permission to view. To include multiple projects, provide an ampersand-separated list. For example, `projectId=10000&projectId=10001`. This parameter is only used when `fieldId` is present.
+  --issue-type-id: list # The ID of an issue type that returned users and groups must have permission to view. To include multiple issue types, provide an ampersand-separated list. For example, `issueTypeId=10000&issueTypeId=10001`. Special values, such as `-1` (all standard issue types) and `-2` (all subtask issue types), are supported. This parameter is only used when `fieldId` is present.
+  --avatar-size: string@avatar-size-completer # The size of the avatar to return. If an invalid value is provided, the default value is used. (default: xsmall)
+  --case-insensitive: oneof<nothing, bool> # Whether the search for groups should be case insensitive. (default: false)
+  --exclude-connect-addons: oneof<nothing, bool> # Whether Connect app users and groups should be excluded from the search results. If an invalid value is provided, the default value is used. (default: false)
 ]: nothing -> record<groups: record<groups: list<record>, header: string, total: int>, users: record<header: string, total: int, users: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "fieldId" $fieldId "scalar") (serialize-qp "projectId" $projectId "multi") (serialize-qp "issueTypeId" $issueTypeId "multi") (serialize-qp "avatarSize" $avatarSize "scalar") (serialize-qp "caseInsensitive" $caseInsensitive "scalar") (serialize-qp "excludeConnectAddons" $excludeConnectAddons "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "showAvatar" $show_avatar "scalar") (serialize-qp "fieldId" $field_id "scalar") (serialize-qp "projectId" $project_id "multi") (serialize-qp "issueTypeId" $issue_type_id "multi") (serialize-qp "avatarSize" $avatar_size "scalar") (serialize-qp "caseInsensitive" $case_insensitive "scalar") (serialize-qp "excludeConnectAddons" $exclude_connect_addons "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/groupuserpicker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3783,7 +3783,7 @@ export def "rest-3-instance-license get" [
 # POST /rest/api/3/issue
 # operationId: createIssue
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue createIssue" [
+export def "rest-3-issue create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3792,9 +3792,9 @@ export def "rest-3-issue createIssue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateHistory: oneof<nothing, bool> # Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira. When provided, the issue type and request type are added to the user's history for a project. These values are then used to provide defaults on the issue create screen. (default: false)
+  --update-history: oneof<nothing, bool> # Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira. When provided, the issue type and request type are added to the user's history for a project. These values are then used to provide defaults on the issue create screen. (default: false)
   --fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
-  --historyMetadata: any # Additional issue history details.
+  --history-metadata: any # Additional issue history details.
   --properties: list # Details of issue properties to be add or update. — item shape: {key?: string, value?: any}
   --transition: any # Details of a transition. Required when performing a transition, optional when creating or editing an issue.
   --update: record # A Map containing the field field name and a list of operations to perform on the issue screen field. Note that fields included in here cannot be included in `fields`.
@@ -3802,9 +3802,9 @@ export def "rest-3-issue createIssue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateHistory" $updateHistory "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "updateHistory" $update_history "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issue" $qp)
-  let body = {fields: $fields, historyMetadata: $historyMetadata, properties: $properties, transition: $transition, update: $update} | compact
+  let body = {"fields": $fields, "historyMetadata": $history_metadata, "properties": $properties, "transition": $transition, "update": $update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3816,7 +3816,7 @@ export def "rest-3-issue createIssue" [
 # POST /rest/api/3/issue/bulk
 # operationId: createIssues
 # --issueUpdates item shape: {fields?: record, historyMetadata?: any, properties?: list, transition?: any, update?: record}
-export def "rest-3-issue-bulk createIssues" [
+export def "rest-3-issue-bulk create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3825,13 +3825,13 @@ export def "rest-3-issue-bulk createIssues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --issueUpdates: list # item shape: {fields?: record, historyMetadata?: any, properties?: list, transition?: any, update?: record}
+  --issue-updates: list # item shape: {fields?: record, historyMetadata?: any, properties?: list, transition?: any, update?: record}
 ]: any -> record<errors: table<elementErrors: record, failedElementNumber: int, status: int>, issues: table<id: string, key: string, self: string, transition: record, watchers: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issue/bulk")
-  let body = {issueUpdates: $issueUpdates} | compact
+  let body = {"issueUpdates": $issue_updates} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3842,7 +3842,7 @@ export def "rest-3-issue-bulk createIssues" [
 #
 # GET /rest/api/3/issue/createmeta
 # operationId: getCreateIssueMeta
-export def "rest-3-issue-createmeta get" [
+export def "rest-3-issue-createmeta get-create-issue-meta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3851,15 +3851,15 @@ export def "rest-3-issue-createmeta get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --projectIds: list # List of project IDs. This parameter accepts a comma-separated list. Multiple project IDs can also be provided using an ampersand-separated list. For example, `projectIds=10000,10001&projectIds=10020,10021`. This parameter may be provided with `projectKeys`.
-  --projectKeys: list # List of project keys. This parameter accepts a comma-separated list. Multiple project keys can also be provided using an ampersand-separated list. For example, `projectKeys=proj1,proj2&projectKeys=proj3`. This parameter may be provided with `projectIds`.
-  --issuetypeIds: list # List of issue type IDs. This parameter accepts a comma-separated list. Multiple issue type IDs can also be provided using an ampersand-separated list. For example, `issuetypeIds=10000,10001&issuetypeIds=10020,10021`. This parameter may be provided with `issuetypeNames`.
-  --issuetypeNames: list # List of issue type names. This parameter accepts a comma-separated list. Multiple issue type names can also be provided using an ampersand-separated list. For example, `issuetypeNames=name1,name2&issuetypeNames=name3`. This parameter may be provided with `issuetypeIds`.
+  --project-ids: list # List of project IDs. This parameter accepts a comma-separated list. Multiple project IDs can also be provided using an ampersand-separated list. For example, `projectIds=10000,10001&projectIds=10020,10021`. This parameter may be provided with `projectKeys`.
+  --project-keys: list # List of project keys. This parameter accepts a comma-separated list. Multiple project keys can also be provided using an ampersand-separated list. For example, `projectKeys=proj1,proj2&projectKeys=proj3`. This parameter may be provided with `projectIds`.
+  --issuetype-ids: list # List of issue type IDs. This parameter accepts a comma-separated list. Multiple issue type IDs can also be provided using an ampersand-separated list. For example, `issuetypeIds=10000,10001&issuetypeIds=10020,10021`. This parameter may be provided with `issuetypeNames`.
+  --issuetype-names: list # List of issue type names. This parameter accepts a comma-separated list. Multiple issue type names can also be provided using an ampersand-separated list. For example, `issuetypeNames=name1,name2&issuetypeNames=name3`. This parameter may be provided with `issuetypeIds`.
   --expand: string # Use [expand](#expansion) to include additional information about issue metadata in the response. This parameter accepts `projects.issuetypes.fields`, which returns information about the fields in the issue creation screen for each issue type. Fields hidden from the screen are not returned. Use the information to populate the `fields` and `update` fields in [Create issue](#api-rest-api-3-issue-post) and [Create issues](#api-rest-api-3-issue-bulk-post).
 ]: nothing -> record<expand: string, projects: table<avatarUrls: record, expand: string, id: string, issuetypes: list, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectIds" $projectIds "multi") (serialize-qp "projectKeys" $projectKeys "multi") (serialize-qp "issuetypeIds" $issuetypeIds "multi") (serialize-qp "issuetypeNames" $issuetypeNames "multi") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "projectIds" $project_ids "multi") (serialize-qp "projectKeys" $project_keys "multi") (serialize-qp "issuetypeIds" $issuetype_ids "multi") (serialize-qp "issuetypeNames" $issuetype_names "multi") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issue/createmeta" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3870,7 +3870,7 @@ export def "rest-3-issue-createmeta get" [
 #
 # GET /rest/api/3/issue/picker
 # operationId: getIssuePickerResource
-export def "rest-3-issue-picker get" [
+export def "rest-3-issue-picker get-issue-picker-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3880,15 +3880,15 @@ export def "rest-3-issue-picker get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A string to match against text fields in the issue such as title, description, or comments. (e.g. query)
-  --currentJQL: string # A JQL query defining a list of issues to search for the query term. Note that `username` and `userkey` cannot be used as search terms for this parameter, due to privacy reasons. Use `accountId` instead.
-  --currentIssueKey: string # The key of an issue to exclude from search results. For example, the issue the user is viewing when they perform this query.
-  --currentProjectId: string # The ID of a project that suggested issues must belong to.
-  --showSubTasks: oneof<nothing, bool> # Indicate whether to include subtasks in the suggestions list.
-  --showSubTaskParent: oneof<nothing, bool> # When `currentIssueKey` is a subtask, whether to include the parent issue in the suggestions if it matches the query.
+  --current-jql: string # A JQL query defining a list of issues to search for the query term. Note that `username` and `userkey` cannot be used as search terms for this parameter, due to privacy reasons. Use `accountId` instead.
+  --current-issue-key: string # The key of an issue to exclude from search results. For example, the issue the user is viewing when they perform this query.
+  --current-project-id: string # The ID of a project that suggested issues must belong to.
+  --show-sub-tasks: oneof<nothing, bool> # Indicate whether to include subtasks in the suggestions list.
+  --show-sub-task-parent: oneof<nothing, bool> # When `currentIssueKey` is a subtask, whether to include the parent issue in the suggestions if it matches the query.
 ]: nothing -> record<sections: table<id: string, issues: list, label: string, msg: string, sub: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "currentJQL" $currentJQL "scalar") (serialize-qp "currentIssueKey" $currentIssueKey "scalar") (serialize-qp "currentProjectId" $currentProjectId "scalar") (serialize-qp "showSubTasks" $showSubTasks "scalar") (serialize-qp "showSubTaskParent" $showSubTaskParent "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "currentJQL" $current_jql "scalar") (serialize-qp "currentIssueKey" $current_issue_key "scalar") (serialize-qp "currentProjectId" $current_project_id "scalar") (serialize-qp "showSubTasks" $show_sub_tasks "scalar") (serialize-qp "showSubTaskParent" $show_sub_task_parent "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issue/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3908,14 +3908,14 @@ export def "rest-3-issue-properties bulkSetIssuesPropertiesList" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --entitiesIds: list # A list of entity property IDs.
+  --entities-ids: list # A list of entity property IDs.
   --properties: record # A list of entity property keys and values.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issue/properties")
-  let body = {entitiesIds: $entitiesIds, properties: $properties} | compact
+  let body = {"entitiesIds": $entities_ids, "properties": $properties} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3942,7 +3942,7 @@ export def "rest-3-issue-properties-multi bulkSetIssuePropertiesByIssue" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issue/properties/multi")
-  let body = {issues: $issues} | compact
+  let body = {"issues": $issues} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3954,7 +3954,7 @@ export def "rest-3-issue-properties-multi bulkSetIssuePropertiesByIssue" [
 # DELETE /rest/api/3/issue/properties/{propertyKey}
 # operationId: bulkDeleteIssueProperty
 export def "rest-3-issue-properties bulkDeleteIssueProperty" [
-  propertyKey: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3963,14 +3963,14 @@ export def "rest-3-issue-properties bulkDeleteIssueProperty" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currentValue: any # The value of properties to perform the bulk operation on.
-  --entityIds: list # List of issues to perform the bulk delete operation on.
+  --current-value: any # The value of properties to perform the bulk operation on.
+  --entity-ids: list # List of issues to perform the bulk delete operation on.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/properties/($propertyKey)")
-  let body = {currentValue: $currentValue, entityIds: $entityIds} | compact
+  let full_url = (build-url $base ({property_key: $property_key} | format pattern "/rest/api/3/issue/properties/{property_key}"))
+  let body = {"currentValue": $current_value, "entityIds": $entity_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3982,7 +3982,7 @@ export def "rest-3-issue-properties bulkDeleteIssueProperty" [
 # PUT /rest/api/3/issue/properties/{propertyKey}
 # operationId: bulkSetIssueProperty
 export def "rest-3-issue-properties bulkSetIssueProperty" [
-  propertyKey: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3998,8 +3998,8 @@ export def "rest-3-issue-properties bulkSetIssueProperty" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/properties/($propertyKey)")
-  let body = {expression: $expression, filter: $filter, value: $value} | compact
+  let full_url = (build-url $base ({property_key: $property_key} | format pattern "/rest/api/3/issue/properties/{property_key}"))
+  let body = {"expression": $expression, "filter": $filter, "value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4010,7 +4010,7 @@ export def "rest-3-issue-properties bulkSetIssueProperty" [
 #
 # POST /rest/api/3/issue/watching
 # operationId: getIsWatchingIssueBulk
-export def "rest-3-issue-watching post" [
+export def "rest-3-issue-watching get-is-watching-issue-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4019,13 +4019,13 @@ export def "rest-3-issue-watching post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  issueIds: list # The list of issue IDs.
+  issue_ids: list # The list of issue IDs.
 ]: any -> record<issuesIsWatching: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issue/watching")
-  let body = {issueIds: $issueIds} | compact
+  let body = {"issueIds": $issue_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4037,7 +4037,7 @@ export def "rest-3-issue-watching post" [
 # DELETE /rest/api/3/issue/{issueIdOrKey}
 # operationId: deleteIssue
 export def "rest-3-issue delete" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4046,12 +4046,12 @@ export def "rest-3-issue delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --deleteSubtasks: string@deleteSubtasks-completer # Whether the issue's subtasks are deleted when the issue is deleted. (default: false)
+  --delete-subtasks: string@delete-subtasks-completer # Whether the issue's subtasks are deleted when the issue is deleted. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "deleteSubtasks" $deleteSubtasks "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)" $qp)
+  let qp = [(serialize-qp "deleteSubtasks" $delete_subtasks "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4062,7 +4062,7 @@ export def "rest-3-issue delete" [
 # GET /rest/api/3/issue/{issueIdOrKey}
 # operationId: getIssue
 export def "rest-3-issue get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4072,15 +4072,15 @@ export def "rest-3-issue get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list # A list of fields to return for the issue. This parameter accepts a comma-separated list. Use it to retrieve a subset of fields. Allowed values:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  Examples:   *  `summary,comment` Returns only the summary and comments fields.  *  `-description` Returns all (default) fields except description.  *  `*navigable,-comment` Returns all navigable fields except comment.  This parameter may be specified multiple times. For example, `fields=field1,field2& fields=field3`.  Note: All fields are returned by default. This differs from [Search for issues using JQL (GET)](#api-rest-api-3-search-get) and [Search for issues using JQL (POST)](#api-rest-api-3-search-post) where the default is all navigable fields.
-  --fieldsByKeys: oneof<nothing, bool> # Whether fields in `fields` are referenced by keys rather than IDs. This parameter is useful where fields have been added by a connect app and a field's key may differ from its ID. (default: false)
+  --fields-by-keys: oneof<nothing, bool> # Whether fields in `fields` are referenced by keys rather than IDs. This parameter is useful where fields have been added by a connect app and a field's key may differ from its ID. (default: false)
   --expand: string # Use [expand](#expansion) to include additional information about the issues in the response. This parameter accepts a comma-separated list. Expand options include:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Returns a JSON array for each version of a field's value, with the highest number representing the most recent version. Note: When included in the request, the `fields` parameter is ignored.
   --properties: list # A list of issue properties to return for the issue. This parameter accepts a comma-separated list. Allowed values:   *  `*all` Returns all issue properties.  *  Any issue property key, prefixed with a minus to exclude.  Examples:   *  `*all` Returns all properties.  *  `*all,-prop1` Returns all properties except `prop1`.  *  `prop1,prop2` Returns `prop1` and `prop2` properties.  This parameter may be specified multiple times. For example, `properties=prop1,prop2& properties=prop3`.
-  --updateHistory: oneof<nothing, bool> # Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira. This also populates the [JQL issues search](#api-rest-api-3-search-get) `lastViewed` field. (default: false)
+  --update-history: oneof<nothing, bool> # Whether the project in which the issue is created is added to the user's **Recently viewed** project list, as shown under **Projects** in Jira. This also populates the [JQL issues search](#api-rest-api-3-search-get) `lastViewed` field. (default: false)
 ]: nothing -> record<changelog: record<histories: list<record>, maxResults: int, startAt: int, total: int>, editmeta: record<fields: record>, expand: string, fields: record, fieldsToInclude: record<actuallyIncluded: list<string>, excluded: list<string>, included: list<string>>, id: string, key: string, names: record, operations: record<linkGroups: list<record>>, properties: record, renderedFields: record, schema: record, self: string, transitions: table<expand: string, fields: record, hasScreen: bool, id: string, isAvailable: bool, isConditional: bool, isGlobal: bool, isInitial: bool, looped: bool, name: string, to: record>, versionedRepresentations: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "fieldsByKeys" $fieldsByKeys "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi") (serialize-qp "updateHistory" $updateHistory "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)" $qp)
+  let qp = [(serialize-qp "fields" $fields "multi") (serialize-qp "fieldsByKeys" $fields_by_keys "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi") (serialize-qp "updateHistory" $update_history "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4092,7 +4092,7 @@ export def "rest-3-issue get" [
 # operationId: editIssue
 # --properties item shape: {key?: string, value?: any}
 export def "rest-3-issue editIssue" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4101,11 +4101,11 @@ export def "rest-3-issue editIssue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notifyUsers: oneof<nothing, bool> # Whether a notification email about the issue update is sent to all watchers. To disable the notification, administer Jira or administer project permissions are required. If the user doesn't have the necessary permission the request is ignored. (default: true)
-  --overrideScreenSecurity: oneof<nothing, bool> # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
-  --overrideEditableFlag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --notify-users: oneof<nothing, bool> # Whether a notification email about the issue update is sent to all watchers. To disable the notification, administer Jira or administer project permissions are required. If the user doesn't have the necessary permission the request is ignored. (default: true)
+  --override-screen-security: oneof<nothing, bool> # Whether screen security is overridden to enable hidden fields to be edited. Available to Connect app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --override-editable-flag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
-  --historyMetadata: any # Additional issue history details.
+  --history-metadata: any # Additional issue history details.
   --properties: list # Details of issue properties to be add or update. — item shape: {key?: string, value?: any}
   --transition: any # Details of a transition. Required when performing a transition, optional when creating or editing an issue.
   --update: record # A Map containing the field field name and a list of operations to perform on the issue screen field. Note that fields included in here cannot be included in `fields`.
@@ -4113,9 +4113,9 @@ export def "rest-3-issue editIssue" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "notifyUsers" $notifyUsers "scalar") (serialize-qp "overrideScreenSecurity" $overrideScreenSecurity "scalar") (serialize-qp "overrideEditableFlag" $overrideEditableFlag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)" $qp)
-  let body = {fields: $fields, historyMetadata: $historyMetadata, properties: $properties, transition: $transition, update: $update} | compact
+  let qp = [(serialize-qp "notifyUsers" $notify_users "scalar") (serialize-qp "overrideScreenSecurity" $override_screen_security "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}") $qp)
+  let body = {"fields": $fields, "historyMetadata": $history_metadata, "properties": $properties, "transition": $transition, "update": $update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4127,7 +4127,7 @@ export def "rest-3-issue editIssue" [
 # PUT /rest/api/3/issue/{issueIdOrKey}/assignee
 # operationId: assignIssue
 export def "rest-3-issue-assignee assignIssue" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4136,15 +4136,15 @@ export def "rest-3-issue-assignee assignIssue" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. Required in requests.
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. Required in requests.
   --key: string # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --name: string # This property is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/assignee")
-  let body = {accountId: $accountId, key: $key, name: $name} | compact
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/assignee"))
+  let body = {"accountId": $account_id, "key": $key, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4155,8 +4155,8 @@ export def "rest-3-issue-assignee assignIssue" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/attachments
 # operationId: addAttachment
-export def "rest-3-issue-attachments addAttachment" [
-  issueIdOrKey: string
+export def "rest-3-issue-attachments create" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4170,7 +4170,7 @@ export def "rest-3-issue-attachments addAttachment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/attachments")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/attachments"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4182,7 +4182,7 @@ export def "rest-3-issue-attachments addAttachment" [
 # GET /rest/api/3/issue/{issueIdOrKey}/changelog
 # operationId: getChangeLogs
 export def "rest-3-issue-changelog get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4191,13 +4191,13 @@ export def "rest-3-issue-changelog get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<author: record, created: string, historyMetadata: record, id: string, items: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/changelog" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/changelog") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4207,8 +4207,8 @@ export def "rest-3-issue-changelog get" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/changelog/list
 # operationId: getChangeLogsByIds
-export def "rest-3-issue-changelog-list post" [
-  issueIdOrKey: string
+export def "rest-3-issue-changelog-list get" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4217,13 +4217,13 @@ export def "rest-3-issue-changelog-list post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  changelogIds: list # The list of changelog IDs.
+  changelog_ids: list # The list of changelog IDs.
 ]: any -> record<histories: table<author: record, created: string, historyMetadata: record, id: string, items: list>, maxResults: int, startAt: int, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/changelog/list")
-  let body = {changelogIds: $changelogIds} | compact
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/changelog/list"))
+  let body = {"changelogIds": $changelog_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4235,7 +4235,7 @@ export def "rest-3-issue-changelog-list post" [
 # GET /rest/api/3/issue/{issueIdOrKey}/comment
 # operationId: getComments
 export def "rest-3-issue-comment list" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4244,15 +4244,15 @@ export def "rest-3-issue-comment list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 5000)
-  --orderBy: string@orderBy-completer-3 # [Order](#ordering) the results by a field. Accepts *created* to sort comments by their created date.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 5000)
+  --order-by: string@order-by-completer-3 # [Order](#ordering) the results by a field. Accepts *created* to sort comments by their created date.
   --expand: string # Use [expand](#expansion) to include additional information about comments in the response. This parameter accepts `renderedBody`, which returns the comment body rendered in HTML.
 ]: nothing -> record<comments: table<author: record, body: any, created: string, id: string, jsdAuthorCanSeeRequest: bool, jsdPublic: bool, properties: list, renderedBody: string, self: string, updateAuthor: record, updated: string, visibility: record>, maxResults: int, startAt: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/comment" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/comment") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4263,8 +4263,8 @@ export def "rest-3-issue-comment list" [
 # POST /rest/api/3/issue/{issueIdOrKey}/comment
 # operationId: addComment
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue-comment addComment" [
-  issueIdOrKey: string
+export def "rest-3-issue-comment create" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4282,8 +4282,8 @@ export def "rest-3-issue-comment addComment" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/comment" $qp)
-  let body = {body: $body_body, properties: $properties, visibility: $visibility} | compact
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/comment") $qp)
+  let body = {"body": $body_body, "properties": $properties, "visibility": $visibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4295,7 +4295,7 @@ export def "rest-3-issue-comment addComment" [
 # DELETE /rest/api/3/issue/{issueIdOrKey}/comment/{id}
 # operationId: deleteComment
 export def "rest-3-issue-comment delete" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4308,7 +4308,7 @@ export def "rest-3-issue-comment delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/comment/($id)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/rest/api/3/issue/{issue_id_or_key}/comment/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4319,7 +4319,7 @@ export def "rest-3-issue-comment delete" [
 # GET /rest/api/3/issue/{issueIdOrKey}/comment/{id}
 # operationId: getComment
 export def "rest-3-issue-comment get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4334,7 +4334,7 @@ export def "rest-3-issue-comment get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/comment/($id)" $qp)
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/rest/api/3/issue/{issue_id_or_key}/comment/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4345,8 +4345,8 @@ export def "rest-3-issue-comment get" [
 # PUT /rest/api/3/issue/{issueIdOrKey}/comment/{id}
 # operationId: updateComment
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue-comment updateComment" [
-  issueIdOrKey: string
+export def "rest-3-issue-comment update" [
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4356,8 +4356,8 @@ export def "rest-3-issue-comment updateComment" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notifyUsers: oneof<nothing, bool> # Whether users are notified when a comment is updated. (default: true)
-  --overrideEditableFlag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect app users with the *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --notify-users: oneof<nothing, bool> # Whether users are notified when a comment is updated. (default: true)
+  --override-editable-flag: oneof<nothing, bool> # Whether screen security is overridden to enable uneditable fields to be edited. Available to Connect app users with the *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
   --expand: string # Use [expand](#expansion) to include additional information about comments in the response. This parameter accepts `renderedBody`, which returns the comment body rendered in HTML.
   --body-body: any # The comment text in [Atlassian Document Format](https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/).
   --properties: list # A list of comment properties. Optional on create and update. — item shape: {key?: string, value?: any}
@@ -4366,9 +4366,9 @@ export def "rest-3-issue-comment updateComment" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "notifyUsers" $notifyUsers "scalar") (serialize-qp "overrideEditableFlag" $overrideEditableFlag "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/comment/($id)" $qp)
-  let body = {body: $body_body, properties: $properties, visibility: $visibility} | compact
+  let qp = [(serialize-qp "notifyUsers" $notify_users "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/rest/api/3/issue/{issue_id_or_key}/comment/{id}") $qp)
+  let body = {"body": $body_body, "properties": $properties, "visibility": $visibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4379,8 +4379,8 @@ export def "rest-3-issue-comment updateComment" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/editmeta
 # operationId: getEditIssueMeta
-export def "rest-3-issue-editmeta get" [
-  issueIdOrKey: string
+export def "rest-3-issue-editmeta get-edit-issue-meta" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4389,13 +4389,13 @@ export def "rest-3-issue-editmeta get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --overrideScreenSecurity: oneof<nothing, bool> # Whether hidden fields are returned. Available to Connect app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
-  --overrideEditableFlag: oneof<nothing, bool> # Whether non-editable fields are returned. Available to Connect app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --override-screen-security: oneof<nothing, bool> # Whether hidden fields are returned. Available to Connect app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
+  --override-editable-flag: oneof<nothing, bool> # Whether non-editable fields are returned. Available to Connect app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) and Forge apps acting on behalf of users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: false)
 ]: nothing -> record<fields: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "overrideScreenSecurity" $overrideScreenSecurity "scalar") (serialize-qp "overrideEditableFlag" $overrideEditableFlag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/editmeta" $qp)
+  let qp = [(serialize-qp "overrideScreenSecurity" $override_screen_security "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/editmeta") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4406,7 +4406,7 @@ export def "rest-3-issue-editmeta get" [
 # POST /rest/api/3/issue/{issueIdOrKey}/notify
 # operationId: notify
 export def "rest-3-issue-notify notify" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4415,17 +4415,17 @@ export def "rest-3-issue-notify notify" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --htmlBody: string # The HTML body of the email notification for the issue.
+  --html-body: string # The HTML body of the email notification for the issue.
   --restrict: any # Restricts the notifications to users with the specified permissions.
   --subject: string # The subject of the email notification for the issue. If this is not specified, then the subject is set to the issue key and summary.
-  --textBody: string # The plain text body of the email notification for the issue.
+  --text-body: string # The plain text body of the email notification for the issue.
   --body-to: any # The recipients of the email notification for the issue.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/notify")
-  let body = {htmlBody: $htmlBody, restrict: $restrict, subject: $subject, textBody: $textBody, to: $body_to} | compact
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/notify"))
+  let body = {"htmlBody": $html_body, "restrict": $restrict, "subject": $subject, "textBody": $text_body, "to": $body_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4436,8 +4436,8 @@ export def "rest-3-issue-notify notify" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/properties
 # operationId: getIssuePropertyKeys
-export def "rest-3-issue-properties list" [
-  issueIdOrKey: string
+export def "rest-3-issue-properties get-issue-property-keys" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4449,7 +4449,7 @@ export def "rest-3-issue-properties list" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/properties")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4459,9 +4459,9 @@ export def "rest-3-issue-properties list" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/properties/{propertyKey}
 # operationId: deleteIssueProperty
-export def "rest-3-issue-properties delete" [
-  issueIdOrKey: string
-  propertyKey: string
+export def "rest-3-issue-properties delete-issue-property" [
+  issue_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4473,7 +4473,7 @@ export def "rest-3-issue-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, property_key: $property_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4483,9 +4483,9 @@ export def "rest-3-issue-properties delete" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/properties/{propertyKey}
 # operationId: getIssueProperty
-export def "rest-3-issue-properties get" [
-  issueIdOrKey: string
-  propertyKey: string
+export def "rest-3-issue-properties get-issue-property" [
+  issue_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4497,7 +4497,7 @@ export def "rest-3-issue-properties get" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, property_key: $property_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4508,8 +4508,8 @@ export def "rest-3-issue-properties get" [
 # PUT /rest/api/3/issue/{issueIdOrKey}/properties/{propertyKey}
 # operationId: setIssueProperty
 export def "rest-3-issue-properties setIssueProperty" [
-  issueIdOrKey: string
-  propertyKey: string
+  issue_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4523,7 +4523,7 @@ export def "rest-3-issue-properties setIssueProperty" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, property_key: $property_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/properties/{property_key}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4534,8 +4534,8 @@ export def "rest-3-issue-properties setIssueProperty" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/remotelink
 # operationId: deleteRemoteIssueLinkByGlobalId
-export def "rest-3-issue-remotelink delete-by-issueIdOrKey" [
-  issueIdOrKey: string
+export def "rest-3-issue-remotelink delete-remote-issue-link-by-issueIdOrKey" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4544,12 +4544,12 @@ export def "rest-3-issue-remotelink delete-by-issueIdOrKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --globalId: string # The global ID of a remote issue link. (e.g. system=http://www.mycompany.com/support&id=1)
+  --global-id: string # The global ID of a remote issue link. (e.g. system=http://www.mycompany.com/support&id=1)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "globalId" $globalId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/remotelink" $qp)
+  let qp = [(serialize-qp "globalId" $global_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4559,8 +4559,8 @@ export def "rest-3-issue-remotelink delete-by-issueIdOrKey" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/remotelink
 # operationId: getRemoteIssueLinks
-export def "rest-3-issue-remotelink list" [
-  issueIdOrKey: string
+export def "rest-3-issue-remotelink get-remote-issue-links" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4569,12 +4569,12 @@ export def "rest-3-issue-remotelink list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --globalId: string # The global ID of the remote issue link.
+  --global-id: string # The global ID of the remote issue link.
 ]: nothing -> record<application: record<name: string, type: string>, globalId: string, id: int, object: record<icon: record<link: string, title: string, url16x16: string>, status: record<icon: record, resolved: bool>, summary: string, title: string, url: string>, relationship: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "globalId" $globalId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/remotelink" $qp)
+  let qp = [(serialize-qp "globalId" $global_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4584,8 +4584,8 @@ export def "rest-3-issue-remotelink list" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/remotelink
 # operationId: createOrUpdateRemoteIssueLink
-export def "rest-3-issue-remotelink createOrUpdateRemoteIssueLink" [
-  issueIdOrKey: string
+export def "rest-3-issue-remotelink create-or-update-remote-issue-link" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4595,15 +4595,15 @@ export def "rest-3-issue-remotelink createOrUpdateRemoteIssueLink" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --application: any # Details of the remote application the linked item is in. For example, trello.
-  --globalId: string # An identifier for the remote item in the remote system. For example, the global ID for a remote item in Confluence would consist of the app ID and page ID, like this: `appId=456&pageId=123`.  Setting this field enables the remote issue link details to be updated or deleted using remote system and item details as the record identifier, rather than using the record's Jira ID.  The maximum length is 255 characters.
+  --global-id: string # An identifier for the remote item in the remote system. For example, the global ID for a remote item in Confluence would consist of the app ID and page ID, like this: `appId=456&pageId=123`.  Setting this field enables the remote issue link details to be updated or deleted using remote system and item details as the record identifier, rather than using the record's Jira ID.  The maximum length is 255 characters.
   object: any # Details of the item linked to.
   --relationship: string # Description of the relationship between the issue and the linked item. If not set, the relationship description "links to" is used in Jira.
 ]: any -> record<id: int, self: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/remotelink")
-  let body = {application: $application, globalId: $globalId, object: $object, relationship: $relationship} | compact
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink"))
+  let body = {"application": $application, "globalId": $global_id, "object": $object, "relationship": $relationship} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4614,9 +4614,9 @@ export def "rest-3-issue-remotelink createOrUpdateRemoteIssueLink" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: deleteRemoteIssueLinkById
-export def "rest-3-issue-remotelink delete-by-issueIdOrKey-linkId" [
-  issueIdOrKey: string
-  linkId: string
+export def "rest-3-issue-remotelink delete-remote-issue-link-by-issueIdOrKey-linkId" [
+  issue_id_or_key: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4628,7 +4628,7 @@ export def "rest-3-issue-remotelink delete-by-issueIdOrKey-linkId" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/remotelink/($linkId)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, link_id: $link_id} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4638,9 +4638,9 @@ export def "rest-3-issue-remotelink delete-by-issueIdOrKey-linkId" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: getRemoteIssueLinkById
-export def "rest-3-issue-remotelink get" [
-  issueIdOrKey: string
-  linkId: string
+export def "rest-3-issue-remotelink get-remote-issue-link" [
+  issue_id_or_key: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4652,7 +4652,7 @@ export def "rest-3-issue-remotelink get" [
 ]: nothing -> record<application: record<name: string, type: string>, globalId: string, id: int, object: record<icon: record<link: string, title: string, url16x16: string>, status: record<icon: record, resolved: bool>, summary: string, title: string, url: string>, relationship: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/remotelink/($linkId)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, link_id: $link_id} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4662,9 +4662,9 @@ export def "rest-3-issue-remotelink get" [
 #
 # PUT /rest/api/3/issue/{issueIdOrKey}/remotelink/{linkId}
 # operationId: updateRemoteIssueLink
-export def "rest-3-issue-remotelink updateRemoteIssueLink" [
-  issueIdOrKey: string
-  linkId: string
+export def "rest-3-issue-remotelink update-remote-issue-link" [
+  issue_id_or_key: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4674,15 +4674,15 @@ export def "rest-3-issue-remotelink updateRemoteIssueLink" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --application: any # Details of the remote application the linked item is in. For example, trello.
-  --globalId: string # An identifier for the remote item in the remote system. For example, the global ID for a remote item in Confluence would consist of the app ID and page ID, like this: `appId=456&pageId=123`.  Setting this field enables the remote issue link details to be updated or deleted using remote system and item details as the record identifier, rather than using the record's Jira ID.  The maximum length is 255 characters.
+  --global-id: string # An identifier for the remote item in the remote system. For example, the global ID for a remote item in Confluence would consist of the app ID and page ID, like this: `appId=456&pageId=123`.  Setting this field enables the remote issue link details to be updated or deleted using remote system and item details as the record identifier, rather than using the record's Jira ID.  The maximum length is 255 characters.
   object: any # Details of the item linked to.
   --relationship: string # Description of the relationship between the issue and the linked item. If not set, the relationship description "links to" is used in Jira.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/remotelink/($linkId)")
-  let body = {application: $application, globalId: $globalId, object: $object, relationship: $relationship} | compact
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, link_id: $link_id} | format pattern "/rest/api/3/issue/{issue_id_or_key}/remotelink/{link_id}"))
+  let body = {"application": $application, "globalId": $global_id, "object": $object, "relationship": $relationship} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4694,7 +4694,7 @@ export def "rest-3-issue-remotelink updateRemoteIssueLink" [
 # GET /rest/api/3/issue/{issueIdOrKey}/transitions
 # operationId: getTransitions
 export def "rest-3-issue-transitions get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4704,15 +4704,15 @@ export def "rest-3-issue-transitions get" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information about transitions in the response. This parameter accepts `transitions.fields`, which returns information about the fields in the transition screen for each transition. Fields hidden from the screen are not returned. Use this information to populate the `fields` and `update` fields in [Transition issue](#api-rest-api-3-issue-issueIdOrKey-transitions-post).
-  --transitionId: string # The ID of the transition.
-  --skipRemoteOnlyCondition: oneof<nothing, bool> # Whether transitions with the condition *Hide From User Condition* are included in the response. (default: false)
-  --includeUnavailableTransitions: oneof<nothing, bool> # Whether details of transitions that fail a condition are included in the response (default: false)
-  --sortByOpsBarAndStatus: oneof<nothing, bool> # Whether the transitions are sorted by ops-bar sequence value first then category order (Todo, In Progress, Done) or only by ops-bar sequence value. (default: false)
+  --transition-id: string # The ID of the transition.
+  --skip-remote-only-condition: oneof<nothing, bool> # Whether transitions with the condition *Hide From User Condition* are included in the response. (default: false)
+  --include-unavailable-transitions: oneof<nothing, bool> # Whether details of transitions that fail a condition are included in the response (default: false)
+  --sort-by-ops-bar-and-status: oneof<nothing, bool> # Whether the transitions are sorted by ops-bar sequence value first then category order (Todo, In Progress, Done) or only by ops-bar sequence value. (default: false)
 ]: nothing -> record<expand: string, transitions: table<expand: string, fields: record, hasScreen: bool, id: string, isAvailable: bool, isConditional: bool, isGlobal: bool, isInitial: bool, looped: bool, name: string, to: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "transitionId" $transitionId "scalar") (serialize-qp "skipRemoteOnlyCondition" $skipRemoteOnlyCondition "scalar") (serialize-qp "includeUnavailableTransitions" $includeUnavailableTransitions "scalar") (serialize-qp "sortByOpsBarAndStatus" $sortByOpsBarAndStatus "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/transitions" $qp)
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "transitionId" $transition_id "scalar") (serialize-qp "skipRemoteOnlyCondition" $skip_remote_only_condition "scalar") (serialize-qp "includeUnavailableTransitions" $include_unavailable_transitions "scalar") (serialize-qp "sortByOpsBarAndStatus" $sort_by_ops_bar_and_status "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/transitions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4724,7 +4724,7 @@ export def "rest-3-issue-transitions get" [
 # operationId: doTransition
 # --properties item shape: {key?: string, value?: any}
 export def "rest-3-issue-transitions doTransition" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4734,7 +4734,7 @@ export def "rest-3-issue-transitions doTransition" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: record # List of issue screen fields to update, specifying the sub-field to update and its value for each field. This field provides a straightforward option when setting a sub-field. When multiple sub-fields or other operations are required, use `update`. Fields included in here cannot be included in `update`.
-  --historyMetadata: any # Additional issue history details.
+  --history-metadata: any # Additional issue history details.
   --properties: list # Details of issue properties to be add or update. — item shape: {key?: string, value?: any}
   --transition: any # Details of a transition. Required when performing a transition, optional when creating or editing an issue.
   --update: record # A Map containing the field field name and a list of operations to perform on the issue screen field. Note that fields included in here cannot be included in `fields`.
@@ -4742,8 +4742,8 @@ export def "rest-3-issue-transitions doTransition" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/transitions")
-  let body = {fields: $fields, historyMetadata: $historyMetadata, properties: $properties, transition: $transition, update: $update} | compact
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/transitions"))
+  let body = {"fields": $fields, "historyMetadata": $history_metadata, "properties": $properties, "transition": $transition, "update": $update} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4754,8 +4754,8 @@ export def "rest-3-issue-transitions doTransition" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/votes
 # operationId: removeVote
-export def "rest-3-issue-votes removeVote" [
-  issueIdOrKey: string
+export def "rest-3-issue-votes delete" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4767,7 +4767,7 @@ export def "rest-3-issue-votes removeVote" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/votes")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/votes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4778,7 +4778,7 @@ export def "rest-3-issue-votes removeVote" [
 # GET /rest/api/3/issue/{issueIdOrKey}/votes
 # operationId: getVotes
 export def "rest-3-issue-votes get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4790,7 +4790,7 @@ export def "rest-3-issue-votes get" [
 ]: nothing -> record<hasVoted: bool, self: string, voters: table<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, votes: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/votes")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/votes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4800,8 +4800,8 @@ export def "rest-3-issue-votes get" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/votes
 # operationId: addVote
-export def "rest-3-issue-votes addVote" [
-  issueIdOrKey: string
+export def "rest-3-issue-votes create" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4813,7 +4813,7 @@ export def "rest-3-issue-votes addVote" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/votes")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/votes"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4823,8 +4823,8 @@ export def "rest-3-issue-votes addVote" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/watchers
 # operationId: removeWatcher
-export def "rest-3-issue-watchers removeWatcher" [
-  issueIdOrKey: string
+export def "rest-3-issue-watchers delete" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4834,12 +4834,12 @@ export def "rest-3-issue-watchers removeWatcher" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. Required. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. Required. (e.g. 5b10ac8d82e05b22cc7d4ef5)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/watchers" $qp)
+  let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "accountId" $account_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/watchers") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4850,7 +4850,7 @@ export def "rest-3-issue-watchers removeWatcher" [
 # GET /rest/api/3/issue/{issueIdOrKey}/watchers
 # operationId: getIssueWatchers
 export def "rest-3-issue-watchers get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4862,7 +4862,7 @@ export def "rest-3-issue-watchers get" [
 ]: nothing -> record<isWatching: bool, self: string, watchCount: int, watchers: table<accountId: string, accountType: string, active: bool, avatarUrls: record, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/watchers")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/watchers"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4872,8 +4872,8 @@ export def "rest-3-issue-watchers get" [
 #
 # POST /rest/api/3/issue/{issueIdOrKey}/watchers
 # operationId: addWatcher
-export def "rest-3-issue-watchers addWatcher" [
-  issueIdOrKey: string
+export def "rest-3-issue-watchers create" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4887,7 +4887,7 @@ export def "rest-3-issue-watchers addWatcher" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/watchers")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/watchers"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4899,7 +4899,7 @@ export def "rest-3-issue-watchers addWatcher" [
 # GET /rest/api/3/issue/{issueIdOrKey}/worklog
 # operationId: getIssueWorklog
 export def "rest-3-issue-worklog list" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4908,16 +4908,16 @@ export def "rest-3-issue-worklog list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 5000)
-  --startedAfter: int # The worklog start date and time, as a UNIX timestamp in milliseconds, after which worklogs are returned. (format: int64)
-  --startedBefore: int # The worklog start date and time, as a UNIX timestamp in milliseconds, before which worklogs are returned. (format: int64)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 5000)
+  --started-after: int # The worklog start date and time, as a UNIX timestamp in milliseconds, after which worklogs are returned. (format: int64)
+  --started-before: int # The worklog start date and time, as a UNIX timestamp in milliseconds, before which worklogs are returned. (format: int64)
   --expand: string # Use [expand](#expansion) to include additional information about worklogs in the response. This parameter accepts`properties`, which returns worklog properties. (default: )
 ]: nothing -> record<maxResults: int, startAt: int, total: int, worklogs: table<author: record, comment: any, created: string, id: string, issueId: string, properties: list, self: string, started: string, timeSpent: string, timeSpentSeconds: int, updateAuthor: record, updated: string, visibility: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "startedAfter" $startedAfter "scalar") (serialize-qp "startedBefore" $startedBefore "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startedAfter" $started_after "scalar") (serialize-qp "startedBefore" $started_before "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4928,8 +4928,8 @@ export def "rest-3-issue-worklog list" [
 # POST /rest/api/3/issue/{issueIdOrKey}/worklog
 # operationId: addWorklog
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue-worklog addWorklog" [
-  issueIdOrKey: string
+export def "rest-3-issue-worklog create" [
+  issue_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4938,25 +4938,25 @@ export def "rest-3-issue-worklog addWorklog" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notifyUsers: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
-  --adjustEstimate: string@adjustEstimate-completer # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `manual` Reduces the estimate by amount specified in `reduceBy`.  *  `auto` Reduces the estimate by the value of `timeSpent` in the worklog. (default: auto)
-  --newEstimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
-  --reduceBy: string # The amount to reduce the issue's remaining estimate by, as days (\#d), hours (\#h), or minutes (\#m). For example, *2d*. Required when `adjustEstimate` is `manual`.
+  --notify-users: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
+  --adjust-estimate: string@adjust-estimate-completer # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `manual` Reduces the estimate by amount specified in `reduceBy`.  *  `auto` Reduces the estimate by the value of `timeSpent` in the worklog. (default: auto)
+  --new-estimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
+  --reduce-by: string # The amount to reduce the issue's remaining estimate by, as days (\#d), hours (\#h), or minutes (\#m). For example, *2d*. Required when `adjustEstimate` is `manual`.
   --expand: string # Use [expand](#expansion) to include additional information about work logs in the response. This parameter accepts `properties`, which returns worklog properties. (default: )
-  --overrideEditableFlag: oneof<nothing, bool> # Whether the worklog entry should be added to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) can use this flag. (default: false)
+  --override-editable-flag: oneof<nothing, bool> # Whether the worklog entry should be added to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) can use this flag. (default: false)
   --comment: any # A comment about the worklog in [Atlassian Document Format](https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/). Optional when creating or updating a worklog.
   --properties: list # Details of properties for the worklog. Optional when creating or updating a worklog. — item shape: {key?: string, value?: any}
   --started: string # The datetime on which the worklog effort was started. Required when creating a worklog. Optional when updating a worklog. (format: date-time)
-  --timeSpent: string # The time spent working on the issue as days (\#d), hours (\#h), or minutes (\#m or \#). Required when creating a worklog if `timeSpentSeconds` isn't provided. Optional when updating a worklog. Cannot be provided if `timeSpentSecond` is provided.
-  --timeSpentSeconds: int # The time in seconds spent working on the issue. Required when creating a worklog if `timeSpent` isn't provided. Optional when updating a worklog. Cannot be provided if `timeSpent` is provided. (format: int64)
+  --time-spent: string # The time spent working on the issue as days (\#d), hours (\#h), or minutes (\#m or \#). Required when creating a worklog if `timeSpentSeconds` isn't provided. Optional when updating a worklog. Cannot be provided if `timeSpentSecond` is provided.
+  --time-spent-seconds: int # The time in seconds spent working on the issue. Required when creating a worklog if `timeSpent` isn't provided. Optional when updating a worklog. Cannot be provided if `timeSpent` is provided. (format: int64)
   --visibility: any # Details about any restrictions in the visibility of the worklog. Optional when creating or updating a worklog.
 ]: any -> record<author: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, comment: any, created: string, id: string, issueId: string, properties: table<key: string, value: any>, self: string, started: string, timeSpent: string, timeSpentSeconds: int, updateAuthor: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, updated: string, visibility: record<identifier: string, type: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "notifyUsers" $notifyUsers "scalar") (serialize-qp "adjustEstimate" $adjustEstimate "scalar") (serialize-qp "newEstimate" $newEstimate "scalar") (serialize-qp "reduceBy" $reduceBy "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "overrideEditableFlag" $overrideEditableFlag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog" $qp)
-  let body = {comment: $comment, properties: $properties, started: $started, timeSpent: $timeSpent, timeSpentSeconds: $timeSpentSeconds, visibility: $visibility} | compact
+  let qp = [(serialize-qp "notifyUsers" $notify_users "scalar") (serialize-qp "adjustEstimate" $adjust_estimate "scalar") (serialize-qp "newEstimate" $new_estimate "scalar") (serialize-qp "reduceBy" $reduce_by "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog") $qp)
+  let body = {"comment": $comment, "properties": $properties, "started": $started, "timeSpent": $time_spent, "timeSpentSeconds": $time_spent_seconds, "visibility": $visibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4968,7 +4968,7 @@ export def "rest-3-issue-worklog addWorklog" [
 # DELETE /rest/api/3/issue/{issueIdOrKey}/worklog/{id}
 # operationId: deleteWorklog
 export def "rest-3-issue-worklog delete" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4978,16 +4978,16 @@ export def "rest-3-issue-worklog delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notifyUsers: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
-  --adjustEstimate: string@adjustEstimate-completer # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `manual` Increases the estimate by amount specified in `increaseBy`.  *  `auto` Reduces the estimate by the value of `timeSpent` in the worklog. (default: auto)
-  --newEstimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
-  --increaseBy: string # The amount to increase the issue's remaining estimate by, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `manual`.
-  --overrideEditableFlag: oneof<nothing, bool> # Whether the work log entry should be added to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with admin permission can use this flag. (default: false)
+  --notify-users: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
+  --adjust-estimate: string@adjust-estimate-completer # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `manual` Increases the estimate by amount specified in `increaseBy`.  *  `auto` Reduces the estimate by the value of `timeSpent` in the worklog. (default: auto)
+  --new-estimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
+  --increase-by: string # The amount to increase the issue's remaining estimate by, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `manual`.
+  --override-editable-flag: oneof<nothing, bool> # Whether the work log entry should be added to the issue even if the issue is not editable, because jira.issue.editable set to false or missing. For example, the issue is closed. Connect and Forge app users with admin permission can use this flag. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "notifyUsers" $notifyUsers "scalar") (serialize-qp "adjustEstimate" $adjustEstimate "scalar") (serialize-qp "newEstimate" $newEstimate "scalar") (serialize-qp "increaseBy" $increaseBy "scalar") (serialize-qp "overrideEditableFlag" $overrideEditableFlag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($id)" $qp)
+  let qp = [(serialize-qp "notifyUsers" $notify_users "scalar") (serialize-qp "adjustEstimate" $adjust_estimate "scalar") (serialize-qp "newEstimate" $new_estimate "scalar") (serialize-qp "increaseBy" $increase_by "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -4998,7 +4998,7 @@ export def "rest-3-issue-worklog delete" [
 # GET /rest/api/3/issue/{issueIdOrKey}/worklog/{id}
 # operationId: getWorklog
 export def "rest-3-issue-worklog get" [
-  issueIdOrKey: string
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5013,7 +5013,7 @@ export def "rest-3-issue-worklog get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($id)" $qp)
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5024,8 +5024,8 @@ export def "rest-3-issue-worklog get" [
 # PUT /rest/api/3/issue/{issueIdOrKey}/worklog/{id}
 # operationId: updateWorklog
 # --properties item shape: {key?: string, value?: any}
-export def "rest-3-issue-worklog updateWorklog" [
-  issueIdOrKey: string
+export def "rest-3-issue-worklog update" [
+  issue_id_or_key: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5035,24 +5035,24 @@ export def "rest-3-issue-worklog updateWorklog" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --notifyUsers: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
-  --adjustEstimate: string@adjustEstimate-completer # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `auto` Updates the estimate by the difference between the original and updated value of `timeSpent` or `timeSpentSeconds`. (default: auto)
-  --newEstimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
+  --notify-users: oneof<nothing, bool> # Whether users watching the issue are notified by email. (default: true)
+  --adjust-estimate: string@adjust-estimate-completer # Defines how to update the issue's time estimate, the options are:   *  `new` Sets the estimate to a specific value, defined in `newEstimate`.  *  `leave` Leaves the estimate unchanged.  *  `auto` Updates the estimate by the difference between the original and updated value of `timeSpent` or `timeSpentSeconds`. (default: auto)
+  --new-estimate: string # The value to set as the issue's remaining time estimate, as days (\#d), hours (\#h), or minutes (\#m or \#). For example, *2d*. Required when `adjustEstimate` is `new`.
   --expand: string # Use [expand](#expansion) to include additional information about worklogs in the response. This parameter accepts `properties`, which returns worklog properties. (default: )
-  --overrideEditableFlag: oneof<nothing, bool> # Whether the worklog should be added to the issue even if the issue is not editable. For example, because the issue is closed. Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) can use this flag. (default: false)
+  --override-editable-flag: oneof<nothing, bool> # Whether the worklog should be added to the issue even if the issue is not editable. For example, because the issue is closed. Connect and Forge app users with *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg) can use this flag. (default: false)
   --comment: any # A comment about the worklog in [Atlassian Document Format](https://developer.atlassian.com/cloud/jira/platform/apis/document/structure/). Optional when creating or updating a worklog.
   --properties: list # Details of properties for the worklog. Optional when creating or updating a worklog. — item shape: {key?: string, value?: any}
   --started: string # The datetime on which the worklog effort was started. Required when creating a worklog. Optional when updating a worklog. (format: date-time)
-  --timeSpent: string # The time spent working on the issue as days (\#d), hours (\#h), or minutes (\#m or \#). Required when creating a worklog if `timeSpentSeconds` isn't provided. Optional when updating a worklog. Cannot be provided if `timeSpentSecond` is provided.
-  --timeSpentSeconds: int # The time in seconds spent working on the issue. Required when creating a worklog if `timeSpent` isn't provided. Optional when updating a worklog. Cannot be provided if `timeSpent` is provided. (format: int64)
+  --time-spent: string # The time spent working on the issue as days (\#d), hours (\#h), or minutes (\#m or \#). Required when creating a worklog if `timeSpentSeconds` isn't provided. Optional when updating a worklog. Cannot be provided if `timeSpentSecond` is provided.
+  --time-spent-seconds: int # The time in seconds spent working on the issue. Required when creating a worklog if `timeSpent` isn't provided. Optional when updating a worklog. Cannot be provided if `timeSpent` is provided. (format: int64)
   --visibility: any # Details about any restrictions in the visibility of the worklog. Optional when creating or updating a worklog.
 ]: any -> record<author: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, comment: any, created: string, id: string, issueId: string, properties: table<key: string, value: any>, self: string, started: string, timeSpent: string, timeSpentSeconds: int, updateAuthor: record<accountId: string, accountType: string, active: bool, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, key: string, name: string, self: string, timeZone: string>, updated: string, visibility: record<identifier: string, type: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "notifyUsers" $notifyUsers "scalar") (serialize-qp "adjustEstimate" $adjustEstimate "scalar") (serialize-qp "newEstimate" $newEstimate "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "overrideEditableFlag" $overrideEditableFlag "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($id)" $qp)
-  let body = {comment: $comment, properties: $properties, started: $started, timeSpent: $timeSpent, timeSpentSeconds: $timeSpentSeconds, visibility: $visibility} | compact
+  let qp = [(serialize-qp "notifyUsers" $notify_users "scalar") (serialize-qp "adjustEstimate" $adjust_estimate "scalar") (serialize-qp "newEstimate" $new_estimate "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "overrideEditableFlag" $override_editable_flag "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, id: $id} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{id}") $qp)
+  let body = {"comment": $comment, "properties": $properties, "started": $started, "timeSpent": $time_spent, "timeSpentSeconds": $time_spent_seconds, "visibility": $visibility} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5063,9 +5063,9 @@ export def "rest-3-issue-worklog updateWorklog" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/worklog/{worklogId}/properties
 # operationId: getWorklogPropertyKeys
-export def "rest-3-issue-worklog-properties list" [
-  issueIdOrKey: string
-  worklogId: string
+export def "rest-3-issue-worklog-properties get-worklog-property-keys" [
+  issue_id_or_key: string
+  worklog_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5077,7 +5077,7 @@ export def "rest-3-issue-worklog-properties list" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($worklogId)/properties")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, worklog_id: $worklog_id} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{worklog_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5087,10 +5087,10 @@ export def "rest-3-issue-worklog-properties list" [
 #
 # DELETE /rest/api/3/issue/{issueIdOrKey}/worklog/{worklogId}/properties/{propertyKey}
 # operationId: deleteWorklogProperty
-export def "rest-3-issue-worklog-properties delete" [
-  issueIdOrKey: string
-  worklogId: string
-  propertyKey: string
+export def "rest-3-issue-worklog-properties delete-worklog-property" [
+  issue_id_or_key: string
+  worklog_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5102,7 +5102,7 @@ export def "rest-3-issue-worklog-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($worklogId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, worklog_id: $worklog_id, property_key: $property_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{worklog_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5112,10 +5112,10 @@ export def "rest-3-issue-worklog-properties delete" [
 #
 # GET /rest/api/3/issue/{issueIdOrKey}/worklog/{worklogId}/properties/{propertyKey}
 # operationId: getWorklogProperty
-export def "rest-3-issue-worklog-properties get" [
-  issueIdOrKey: string
-  worklogId: string
-  propertyKey: string
+export def "rest-3-issue-worklog-properties get-worklog-property" [
+  issue_id_or_key: string
+  worklog_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5127,7 +5127,7 @@ export def "rest-3-issue-worklog-properties get" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($worklogId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, worklog_id: $worklog_id, property_key: $property_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{worklog_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5138,9 +5138,9 @@ export def "rest-3-issue-worklog-properties get" [
 # PUT /rest/api/3/issue/{issueIdOrKey}/worklog/{worklogId}/properties/{propertyKey}
 # operationId: setWorklogProperty
 export def "rest-3-issue-worklog-properties setWorklogProperty" [
-  issueIdOrKey: string
-  worklogId: string
-  propertyKey: string
+  issue_id_or_key: string
+  worklog_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5154,7 +5154,7 @@ export def "rest-3-issue-worklog-properties setWorklogProperty" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issue/($issueIdOrKey)/worklog/($worklogId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_id_or_key: $issue_id_or_key, worklog_id: $worklog_id, property_key: $property_key} | format pattern "/rest/api/3/issue/{issue_id_or_key}/worklog/{worklog_id}/properties/{property_key}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5179,15 +5179,15 @@ export def "rest-3-issue-link linkIssues" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --comment: record # A comment. — shape: {body?: any, properties?: list, visibility?: any}
-  inwardIssue: record # The ID or key of a linked issue. — shape: {id?: string, key?: string}
-  outwardIssue: record # The ID or key of a linked issue. — shape: {id?: string, key?: string}
+  inward_issue: record # The ID or key of a linked issue. — shape: {id?: string, key?: string}
+  outward_issue: record # The ID or key of a linked issue. — shape: {id?: string, key?: string}
   type: record # This object is used as follows:   *  In the [ issueLink](#api-rest-api-3-issueLink-post) resource it defines and reports on the type of link between the issues. Find a list of issue link types with [Get issue link types](#api-rest-api-3-issueLinkType-get).  *  In the [ issueLinkType](#api-rest-api-3-issueLinkType-post) resource it defines and reports on issue link types. — shape: {id?: string, inward?: string, name?: string, outward?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issueLink")
-  let body = {comment: $comment, inwardIssue: $inwardIssue, outwardIssue: $outwardIssue, type: $type} | compact
+  let body = {"comment": $comment, "inwardIssue": $inward_issue, "outwardIssue": $outward_issue, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5199,7 +5199,7 @@ export def "rest-3-issue-link linkIssues" [
 # DELETE /rest/api/3/issueLink/{linkId}
 # operationId: deleteIssueLink
 export def "rest-3-issue-link delete" [
-  linkId: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5211,7 +5211,7 @@ export def "rest-3-issue-link delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issueLink/($linkId)")
+  let full_url = (build-url $base ({link_id: $link_id} | format pattern "/rest/api/3/issueLink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5222,7 +5222,7 @@ export def "rest-3-issue-link delete" [
 # GET /rest/api/3/issueLink/{linkId}
 # operationId: getIssueLink
 export def "rest-3-issue-link get" [
-  linkId: string
+  link_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5234,7 +5234,7 @@ export def "rest-3-issue-link get" [
 ]: nothing -> record<id: string, inwardIssue: record<fields: record<assignee: record, issueType: record, issuetype: record, priority: record, status: record, summary: string, timetracking: record>, id: string, key: string, self: string>, outwardIssue: record<fields: record<assignee: record, issueType: record, issuetype: record, priority: record, status: record, summary: string, timetracking: record>, id: string, key: string, self: string>, self: string, type: record<id: string, inward: string, name: string, outward: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issueLink/($linkId)")
+  let full_url = (build-url $base ({link_id: $link_id} | format pattern "/rest/api/3/issueLink/{link_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5266,7 +5266,7 @@ export def "rest-3-issue-link-type list" [
 #
 # POST /rest/api/3/issueLinkType
 # operationId: createIssueLinkType
-export def "rest-3-issue-link-type createIssueLinkType" [
+export def "rest-3-issue-link-type create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5284,7 +5284,7 @@ export def "rest-3-issue-link-type createIssueLinkType" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issueLinkType")
-  let body = {id: $id, inward: $inward, name: $name, outward: $outward} | compact
+  let body = {"id": $id, "inward": $inward, "name": $name, "outward": $outward} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5296,7 +5296,7 @@ export def "rest-3-issue-link-type createIssueLinkType" [
 # DELETE /rest/api/3/issueLinkType/{issueLinkTypeId}
 # operationId: deleteIssueLinkType
 export def "rest-3-issue-link-type delete" [
-  issueLinkTypeId: string
+  issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5308,7 +5308,7 @@ export def "rest-3-issue-link-type delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issueLinkType/($issueLinkTypeId)")
+  let full_url = (build-url $base ({issue_link_type_id: $issue_link_type_id} | format pattern "/rest/api/3/issueLinkType/{issue_link_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5319,7 +5319,7 @@ export def "rest-3-issue-link-type delete" [
 # GET /rest/api/3/issueLinkType/{issueLinkTypeId}
 # operationId: getIssueLinkType
 export def "rest-3-issue-link-type get" [
-  issueLinkTypeId: string
+  issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5331,7 +5331,7 @@ export def "rest-3-issue-link-type get" [
 ]: nothing -> record<id: string, inward: string, name: string, outward: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issueLinkType/($issueLinkTypeId)")
+  let full_url = (build-url $base ({issue_link_type_id: $issue_link_type_id} | format pattern "/rest/api/3/issueLinkType/{issue_link_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5341,8 +5341,8 @@ export def "rest-3-issue-link-type get" [
 #
 # PUT /rest/api/3/issueLinkType/{issueLinkTypeId}
 # operationId: updateIssueLinkType
-export def "rest-3-issue-link-type updateIssueLinkType" [
-  issueLinkTypeId: string
+export def "rest-3-issue-link-type update" [
+  issue_link_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5359,8 +5359,8 @@ export def "rest-3-issue-link-type updateIssueLinkType" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issueLinkType/($issueLinkTypeId)")
-  let body = {id: $id, inward: $inward, name: $name, outward: $outward} | compact
+  let full_url = (build-url $base ({issue_link_type_id: $issue_link_type_id} | format pattern "/rest/api/3/issueLinkType/{issue_link_type_id}"))
+  let body = {"id": $id, "inward": $inward, "name": $name, "outward": $outward} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5371,7 +5371,7 @@ export def "rest-3-issue-link-type updateIssueLinkType" [
 #
 # GET /rest/api/3/issuesecurityschemes
 # operationId: getIssueSecuritySchemes
-export def "rest-3-issuesecurityschemes list" [
+export def "rest-3-issuesecurityschemes get-issue-security-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5393,7 +5393,7 @@ export def "rest-3-issuesecurityschemes list" [
 #
 # GET /rest/api/3/issuesecurityschemes/{id}
 # operationId: getIssueSecurityScheme
-export def "rest-3-issuesecurityschemes get" [
+export def "rest-3-issuesecurityschemes get-issue-security-scheme" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5406,7 +5406,7 @@ export def "rest-3-issuesecurityschemes get" [
 ]: nothing -> record<defaultSecurityLevelId: int, description: string, id: int, levels: table<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string>, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuesecurityschemes/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/issuesecurityschemes/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5416,8 +5416,8 @@ export def "rest-3-issuesecurityschemes get" [
 #
 # GET /rest/api/3/issuesecurityschemes/{issueSecuritySchemeId}/members
 # operationId: getIssueSecurityLevelMembers
-export def "rest-3-issuesecurityschemes-members get" [
-  issueSecuritySchemeId: int
+export def "rest-3-issuesecurityschemes-members get-issue-security-level" [
+  issue_security_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5426,15 +5426,15 @@ export def "rest-3-issuesecurityschemes-members get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --issueSecurityLevelId: list # The list of issue security level IDs. To include multiple issue security levels separate IDs with ampersand: `issueSecurityLevelId=10000&issueSecurityLevelId=10001`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --issue-security-level-id: list # The list of issue security level IDs. To include multiple issue security levels separate IDs with ampersand: `issueSecurityLevelId=10000&issueSecurityLevelId=10001`.
   --expand: string # Use expand to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `all` Returns all expandable information.  *  `field` Returns information about the custom field granted the permission.  *  `group` Returns information about the group that is granted the permission.  *  `projectRole` Returns information about the project role granted the permission.  *  `user` Returns information about the user who is granted the permission.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<holder: record, id: int, issueSecurityLevelId: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "issueSecurityLevelId" $issueSecurityLevelId "multi") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issuesecurityschemes/($issueSecuritySchemeId)/members" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "issueSecurityLevelId" $issue_security_level_id "multi") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_security_scheme_id: $issue_security_scheme_id} | format pattern "/rest/api/3/issuesecurityschemes/{issue_security_scheme_id}/members") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5444,7 +5444,7 @@ export def "rest-3-issuesecurityschemes-members get" [
 #
 # GET /rest/api/3/issuetype
 # operationId: getIssueAllTypes
-export def "rest-3-issuetype list" [
+export def "rest-3-issuetype get-issue-all-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5466,7 +5466,7 @@ export def "rest-3-issuetype list" [
 #
 # POST /rest/api/3/issuetype
 # operationId: createIssueType
-export def "rest-3-issuetype createIssueType" [
+export def "rest-3-issuetype create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5476,7 +5476,7 @@ export def "rest-3-issuetype createIssueType" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the issue type.
-  --hierarchyLevel: int # The hierarchy level of the issue type. Use:   *  `-1` for Subtask.  *  `0` for Base.  Defaults to `0`. (format: int32)
+  --hierarchy-level: int # The hierarchy level of the issue type. Use:   *  `-1` for Subtask.  *  `0` for Base.  Defaults to `0`. (format: int32)
   name: string # The unique name for the issue type. The maximum length is 60 characters.
   --type: string@type-completer-1 # Deprecated. Use `hierarchyLevel` instead. See the [deprecation notice](https://community.developer.atlassian.com/t/deprecation-of-the-epic-link-parent-link-and-other-related-fields-in-rest-apis-and-webhooks/54048) for details.  Whether the issue type is `subtype` or `standard`. Defaults to `standard`.
 ]: any -> record<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, subtask: bool> {
@@ -5484,7 +5484,7 @@ export def "rest-3-issuetype createIssueType" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issuetype")
-  let body = {description: $description, hierarchyLevel: $hierarchyLevel, name: $name, type: $type} | compact
+  let body = {"description": $description, "hierarchyLevel": $hierarchy_level, "name": $name, "type": $type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5495,7 +5495,7 @@ export def "rest-3-issuetype createIssueType" [
 #
 # GET /rest/api/3/issuetype/project
 # operationId: getIssueTypesForProject
-export def "rest-3-issuetype-project get" [
+export def "rest-3-issuetype-project get-issue-types-for" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5504,12 +5504,12 @@ export def "rest-3-issuetype-project get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --projectId: int # The ID of the project. (format: int64)
+  --project-id: int # The ID of the project. (format: int64)
   --level: int # The level of the issue type to filter by. Use:   *  `-1` for Subtask.  *  `0` for Base.  *  `1` for Epic. (format: int32)
 ]: nothing -> table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record, type: string>, self: string, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectId" $projectId "scalar") (serialize-qp "level" $level "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "projectId" $project_id "scalar") (serialize-qp "level" $level "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issuetype/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5530,12 +5530,12 @@ export def "rest-3-issuetype delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --alternativeIssueTypeId: string # The ID of the replacement issue type.
+  --alternative-issue-type-id: string # The ID of the replacement issue type.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "alternativeIssueTypeId" $alternativeIssueTypeId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issuetype/($id)" $qp)
+  let qp = [(serialize-qp "alternativeIssueTypeId" $alternative_issue_type_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/issuetype/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5558,7 +5558,7 @@ export def "rest-3-issuetype get" [
 ]: nothing -> record<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetype/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/issuetype/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5568,7 +5568,7 @@ export def "rest-3-issuetype get" [
 #
 # PUT /rest/api/3/issuetype/{id}
 # operationId: updateIssueType
-export def "rest-3-issuetype updateIssueType" [
+export def "rest-3-issuetype update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5578,15 +5578,15 @@ export def "rest-3-issuetype updateIssueType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --avatarId: int # The ID of an issue type avatar. (format: int64)
+  --avatar-id: int # The ID of an issue type avatar. (format: int64)
   --description: string # The description of the issue type.
   --name: string # The unique name for the issue type. The maximum length is 60 characters.
 ]: any -> record<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, subtask: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetype/($id)")
-  let body = {avatarId: $avatarId, description: $description, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/issuetype/{id}"))
+  let body = {"avatarId": $avatar_id, "description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5610,7 +5610,7 @@ export def "rest-3-issuetype-alternatives get" [
 ]: nothing -> table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record<project: record, type: string>, self: string, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetype/($id)/alternatives")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/issuetype/{id}/alternatives"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5620,7 +5620,7 @@ export def "rest-3-issuetype-alternatives get" [
 #
 # POST /rest/api/3/issuetype/{id}/avatar2
 # operationId: createIssueTypeAvatar
-export def "rest-3-issuetype-avatar2 createIssueTypeAvatar" [
+export def "rest-3-issuetype-avatar2 create-issue-type-avatar" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5639,7 +5639,7 @@ export def "rest-3-issuetype-avatar2 createIssueTypeAvatar" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "x" $x "scalar") (serialize-qp "y" $y "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issuetype/($id)/avatar2" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/issuetype/{id}/avatar2") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5650,8 +5650,8 @@ export def "rest-3-issuetype-avatar2 createIssueTypeAvatar" [
 #
 # GET /rest/api/3/issuetype/{issueTypeId}/properties
 # operationId: getIssueTypePropertyKeys
-export def "rest-3-issuetype-properties list" [
-  issueTypeId: string
+export def "rest-3-issuetype-properties get-issue-type-property-keys" [
+  issue_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5663,7 +5663,7 @@ export def "rest-3-issuetype-properties list" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetype/($issueTypeId)/properties")
+  let full_url = (build-url $base ({issue_type_id: $issue_type_id} | format pattern "/rest/api/3/issuetype/{issue_type_id}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5673,9 +5673,9 @@ export def "rest-3-issuetype-properties list" [
 #
 # DELETE /rest/api/3/issuetype/{issueTypeId}/properties/{propertyKey}
 # operationId: deleteIssueTypeProperty
-export def "rest-3-issuetype-properties delete" [
-  issueTypeId: string
-  propertyKey: string
+export def "rest-3-issuetype-properties delete-issue-type-property" [
+  issue_type_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5687,7 +5687,7 @@ export def "rest-3-issuetype-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetype/($issueTypeId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_type_id: $issue_type_id, property_key: $property_key} | format pattern "/rest/api/3/issuetype/{issue_type_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5697,9 +5697,9 @@ export def "rest-3-issuetype-properties delete" [
 #
 # GET /rest/api/3/issuetype/{issueTypeId}/properties/{propertyKey}
 # operationId: getIssueTypeProperty
-export def "rest-3-issuetype-properties get" [
-  issueTypeId: string
-  propertyKey: string
+export def "rest-3-issuetype-properties get-issue-type-property" [
+  issue_type_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5711,7 +5711,7 @@ export def "rest-3-issuetype-properties get" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetype/($issueTypeId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_type_id: $issue_type_id, property_key: $property_key} | format pattern "/rest/api/3/issuetype/{issue_type_id}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5722,8 +5722,8 @@ export def "rest-3-issuetype-properties get" [
 # PUT /rest/api/3/issuetype/{issueTypeId}/properties/{propertyKey}
 # operationId: setIssueTypeProperty
 export def "rest-3-issuetype-properties setIssueTypeProperty" [
-  issueTypeId: string
-  propertyKey: string
+  issue_type_id: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5737,7 +5737,7 @@ export def "rest-3-issuetype-properties setIssueTypeProperty" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetype/($issueTypeId)/properties/($propertyKey)")
+  let full_url = (build-url $base ({issue_type_id: $issue_type_id, property_key: $property_key} | format pattern "/rest/api/3/issuetype/{issue_type_id}/properties/{property_key}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5748,7 +5748,7 @@ export def "rest-3-issuetype-properties setIssueTypeProperty" [
 #
 # GET /rest/api/3/issuetypescheme
 # operationId: getAllIssueTypeSchemes
-export def "rest-3-issuetypescheme get" [
+export def "rest-3-issuetypescheme get-all-issue-type-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5757,16 +5757,16 @@ export def "rest-3-issuetypescheme get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list # The list of issue type schemes IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
-  --orderBy: string@orderBy-completer-4 # [Order](#ordering) the results by a field:   *  `name` Sorts by issue type scheme name.  *  `id` Sorts by issue type scheme ID. (default: id)
+  --order-by: string@order-by-completer-4 # [Order](#ordering) the results by a field:   *  `name` Sorts by issue type scheme name.  *  `id` Sorts by issue type scheme ID. (default: id)
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `projects` For each issue type schemes, returns information about the projects the issue type scheme is assigned to.  *  `issueTypes` For each issue type schemes, returns information about the issueTypes the issue type scheme have. (default: )
-  --queryString: string # String used to perform a case-insensitive partial match with issue type scheme name. (default: )
+  --query-string: string # String used to perform a case-insensitive partial match with issue type scheme name. (default: )
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<defaultIssueTypeId: string, description: string, id: string, isDefault: bool, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "queryString" $queryString "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "id" $id "multi") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "queryString" $query_string "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issuetypescheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5777,7 +5777,7 @@ export def "rest-3-issuetypescheme get" [
 #
 # POST /rest/api/3/issuetypescheme
 # operationId: createIssueTypeScheme
-export def "rest-3-issuetypescheme createIssueTypeScheme" [
+export def "rest-3-issuetypescheme create-issue-type-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5786,16 +5786,16 @@ export def "rest-3-issuetypescheme createIssueTypeScheme" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultIssueTypeId: string # The ID of the default issue type of the issue type scheme. This ID must be included in `issueTypeIds`.
+  --default-issue-type-id: string # The ID of the default issue type of the issue type scheme. This ID must be included in `issueTypeIds`.
   --description: string # The description of the issue type scheme. The maximum length is 4000 characters.
-  issueTypeIds: list # The list of issue types IDs of the issue type scheme. At least one standard issue type ID is required.
+  issue_type_ids: list # The list of issue types IDs of the issue type scheme. At least one standard issue type ID is required.
   name: string # The name of the issue type scheme. The name must be unique. The maximum length is 255 characters.
 ]: any -> record<issueTypeSchemeId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issuetypescheme")
-  let body = {defaultIssueTypeId: $defaultIssueTypeId, description: $description, issueTypeIds: $issueTypeIds, name: $name} | compact
+  let body = {"defaultIssueTypeId": $default_issue_type_id, "description": $description, "issueTypeIds": $issue_type_ids, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5806,7 +5806,7 @@ export def "rest-3-issuetypescheme createIssueTypeScheme" [
 #
 # GET /rest/api/3/issuetypescheme/mapping
 # operationId: getIssueTypeSchemesMapping
-export def "rest-3-issuetypescheme-mapping get" [
+export def "rest-3-issuetypescheme-mapping get-issue-type-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5815,13 +5815,13 @@ export def "rest-3-issuetypescheme-mapping get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --issueTypeSchemeId: list # The list of issue type scheme IDs. To include multiple IDs, provide an ampersand-separated list. For example, `issueTypeSchemeId=10000&issueTypeSchemeId=10001`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --issue-type-scheme-id: list # The list of issue type scheme IDs. To include multiple IDs, provide an ampersand-separated list. For example, `issueTypeSchemeId=10000&issueTypeSchemeId=10001`.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<issueTypeId: string, issueTypeSchemeId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "issueTypeSchemeId" $issueTypeSchemeId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "issueTypeSchemeId" $issue_type_scheme_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issuetypescheme/mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5832,7 +5832,7 @@ export def "rest-3-issuetypescheme-mapping get" [
 #
 # GET /rest/api/3/issuetypescheme/project
 # operationId: getIssueTypeSchemeForProjects
-export def "rest-3-issuetypescheme-project get" [
+export def "rest-3-issuetypescheme-project get-issue-type-scheme-for" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5841,13 +5841,13 @@ export def "rest-3-issuetypescheme-project get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --projectId: list # The list of project IDs. To include multiple project IDs, provide an ampersand-separated list. For example, `projectId=10000&projectId=10001`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --project-id: list # The list of project IDs. To include multiple project IDs, provide an ampersand-separated list. For example, `projectId=10000&projectId=10001`.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<issueTypeScheme: record, projectIds: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "projectId" $projectId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "projectId" $project_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issuetypescheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5867,14 +5867,14 @@ export def "rest-3-issuetypescheme-project assignIssueTypeSchemeToProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  issueTypeSchemeId: string # The ID of the issue type scheme.
-  projectId: string # The ID of the project.
+  issue_type_scheme_id: string # The ID of the issue type scheme.
+  project_id: string # The ID of the project.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issuetypescheme/project")
-  let body = {issueTypeSchemeId: $issueTypeSchemeId, projectId: $projectId} | compact
+  let body = {"issueTypeSchemeId": $issue_type_scheme_id, "projectId": $project_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5885,8 +5885,8 @@ export def "rest-3-issuetypescheme-project assignIssueTypeSchemeToProject" [
 #
 # DELETE /rest/api/3/issuetypescheme/{issueTypeSchemeId}
 # operationId: deleteIssueTypeScheme
-export def "rest-3-issuetypescheme delete" [
-  issueTypeSchemeId: int
+export def "rest-3-issuetypescheme delete-issue-type-scheme" [
+  issue_type_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5898,7 +5898,7 @@ export def "rest-3-issuetypescheme delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetypescheme/($issueTypeSchemeId)")
+  let full_url = (build-url $base ({issue_type_scheme_id: $issue_type_scheme_id} | format pattern "/rest/api/3/issuetypescheme/{issue_type_scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -5908,8 +5908,8 @@ export def "rest-3-issuetypescheme delete" [
 #
 # PUT /rest/api/3/issuetypescheme/{issueTypeSchemeId}
 # operationId: updateIssueTypeScheme
-export def "rest-3-issuetypescheme updateIssueTypeScheme" [
-  issueTypeSchemeId: int
+export def "rest-3-issuetypescheme update-issue-type-scheme" [
+  issue_type_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5918,15 +5918,15 @@ export def "rest-3-issuetypescheme updateIssueTypeScheme" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultIssueTypeId: string # The ID of the default issue type of the issue type scheme.
+  --default-issue-type-id: string # The ID of the default issue type of the issue type scheme.
   --description: string # The description of the issue type scheme. The maximum length is 4000 characters.
   --name: string # The name of the issue type scheme. The name must be unique. The maximum length is 255 characters.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetypescheme/($issueTypeSchemeId)")
-  let body = {defaultIssueTypeId: $defaultIssueTypeId, description: $description, name: $name} | compact
+  let full_url = (build-url $base ({issue_type_scheme_id: $issue_type_scheme_id} | format pattern "/rest/api/3/issuetypescheme/{issue_type_scheme_id}"))
+  let body = {"defaultIssueTypeId": $default_issue_type_id, "description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5937,8 +5937,8 @@ export def "rest-3-issuetypescheme updateIssueTypeScheme" [
 #
 # PUT /rest/api/3/issuetypescheme/{issueTypeSchemeId}/issuetype
 # operationId: addIssueTypesToIssueTypeScheme
-export def "rest-3-issuetypescheme-issuetype addIssueTypesToIssueTypeScheme" [
-  issueTypeSchemeId: int
+export def "rest-3-issuetypescheme-issuetype create-issue-types-to-issue-type-scheme" [
+  issue_type_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5947,13 +5947,13 @@ export def "rest-3-issuetypescheme-issuetype addIssueTypesToIssueTypeScheme" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  issueTypeIds: list # The list of issue type IDs.
+  issue_type_ids: list # The list of issue type IDs.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetypescheme/($issueTypeSchemeId)/issuetype")
-  let body = {issueTypeIds: $issueTypeIds} | compact
+  let full_url = (build-url $base ({issue_type_scheme_id: $issue_type_scheme_id} | format pattern "/rest/api/3/issuetypescheme/{issue_type_scheme_id}/issuetype"))
+  let body = {"issueTypeIds": $issue_type_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5965,7 +5965,7 @@ export def "rest-3-issuetypescheme-issuetype addIssueTypesToIssueTypeScheme" [
 # PUT /rest/api/3/issuetypescheme/{issueTypeSchemeId}/issuetype/move
 # operationId: reorderIssueTypesInIssueTypeScheme
 export def "rest-3-issuetypescheme-issuetype-move reorderIssueTypesInIssueTypeScheme" [
-  issueTypeSchemeId: int
+  issue_type_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5975,14 +5975,14 @@ export def "rest-3-issuetypescheme-issuetype-move reorderIssueTypesInIssueTypeSc
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --after: string # The ID of the issue type to place the moved issue types after. Required if `position` isn't provided.
-  issueTypeIds: list # A list of the issue type IDs to move. The order of the issue type IDs in the list is the order they are given after the move.
+  issue_type_ids: list # A list of the issue type IDs to move. The order of the issue type IDs in the list is the order they are given after the move.
   --position: string@position-completer # The position the issue types should be moved to. Required if `after` isn't provided.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetypescheme/($issueTypeSchemeId)/issuetype/move")
-  let body = {after: $after, issueTypeIds: $issueTypeIds, position: $position} | compact
+  let full_url = (build-url $base ({issue_type_scheme_id: $issue_type_scheme_id} | format pattern "/rest/api/3/issuetypescheme/{issue_type_scheme_id}/issuetype/move"))
+  let body = {"after": $after, "issueTypeIds": $issue_type_ids, "position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5993,9 +5993,9 @@ export def "rest-3-issuetypescheme-issuetype-move reorderIssueTypesInIssueTypeSc
 #
 # DELETE /rest/api/3/issuetypescheme/{issueTypeSchemeId}/issuetype/{issueTypeId}
 # operationId: removeIssueTypeFromIssueTypeScheme
-export def "rest-3-issuetypescheme-issuetype removeIssueTypeFromIssueTypeScheme" [
-  issueTypeSchemeId: int
-  issueTypeId: int
+export def "rest-3-issuetypescheme-issuetype delete-issue-type-from-issue-type-scheme" [
+  issue_type_scheme_id: int
+  issue_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6007,7 +6007,7 @@ export def "rest-3-issuetypescheme-issuetype removeIssueTypeFromIssueTypeScheme"
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetypescheme/($issueTypeSchemeId)/issuetype/($issueTypeId)")
+  let full_url = (build-url $base ({issue_type_scheme_id: $issue_type_scheme_id, issue_type_id: $issue_type_id} | format pattern "/rest/api/3/issuetypescheme/{issue_type_scheme_id}/issuetype/{issue_type_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6017,7 +6017,7 @@ export def "rest-3-issuetypescheme-issuetype removeIssueTypeFromIssueTypeScheme"
 #
 # GET /rest/api/3/issuetypescreenscheme
 # operationId: getIssueTypeScreenSchemes
-export def "rest-3-issuetypescreenscheme get" [
+export def "rest-3-issuetypescreenscheme get-issue-type-screen-schemes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6026,16 +6026,16 @@ export def "rest-3-issuetypescreenscheme get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --id: list # The list of issue type screen scheme IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
-  --queryString: string # String used to perform a case-insensitive partial match with issue type screen scheme name. (default: )
-  --orderBy: string@orderBy-completer-4 # [Order](#ordering) the results by a field:   *  `name` Sorts by issue type screen scheme name.  *  `id` Sorts by issue type screen scheme ID. (default: id)
+  --query-string: string # String used to perform a case-insensitive partial match with issue type screen scheme name. (default: )
+  --order-by: string@order-by-completer-4 # [Order](#ordering) the results by a field:   *  `name` Sorts by issue type screen scheme name.  *  `id` Sorts by issue type screen scheme ID. (default: id)
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts `projects` that, for each issue type screen schemes, returns information about the projects the issue type screen scheme is assigned to. (default: )
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "queryString" $queryString "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "id" $id "multi") (serialize-qp "queryString" $query_string "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6047,7 +6047,7 @@ export def "rest-3-issuetypescreenscheme get" [
 # POST /rest/api/3/issuetypescreenscheme
 # operationId: createIssueTypeScreenScheme
 # --issueTypeMappings item shape: {issueTypeId: string, screenSchemeId: string}
-export def "rest-3-issuetypescreenscheme createIssueTypeScreenScheme" [
+export def "rest-3-issuetypescreenscheme create-issue-type-screen-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6057,14 +6057,14 @@ export def "rest-3-issuetypescreenscheme createIssueTypeScreenScheme" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the issue type screen scheme. The maximum length is 255 characters.
-  issueTypeMappings: list # The IDs of the screen schemes for the issue type IDs and *default*. A *default* entry is required to create an issue type screen scheme, it defines the mapping for all issue types without a screen scheme. — item shape: {issueTypeId: string, screenSchemeId: string}
+  issue_type_mappings: list # The IDs of the screen schemes for the issue type IDs and *default*. A *default* entry is required to create an issue type screen scheme, it defines the mapping for all issue types without a screen scheme. — item shape: {issueTypeId: string, screenSchemeId: string}
   name: string # The name of the issue type screen scheme. The name must be unique. The maximum length is 255 characters.
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme")
-  let body = {description: $description, issueTypeMappings: $issueTypeMappings, name: $name} | compact
+  let body = {"description": $description, "issueTypeMappings": $issue_type_mappings, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6075,7 +6075,7 @@ export def "rest-3-issuetypescreenscheme createIssueTypeScreenScheme" [
 #
 # GET /rest/api/3/issuetypescreenscheme/mapping
 # operationId: getIssueTypeScreenSchemeMappings
-export def "rest-3-issuetypescreenscheme-mapping get" [
+export def "rest-3-issuetypescreenscheme-mapping get-issue-type-screen-scheme" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6084,13 +6084,13 @@ export def "rest-3-issuetypescreenscheme-mapping get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --issueTypeScreenSchemeId: list # The list of issue type screen scheme IDs. To include multiple issue type screen schemes, separate IDs with ampersand: `issueTypeScreenSchemeId=10000&issueTypeScreenSchemeId=10001`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --issue-type-screen-scheme-id: list # The list of issue type screen scheme IDs. To include multiple issue type screen schemes, separate IDs with ampersand: `issueTypeScreenSchemeId=10000&issueTypeScreenSchemeId=10001`.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<issueTypeId: string, issueTypeScreenSchemeId: string, screenSchemeId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "issueTypeScreenSchemeId" $issueTypeScreenSchemeId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "issueTypeScreenSchemeId" $issue_type_screen_scheme_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme/mapping" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6101,7 +6101,7 @@ export def "rest-3-issuetypescreenscheme-mapping get" [
 #
 # GET /rest/api/3/issuetypescreenscheme/project
 # operationId: getIssueTypeScreenSchemeProjectAssociations
-export def "rest-3-issuetypescreenscheme-project list" [
+export def "rest-3-issuetypescreenscheme-project get-issue-type-screen-scheme-project-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6110,13 +6110,13 @@ export def "rest-3-issuetypescreenscheme-project list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --projectId: list # The list of project IDs. To include multiple projects, separate IDs with ampersand: `projectId=10000&projectId=10001`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --project-id: list # The list of project IDs. To include multiple projects, separate IDs with ampersand: `projectId=10000&projectId=10001`.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<issueTypeScreenScheme: record, projectIds: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "projectId" $projectId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "projectId" $project_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6136,14 +6136,14 @@ export def "rest-3-issuetypescreenscheme-project assignIssueTypeScreenSchemeToPr
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --issueTypeScreenSchemeId: string # The ID of the issue type screen scheme.
-  --projectId: string # The ID of the project.
+  --issue-type-screen-scheme-id: string # The ID of the issue type screen scheme.
+  --project-id: string # The ID of the project.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/issuetypescreenscheme/project")
-  let body = {issueTypeScreenSchemeId: $issueTypeScreenSchemeId, projectId: $projectId} | compact
+  let body = {"issueTypeScreenSchemeId": $issue_type_screen_scheme_id, "projectId": $project_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6154,8 +6154,8 @@ export def "rest-3-issuetypescreenscheme-project assignIssueTypeScreenSchemeToPr
 #
 # DELETE /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}
 # operationId: deleteIssueTypeScreenScheme
-export def "rest-3-issuetypescreenscheme delete" [
-  issueTypeScreenSchemeId: string
+export def "rest-3-issuetypescreenscheme delete-issue-type-screen-scheme" [
+  issue_type_screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6167,7 +6167,7 @@ export def "rest-3-issuetypescreenscheme delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetypescreenscheme/($issueTypeScreenSchemeId)")
+  let full_url = (build-url $base ({issue_type_screen_scheme_id: $issue_type_screen_scheme_id} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6177,8 +6177,8 @@ export def "rest-3-issuetypescreenscheme delete" [
 #
 # PUT /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}
 # operationId: updateIssueTypeScreenScheme
-export def "rest-3-issuetypescreenscheme updateIssueTypeScreenScheme" [
-  issueTypeScreenSchemeId: string
+export def "rest-3-issuetypescreenscheme update-issue-type-screen-scheme" [
+  issue_type_screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6193,8 +6193,8 @@ export def "rest-3-issuetypescreenscheme updateIssueTypeScreenScheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetypescreenscheme/($issueTypeScreenSchemeId)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({issue_type_screen_scheme_id: $issue_type_screen_scheme_id} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6206,8 +6206,8 @@ export def "rest-3-issuetypescreenscheme updateIssueTypeScreenScheme" [
 # PUT /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}/mapping
 # operationId: appendMappingsForIssueTypeScreenScheme
 # --issueTypeMappings item shape: {issueTypeId: string, screenSchemeId: string}
-export def "rest-3-issuetypescreenscheme-mapping appendMappingsForIssueTypeScreenScheme" [
-  issueTypeScreenSchemeId: string
+export def "rest-3-issuetypescreenscheme-mapping create-mappings-for-issue-type-screen-scheme" [
+  issue_type_screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6216,13 +6216,13 @@ export def "rest-3-issuetypescreenscheme-mapping appendMappingsForIssueTypeScree
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  issueTypeMappings: list # The list of issue type to screen scheme mappings. A *default* entry cannot be specified because a default entry is added when an issue type screen scheme is created. — item shape: {issueTypeId: string, screenSchemeId: string}
+  issue_type_mappings: list # The list of issue type to screen scheme mappings. A *default* entry cannot be specified because a default entry is added when an issue type screen scheme is created. — item shape: {issueTypeId: string, screenSchemeId: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetypescreenscheme/($issueTypeScreenSchemeId)/mapping")
-  let body = {issueTypeMappings: $issueTypeMappings} | compact
+  let full_url = (build-url $base ({issue_type_screen_scheme_id: $issue_type_screen_scheme_id} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}/mapping"))
+  let body = {"issueTypeMappings": $issue_type_mappings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6233,8 +6233,8 @@ export def "rest-3-issuetypescreenscheme-mapping appendMappingsForIssueTypeScree
 #
 # PUT /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}/mapping/default
 # operationId: updateDefaultScreenScheme
-export def "rest-3-issuetypescreenscheme-mapping-default updateDefaultScreenScheme" [
-  issueTypeScreenSchemeId: string
+export def "rest-3-issuetypescreenscheme-mapping-default update-default-screen-scheme" [
+  issue_type_screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6243,13 +6243,13 @@ export def "rest-3-issuetypescreenscheme-mapping-default updateDefaultScreenSche
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  screenSchemeId: string # The ID of the screen scheme.
+  screen_scheme_id: string # The ID of the screen scheme.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetypescreenscheme/($issueTypeScreenSchemeId)/mapping/default")
-  let body = {screenSchemeId: $screenSchemeId} | compact
+  let full_url = (build-url $base ({issue_type_screen_scheme_id: $issue_type_screen_scheme_id} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}/mapping/default"))
+  let body = {"screenSchemeId": $screen_scheme_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6260,8 +6260,8 @@ export def "rest-3-issuetypescreenscheme-mapping-default updateDefaultScreenSche
 #
 # POST /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}/mapping/remove
 # operationId: removeMappingsFromIssueTypeScreenScheme
-export def "rest-3-issuetypescreenscheme-mapping-remove removeMappingsFromIssueTypeScreenScheme" [
-  issueTypeScreenSchemeId: string
+export def "rest-3-issuetypescreenscheme-mapping-remove delete-mappings-from-issue-type-screen-scheme" [
+  issue_type_screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6270,13 +6270,13 @@ export def "rest-3-issuetypescreenscheme-mapping-remove removeMappingsFromIssueT
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  issueTypeIds: list # The list of issue type IDs.
+  issue_type_ids: list # The list of issue type IDs.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/issuetypescreenscheme/($issueTypeScreenSchemeId)/mapping/remove")
-  let body = {issueTypeIds: $issueTypeIds} | compact
+  let full_url = (build-url $base ({issue_type_screen_scheme_id: $issue_type_screen_scheme_id} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}/mapping/remove"))
+  let body = {"issueTypeIds": $issue_type_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6287,8 +6287,8 @@ export def "rest-3-issuetypescreenscheme-mapping-remove removeMappingsFromIssueT
 #
 # GET /rest/api/3/issuetypescreenscheme/{issueTypeScreenSchemeId}/project
 # operationId: getProjectsForIssueTypeScreenScheme
-export def "rest-3-issuetypescreenscheme-project get" [
-  issueTypeScreenSchemeId: int
+export def "rest-3-issuetypescreenscheme-project get-projects-for-issue-type-screen-scheme" [
+  issue_type_screen_scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6297,14 +6297,14 @@ export def "rest-3-issuetypescreenscheme-project get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --query: string # default: 
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/issuetypescreenscheme/($issueTypeScreenSchemeId)/project" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({issue_type_screen_scheme_id: $issue_type_screen_scheme_id} | format pattern "/rest/api/3/issuetypescreenscheme/{issue_type_screen_scheme_id}/project") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6314,7 +6314,7 @@ export def "rest-3-issuetypescreenscheme-project get" [
 #
 # GET /rest/api/3/jql/autocompletedata
 # operationId: getAutoComplete
-export def "rest-3-jql-autocompletedata get" [
+export def "rest-3-jql-autocompletedata get-auto-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6336,7 +6336,7 @@ export def "rest-3-jql-autocompletedata get" [
 #
 # POST /rest/api/3/jql/autocompletedata
 # operationId: getAutoCompletePost
-export def "rest-3-jql-autocompletedata post" [
+export def "rest-3-jql-autocompletedata get-auto-complete-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6345,14 +6345,14 @@ export def "rest-3-jql-autocompletedata post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeCollapsedFields: oneof<nothing, bool> # Include collapsed fields for fields that have non-unique names. (default: false)
-  --projectIds: list # List of project IDs used to filter the visible field details returned.
+  --include-collapsed-fields: oneof<nothing, bool> # Include collapsed fields for fields that have non-unique names. (default: false)
+  --project-ids: list # List of project IDs used to filter the visible field details returned.
 ]: any -> record<jqlReservedWords: list<string>, visibleFieldNames: table<auto: string, cfid: string, deprecated: string, deprecatedSearcherKey: string, displayName: string, operators: list, orderable: string, searchable: string, types: list, value: string>, visibleFunctionNames: table<displayName: string, isList: string, types: list, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/jql/autocompletedata")
-  let body = {includeCollapsedFields: $includeCollapsedFields, projectIds: $projectIds} | compact
+  let body = {"includeCollapsedFields": $include_collapsed_fields, "projectIds": $project_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6363,7 +6363,7 @@ export def "rest-3-jql-autocompletedata post" [
 #
 # GET /rest/api/3/jql/autocompletedata/suggestions
 # operationId: getFieldAutoCompleteForQueryString
-export def "rest-3-jql-autocompletedata-suggestions get" [
+export def "rest-3-jql-autocompletedata-suggestions get-field-auto-complete-for-query-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6372,14 +6372,14 @@ export def "rest-3-jql-autocompletedata-suggestions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fieldName: string # The name of the field. (e.g. reporter)
-  --fieldValue: string # The partial field item name entered by the user.
-  --predicateName: string # The name of the [ CHANGED operator predicate](https://confluence.atlassian.com/x/hQORLQ#Advancedsearching-operatorsreference-CHANGEDCHANGED) for which the suggestions are generated. The valid predicate operators are *by*, *from*, and *to*.
-  --predicateValue: string # The partial predicate item name entered by the user.
+  --field-name: string # The name of the field. (e.g. reporter)
+  --field-value: string # The partial field item name entered by the user.
+  --predicate-name: string # The name of the [ CHANGED operator predicate](https://confluence.atlassian.com/x/hQORLQ#Advancedsearching-operatorsreference-CHANGEDCHANGED) for which the suggestions are generated. The valid predicate operators are *by*, *from*, and *to*.
+  --predicate-value: string # The partial predicate item name entered by the user.
 ]: nothing -> record<results: table<displayName: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fieldName" $fieldName "scalar") (serialize-qp "fieldValue" $fieldValue "scalar") (serialize-qp "predicateName" $predicateName "scalar") (serialize-qp "predicateValue" $predicateValue "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fieldName" $field_name "scalar") (serialize-qp "fieldValue" $field_value "scalar") (serialize-qp "predicateName" $predicate_name "scalar") (serialize-qp "predicateValue" $predicate_value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/jql/autocompletedata/suggestions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6390,7 +6390,7 @@ export def "rest-3-jql-autocompletedata-suggestions get" [
 #
 # GET /rest/api/3/jql/function/computation
 # operationId: getPrecomputations
-export def "rest-3-jql-function-computation get" [
+export def "rest-3-jql-function-computation get-precomputations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6399,15 +6399,15 @@ export def "rest-3-jql-function-computation get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --functionKey: list
-  --startAt: int # format: int64, default: 0
-  --maxResults: int # format: int32, default: 5000
-  --orderBy: string
+  --function-key: list
+  --start-at: int # format: int64, default: 0
+  --max-results: int # format: int32, default: 5000
+  --order-by: string
   --filter: string
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<arguments: list, created: string, field: string, functionKey: string, functionName: string, id: string, operator: string, updated: string, used: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "functionKey" $functionKey "multi") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "functionKey" $function_key "multi") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/jql/function/computation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6419,7 +6419,7 @@ export def "rest-3-jql-function-computation get" [
 # POST /rest/api/3/jql/function/computation
 # operationId: updatePrecomputations
 # --values item shape: {id: int, value: string}
-export def "rest-3-jql-function-computation updatePrecomputations" [
+export def "rest-3-jql-function-computation update-precomputations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6434,7 +6434,7 @@ export def "rest-3-jql-function-computation updatePrecomputations" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/jql/function/computation")
-  let body = {values: $values} | compact
+  let body = {"values": $values} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6454,14 +6454,14 @@ export def "rest-3-jql-match matchIssues" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  issueIds: list # A list of issue IDs.
+  issue_ids: list # A list of issue IDs.
   jqls: list # A list of JQL queries.
 ]: any -> record<matches: table<errors: list, matchedIssues: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/jql/match")
-  let body = {issueIds: $issueIds, jqls: $jqls} | compact
+  let body = {"issueIds": $issue_ids, "jqls": $jqls} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6489,7 +6489,7 @@ export def "rest-3-jql-parse parseJqlQueries" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "validation" $validation "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/jql/parse" $qp)
-  let body = {queries: $queries} | compact
+  let body = {"queries": $queries} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6509,13 +6509,13 @@ export def "rest-3-jql-pdcleaner migrateQueries" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --queryStrings: list # A list of queries with user identifiers. Maximum of 100 queries.
+  --query-strings: list # A list of queries with user identifiers. Maximum of 100 queries.
 ]: any -> record<queriesWithUnknownUsers: table<convertedQuery: string, originalQuery: string>, queryStrings: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/jql/pdcleaner")
-  let body = {queryStrings: $queryStrings} | compact
+  let body = {"queryStrings": $query_strings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6542,7 +6542,7 @@ export def "rest-3-jql-sanitize sanitiseJqlQueries" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/jql/sanitize")
-  let body = {queries: $queries} | compact
+  let body = {"queries": $queries} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6553,7 +6553,7 @@ export def "rest-3-jql-sanitize sanitiseJqlQueries" [
 #
 # GET /rest/api/3/label
 # operationId: getAllLabels
-export def "rest-3-label get" [
+export def "rest-3-label get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6562,12 +6562,12 @@ export def "rest-3-label get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 1000)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 1000)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/label" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6600,8 +6600,8 @@ export def "rest-3-license-approximate-license-count get" [
 #
 # GET /rest/api/3/license/approximateLicenseCount/product/{applicationKey}
 # operationId: getApproximateApplicationLicenseCount
-export def "rest-3-license-approximate-license-count-product get" [
-  applicationKey: string
+export def "rest-3-license-approximate-license-count-product get-approximate-application" [
+  application_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6613,7 +6613,7 @@ export def "rest-3-license-approximate-license-count-product get" [
 ]: nothing -> record<key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/license/approximateLicenseCount/product/($applicationKey)")
+  let full_url = (build-url $base ({application_key: $application_key} | format pattern "/rest/api/3/license/approximateLicenseCount/product/{application_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6632,18 +6632,18 @@ export def "rest-3-mypermissions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --projectKey: string # The key of project. Ignored if `projectId` is provided.
-  --projectId: string # The ID of project.
-  --issueKey: string # The key of the issue. Ignored if `issueId` is provided.
-  --issueId: string # The ID of the issue.
+  --project-key: string # The key of project. Ignored if `projectId` is provided.
+  --project-id: string # The ID of project.
+  --issue-key: string # The key of the issue. Ignored if `issueId` is provided.
+  --issue-id: string # The ID of the issue.
   --permissions: string # A list of permission keys. (Required) This parameter accepts a comma-separated list. To get the list of available permissions, use [Get all permissions](#api-rest-api-3-permissions-get). (e.g. BROWSE_PROJECTS,EDIT_ISSUES)
-  --projectUuid: string
-  --projectConfigurationUuid: string
-  --commentId: string # The ID of the comment.
+  --project-uuid: string
+  --project-configuration-uuid: string
+  --comment-id: string # The ID of the comment.
 ]: nothing -> record<permissions: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectKey" $projectKey "scalar") (serialize-qp "projectId" $projectId "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "issueId" $issueId "scalar") (serialize-qp "permissions" $permissions "scalar") (serialize-qp "projectUuid" $projectUuid "scalar") (serialize-qp "projectConfigurationUuid" $projectConfigurationUuid "scalar") (serialize-qp "commentId" $commentId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "projectKey" $project_key "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "issueKey" $issue_key "scalar") (serialize-qp "issueId" $issue_id "scalar") (serialize-qp "permissions" $permissions "scalar") (serialize-qp "projectUuid" $project_uuid "scalar") (serialize-qp "projectConfigurationUuid" $project_configuration_uuid "scalar") (serialize-qp "commentId" $comment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/mypermissions" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6654,7 +6654,7 @@ export def "rest-3-mypermissions get" [
 #
 # DELETE /rest/api/3/mypreferences
 # operationId: removePreference
-export def "rest-3-mypreferences removePreference" [
+export def "rest-3-mypreferences delete-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6678,7 +6678,7 @@ export def "rest-3-mypreferences removePreference" [
 #
 # GET /rest/api/3/mypreferences
 # operationId: getPreference
-export def "rest-3-mypreferences get" [
+export def "rest-3-mypreferences get-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6792,7 +6792,7 @@ export def "rest-3-mypreferences-locale setLocale" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/mypreferences/locale")
-  let body = {locale: $locale} | compact
+  let body = {"locale": $locale} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6803,7 +6803,7 @@ export def "rest-3-mypreferences-locale setLocale" [
 #
 # GET /rest/api/3/myself
 # operationId: getCurrentUser
-export def "rest-3-myself get" [
+export def "rest-3-myself get-current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6836,16 +6836,16 @@ export def "rest-3-notificationscheme list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
-  --maxResults: string # The maximum number of items to return per page. (default: 50)
+  --start-at: string # The index of the first item to return in a page of results (page offset). (default: 0)
+  --max-results: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of notification schemes IDs to be filtered by
-  --projectId: list # The list of projects IDs to be filtered by
-  --onlyDefault: oneof<nothing, bool> # When set to true, returns only the default notification scheme. If you provide project IDs not associated with the default, returns an empty page. The default value is false. (default: false)
+  --project-id: list # The list of projects IDs to be filtered by
+  --only-default: oneof<nothing, bool> # When set to true, returns only the default notification scheme. If you provide project IDs not associated with the default, returns an empty page. The default value is false. (default: false)
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `all` Returns all expandable information  *  `field` Returns information about any custom fields assigned to receive an event  *  `group` Returns information about any groups assigned to receive an event  *  `notificationSchemeEvents` Returns a list of event associations. This list is returned for all expandable information  *  `projectRole` Returns information about any project roles assigned to receive an event  *  `user` Returns information about any users assigned to receive an event
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, expand: string, id: int, name: string, notificationSchemeEvents: list, projects: list, scope: record, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "projectId" $projectId "multi") (serialize-qp "onlyDefault" $onlyDefault "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "id" $id "multi") (serialize-qp "projectId" $project_id "multi") (serialize-qp "onlyDefault" $only_default "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/notificationscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6857,7 +6857,7 @@ export def "rest-3-notificationscheme list" [
 # POST /rest/api/3/notificationscheme
 # operationId: createNotificationScheme
 # --notificationSchemeEvents item shape: {event: any, notifications: list}
-export def "rest-3-notificationscheme createNotificationScheme" [
+export def "rest-3-notificationscheme create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6868,13 +6868,13 @@ export def "rest-3-notificationscheme createNotificationScheme" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the notification scheme.
   name: string # The name of the notification scheme. Must be unique (case-insensitive).
-  --notificationSchemeEvents: list # The list of notifications which should be added to the notification scheme. — item shape: {event: any, notifications: list}
+  --notification-scheme-events: list # The list of notifications which should be added to the notification scheme. — item shape: {event: any, notifications: list}
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/notificationscheme")
-  let body = {description: $description, name: $name, notificationSchemeEvents: $notificationSchemeEvents} | compact
+  let body = {"description": $description, "name": $name, "notificationSchemeEvents": $notification_scheme_events} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6885,7 +6885,7 @@ export def "rest-3-notificationscheme createNotificationScheme" [
 #
 # GET /rest/api/3/notificationscheme/project
 # operationId: getNotificationSchemeToProjectMappings
-export def "rest-3-notificationscheme-project get" [
+export def "rest-3-notificationscheme-project get-notification-scheme-to-project-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6894,14 +6894,14 @@ export def "rest-3-notificationscheme-project get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
-  --maxResults: string # The maximum number of items to return per page. (default: 50)
-  --notificationSchemeId: list # The list of notifications scheme IDs to be filtered out
-  --projectId: list # The list of project IDs to be filtered out
+  --start-at: string # The index of the first item to return in a page of results (page offset). (default: 0)
+  --max-results: string # The maximum number of items to return per page. (default: 50)
+  --notification-scheme-id: list # The list of notifications scheme IDs to be filtered out
+  --project-id: list # The list of project IDs to be filtered out
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<notificationSchemeId: string, projectId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "notificationSchemeId" $notificationSchemeId "multi") (serialize-qp "projectId" $projectId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "notificationSchemeId" $notification_scheme_id "multi") (serialize-qp "projectId" $project_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/notificationscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6927,7 +6927,7 @@ export def "rest-3-notificationscheme get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/notificationscheme/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/notificationscheme/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -6937,7 +6937,7 @@ export def "rest-3-notificationscheme get" [
 #
 # PUT /rest/api/3/notificationscheme/{id}
 # operationId: updateNotificationScheme
-export def "rest-3-notificationscheme updateNotificationScheme" [
+export def "rest-3-notificationscheme update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6953,8 +6953,8 @@ export def "rest-3-notificationscheme updateNotificationScheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/notificationscheme/($id)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/notificationscheme/{id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6966,7 +6966,7 @@ export def "rest-3-notificationscheme updateNotificationScheme" [
 # PUT /rest/api/3/notificationscheme/{id}/notification
 # operationId: addNotifications
 # --notificationSchemeEvents item shape: {event: any, notifications: list}
-export def "rest-3-notificationscheme-notification addNotifications" [
+export def "rest-3-notificationscheme-notification create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6976,13 +6976,13 @@ export def "rest-3-notificationscheme-notification addNotifications" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  notificationSchemeEvents: list # The list of notifications which should be added to the notification scheme. — item shape: {event: any, notifications: list}
+  notification_scheme_events: list # The list of notifications which should be added to the notification scheme. — item shape: {event: any, notifications: list}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/notificationscheme/($id)/notification")
-  let body = {notificationSchemeEvents: $notificationSchemeEvents} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/notificationscheme/{id}/notification"))
+  let body = {"notificationSchemeEvents": $notification_scheme_events} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6994,7 +6994,7 @@ export def "rest-3-notificationscheme-notification addNotifications" [
 # DELETE /rest/api/3/notificationscheme/{notificationSchemeId}
 # operationId: deleteNotificationScheme
 export def "rest-3-notificationscheme delete" [
-  notificationSchemeId: string
+  notification_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7006,7 +7006,7 @@ export def "rest-3-notificationscheme delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/notificationscheme/($notificationSchemeId)")
+  let full_url = (build-url $base ({notification_scheme_id: $notification_scheme_id} | format pattern "/rest/api/3/notificationscheme/{notification_scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7016,9 +7016,9 @@ export def "rest-3-notificationscheme delete" [
 #
 # DELETE /rest/api/3/notificationscheme/{notificationSchemeId}/notification/{notificationId}
 # operationId: removeNotificationFromNotificationScheme
-export def "rest-3-notificationscheme-notification removeNotificationFromNotificationScheme" [
-  notificationSchemeId: string
-  notificationId: string
+export def "rest-3-notificationscheme-notification delete-notification-from" [
+  notification_scheme_id: string
+  notification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7030,7 +7030,7 @@ export def "rest-3-notificationscheme-notification removeNotificationFromNotific
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/notificationscheme/($notificationSchemeId)/notification/($notificationId)")
+  let full_url = (build-url $base ({notification_scheme_id: $notification_scheme_id, notification_id: $notification_id} | format pattern "/rest/api/3/notificationscheme/{notification_scheme_id}/notification/{notification_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7040,7 +7040,7 @@ export def "rest-3-notificationscheme-notification removeNotificationFromNotific
 #
 # GET /rest/api/3/permissions
 # operationId: getAllPermissions
-export def "rest-3-permissions get" [
+export def "rest-3-permissions get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7063,7 +7063,7 @@ export def "rest-3-permissions get" [
 # POST /rest/api/3/permissions/check
 # operationId: getBulkPermissions
 # --projectPermissions item shape: {issues?: list, permissions: list, projects?: list}
-export def "rest-3-permissions-check post" [
+export def "rest-3-permissions-check get-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7072,15 +7072,15 @@ export def "rest-3-permissions-check post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of a user.
-  --globalPermissions: list # Global permissions to look up.
-  --projectPermissions: list # Project permissions with associated projects and issues to look up. — item shape: {issues?: list, permissions: list, projects?: list}
+  --account-id: string # The account ID of a user.
+  --global-permissions: list # Global permissions to look up.
+  --project-permissions: list # Project permissions with associated projects and issues to look up. — item shape: {issues?: list, permissions: list, projects?: list}
 ]: any -> record<globalPermissions: list<string>, projectPermissions: table<issues: list, permission: string, projects: list>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/permissions/check")
-  let body = {accountId: $accountId, globalPermissions: $globalPermissions, projectPermissions: $projectPermissions} | compact
+  let body = {"accountId": $account_id, "globalPermissions": $global_permissions, "projectPermissions": $project_permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7091,7 +7091,7 @@ export def "rest-3-permissions-check post" [
 #
 # POST /rest/api/3/permissions/project
 # operationId: getPermittedProjects
-export def "rest-3-permissions-project post" [
+export def "rest-3-permissions-project get-permitted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7106,7 +7106,7 @@ export def "rest-3-permissions-project post" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/permissions/project")
-  let body = {permissions: $permissions} | compact
+  let body = {"permissions": $permissions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7117,7 +7117,7 @@ export def "rest-3-permissions-project post" [
 #
 # GET /rest/api/3/permissionscheme
 # operationId: getAllPermissionSchemes
-export def "rest-3-permissionscheme list" [
+export def "rest-3-permissionscheme get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7142,7 +7142,7 @@ export def "rest-3-permissionscheme list" [
 # POST /rest/api/3/permissionscheme
 # operationId: createPermissionScheme
 # --permissions item shape: {holder?: any, permission?: string}
-export def "rest-3-permissionscheme createPermissionScheme" [
+export def "rest-3-permissionscheme create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7162,7 +7162,7 @@ export def "rest-3-permissionscheme createPermissionScheme" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/permissionscheme" $qp)
-  let body = {description: $description, name: $name, permissions: $permissions, scope: $scope} | compact
+  let body = {"description": $description, "name": $name, "permissions": $permissions, "scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7174,7 +7174,7 @@ export def "rest-3-permissionscheme createPermissionScheme" [
 # DELETE /rest/api/3/permissionscheme/{schemeId}
 # operationId: deletePermissionScheme
 export def "rest-3-permissionscheme delete" [
-  schemeId: int
+  scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7186,7 +7186,7 @@ export def "rest-3-permissionscheme delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)")
+  let full_url = (build-url $base ({scheme_id: $scheme_id} | format pattern "/rest/api/3/permissionscheme/{scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7197,7 +7197,7 @@ export def "rest-3-permissionscheme delete" [
 # GET /rest/api/3/permissionscheme/{schemeId}
 # operationId: getPermissionScheme
 export def "rest-3-permissionscheme get" [
-  schemeId: int
+  scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7211,7 +7211,7 @@ export def "rest-3-permissionscheme get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)" $qp)
+  let full_url = (build-url $base ({scheme_id: $scheme_id} | format pattern "/rest/api/3/permissionscheme/{scheme_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7222,8 +7222,8 @@ export def "rest-3-permissionscheme get" [
 # PUT /rest/api/3/permissionscheme/{schemeId}
 # operationId: updatePermissionScheme
 # --permissions item shape: {holder?: any, permission?: string}
-export def "rest-3-permissionscheme updatePermissionScheme" [
-  schemeId: int
+export def "rest-3-permissionscheme update" [
+  scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7242,8 +7242,8 @@ export def "rest-3-permissionscheme updatePermissionScheme" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)" $qp)
-  let body = {description: $description, name: $name, permissions: $permissions, scope: $scope} | compact
+  let full_url = (build-url $base ({scheme_id: $scheme_id} | format pattern "/rest/api/3/permissionscheme/{scheme_id}") $qp)
+  let body = {"description": $description, "name": $name, "permissions": $permissions, "scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7254,8 +7254,8 @@ export def "rest-3-permissionscheme updatePermissionScheme" [
 #
 # GET /rest/api/3/permissionscheme/{schemeId}/permission
 # operationId: getPermissionSchemeGrants
-export def "rest-3-permissionscheme-permission list" [
-  schemeId: int
+export def "rest-3-permissionscheme-permission get-permission-scheme-grants" [
+  scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7269,7 +7269,7 @@ export def "rest-3-permissionscheme-permission list" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)/permission" $qp)
+  let full_url = (build-url $base ({scheme_id: $scheme_id} | format pattern "/rest/api/3/permissionscheme/{scheme_id}/permission") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7279,8 +7279,8 @@ export def "rest-3-permissionscheme-permission list" [
 #
 # POST /rest/api/3/permissionscheme/{schemeId}/permission
 # operationId: createPermissionGrant
-export def "rest-3-permissionscheme-permission createPermissionGrant" [
-  schemeId: int
+export def "rest-3-permissionscheme-permission create-permission-grant" [
+  scheme_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7297,8 +7297,8 @@ export def "rest-3-permissionscheme-permission createPermissionGrant" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)/permission" $qp)
-  let body = {holder: $holder, permission: $permission} | compact
+  let full_url = (build-url $base ({scheme_id: $scheme_id} | format pattern "/rest/api/3/permissionscheme/{scheme_id}/permission") $qp)
+  let body = {"holder": $holder, "permission": $permission} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7309,9 +7309,9 @@ export def "rest-3-permissionscheme-permission createPermissionGrant" [
 #
 # DELETE /rest/api/3/permissionscheme/{schemeId}/permission/{permissionId}
 # operationId: deletePermissionSchemeEntity
-export def "rest-3-permissionscheme-permission delete" [
-  schemeId: int
-  permissionId: int
+export def "rest-3-permissionscheme-permission delete-permission-scheme-entity" [
+  scheme_id: int
+  permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7323,7 +7323,7 @@ export def "rest-3-permissionscheme-permission delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)/permission/($permissionId)")
+  let full_url = (build-url $base ({scheme_id: $scheme_id, permission_id: $permission_id} | format pattern "/rest/api/3/permissionscheme/{scheme_id}/permission/{permission_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7333,9 +7333,9 @@ export def "rest-3-permissionscheme-permission delete" [
 #
 # GET /rest/api/3/permissionscheme/{schemeId}/permission/{permissionId}
 # operationId: getPermissionSchemeGrant
-export def "rest-3-permissionscheme-permission get" [
-  schemeId: int
-  permissionId: int
+export def "rest-3-permissionscheme-permission get-permission-scheme-grant" [
+  scheme_id: int
+  permission_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7349,7 +7349,7 @@ export def "rest-3-permissionscheme-permission get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/permissionscheme/($schemeId)/permission/($permissionId)" $qp)
+  let full_url = (build-url $base ({scheme_id: $scheme_id, permission_id: $permission_id} | format pattern "/rest/api/3/permissionscheme/{scheme_id}/permission/{permission_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7361,7 +7361,7 @@ export def "rest-3-permissionscheme-permission get" [
 # DEPRECATED
 # operationId: getPriorities
 @deprecated
-export def "rest-3-priority list" [
+export def "rest-3-priority get-priorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7383,7 +7383,7 @@ export def "rest-3-priority list" [
 #
 # POST /rest/api/3/priority
 # operationId: createPriority
-export def "rest-3-priority createPriority" [
+export def "rest-3-priority create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7393,15 +7393,15 @@ export def "rest-3-priority createPriority" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the priority.
-  --iconUrl: string@iconUrl-completer # The URL of an icon for the priority. Accepted protocols are HTTP and HTTPS. Built in icons can also be used.
+  --icon-url: string@icon-url-completer # The URL of an icon for the priority. Accepted protocols are HTTP and HTTPS. Built in icons can also be used.
   name: string # The name of the priority. Must be unique.
-  statusColor: string # The status color of the priority in 3-digit or 6-digit hexadecimal format.
+  status_color: string # The status color of the priority in 3-digit or 6-digit hexadecimal format.
 ]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/priority")
-  let body = {description: $description, iconUrl: $iconUrl, name: $name, statusColor: $statusColor} | compact
+  let body = {"description": $description, "iconUrl": $icon_url, "name": $name, "statusColor": $status_color} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7427,7 +7427,7 @@ export def "rest-3-priority-default setDefaultPriority" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/priority/default")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7438,7 +7438,7 @@ export def "rest-3-priority-default setDefaultPriority" [
 #
 # PUT /rest/api/3/priority/move
 # operationId: movePriorities
-export def "rest-3-priority-move movePriorities" [
+export def "rest-3-priority-move move-priorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7455,7 +7455,7 @@ export def "rest-3-priority-move movePriorities" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/priority/move")
-  let body = {after: $after, ids: $ids, position: $position} | compact
+  let body = {"after": $after, "ids": $ids, "position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7466,7 +7466,7 @@ export def "rest-3-priority-move movePriorities" [
 #
 # GET /rest/api/3/priority/search
 # operationId: searchPriorities
-export def "rest-3-priority-search searchPriorities" [
+export def "rest-3-priority-search list-priorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7475,14 +7475,14 @@ export def "rest-3-priority-search searchPriorities" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
-  --maxResults: string # The maximum number of items to return per page. (default: 50)
+  --start-at: string # The index of the first item to return in a page of results (page offset). (default: 0)
+  --max-results: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of priority IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=2&id=3`.
-  --onlyDefault: oneof<nothing, bool> # Whether only the default priority is returned. (default: false)
+  --only-default: oneof<nothing, bool> # Whether only the default priority is returned. (default: false)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, iconUrl: string, id: string, isDefault: bool, name: string, self: string, statusColor: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "onlyDefault" $onlyDefault "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "id" $id "multi") (serialize-qp "onlyDefault" $only_default "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/priority/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7503,12 +7503,12 @@ export def "rest-3-priority delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replaceWith: string # The ID of the issue priority that will replace the currently selected resolution.
+  --replace-with: string # The ID of the issue priority that will replace the currently selected resolution.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "replaceWith" $replaceWith "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/priority/($id)" $qp)
+  let qp = [(serialize-qp "replaceWith" $replace_with "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/priority/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7531,7 +7531,7 @@ export def "rest-3-priority get" [
 ]: nothing -> record<description: string, iconUrl: string, id: string, isDefault: bool, name: string, self: string, statusColor: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/priority/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/priority/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7541,7 +7541,7 @@ export def "rest-3-priority get" [
 #
 # PUT /rest/api/3/priority/{id}
 # operationId: updatePriority
-export def "rest-3-priority updatePriority" [
+export def "rest-3-priority update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7552,15 +7552,15 @@ export def "rest-3-priority updatePriority" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The description of the priority.
-  --iconUrl: string@iconUrl-completer # The URL of an icon for the priority. Accepted protocols are HTTP and HTTPS. Built in icons can also be used.
+  --icon-url: string@icon-url-completer # The URL of an icon for the priority. Accepted protocols are HTTP and HTTPS. Built in icons can also be used.
   --name: string # The name of the priority. Must be unique.
-  --statusColor: string # The status color of the priority in 3-digit or 6-digit hexadecimal format.
+  --status-color: string # The status color of the priority in 3-digit or 6-digit hexadecimal format.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/priority/($id)")
-  let body = {description: $description, iconUrl: $iconUrl, name: $name, statusColor: $statusColor} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/priority/{id}"))
+  let body = {"description": $description, "iconUrl": $icon_url, "name": $name, "statusColor": $status_color} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7573,7 +7573,7 @@ export def "rest-3-priority updatePriority" [
 # DEPRECATED
 # operationId: getAllProjects
 @deprecated
-export def "rest-3-project list" [
+export def "rest-3-project get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7599,7 +7599,7 @@ export def "rest-3-project list" [
 #
 # POST /rest/api/3/project
 # operationId: createProject
-export def "rest-3-project createProject" [
+export def "rest-3-project create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7608,30 +7608,30 @@ export def "rest-3-project createProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --assigneeType: string@assigneeType-completer-1 # The default assignee when creating issues for this project.
-  --avatarId: int # An integer value for the project's avatar. (format: int64)
-  --categoryId: int # The ID of the project's category. A complete list of category IDs is found using the [Get all project categories](#api-rest-api-3-projectCategory-get) operation. (format: int64)
+  --assignee-type: string@assignee-type-completer-1 # The default assignee when creating issues for this project.
+  --avatar-id: int # An integer value for the project's avatar. (format: int64)
+  --category-id: int # The ID of the project's category. A complete list of category IDs is found using the [Get all project categories](#api-rest-api-3-projectCategory-get) operation. (format: int64)
   --description: string # A brief description of the project.
-  --fieldConfigurationScheme: int # The ID of the field configuration scheme for the project. Use the [Get all field configuration schemes](#api-rest-api-3-fieldconfigurationscheme-get) operation to get a list of field configuration scheme IDs. If you specify the field configuration scheme you cannot specify the project template key. (format: int64)
-  --issueSecurityScheme: int # The ID of the issue security scheme for the project, which enables you to control who can and cannot view issues. Use the [Get issue security schemes](#api-rest-api-3-issuesecurityschemes-get) resource to get all issue security scheme IDs. (format: int64)
-  --issueTypeScheme: int # The ID of the issue type scheme for the project. Use the [Get all issue type schemes](#api-rest-api-3-issuetypescheme-get) operation to get a list of issue type scheme IDs. If you specify the issue type scheme you cannot specify the project template key. (format: int64)
-  --issueTypeScreenScheme: int # The ID of the issue type screen scheme for the project. Use the [Get all issue type screen schemes](#api-rest-api-3-issuetypescreenscheme-get) operation to get a list of issue type screen scheme IDs. If you specify the issue type screen scheme you cannot specify the project template key. (format: int64)
+  --field-configuration-scheme: int # The ID of the field configuration scheme for the project. Use the [Get all field configuration schemes](#api-rest-api-3-fieldconfigurationscheme-get) operation to get a list of field configuration scheme IDs. If you specify the field configuration scheme you cannot specify the project template key. (format: int64)
+  --issue-security-scheme: int # The ID of the issue security scheme for the project, which enables you to control who can and cannot view issues. Use the [Get issue security schemes](#api-rest-api-3-issuesecurityschemes-get) resource to get all issue security scheme IDs. (format: int64)
+  --issue-type-scheme: int # The ID of the issue type scheme for the project. Use the [Get all issue type schemes](#api-rest-api-3-issuetypescheme-get) operation to get a list of issue type scheme IDs. If you specify the issue type scheme you cannot specify the project template key. (format: int64)
+  --issue-type-screen-scheme: int # The ID of the issue type screen scheme for the project. Use the [Get all issue type screen schemes](#api-rest-api-3-issuetypescreenscheme-get) operation to get a list of issue type screen scheme IDs. If you specify the issue type screen scheme you cannot specify the project template key. (format: int64)
   key: string # Project keys must be unique and start with an uppercase letter followed by one or more uppercase alphanumeric characters. The maximum length is 10 characters.
   --lead: string # This parameter is deprecated because of privacy changes. Use `leadAccountId` instead. See the [migration guide](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. The user name of the project lead. Either `lead` or `leadAccountId` must be set when creating a project. Cannot be provided with `leadAccountId`.
-  --leadAccountId: string # The account ID of the project lead. Either `lead` or `leadAccountId` must be set when creating a project. Cannot be provided with `lead`.
+  --lead-account-id: string # The account ID of the project lead. Either `lead` or `leadAccountId` must be set when creating a project. Cannot be provided with `lead`.
   name: string # The name of the project.
-  --notificationScheme: int # The ID of the notification scheme for the project. Use the [Get notification schemes](#api-rest-api-3-notificationscheme-get) resource to get a list of notification scheme IDs. (format: int64)
-  --permissionScheme: int # The ID of the permission scheme for the project. Use the [Get all permission schemes](#api-rest-api-3-permissionscheme-get) resource to see a list of all permission scheme IDs. (format: int64)
-  --projectTemplateKey: string@projectTemplateKey-completer # A predefined configuration for a project. The type of the `projectTemplateKey` must match with the type of the `projectTypeKey`.
-  --projectTypeKey: string@projectTypeKey-completer # The [project type](https://confluence.atlassian.com/x/GwiiLQ#Jiraapplicationsoverview-Productfeaturesandprojecttypes), which defines the application-specific feature set. If you don't specify the project template you have to specify the project type.
+  --notification-scheme: int # The ID of the notification scheme for the project. Use the [Get notification schemes](#api-rest-api-3-notificationscheme-get) resource to get a list of notification scheme IDs. (format: int64)
+  --permission-scheme: int # The ID of the permission scheme for the project. Use the [Get all permission schemes](#api-rest-api-3-permissionscheme-get) resource to see a list of all permission scheme IDs. (format: int64)
+  --project-template-key: string@project-template-key-completer # A predefined configuration for a project. The type of the `projectTemplateKey` must match with the type of the `projectTypeKey`.
+  --project-type-key: string@project-type-key-completer # The [project type](https://confluence.atlassian.com/x/GwiiLQ#Jiraapplicationsoverview-Productfeaturesandprojecttypes), which defines the application-specific feature set. If you don't specify the project template you have to specify the project type.
   --body-url: string # A link to information about this project, such as project documentation
-  --workflowScheme: int # The ID of the workflow scheme for the project. Use the [Get all workflow schemes](#api-rest-api-3-workflowscheme-get) operation to get a list of workflow scheme IDs. If you specify the workflow scheme you cannot specify the project template key. (format: int64)
+  --workflow-scheme: int # The ID of the workflow scheme for the project. Use the [Get all workflow schemes](#api-rest-api-3-workflowscheme-get) operation to get a list of workflow scheme IDs. If you specify the workflow scheme you cannot specify the project template key. (format: int64)
 ]: any -> record<id: int, key: string, self: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/project")
-  let body = {assigneeType: $assigneeType, avatarId: $avatarId, categoryId: $categoryId, description: $description, fieldConfigurationScheme: $fieldConfigurationScheme, issueSecurityScheme: $issueSecurityScheme, issueTypeScheme: $issueTypeScheme, issueTypeScreenScheme: $issueTypeScreenScheme, key: $key, lead: $lead, leadAccountId: $leadAccountId, name: $name, notificationScheme: $notificationScheme, permissionScheme: $permissionScheme, projectTemplateKey: $projectTemplateKey, projectTypeKey: $projectTypeKey, url: $body_url, workflowScheme: $workflowScheme} | compact
+  let body = {"assigneeType": $assignee_type, "avatarId": $avatar_id, "categoryId": $category_id, "description": $description, "fieldConfigurationScheme": $field_configuration_scheme, "issueSecurityScheme": $issue_security_scheme, "issueTypeScheme": $issue_type_scheme, "issueTypeScreenScheme": $issue_type_screen_scheme, "key": $key, "lead": $lead, "leadAccountId": $lead_account_id, "name": $name, "notificationScheme": $notification_scheme, "permissionScheme": $permission_scheme, "projectTemplateKey": $project_template_key, "projectTypeKey": $project_type_key, "url": $body_url, "workflowScheme": $workflow_scheme} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7667,7 +7667,7 @@ export def "rest-3-project-recent get" [
 #
 # GET /rest/api/3/project/search
 # operationId: searchProjects
-export def "rest-3-project-search searchProjects" [
+export def "rest-3-project-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7676,23 +7676,23 @@ export def "rest-3-project-search searchProjects" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --orderBy: string@orderBy-completer-5 # [Order](#ordering) the results by a field.   *  `category` Sorts by project category. A complete list of category IDs is found using [Get all project categories](#api-rest-api-3-projectCategory-get).  *  `issueCount` Sorts by the total number of issues in each project.  *  `key` Sorts by project key.  *  `lastIssueUpdatedTime` Sorts by the last issue update time.  *  `name` Sorts by project name.  *  `owner` Sorts by project lead.  *  `archivedDate` EXPERIMENTAL. Sorts by project archived date.  *  `deletedDate` EXPERIMENTAL. Sorts by project deleted date. (default: key)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --order-by: string@order-by-completer-5 # [Order](#ordering) the results by a field.   *  `category` Sorts by project category. A complete list of category IDs is found using [Get all project categories](#api-rest-api-3-projectCategory-get).  *  `issueCount` Sorts by the total number of issues in each project.  *  `key` Sorts by project key.  *  `lastIssueUpdatedTime` Sorts by the last issue update time.  *  `name` Sorts by project name.  *  `owner` Sorts by project lead.  *  `archivedDate` EXPERIMENTAL. Sorts by project archived date.  *  `deletedDate` EXPERIMENTAL. Sorts by project deleted date. (default: key)
   --id: list # The project IDs to filter the results by. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`. Up to 50 project IDs can be provided.
   --keys: list # The project keys to filter the results by. To include multiple keys, provide an ampersand-separated list. For example, `keys=PA&keys=PB`. Up to 50 project keys can be provided.
   --query: string # Filter the results using a literal string. Projects with a matching `key` or `name` are returned (case insensitive).
-  --typeKey: string # Orders results by the [project type](https://confluence.atlassian.com/x/GwiiLQ#Jiraapplicationsoverview-Productfeaturesandprojecttypes). This parameter accepts a comma-separated list. Valid values are `business`, `service_desk`, and `software`.
-  --categoryId: int # The ID of the project's category. A complete list of category IDs is found using the [Get all project categories](#api-rest-api-3-projectCategory-get) operation. (format: int64)
+  --type-key: string # Orders results by the [project type](https://confluence.atlassian.com/x/GwiiLQ#Jiraapplicationsoverview-Productfeaturesandprojecttypes). This parameter accepts a comma-separated list. Valid values are `business`, `service_desk`, and `software`.
+  --category-id: int # The ID of the project's category. A complete list of category IDs is found using the [Get all project categories](#api-rest-api-3-projectCategory-get) operation. (format: int64)
   --action: string@action-completer # Filter results by projects for which the user can:   *  `view` the project, meaning that they have one of the following permissions:           *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project.      *  *Administer projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project.      *  *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg).  *  `browse` the project, meaning that they have the *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project.  *  `edit` the project, meaning that they have one of the following permissions:           *  *Administer projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project.      *  *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg). (default: view)
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expanded options include:   *  `description` Returns the project description.  *  `projectKeys` Returns all project keys associated with a project.  *  `lead` Returns information about the project lead.  *  `issueTypes` Returns all issue types associated with the project.  *  `url` Returns the URL associated with the project.  *  `insight` EXPERIMENTAL. Returns the insight details of total issue count and last issue update time for the project.
   --status: list # EXPERIMENTAL. Filter results by project status:   *  `live` Search live projects.  *  `archived` Search archived projects.  *  `deleted` Search deleted projects, those in the recycle bin.
   --properties: list # EXPERIMENTAL. A list of project properties to return for the project. This parameter accepts a comma-separated list.
-  --propertyQuery: string # EXPERIMENTAL. A query string used to search properties. The query string cannot be specified using a JSON object. For example, to search for the value of `nested` from `{"something":{"nested":1,"other":2}}` use `[thepropertykey].something.nested=1`. Note that the propertyQuery key is enclosed in square brackets to enable searching where the propertyQuery key includes dot (.) or equals (=) characters. Note that `thepropertykey` is only returned when included in `properties`.
+  --property-query: string # EXPERIMENTAL. A query string used to search properties. The query string cannot be specified using a JSON object. For example, to search for the value of `nested` from `{"something":{"nested":1,"other":2}}` use `[thepropertykey].something.nested=1`. Note that the propertyQuery key is enclosed in square brackets to enable searching where the propertyQuery key includes dot (.) or equals (=) characters. Note that `thepropertykey` is only returned when included in `properties`.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<archived: bool, archivedBy: record, archivedDate: string, assigneeType: string, avatarUrls: record, components: list, deleted: bool, deletedBy: record, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record, isPrivate: bool, issueTypeHierarchy: record, issueTypes: list, key: string, landingPageInfo: record, lead: record, name: string, permissions: record, projectCategory: record, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "id" $id "multi") (serialize-qp "keys" $keys "multi") (serialize-qp "query" $query "scalar") (serialize-qp "typeKey" $typeKey "scalar") (serialize-qp "categoryId" $categoryId "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "status" $status "multi") (serialize-qp "properties" $properties "multi") (serialize-qp "propertyQuery" $propertyQuery "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "id" $id "multi") (serialize-qp "keys" $keys "multi") (serialize-qp "query" $query "scalar") (serialize-qp "typeKey" $type_key "scalar") (serialize-qp "categoryId" $category_id "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "status" $status "multi") (serialize-qp "properties" $properties "multi") (serialize-qp "propertyQuery" $property_query "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/project/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7703,7 +7703,7 @@ export def "rest-3-project-search searchProjects" [
 #
 # GET /rest/api/3/project/type
 # operationId: getAllProjectTypes
-export def "rest-3-project-type list" [
+export def "rest-3-project-type get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7725,7 +7725,7 @@ export def "rest-3-project-type list" [
 #
 # GET /rest/api/3/project/type/accessible
 # operationId: getAllAccessibleProjectTypes
-export def "rest-3-project-type-accessible list" [
+export def "rest-3-project-type-accessible get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7748,7 +7748,7 @@ export def "rest-3-project-type-accessible list" [
 # GET /rest/api/3/project/type/{projectTypeKey}
 # operationId: getProjectTypeByKey
 export def "rest-3-project-type get" [
-  projectTypeKey: string
+  project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7760,7 +7760,7 @@ export def "rest-3-project-type get" [
 ]: nothing -> record<color: string, descriptionI18nKey: string, formattedKey: string, icon: string, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/type/($projectTypeKey)")
+  let full_url = (build-url $base ({project_type_key: $project_type_key} | format pattern "/rest/api/3/project/type/{project_type_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7771,7 +7771,7 @@ export def "rest-3-project-type get" [
 # GET /rest/api/3/project/type/{projectTypeKey}/accessible
 # operationId: getAccessibleProjectTypeByKey
 export def "rest-3-project-type-accessible get" [
-  projectTypeKey: string
+  project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7783,7 +7783,7 @@ export def "rest-3-project-type-accessible get" [
 ]: nothing -> record<color: string, descriptionI18nKey: string, formattedKey: string, icon: string, key: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/type/($projectTypeKey)/accessible")
+  let full_url = (build-url $base ({project_type_key: $project_type_key} | format pattern "/rest/api/3/project/type/{project_type_key}/accessible"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7794,7 +7794,7 @@ export def "rest-3-project-type-accessible get" [
 # DELETE /rest/api/3/project/{projectIdOrKey}
 # operationId: deleteProject
 export def "rest-3-project delete" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7803,12 +7803,12 @@ export def "rest-3-project delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --enableUndo: oneof<nothing, bool> # Whether this project is placed in the Jira recycle bin where it will be available for restoration. (default: false)
+  --enable-undo: oneof<nothing, bool> # Whether this project is placed in the Jira recycle bin where it will be available for restoration. (default: false)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "enableUndo" $enableUndo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)" $qp)
+  let qp = [(serialize-qp "enableUndo" $enable_undo "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7819,7 +7819,7 @@ export def "rest-3-project delete" [
 # GET /rest/api/3/project/{projectIdOrKey}
 # operationId: getProject
 export def "rest-3-project get" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7834,7 +7834,7 @@ export def "rest-3-project get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)" $qp)
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7844,8 +7844,8 @@ export def "rest-3-project get" [
 #
 # PUT /rest/api/3/project/{projectIdOrKey}
 # operationId: updateProject
-export def "rest-3-project updateProject" [
-  projectIdOrKey: string
+export def "rest-3-project update" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7855,25 +7855,25 @@ export def "rest-3-project updateProject" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Note that the project description, issue types, and project lead are included in all responses by default. Expand options include:   *  `description` The project description.  *  `issueTypes` The issue types associated with the project.  *  `lead` The project lead.  *  `projectKeys` All project keys associated with the project.
-  --assigneeType: string@assigneeType-completer-1 # The default assignee when creating issues for this project.
-  --avatarId: int # An integer value for the project's avatar. (format: int64)
-  --categoryId: int # The ID of the project's category. A complete list of category IDs is found using the [Get all project categories](#api-rest-api-3-projectCategory-get) operation. To remove the project category from the project, set the value to `-1.` (format: int64)
+  --assignee-type: string@assignee-type-completer-1 # The default assignee when creating issues for this project.
+  --avatar-id: int # An integer value for the project's avatar. (format: int64)
+  --category-id: int # The ID of the project's category. A complete list of category IDs is found using the [Get all project categories](#api-rest-api-3-projectCategory-get) operation. To remove the project category from the project, set the value to `-1.` (format: int64)
   --description: string # A brief description of the project.
-  --issueSecurityScheme: int # The ID of the issue security scheme for the project, which enables you to control who can and cannot view issues. Use the [Get issue security schemes](#api-rest-api-3-issuesecurityschemes-get) resource to get all issue security scheme IDs. (format: int64)
+  --issue-security-scheme: int # The ID of the issue security scheme for the project, which enables you to control who can and cannot view issues. Use the [Get issue security schemes](#api-rest-api-3-issuesecurityschemes-get) resource to get all issue security scheme IDs. (format: int64)
   --key: string # Project keys must be unique and start with an uppercase letter followed by one or more uppercase alphanumeric characters. The maximum length is 10 characters.
   --lead: string # This parameter is deprecated because of privacy changes. Use `leadAccountId` instead. See the [migration guide](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details. The user name of the project lead. Cannot be provided with `leadAccountId`.
-  --leadAccountId: string # The account ID of the project lead. Cannot be provided with `lead`.
+  --lead-account-id: string # The account ID of the project lead. Cannot be provided with `lead`.
   --name: string # The name of the project.
-  --notificationScheme: int # The ID of the notification scheme for the project. Use the [Get notification schemes](#api-rest-api-3-notificationscheme-get) resource to get a list of notification scheme IDs. (format: int64)
-  --permissionScheme: int # The ID of the permission scheme for the project. Use the [Get all permission schemes](#api-rest-api-3-permissionscheme-get) resource to see a list of all permission scheme IDs. (format: int64)
+  --notification-scheme: int # The ID of the notification scheme for the project. Use the [Get notification schemes](#api-rest-api-3-notificationscheme-get) resource to get a list of notification scheme IDs. (format: int64)
+  --permission-scheme: int # The ID of the permission scheme for the project. Use the [Get all permission schemes](#api-rest-api-3-permissionscheme-get) resource to see a list of all permission scheme IDs. (format: int64)
   --body-url: string # A link to information about this project, such as project documentation
 ]: any -> record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: table<assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list<record>>, issueTypes: table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record, self: string, subtask: bool>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: table<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)" $qp)
-  let body = {assigneeType: $assigneeType, avatarId: $avatarId, categoryId: $categoryId, description: $description, issueSecurityScheme: $issueSecurityScheme, key: $key, lead: $lead, leadAccountId: $leadAccountId, name: $name, notificationScheme: $notificationScheme, permissionScheme: $permissionScheme, url: $body_url} | compact
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}") $qp)
+  let body = {"assigneeType": $assignee_type, "avatarId": $avatar_id, "categoryId": $category_id, "description": $description, "issueSecurityScheme": $issue_security_scheme, "key": $key, "lead": $lead, "leadAccountId": $lead_account_id, "name": $name, "notificationScheme": $notification_scheme, "permissionScheme": $permission_scheme, "url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7884,8 +7884,8 @@ export def "rest-3-project updateProject" [
 #
 # POST /rest/api/3/project/{projectIdOrKey}/archive
 # operationId: archiveProject
-export def "rest-3-project-archive archiveProject" [
-  projectIdOrKey: string
+export def "rest-3-project-archive archive" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7897,7 +7897,7 @@ export def "rest-3-project-archive archiveProject" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/archive")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/archive"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7907,8 +7907,8 @@ export def "rest-3-project-archive archiveProject" [
 #
 # PUT /rest/api/3/project/{projectIdOrKey}/avatar
 # operationId: updateProjectAvatar
-export def "rest-3-project-avatar updateProjectAvatar" [
-  projectIdOrKey: string
+export def "rest-3-project-avatar update" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7922,8 +7922,8 @@ export def "rest-3-project-avatar updateProjectAvatar" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/avatar")
-  let body = {id: $id} | compact
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/avatar"))
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7935,7 +7935,7 @@ export def "rest-3-project-avatar updateProjectAvatar" [
 # DELETE /rest/api/3/project/{projectIdOrKey}/avatar/{id}
 # operationId: deleteProjectAvatar
 export def "rest-3-project-avatar delete" [
-  projectIdOrKey: string
+  project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7948,7 +7948,7 @@ export def "rest-3-project-avatar delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/avatar/($id)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, id: $id} | format pattern "/rest/api/3/project/{project_id_or_key}/avatar/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -7958,8 +7958,8 @@ export def "rest-3-project-avatar delete" [
 #
 # POST /rest/api/3/project/{projectIdOrKey}/avatar2
 # operationId: createProjectAvatar
-export def "rest-3-project-avatar2 createProjectAvatar" [
-  projectIdOrKey: string
+export def "rest-3-project-avatar2 create-project-avatar" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7977,7 +7977,7 @@ export def "rest-3-project-avatar2 createProjectAvatar" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "x" $x "scalar") (serialize-qp "y" $y "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/avatar2" $qp)
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/avatar2") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -7988,8 +7988,8 @@ export def "rest-3-project-avatar2 createProjectAvatar" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/avatars
 # operationId: getAllProjectAvatars
-export def "rest-3-project-avatars get" [
-  projectIdOrKey: string
+export def "rest-3-project-avatars get-all" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8001,7 +8001,7 @@ export def "rest-3-project-avatars get" [
 ]: nothing -> record<custom: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>, system: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/avatars")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/avatars"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8011,8 +8011,8 @@ export def "rest-3-project-avatars get" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/component
 # operationId: getProjectComponentsPaginated
-export def "rest-3-project-component get" [
-  projectIdOrKey: string
+export def "rest-3-project-component get-project-components-paginated" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8021,15 +8021,15 @@ export def "rest-3-project-component get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --orderBy: string@orderBy-completer-6 # [Order](#ordering) the results by a field:   *  `description` Sorts by the component description.  *  `issueCount` Sorts by the count of issues associated with the component.  *  `lead` Sorts by the user key of the component's project lead.  *  `name` Sorts by component name.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --order-by: string@order-by-completer-6 # [Order](#ordering) the results by a field:   *  `description` Sorts by the component description.  *  `issueCount` Sorts by the count of issues associated with the component.  *  `lead` Sorts by the user key of the component's project lead.  *  `name` Sorts by component name.
   --query: string # Filter the results using a literal string. Components with a matching `name` or `description` are returned (case insensitive).
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, issueCount: int, lead: record, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/component" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/component") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8040,7 +8040,7 @@ export def "rest-3-project-component get" [
 # GET /rest/api/3/project/{projectIdOrKey}/components
 # operationId: getProjectComponents
 export def "rest-3-project-components get" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8052,7 +8052,7 @@ export def "rest-3-project-components get" [
 ]: nothing -> table<assignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>, realAssigneeType: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/components")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/components"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8062,8 +8062,8 @@ export def "rest-3-project-components get" [
 #
 # POST /rest/api/3/project/{projectIdOrKey}/delete
 # operationId: deleteProjectAsynchronously
-export def "rest-3-project-delete post" [
-  projectIdOrKey: string
+export def "rest-3-project-delete delete-project-asynchronously" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8075,7 +8075,7 @@ export def "rest-3-project-delete post" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/delete")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/delete"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8085,8 +8085,8 @@ export def "rest-3-project-delete post" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/features
 # operationId: getFeaturesForProject
-export def "rest-3-project-features get" [
-  projectIdOrKey: string
+export def "rest-3-project-features get-features-for" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8098,7 +8098,7 @@ export def "rest-3-project-features get" [
 ]: nothing -> record<features: table<feature: string, imageUri: string, localisedDescription: string, localisedName: string, prerequisites: list, projectId: int, state: string, toggleLocked: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/features")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/features"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8109,8 +8109,8 @@ export def "rest-3-project-features get" [
 # PUT /rest/api/3/project/{projectIdOrKey}/features/{featureKey}
 # operationId: toggleFeatureForProject
 export def "rest-3-project-features toggleFeatureForProject" [
-  projectIdOrKey: string
-  featureKey: string
+  project_id_or_key: string
+  feature_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8124,8 +8124,8 @@ export def "rest-3-project-features toggleFeatureForProject" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/features/($featureKey)")
-  let body = {state: $state} | compact
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, feature_key: $feature_key} | format pattern "/rest/api/3/project/{project_id_or_key}/features/{feature_key}"))
+  let body = {"state": $state} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8136,8 +8136,8 @@ export def "rest-3-project-features toggleFeatureForProject" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/properties
 # operationId: getProjectPropertyKeys
-export def "rest-3-project-properties list" [
-  projectIdOrKey: string
+export def "rest-3-project-properties get-project-property-keys" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8149,7 +8149,7 @@ export def "rest-3-project-properties list" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/properties")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8159,9 +8159,9 @@ export def "rest-3-project-properties list" [
 #
 # DELETE /rest/api/3/project/{projectIdOrKey}/properties/{propertyKey}
 # operationId: deleteProjectProperty
-export def "rest-3-project-properties delete" [
-  projectIdOrKey: string
-  propertyKey: string
+export def "rest-3-project-properties delete-project-property" [
+  project_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8173,7 +8173,7 @@ export def "rest-3-project-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, property_key: $property_key} | format pattern "/rest/api/3/project/{project_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8183,9 +8183,9 @@ export def "rest-3-project-properties delete" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/properties/{propertyKey}
 # operationId: getProjectProperty
-export def "rest-3-project-properties get" [
-  projectIdOrKey: string
-  propertyKey: string
+export def "rest-3-project-properties get-project-property" [
+  project_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8197,7 +8197,7 @@ export def "rest-3-project-properties get" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, property_key: $property_key} | format pattern "/rest/api/3/project/{project_id_or_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8208,8 +8208,8 @@ export def "rest-3-project-properties get" [
 # PUT /rest/api/3/project/{projectIdOrKey}/properties/{propertyKey}
 # operationId: setProjectProperty
 export def "rest-3-project-properties setProjectProperty" [
-  projectIdOrKey: string
-  propertyKey: string
+  project_id_or_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8223,7 +8223,7 @@ export def "rest-3-project-properties setProjectProperty" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, property_key: $property_key} | format pattern "/rest/api/3/project/{project_id_or_key}/properties/{property_key}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8235,7 +8235,7 @@ export def "rest-3-project-properties setProjectProperty" [
 # POST /rest/api/3/project/{projectIdOrKey}/restore
 # operationId: restore
 export def "rest-3-project-restore restore" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8247,7 +8247,7 @@ export def "rest-3-project-restore restore" [
 ]: nothing -> record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: table<assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list<record>>, issueTypes: table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record, self: string, subtask: bool>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: table<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/restore")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/restore"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8258,7 +8258,7 @@ export def "rest-3-project-restore restore" [
 # GET /rest/api/3/project/{projectIdOrKey}/role
 # operationId: getProjectRoles
 export def "rest-3-project-role list" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8270,7 +8270,7 @@ export def "rest-3-project-role list" [
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/role")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/role"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8280,8 +8280,8 @@ export def "rest-3-project-role list" [
 #
 # DELETE /rest/api/3/project/{projectIdOrKey}/role/{id}
 # operationId: deleteActor
-export def "rest-3-project-role delete" [
-  projectIdOrKey: string
+export def "rest-3-project-role delete-actor" [
+  project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8293,12 +8293,12 @@ export def "rest-3-project-role delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # The user account ID of the user to remove from the project role. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --group: string # The name of the group to remove from the project role. This parameter cannot be used with the `groupId` parameter. As a group's name can change, use of `groupId` is recommended.
-  --groupId: string # The ID of the group to remove from the project role. This parameter cannot be used with the `group` parameter.
+  --group-id: string # The ID of the group to remove from the project role. This parameter cannot be used with the `group` parameter.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "groupId" $groupId "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/role/($id)" $qp)
+  let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "groupId" $group_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, id: $id} | format pattern "/rest/api/3/project/{project_id_or_key}/role/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8309,7 +8309,7 @@ export def "rest-3-project-role delete" [
 # GET /rest/api/3/project/{projectIdOrKey}/role/{id}
 # operationId: getProjectRole
 export def "rest-3-project-role get" [
-  projectIdOrKey: string
+  project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8319,12 +8319,12 @@ export def "rest-3-project-role get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --excludeInactiveUsers: oneof<nothing, bool> # Exclude inactive users. (default: false)
+  --exclude-inactive-users: oneof<nothing, bool> # Exclude inactive users. (default: false)
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "excludeInactiveUsers" $excludeInactiveUsers "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/role/($id)" $qp)
+  let qp = [(serialize-qp "excludeInactiveUsers" $exclude_inactive_users "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, id: $id} | format pattern "/rest/api/3/project/{project_id_or_key}/role/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8334,8 +8334,8 @@ export def "rest-3-project-role get" [
 #
 # POST /rest/api/3/project/{projectIdOrKey}/role/{id}
 # operationId: addActorUsers
-export def "rest-3-project-role addActorUsers" [
-  projectIdOrKey: string
+export def "rest-3-project-role create-actor-users" [
+  project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8346,14 +8346,14 @@ export def "rest-3-project-role addActorUsers" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --group: list # The name of the group to add. This parameter cannot be used with the `groupId` parameter. As a group's name can change, use of `groupId` is recommended.
-  --groupId: list # The ID of the group to add. This parameter cannot be used with the `group` parameter.
+  --group-id: list # The ID of the group to add. This parameter cannot be used with the `group` parameter.
   --user: list # The user account ID of the user to add.
 ]: any -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/role/($id)")
-  let body = {group: $group, groupId: $groupId, user: $user} | compact
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, id: $id} | format pattern "/rest/api/3/project/{project_id_or_key}/role/{id}"))
+  let body = {"group": $group, "groupId": $group_id, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8365,7 +8365,7 @@ export def "rest-3-project-role addActorUsers" [
 # PUT /rest/api/3/project/{projectIdOrKey}/role/{id}
 # operationId: setActors
 export def "rest-3-project-role setActors" [
-  projectIdOrKey: string
+  project_id_or_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8375,13 +8375,13 @@ export def "rest-3-project-role setActors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --categorisedActors: record # The actors to add to the project role.  Add groups using:   *  `atlassian-group-role-actor` and a list of group names.  *  `atlassian-group-role-actor-id` and a list of group IDs.  As a group's name can change, use of `atlassian-group-role-actor-id` is recommended. For example, `"atlassian-group-role-actor-id":["eef79f81-0b89-4fca-a736-4be531a10869","77f6ab39-e755-4570-a6ae-2d7a8df0bcb8"]`.  Add users using `atlassian-user-role-actor` and a list of account IDs. For example, `"atlassian-user-role-actor":["12345678-9abc-def1-2345-6789abcdef12", "abcdef12-3456-789a-bcde-f123456789ab"]`.
+  --categorised-actors: record # The actors to add to the project role.  Add groups using:   *  `atlassian-group-role-actor` and a list of group names.  *  `atlassian-group-role-actor-id` and a list of group IDs.  As a group's name can change, use of `atlassian-group-role-actor-id` is recommended. For example, `"atlassian-group-role-actor-id":["eef79f81-0b89-4fca-a736-4be531a10869","77f6ab39-e755-4570-a6ae-2d7a8df0bcb8"]`.  Add users using `atlassian-user-role-actor` and a list of account IDs. For example, `"atlassian-user-role-actor":["12345678-9abc-def1-2345-6789abcdef12", "abcdef12-3456-789a-bcde-f123456789ab"]`.
 ]: any -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/role/($id)")
-  let body = {categorisedActors: $categorisedActors} | compact
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, id: $id} | format pattern "/rest/api/3/project/{project_id_or_key}/role/{id}"))
+  let body = {"categorisedActors": $categorised_actors} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8393,7 +8393,7 @@ export def "rest-3-project-role setActors" [
 # GET /rest/api/3/project/{projectIdOrKey}/roledetails
 # operationId: getProjectRoleDetails
 export def "rest-3-project-roledetails get" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8402,13 +8402,13 @@ export def "rest-3-project-roledetails get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --currentMember: oneof<nothing, bool> # Whether the roles should be filtered to include only those the user is assigned to. (default: false)
-  --excludeConnectAddons: oneof<nothing, bool> # default: false
+  --current-member: oneof<nothing, bool> # Whether the roles should be filtered to include only those the user is assigned to. (default: false)
+  --exclude-connect-addons: oneof<nothing, bool> # default: false
 ]: nothing -> table<admin: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "currentMember" $currentMember "scalar") (serialize-qp "excludeConnectAddons" $excludeConnectAddons "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/roledetails" $qp)
+  let qp = [(serialize-qp "currentMember" $current_member "scalar") (serialize-qp "excludeConnectAddons" $exclude_connect_addons "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/roledetails") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8418,8 +8418,8 @@ export def "rest-3-project-roledetails get" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/statuses
 # operationId: getAllStatuses
-export def "rest-3-project-statuses get" [
-  projectIdOrKey: string
+export def "rest-3-project-statuses get-all" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8431,7 +8431,7 @@ export def "rest-3-project-statuses get" [
 ]: nothing -> table<id: string, name: string, self: string, statuses: list<record>, subtask: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/statuses")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/statuses"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8443,9 +8443,9 @@ export def "rest-3-project-statuses get" [
 # DEPRECATED
 # operationId: updateProjectType
 @deprecated
-export def "rest-3-project-type updateProjectType" [
-  projectIdOrKey: string
-  newProjectTypeKey: string
+export def "rest-3-project-type update" [
+  project_id_or_key: string
+  new_project_type_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8457,7 +8457,7 @@ export def "rest-3-project-type updateProjectType" [
 ]: nothing -> record<archived: bool, archivedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, archivedDate: string, assigneeType: string, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, components: table<assignee: record, assigneeType: string, description: string, id: string, isAssigneeTypeValid: bool, lead: record, leadAccountId: string, leadUserName: string, name: string, project: string, projectId: int, realAssignee: record, realAssigneeType: string, self: string>, deleted: bool, deletedBy: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, deletedDate: string, description: string, email: string, expand: string, favourite: bool, id: string, insight: record<lastIssueUpdateTime: string, totalIssueCount: int>, isPrivate: bool, issueTypeHierarchy: record<baseLevelId: int, levels: list<record>>, issueTypes: table<avatarId: int, description: string, entityId: string, hierarchyLevel: int, iconUrl: string, id: string, name: string, scope: record, self: string, subtask: bool>, key: string, landingPageInfo: record<attributes: record, boardId: int, boardName: string, projectKey: string, projectType: string, queueCategory: string, queueId: int, queueName: string, simpleBoard: bool, simplified: bool, url: string>, lead: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, permissions: record<canEdit: bool>, projectCategory: record<description: string, id: string, name: string, self: string>, projectTypeKey: string, properties: record, retentionTillDate: string, roles: record, self: string, simplified: bool, style: string, url: string, uuid: string, versions: table<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/type/($newProjectTypeKey)")
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key, new_project_type_key: $new_project_type_key} | format pattern "/rest/api/3/project/{project_id_or_key}/type/{new_project_type_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8467,8 +8467,8 @@ export def "rest-3-project-type updateProjectType" [
 #
 # GET /rest/api/3/project/{projectIdOrKey}/version
 # operationId: getProjectVersionsPaginated
-export def "rest-3-project-version get" [
-  projectIdOrKey: string
+export def "rest-3-project-version get-project-versions-paginated" [
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8477,17 +8477,17 @@ export def "rest-3-project-version get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --orderBy: string@orderBy-completer-7 # [Order](#ordering) the results by a field:   *  `description` Sorts by version description.  *  `name` Sorts by version name.  *  `releaseDate` Sorts by release date, starting with the oldest date. Versions with no release date are listed last.  *  `sequence` Sorts by the order of appearance in the user interface.  *  `startDate` Sorts by start date, starting with the oldest date. Versions with no start date are listed last.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --order-by: string@order-by-completer-7 # [Order](#ordering) the results by a field:   *  `description` Sorts by version description.  *  `name` Sorts by version name.  *  `releaseDate` Sorts by release date, starting with the oldest date. Versions with no release date are listed last.  *  `sequence` Sorts by the order of appearance in the user interface.  *  `startDate` Sorts by start date, starting with the oldest date. Versions with no start date are listed last.
   --query: string # Filter the results using a literal string. Versions with matching `name` or `description` are returned (case insensitive).
   --status: string # A list of status values used to filter the results by version status. This parameter accepts a comma-separated list. The status values are `released`, `unreleased`, and `archived`.
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `issuesstatus` Returns the number of issues in each status category for each version.  *  `operations` Returns actions that can be performed on the specified version.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record, moveUnfixedIssuesTo: string, name: string, operations: list, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/version" $qp)
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/version") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8498,7 +8498,7 @@ export def "rest-3-project-version get" [
 # GET /rest/api/3/project/{projectIdOrKey}/versions
 # operationId: getProjectVersions
 export def "rest-3-project-versions get" [
-  projectIdOrKey: string
+  project_id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8512,7 +8512,7 @@ export def "rest-3-project-versions get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectIdOrKey)/versions" $qp)
+  let full_url = (build-url $base ({project_id_or_key: $project_id_or_key} | format pattern "/rest/api/3/project/{project_id_or_key}/versions") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8523,7 +8523,7 @@ export def "rest-3-project-versions get" [
 # GET /rest/api/3/project/{projectId}/email
 # operationId: getProjectEmail
 export def "rest-3-project-email get" [
-  projectId: int
+  project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8535,7 +8535,7 @@ export def "rest-3-project-email get" [
 ]: nothing -> record<emailAddress: string, emailAddressStatus: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectId)/email")
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/rest/api/3/project/{project_id}/email"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8545,8 +8545,8 @@ export def "rest-3-project-email get" [
 #
 # PUT /rest/api/3/project/{projectId}/email
 # operationId: updateProjectEmail
-export def "rest-3-project-email updateProjectEmail" [
-  projectId: int
+export def "rest-3-project-email update" [
+  project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8555,14 +8555,14 @@ export def "rest-3-project-email updateProjectEmail" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --emailAddress: string # The email address.
-  --emailAddressStatus: list # When using a custom domain, the status of the email address.
+  --email-address: string # The email address.
+  --email-address-status: list # When using a custom domain, the status of the email address.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectId)/email")
-  let body = {emailAddress: $emailAddress, emailAddressStatus: $emailAddressStatus} | compact
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/rest/api/3/project/{project_id}/email"))
+  let body = {"emailAddress": $email_address, "emailAddressStatus": $email_address_status} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8576,7 +8576,7 @@ export def "rest-3-project-email updateProjectEmail" [
 # operationId: getHierarchy
 @deprecated
 export def "rest-3-project-hierarchy get" [
-  projectId: int
+  project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8588,7 +8588,7 @@ export def "rest-3-project-hierarchy get" [
 ]: nothing -> record<hierarchy: table<entityId: string, issueTypes: list, level: int, name: string>, projectId: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectId)/hierarchy")
+  let full_url = (build-url $base ({project_id: $project_id} | format pattern "/rest/api/3/project/{project_id}/hierarchy"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8598,8 +8598,8 @@ export def "rest-3-project-hierarchy get" [
 #
 # GET /rest/api/3/project/{projectKeyOrId}/issuesecuritylevelscheme
 # operationId: getProjectIssueSecurityScheme
-export def "rest-3-project-issuesecuritylevelscheme get" [
-  projectKeyOrId: string
+export def "rest-3-project-issuesecuritylevelscheme get-project-issue-security-scheme" [
+  project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8611,7 +8611,7 @@ export def "rest-3-project-issuesecuritylevelscheme get" [
 ]: nothing -> record<defaultSecurityLevelId: int, description: string, id: int, levels: table<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string>, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectKeyOrId)/issuesecuritylevelscheme")
+  let full_url = (build-url $base ({project_key_or_id: $project_key_or_id} | format pattern "/rest/api/3/project/{project_key_or_id}/issuesecuritylevelscheme"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8623,8 +8623,8 @@ export def "rest-3-project-issuesecuritylevelscheme get" [
 # DEPRECATED
 # operationId: getNotificationSchemeForProject
 @deprecated
-export def "rest-3-project-notificationscheme get" [
-  projectKeyOrId: string
+export def "rest-3-project-notificationscheme get-notification-scheme-for" [
+  project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8638,7 +8638,7 @@ export def "rest-3-project-notificationscheme get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectKeyOrId)/notificationscheme" $qp)
+  let full_url = (build-url $base ({project_key_or_id: $project_key_or_id} | format pattern "/rest/api/3/project/{project_key_or_id}/notificationscheme") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8648,8 +8648,8 @@ export def "rest-3-project-notificationscheme get" [
 #
 # GET /rest/api/3/project/{projectKeyOrId}/permissionscheme
 # operationId: getAssignedPermissionScheme
-export def "rest-3-project-permissionscheme get" [
-  projectKeyOrId: string
+export def "rest-3-project-permissionscheme get-assigned" [
+  project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8663,7 +8663,7 @@ export def "rest-3-project-permissionscheme get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectKeyOrId)/permissionscheme" $qp)
+  let full_url = (build-url $base ({project_key_or_id: $project_key_or_id} | format pattern "/rest/api/3/project/{project_key_or_id}/permissionscheme") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8674,7 +8674,7 @@ export def "rest-3-project-permissionscheme get" [
 # PUT /rest/api/3/project/{projectKeyOrId}/permissionscheme
 # operationId: assignPermissionScheme
 export def "rest-3-project-permissionscheme assignPermissionScheme" [
-  projectKeyOrId: string
+  project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8690,8 +8690,8 @@ export def "rest-3-project-permissionscheme assignPermissionScheme" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/project/($projectKeyOrId)/permissionscheme" $qp)
-  let body = {id: $id} | compact
+  let full_url = (build-url $base ({project_key_or_id: $project_key_or_id} | format pattern "/rest/api/3/project/{project_key_or_id}/permissionscheme") $qp)
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8702,8 +8702,8 @@ export def "rest-3-project-permissionscheme assignPermissionScheme" [
 #
 # GET /rest/api/3/project/{projectKeyOrId}/securitylevel
 # operationId: getSecurityLevelsForProject
-export def "rest-3-project-securitylevel get" [
-  projectKeyOrId: string
+export def "rest-3-project-securitylevel get-security-levels-for" [
+  project_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8715,7 +8715,7 @@ export def "rest-3-project-securitylevel get" [
 ]: nothing -> record<levels: table<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/project/($projectKeyOrId)/securitylevel")
+  let full_url = (build-url $base ({project_key_or_id: $project_key_or_id} | format pattern "/rest/api/3/project/{project_key_or_id}/securitylevel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8725,7 +8725,7 @@ export def "rest-3-project-securitylevel get" [
 #
 # GET /rest/api/3/projectCategory
 # operationId: getAllProjectCategories
-export def "rest-3-project-category list" [
+export def "rest-3-project-category get-all-project-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8747,7 +8747,7 @@ export def "rest-3-project-category list" [
 #
 # POST /rest/api/3/projectCategory
 # operationId: createProjectCategory
-export def "rest-3-project-category createProjectCategory" [
+export def "rest-3-project-category create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8763,7 +8763,7 @@ export def "rest-3-project-category createProjectCategory" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/projectCategory")
-  let body = {description: $description, name: $name} | compact
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8774,7 +8774,7 @@ export def "rest-3-project-category createProjectCategory" [
 #
 # DELETE /rest/api/3/projectCategory/{id}
 # operationId: removeProjectCategory
-export def "rest-3-project-category removeProjectCategory" [
+export def "rest-3-project-category delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8787,7 +8787,7 @@ export def "rest-3-project-category removeProjectCategory" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/projectCategory/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/projectCategory/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8810,7 +8810,7 @@ export def "rest-3-project-category get" [
 ]: nothing -> record<description: string, id: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/projectCategory/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/projectCategory/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -8820,7 +8820,7 @@ export def "rest-3-project-category get" [
 #
 # PUT /rest/api/3/projectCategory/{id}
 # operationId: updateProjectCategory
-export def "rest-3-project-category updateProjectCategory" [
+export def "rest-3-project-category update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8836,8 +8836,8 @@ export def "rest-3-project-category updateProjectCategory" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/projectCategory/($id)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/projectCategory/{id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8848,7 +8848,7 @@ export def "rest-3-project-category updateProjectCategory" [
 #
 # GET /rest/api/3/projectvalidate/key
 # operationId: validateProjectKey
-export def "rest-3-projectvalidate-key validateProjectKey" [
+export def "rest-3-projectvalidate-key validate-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8944,7 +8944,7 @@ export def "rest-3-resolution list" [
 #
 # POST /rest/api/3/resolution
 # operationId: createResolution
-export def "rest-3-resolution createResolution" [
+export def "rest-3-resolution create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8960,7 +8960,7 @@ export def "rest-3-resolution createResolution" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/resolution")
-  let body = {description: $description, name: $name} | compact
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8986,7 +8986,7 @@ export def "rest-3-resolution-default setDefaultResolution" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/resolution/default")
-  let body = {id: $id} | compact
+  let body = {"id": $id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -8997,7 +8997,7 @@ export def "rest-3-resolution-default setDefaultResolution" [
 #
 # PUT /rest/api/3/resolution/move
 # operationId: moveResolutions
-export def "rest-3-resolution-move moveResolutions" [
+export def "rest-3-resolution-move move" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9014,7 +9014,7 @@ export def "rest-3-resolution-move moveResolutions" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/resolution/move")
-  let body = {after: $after, ids: $ids, position: $position} | compact
+  let body = {"after": $after, "ids": $ids, "position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9025,7 +9025,7 @@ export def "rest-3-resolution-move moveResolutions" [
 #
 # GET /rest/api/3/resolution/search
 # operationId: searchResolutions
-export def "rest-3-resolution-search searchResolutions" [
+export def "rest-3-resolution-search list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9034,14 +9034,14 @@ export def "rest-3-resolution-search searchResolutions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: string # The index of the first item to return in a page of results (page offset). (default: 0)
-  --maxResults: string # The maximum number of items to return per page. (default: 50)
+  --start-at: string # The index of the first item to return in a page of results (page offset). (default: 0)
+  --max-results: string # The maximum number of items to return per page. (default: 50)
   --id: list # The list of resolutions IDs to be filtered out
-  --onlyDefault: oneof<nothing, bool> # When set to true, return default only, when IDs provided, if none of them is default, return empty page. Default value is false (default: false)
+  --only-default: oneof<nothing, bool> # When set to true, return default only, when IDs provided, if none of them is default, return empty page. Default value is false (default: false)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<default: bool, description: string, iconUrl: string, id: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "onlyDefault" $onlyDefault "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "id" $id "multi") (serialize-qp "onlyDefault" $only_default "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/resolution/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9062,12 +9062,12 @@ export def "rest-3-resolution delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --replaceWith: string # The ID of the issue resolution that will replace the currently selected resolution.
+  --replace-with: string # The ID of the issue resolution that will replace the currently selected resolution.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "replaceWith" $replaceWith "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/resolution/($id)" $qp)
+  let qp = [(serialize-qp "replaceWith" $replace_with "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/resolution/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9090,7 +9090,7 @@ export def "rest-3-resolution get" [
 ]: nothing -> record<description: string, id: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/resolution/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/resolution/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9100,7 +9100,7 @@ export def "rest-3-resolution get" [
 #
 # PUT /rest/api/3/resolution/{id}
 # operationId: updateResolution
-export def "rest-3-resolution updateResolution" [
+export def "rest-3-resolution update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9116,8 +9116,8 @@ export def "rest-3-resolution updateResolution" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/resolution/($id)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/resolution/{id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9128,7 +9128,7 @@ export def "rest-3-resolution updateResolution" [
 #
 # GET /rest/api/3/role
 # operationId: getAllProjectRoles
-export def "rest-3-role list" [
+export def "rest-3-role get-all-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9150,7 +9150,7 @@ export def "rest-3-role list" [
 #
 # POST /rest/api/3/role
 # operationId: createProjectRole
-export def "rest-3-role createProjectRole" [
+export def "rest-3-role create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9166,7 +9166,7 @@ export def "rest-3-role createProjectRole" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/role")
-  let body = {description: $description, name: $name} | compact
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9177,7 +9177,7 @@ export def "rest-3-role createProjectRole" [
 #
 # DELETE /rest/api/3/role/{id}
 # operationId: deleteProjectRole
-export def "rest-3-role delete" [
+export def "rest-3-role delete-project" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9192,7 +9192,7 @@ export def "rest-3-role delete" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "swap" $swap "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/role/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/role/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9202,7 +9202,7 @@ export def "rest-3-role delete" [
 #
 # GET /rest/api/3/role/{id}
 # operationId: getProjectRoleById
-export def "rest-3-role get" [
+export def "rest-3-role get-project" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9215,7 +9215,7 @@ export def "rest-3-role get" [
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/role/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/role/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9241,8 +9241,8 @@ export def "rest-3-role partialUpdateProjectRole" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/role/($id)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/role/{id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9269,8 +9269,8 @@ export def "rest-3-role fullyUpdateProjectRole" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/role/($id)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/role/{id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9281,7 +9281,7 @@ export def "rest-3-role fullyUpdateProjectRole" [
 #
 # DELETE /rest/api/3/role/{id}/actors
 # operationId: deleteProjectRoleActorsFromRole
-export def "rest-3-role-actors delete" [
+export def "rest-3-role-actors delete-project-role-actors-from" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9292,13 +9292,13 @@ export def "rest-3-role-actors delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --user: string # The user account ID of the user to remove as a default actor. (e.g. 5b10ac8d82e05b22cc7d4ef5)
-  --groupId: string # The group ID of the group to be removed as a default actor. This parameter cannot be used with the `group` parameter.
+  --group-id: string # The group ID of the group to be removed as a default actor. This parameter cannot be used with the `group` parameter.
   --group: string # The group name of the group to be removed as a default actor.This parameter cannot be used with the `groupId` parameter. As a group's name can change, use of `groupId` is recommended.
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "groupId" $groupId "scalar") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/role/($id)/actors" $qp)
+  let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/role/{id}/actors") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9308,7 +9308,7 @@ export def "rest-3-role-actors delete" [
 #
 # GET /rest/api/3/role/{id}/actors
 # operationId: getProjectRoleActorsForRole
-export def "rest-3-role-actors get" [
+export def "rest-3-role-actors get-project-role-actors-for" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9321,7 +9321,7 @@ export def "rest-3-role-actors get" [
 ]: nothing -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/role/($id)/actors")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/role/{id}/actors"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9331,7 +9331,7 @@ export def "rest-3-role-actors get" [
 #
 # POST /rest/api/3/role/{id}/actors
 # operationId: addProjectRoleActorsToRole
-export def "rest-3-role-actors addProjectRoleActorsToRole" [
+export def "rest-3-role-actors create-project-role-actors-to" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9342,14 +9342,14 @@ export def "rest-3-role-actors addProjectRoleActorsToRole" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --group: list # The name of the group to add as a default actor. This parameter cannot be used with the `groupId` parameter. As a group's name can change,use of `groupId` is recommended. This parameter accepts a comma-separated list. For example, `"group":["project-admin", "jira-developers"]`.
-  --groupId: list # The ID of the group to add as a default actor. This parameter cannot be used with the `group` parameter This parameter accepts a comma-separated list. For example, `"groupId":["77f6ab39-e755-4570-a6ae-2d7a8df0bcb8", "0c011f85-69ed-49c4-a801-3b18d0f771bc"]`.
+  --group-id: list # The ID of the group to add as a default actor. This parameter cannot be used with the `group` parameter This parameter accepts a comma-separated list. For example, `"groupId":["77f6ab39-e755-4570-a6ae-2d7a8df0bcb8", "0c011f85-69ed-49c4-a801-3b18d0f771bc"]`.
   --user: list # The account IDs of the users to add as default actors. This parameter accepts a comma-separated list. For example, `"user":["5b10a2844c20165700ede21g", "5b109f2e9729b51b54dc274d"]`.
 ]: any -> record<actors: table<actorGroup: record, actorUser: record, avatarUrl: string, displayName: string, id: int, name: string, type: string>, admin: bool, currentUserRole: bool, default: bool, description: string, id: int, name: string, roleConfigurable: bool, scope: record<project: record<avatarUrls: record, id: string, key: string, name: string, projectCategory: record, projectTypeKey: string, self: string, simplified: bool>, type: string>, self: string, translatedName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/role/($id)/actors")
-  let body = {group: $group, groupId: $groupId, user: $user} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/role/{id}/actors"))
+  let body = {"group": $group, "groupId": $group_id, "user": $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9369,16 +9369,16 @@ export def "rest-3-screens get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 100)
   --id: list # The list of screen IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
-  --queryString: string # String used to perform a case-insensitive partial match with screen name. (default: )
+  --query-string: string # String used to perform a case-insensitive partial match with screen name. (default: )
   --scope: list # The scope filter string. To filter by multiple scope, provide an ampersand-separated list. For example, `scope=GLOBAL&scope=PROJECT`.
-  --orderBy: string@orderBy-completer-4 # [Order](#ordering) the results by a field:   *  `id` Sorts by screen ID.  *  `name` Sorts by screen name.
+  --order-by: string@order-by-completer-4 # [Order](#ordering) the results by a field:   *  `id` Sorts by screen ID.  *  `name` Sorts by screen name.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: int, name: string, scope: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "queryString" $queryString "scalar") (serialize-qp "scope" $scope "multi") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "id" $id "multi") (serialize-qp "queryString" $query_string "scalar") (serialize-qp "scope" $scope "multi") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/screens" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9389,7 +9389,7 @@ export def "rest-3-screens get" [
 #
 # POST /rest/api/3/screens
 # operationId: createScreen
-export def "rest-3-screens createScreen" [
+export def "rest-3-screens create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9405,7 +9405,7 @@ export def "rest-3-screens createScreen" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/screens")
-  let body = {description: $description, name: $name} | compact
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9416,8 +9416,8 @@ export def "rest-3-screens createScreen" [
 #
 # POST /rest/api/3/screens/addToDefault/{fieldId}
 # operationId: addFieldToDefaultScreen
-export def "rest-3-screens-add-to-default addFieldToDefaultScreen" [
-  fieldId: string
+export def "rest-3-screens-add-to-default create-field" [
+  field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9429,7 +9429,7 @@ export def "rest-3-screens-add-to-default addFieldToDefaultScreen" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/addToDefault/($fieldId)")
+  let full_url = (build-url $base ({field_id: $field_id} | format pattern "/rest/api/3/screens/addToDefault/{field_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9440,7 +9440,7 @@ export def "rest-3-screens-add-to-default addFieldToDefaultScreen" [
 # DELETE /rest/api/3/screens/{screenId}
 # operationId: deleteScreen
 export def "rest-3-screens delete" [
-  screenId: int
+  screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9452,7 +9452,7 @@ export def "rest-3-screens delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)")
+  let full_url = (build-url $base ({screen_id: $screen_id} | format pattern "/rest/api/3/screens/{screen_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9462,8 +9462,8 @@ export def "rest-3-screens delete" [
 #
 # PUT /rest/api/3/screens/{screenId}
 # operationId: updateScreen
-export def "rest-3-screens updateScreen" [
-  screenId: int
+export def "rest-3-screens update" [
+  screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9478,8 +9478,8 @@ export def "rest-3-screens updateScreen" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)")
-  let body = {description: $description, name: $name} | compact
+  let full_url = (build-url $base ({screen_id: $screen_id} | format pattern "/rest/api/3/screens/{screen_id}"))
+  let body = {"description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9491,7 +9491,7 @@ export def "rest-3-screens updateScreen" [
 # GET /rest/api/3/screens/{screenId}/availableFields
 # operationId: getAvailableScreenFields
 export def "rest-3-screens-available-fields get" [
-  screenId: int
+  screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9503,7 +9503,7 @@ export def "rest-3-screens-available-fields get" [
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/availableFields")
+  let full_url = (build-url $base ({screen_id: $screen_id} | format pattern "/rest/api/3/screens/{screen_id}/availableFields"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9513,8 +9513,8 @@ export def "rest-3-screens-available-fields get" [
 #
 # GET /rest/api/3/screens/{screenId}/tabs
 # operationId: getAllScreenTabs
-export def "rest-3-screens-tabs get" [
-  screenId: int
+export def "rest-3-screens-tabs get-all" [
+  screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9523,12 +9523,12 @@ export def "rest-3-screens-tabs get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --projectKey: string # The key of the project.
+  --project-key: string # The key of the project.
 ]: nothing -> table<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectKey" $projectKey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs" $qp)
+  let qp = [(serialize-qp "projectKey" $project_key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({screen_id: $screen_id} | format pattern "/rest/api/3/screens/{screen_id}/tabs") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9538,8 +9538,8 @@ export def "rest-3-screens-tabs get" [
 #
 # POST /rest/api/3/screens/{screenId}/tabs
 # operationId: addScreenTab
-export def "rest-3-screens-tabs addScreenTab" [
-  screenId: int
+export def "rest-3-screens-tabs create" [
+  screen_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9553,8 +9553,8 @@ export def "rest-3-screens-tabs addScreenTab" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({screen_id: $screen_id} | format pattern "/rest/api/3/screens/{screen_id}/tabs"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9566,8 +9566,8 @@ export def "rest-3-screens-tabs addScreenTab" [
 # DELETE /rest/api/3/screens/{screenId}/tabs/{tabId}
 # operationId: deleteScreenTab
 export def "rest-3-screens-tabs delete" [
-  screenId: int
-  tabId: int
+  screen_id: int
+  tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9579,7 +9579,7 @@ export def "rest-3-screens-tabs delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)")
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9589,9 +9589,9 @@ export def "rest-3-screens-tabs delete" [
 #
 # PUT /rest/api/3/screens/{screenId}/tabs/{tabId}
 # operationId: renameScreenTab
-export def "rest-3-screens-tabs renameScreenTab" [
-  screenId: int
-  tabId: int
+export def "rest-3-screens-tabs rename" [
+  screen_id: int
+  tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9605,8 +9605,8 @@ export def "rest-3-screens-tabs renameScreenTab" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)")
-  let body = {name: $name} | compact
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}"))
+  let body = {"name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9617,9 +9617,9 @@ export def "rest-3-screens-tabs renameScreenTab" [
 #
 # GET /rest/api/3/screens/{screenId}/tabs/{tabId}/fields
 # operationId: getAllScreenTabFields
-export def "rest-3-screens-tabs-fields get" [
-  screenId: int
-  tabId: int
+export def "rest-3-screens-tabs-fields get-all" [
+  screen_id: int
+  tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9628,12 +9628,12 @@ export def "rest-3-screens-tabs-fields get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --projectKey: string # The key of the project.
+  --project-key: string # The key of the project.
 ]: nothing -> table<id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectKey" $projectKey "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)/fields" $qp)
+  let qp = [(serialize-qp "projectKey" $project_key "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}/fields") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9643,9 +9643,9 @@ export def "rest-3-screens-tabs-fields get" [
 #
 # POST /rest/api/3/screens/{screenId}/tabs/{tabId}/fields
 # operationId: addScreenTabField
-export def "rest-3-screens-tabs-fields addScreenTabField" [
-  screenId: int
-  tabId: int
+export def "rest-3-screens-tabs-fields create" [
+  screen_id: int
+  tab_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9654,13 +9654,13 @@ export def "rest-3-screens-tabs-fields addScreenTabField" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  fieldId: string # The ID of the field to add.
+  field_id: string # The ID of the field to add.
 ]: any -> record<id: string, name: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)/fields")
-  let body = {fieldId: $fieldId} | compact
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}/fields"))
+  let body = {"fieldId": $field_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9671,9 +9671,9 @@ export def "rest-3-screens-tabs-fields addScreenTabField" [
 #
 # DELETE /rest/api/3/screens/{screenId}/tabs/{tabId}/fields/{id}
 # operationId: removeScreenTabField
-export def "rest-3-screens-tabs-fields removeScreenTabField" [
-  screenId: int
-  tabId: int
+export def "rest-3-screens-tabs-fields delete" [
+  screen_id: int
+  tab_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9686,7 +9686,7 @@ export def "rest-3-screens-tabs-fields removeScreenTabField" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)/fields/($id)")
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id, id: $id} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}/fields/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9696,9 +9696,9 @@ export def "rest-3-screens-tabs-fields removeScreenTabField" [
 #
 # POST /rest/api/3/screens/{screenId}/tabs/{tabId}/fields/{id}/move
 # operationId: moveScreenTabField
-export def "rest-3-screens-tabs-fields-move moveScreenTabField" [
-  screenId: int
-  tabId: int
+export def "rest-3-screens-tabs-fields-move move" [
+  screen_id: int
+  tab_id: int
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9714,8 +9714,8 @@ export def "rest-3-screens-tabs-fields-move moveScreenTabField" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)/fields/($id)/move")
-  let body = {after: $after, position: $position} | compact
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id, id: $id} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}/fields/{id}/move"))
+  let body = {"after": $after, "position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9726,9 +9726,9 @@ export def "rest-3-screens-tabs-fields-move moveScreenTabField" [
 #
 # POST /rest/api/3/screens/{screenId}/tabs/{tabId}/move/{pos}
 # operationId: moveScreenTab
-export def "rest-3-screens-tabs-move moveScreenTab" [
-  screenId: int
-  tabId: int
+export def "rest-3-screens-tabs-move move" [
+  screen_id: int
+  tab_id: int
   pos: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9741,7 +9741,7 @@ export def "rest-3-screens-tabs-move moveScreenTab" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screens/($screenId)/tabs/($tabId)/move/($pos)")
+  let full_url = (build-url $base ({screen_id: $screen_id, tab_id: $tab_id, pos: $pos} | format pattern "/rest/api/3/screens/{screen_id}/tabs/{tab_id}/move/{pos}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9760,16 +9760,16 @@ export def "rest-3-screenscheme get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 25)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 25)
   --id: list # The list of screen scheme IDs. To include multiple IDs, provide an ampersand-separated list. For example, `id=10000&id=10001`.
   --expand: string # Use [expand](#expansion) include additional information in the response. This parameter accepts `issueTypeScreenSchemes` that, for each screen schemes, returns information about the issue type screen scheme the screen scheme is assigned to. (default: )
-  --queryString: string # String used to perform a case-insensitive partial match with screen scheme name. (default: )
-  --orderBy: string@orderBy-completer-4 # [Order](#ordering) the results by a field:   *  `id` Sorts by screen scheme ID.  *  `name` Sorts by screen scheme name.
+  --query-string: string # String used to perform a case-insensitive partial match with screen scheme name. (default: )
+  --order-by: string@order-by-completer-4 # [Order](#ordering) the results by a field:   *  `id` Sorts by screen scheme ID.  *  `name` Sorts by screen scheme name.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: int, issueTypeScreenSchemes: record, name: string, screens: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "id" $id "multi") (serialize-qp "expand" $expand "scalar") (serialize-qp "queryString" $queryString "scalar") (serialize-qp "orderBy" $orderBy "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "id" $id "multi") (serialize-qp "expand" $expand "scalar") (serialize-qp "queryString" $query_string "scalar") (serialize-qp "orderBy" $order_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/screenscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9780,7 +9780,7 @@ export def "rest-3-screenscheme get" [
 #
 # POST /rest/api/3/screenscheme
 # operationId: createScreenScheme
-export def "rest-3-screenscheme createScreenScheme" [
+export def "rest-3-screenscheme create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9797,7 +9797,7 @@ export def "rest-3-screenscheme createScreenScheme" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/screenscheme")
-  let body = {description: $description, name: $name, screens: $screens} | compact
+  let body = {"description": $description, "name": $name, "screens": $screens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9809,7 +9809,7 @@ export def "rest-3-screenscheme createScreenScheme" [
 # DELETE /rest/api/3/screenscheme/{screenSchemeId}
 # operationId: deleteScreenScheme
 export def "rest-3-screenscheme delete" [
-  screenSchemeId: string
+  screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9821,7 +9821,7 @@ export def "rest-3-screenscheme delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screenscheme/($screenSchemeId)")
+  let full_url = (build-url $base ({screen_scheme_id: $screen_scheme_id} | format pattern "/rest/api/3/screenscheme/{screen_scheme_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9831,8 +9831,8 @@ export def "rest-3-screenscheme delete" [
 #
 # PUT /rest/api/3/screenscheme/{screenSchemeId}
 # operationId: updateScreenScheme
-export def "rest-3-screenscheme updateScreenScheme" [
-  screenSchemeId: string
+export def "rest-3-screenscheme update" [
+  screen_scheme_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9848,8 +9848,8 @@ export def "rest-3-screenscheme updateScreenScheme" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/screenscheme/($screenSchemeId)")
-  let body = {description: $description, name: $name, screens: $screens} | compact
+  let full_url = (build-url $base ({screen_scheme_id: $screen_scheme_id} | format pattern "/rest/api/3/screenscheme/{screen_scheme_id}"))
+  let body = {"description": $description, "name": $name, "screens": $screens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9860,7 +9860,7 @@ export def "rest-3-screenscheme updateScreenScheme" [
 #
 # GET /rest/api/3/search
 # operationId: searchForIssuesUsingJql
-export def "rest-3-search searchForIssuesUsingJql" [
+export def "rest-3-search list-for-issues-using-jql" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9870,17 +9870,17 @@ export def "rest-3-search searchForIssuesUsingJql" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --jql: string # The [JQL](https://confluence.atlassian.com/x/egORLQ) that defines the search. Note:   *  If no JQL expression is provided, all issues are returned.  *  `username` and `userkey` cannot be used as search terms due to privacy reasons. Use `accountId` instead.  *  If a user has hidden their email address in their user profile, partial matches of the email address will not find the user. An exact match is required. (e.g. project = HSP)
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
-  --maxResults: int # The maximum number of items to return per page. To manage page size, Jira may return fewer items per page where a large number of fields are requested. The greatest number of items returned per page is achieved when requesting `id` or `key` only. (format: int32, default: 50)
-  --validateQuery: string@validateQuery-completer # Determines how to validate the JQL query and treat the validation results. Supported values are:   *  `strict` Returns a 400 response code if any errors are found, along with a list of all errors (and warnings).  *  `warn` Returns all errors as warnings.  *  `none` No validation is performed.  *  `true` *Deprecated* A legacy synonym for `strict`.  *  `false` *Deprecated* A legacy synonym for `warn`.  Note: If the JQL is not correctly formed a 400 response code is returned, regardless of the `validateQuery` value. (default: strict)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
+  --max-results: int # The maximum number of items to return per page. To manage page size, Jira may return fewer items per page where a large number of fields are requested. The greatest number of items returned per page is achieved when requesting `id` or `key` only. (format: int32, default: 50)
+  --validate-query: string@validate-query-completer # Determines how to validate the JQL query and treat the validation results. Supported values are:   *  `strict` Returns a 400 response code if any errors are found, along with a list of all errors (and warnings).  *  `warn` Returns all errors as warnings.  *  `none` No validation is performed.  *  `true` *Deprecated* A legacy synonym for `strict`.  *  `false` *Deprecated* A legacy synonym for `warn`.  Note: If the JQL is not correctly formed a 400 response code is returned, regardless of the `validateQuery` value. (default: strict)
   --fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  Examples:   *  `summary,comment` Returns only the summary and comments fields.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  This parameter may be specified multiple times. For example, `fields=field1,field2&fields=field3`.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
   --expand: string # Use [expand](#expansion) to include additional information about issues in the response. This parameter accepts a comma-separated list. Expand options include:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.
   --properties: list # A list of issue property keys for issue properties to include in the results. This parameter accepts a comma-separated list. Multiple properties can also be provided using an ampersand separated list. For example, `properties=prop1,prop2&properties=prop3`. A maximum of 5 issue property keys can be specified.
-  --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). (default: false)
+  --fields-by-keys: oneof<nothing, bool> # Reference fields by their key (rather than ID). (default: false)
 ]: nothing -> record<expand: string, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, maxResults: int, names: record, schema: record, startAt: int, total: int, warningMessages: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "jql" $jql "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "validateQuery" $validateQuery "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi") (serialize-qp "fieldsByKeys" $fieldsByKeys "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "jql" $jql "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "validateQuery" $validate_query "scalar") (serialize-qp "fields" $fields "multi") (serialize-qp "expand" $expand "scalar") (serialize-qp "properties" $properties "multi") (serialize-qp "fieldsByKeys" $fields_by_keys "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9891,7 +9891,7 @@ export def "rest-3-search searchForIssuesUsingJql" [
 #
 # POST /rest/api/3/search
 # operationId: searchForIssuesUsingJqlPost
-export def "rest-3-search searchForIssuesUsingJqlPost" [
+export def "rest-3-search list-for-issues-using-jql-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9902,18 +9902,18 @@ export def "rest-3-search searchForIssuesUsingJqlPost" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: list # Use [expand](em>#expansion) to include additional information about issues in the response. Note that, unlike the majority of instances where `expand` is specified, `expand` is defined as a list of values. The expand options are:   *  `renderedFields` Returns field values rendered in HTML format.  *  `names` Returns the display name of each field.  *  `schema` Returns the schema describing a field type.  *  `transitions` Returns all possible transitions for the issue.  *  `operations` Returns all possible operations for the issue.  *  `editmeta` Returns information about how each field can be edited.  *  `changelog` Returns a list of recent updates to an issue, sorted by date, starting from the most recent.  *  `versionedRepresentations` Instead of `fields`, returns `versionedRepresentations` a JSON array containing each version of a field's value, with the highest numbered item representing the most recent version.
   --fields: list # A list of fields to return for each issue, use it to retrieve a subset of fields. This parameter accepts a comma-separated list. Expand options include:   *  `*all` Returns all fields.  *  `*navigable` Returns navigable fields.  *  Any issue field, prefixed with a minus to exclude.  The default is `*navigable`.  Examples:   *  `summary,comment` Returns the summary and comments fields only.  *  `-description` Returns all navigable (default) fields except description.  *  `*all,-comment` Returns all fields except comments.  Multiple `fields` parameters can be included in a request.  Note: All navigable fields are returned by default. This differs from [GET issue](#api-rest-api-3-issue-issueIdOrKey-get) where the default is all fields.
-  --fieldsByKeys: oneof<nothing, bool> # Reference fields by their key (rather than ID). The default is `false`.
+  --fields-by-keys: oneof<nothing, bool> # Reference fields by their key (rather than ID). The default is `false`.
   --jql: string # A [JQL](https://confluence.atlassian.com/x/egORLQ) expression.
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --properties: list # A list of up to 5 issue properties to include in the results. This parameter accepts a comma-separated list.
-  --startAt: int # The index of the first item to return in the page of results (page offset). The base index is `0`. (format: int32)
-  --validateQuery: string@validateQuery-completer # Determines how to validate the JQL query and treat the validation results. Supported values:   *  `strict` Returns a 400 response code if any errors are found, along with a list of all errors (and warnings).  *  `warn` Returns all errors as warnings.  *  `none` No validation is performed.  *  `true` *Deprecated* A legacy synonym for `strict`.  *  `false` *Deprecated* A legacy synonym for `warn`.  The default is `strict`.  Note: If the JQL is not correctly formed a 400 response code is returned, regardless of the `validateQuery` value.
+  --start-at: int # The index of the first item to return in the page of results (page offset). The base index is `0`. (format: int32)
+  --validate-query: string@validate-query-completer # Determines how to validate the JQL query and treat the validation results. Supported values:   *  `strict` Returns a 400 response code if any errors are found, along with a list of all errors (and warnings).  *  `warn` Returns all errors as warnings.  *  `none` No validation is performed.  *  `true` *Deprecated* A legacy synonym for `strict`.  *  `false` *Deprecated* A legacy synonym for `warn`.  The default is `strict`.  Note: If the JQL is not correctly formed a 400 response code is returned, regardless of the `validateQuery` value.
 ]: any -> record<expand: string, issues: table<changelog: record, editmeta: record, expand: string, fields: record, fieldsToInclude: record, id: string, key: string, names: record, operations: record, properties: record, renderedFields: record, schema: record, self: string, transitions: list, versionedRepresentations: record>, maxResults: int, names: record, schema: record, startAt: int, total: int, warningMessages: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/search")
-  let body = {expand: $expand, fields: $fields, fieldsByKeys: $fieldsByKeys, jql: $jql, maxResults: $maxResults, properties: $properties, startAt: $startAt, validateQuery: $validateQuery} | compact
+  let body = {"expand": $expand, "fields": $fields, "fieldsByKeys": $fields_by_keys, "jql": $jql, "maxResults": $max_results, "properties": $properties, "startAt": $start_at, "validateQuery": $validate_query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -9924,7 +9924,7 @@ export def "rest-3-search searchForIssuesUsingJqlPost" [
 #
 # GET /rest/api/3/securitylevel/{id}
 # operationId: getIssueSecurityLevel
-export def "rest-3-securitylevel get" [
+export def "rest-3-securitylevel get-issue" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9937,7 +9937,7 @@ export def "rest-3-securitylevel get" [
 ]: nothing -> record<description: string, id: string, isDefault: bool, issueSecuritySchemeId: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/securitylevel/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/securitylevel/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -9969,7 +9969,7 @@ export def "rest-3-server-info get" [
 #
 # GET /rest/api/3/settings/columns
 # operationId: getIssueNavigatorDefaultColumns
-export def "rest-3-settings-columns get" [
+export def "rest-3-settings-columns get-issue-navigator-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10016,7 +10016,7 @@ export def "rest-3-settings-columns setIssueNavigatorDefaultColumns" [
 #
 # GET /rest/api/3/status
 # operationId: getStatuses
-export def "rest-3-status list" [
+export def "rest-3-status get-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10039,7 +10039,7 @@ export def "rest-3-status list" [
 # GET /rest/api/3/status/{idOrName}
 # operationId: getStatus
 export def "rest-3-status get" [
-  idOrName: string
+  id_or_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10051,7 +10051,7 @@ export def "rest-3-status get" [
 ]: nothing -> record<description: string, iconUrl: string, id: string, name: string, self: string, statusCategory: record<colorName: string, id: int, key: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/status/($idOrName)")
+  let full_url = (build-url $base ({id_or_name: $id_or_name} | format pattern "/rest/api/3/status/{id_or_name}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10061,7 +10061,7 @@ export def "rest-3-status get" [
 #
 # GET /rest/api/3/statuscategory
 # operationId: getStatusCategories
-export def "rest-3-statuscategory list" [
+export def "rest-3-statuscategory get-status-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10083,8 +10083,8 @@ export def "rest-3-statuscategory list" [
 #
 # GET /rest/api/3/statuscategory/{idOrKey}
 # operationId: getStatusCategory
-export def "rest-3-statuscategory get" [
-  idOrKey: string
+export def "rest-3-statuscategory get-status-category" [
+  id_or_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10096,7 +10096,7 @@ export def "rest-3-statuscategory get" [
 ]: nothing -> record<colorName: string, id: int, key: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/statuscategory/($idOrKey)")
+  let full_url = (build-url $base ({id_or_key: $id_or_key} | format pattern "/rest/api/3/statuscategory/{id_or_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10157,7 +10157,7 @@ export def "rest-3-statuses get" [
 # operationId: createStatuses
 # --scope shape: {project?: record, type: "PROJECT"|"GLOBAL"}
 # --statuses item shape: {description?: string, name: string, statusCategory: "TODO"|"IN_PROGRESS"|"DONE"}
-export def "rest-3-statuses createStatuses" [
+export def "rest-3-statuses create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10173,7 +10173,7 @@ export def "rest-3-statuses createStatuses" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/statuses")
-  let body = {scope: $scope, statuses: $statuses} | compact
+  let body = {"scope": $scope, "statuses": $statuses} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10185,7 +10185,7 @@ export def "rest-3-statuses createStatuses" [
 # PUT /rest/api/3/statuses
 # operationId: updateStatuses
 # --statuses item shape: {description?: string, id: string, name: string, statusCategory: "TODO"|"IN_PROGRESS"|"DONE"}
-export def "rest-3-statuses updateStatuses" [
+export def "rest-3-statuses update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10200,7 +10200,7 @@ export def "rest-3-statuses updateStatuses" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/statuses")
-  let body = {statuses: $statuses} | compact
+  let body = {"statuses": $statuses} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10221,15 +10221,15 @@ export def "rest-3-statuses-search search" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `usages` Returns the project and issue types that use the status in their workflow.
-  --projectId: string # The project the status is part of or null for global statuses.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 200)
-  --searchString: string # Term to match status names against or null to search for all statuses in the search scope.
-  --statusCategory: string # Category of the status to filter by. The supported values are: `TODO`, `IN_PROGRESS`, and `DONE`.
+  --project-id: string # The project the status is part of or null for global statuses.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 200)
+  --search-string: string # Term to match status names against or null to search for all statuses in the search scope.
+  --status-category: string # Category of the status to filter by. The supported values are: `TODO`, `IN_PROGRESS`, and `DONE`.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<description: string, id: string, name: string, scope: record, statusCategory: string, usages: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "projectId" $projectId "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "searchString" $searchString "scalar") (serialize-qp "statusCategory" $statusCategory "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "projectId" $project_id "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "statusCategory" $status_category "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/statuses/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10241,7 +10241,7 @@ export def "rest-3-statuses-search search" [
 # GET /rest/api/3/task/{taskId}
 # operationId: getTask
 export def "rest-3-task get" [
-  taskId: string
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10253,7 +10253,7 @@ export def "rest-3-task get" [
 ]: nothing -> record<description: string, elapsedRuntime: int, finished: int, id: string, lastUpdate: int, message: string, progress: int, result: any, self: string, started: int, status: string, submitted: int, submittedBy: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/task/($taskId)")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/rest/api/3/task/{task_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10263,8 +10263,8 @@ export def "rest-3-task get" [
 #
 # POST /rest/api/3/task/{taskId}/cancel
 # operationId: cancelTask
-export def "rest-3-task-cancel cancelTask" [
-  taskId: string
+export def "rest-3-task-cancel cancel" [
+  task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10276,7 +10276,7 @@ export def "rest-3-task-cancel cancelTask" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/task/($taskId)/cancel")
+  let full_url = (build-url $base ({task_id: $task_id} | format pattern "/rest/api/3/task/{task_id}/cancel"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10295,13 +10295,13 @@ export def "rest-3-ui-modifications get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --expand: string # Use expand to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `data` Returns UI modification data.  *  `contexts` Returns UI modification contexts.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<contexts: list, data: string, description: string, id: string, name: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/uiModifications" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10313,7 +10313,7 @@ export def "rest-3-ui-modifications get" [
 # POST /rest/api/3/uiModifications
 # operationId: createUiModification
 # --contexts item shape: {issueTypeId: string, projectId: string, viewType: string}
-export def "rest-3-ui-modifications createUiModification" [
+export def "rest-3-ui-modifications create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10331,7 +10331,7 @@ export def "rest-3-ui-modifications createUiModification" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/uiModifications")
-  let body = {contexts: $contexts, data: $data, description: $description, name: $name} | compact
+  let body = {"contexts": $contexts, "data": $data, "description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10343,7 +10343,7 @@ export def "rest-3-ui-modifications createUiModification" [
 # DELETE /rest/api/3/uiModifications/{uiModificationId}
 # operationId: deleteUiModification
 export def "rest-3-ui-modifications delete" [
-  uiModificationId: string
+  ui_modification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10355,7 +10355,7 @@ export def "rest-3-ui-modifications delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/uiModifications/($uiModificationId)")
+  let full_url = (build-url $base ({ui_modification_id: $ui_modification_id} | format pattern "/rest/api/3/uiModifications/{ui_modification_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10366,8 +10366,8 @@ export def "rest-3-ui-modifications delete" [
 # PUT /rest/api/3/uiModifications/{uiModificationId}
 # operationId: updateUiModification
 # --contexts item shape: {issueTypeId: string, projectId: string, viewType: string}
-export def "rest-3-ui-modifications updateUiModification" [
-  uiModificationId: string
+export def "rest-3-ui-modifications update" [
+  ui_modification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10384,8 +10384,8 @@ export def "rest-3-ui-modifications updateUiModification" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/uiModifications/($uiModificationId)")
-  let body = {contexts: $contexts, data: $data, description: $description, name: $name} | compact
+  let full_url = (build-url $base ({ui_modification_id: $ui_modification_id} | format pattern "/rest/api/3/uiModifications/{ui_modification_id}"))
+  let body = {"contexts": $contexts, "data": $data, "description": $description, "name": $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10398,7 +10398,7 @@ export def "rest-3-ui-modifications updateUiModification" [
 # operationId: getAvatars
 export def "rest-3-universal-avatar-type-owner get" [
   type: string
-  entityId: string
+  entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10410,7 +10410,7 @@ export def "rest-3-universal-avatar-type-owner get" [
 ]: nothing -> record<custom: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>, system: table<fileName: string, id: string, isDeletable: bool, isSelected: bool, isSystemAvatar: bool, owner: string, urls: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/universal_avatar/type/($type)/owner/($entityId)")
+  let full_url = (build-url $base ({type: $type, entity_id: $entity_id} | format pattern "/rest/api/3/universal_avatar/type/{type}/owner/{entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10422,7 +10422,7 @@ export def "rest-3-universal-avatar-type-owner get" [
 # operationId: storeAvatar
 export def "rest-3-universal-avatar-type-owner storeAvatar" [
   type: string
-  entityId: string
+  entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10440,7 +10440,7 @@ export def "rest-3-universal-avatar-type-owner storeAvatar" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "x" $x "scalar") (serialize-qp "y" $y "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/universal_avatar/type/($type)/owner/($entityId)" $qp)
+  let full_url = (build-url $base ({type: $type, entity_id: $entity_id} | format pattern "/rest/api/3/universal_avatar/type/{type}/owner/{entity_id}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10453,7 +10453,7 @@ export def "rest-3-universal-avatar-type-owner storeAvatar" [
 # operationId: deleteAvatar
 export def "rest-3-universal-avatar-type-owner-avatar delete" [
   type: string
-  owningObjectId: string
+  owning_object_id: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10466,7 +10466,7 @@ export def "rest-3-universal-avatar-type-owner-avatar delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/universal_avatar/type/($type)/owner/($owningObjectId)/avatar/($id)")
+  let full_url = (build-url $base ({type: $type, owning_object_id: $owning_object_id, id: $id} | format pattern "/rest/api/3/universal_avatar/type/{type}/owner/{owning_object_id}/avatar/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10476,7 +10476,7 @@ export def "rest-3-universal-avatar-type-owner-avatar delete" [
 #
 # GET /rest/api/3/universal_avatar/view/type/{type}
 # operationId: getAvatarImageByType
-export def "rest-3-universal-avatar-view-type get" [
+export def "rest-3-universal-avatar-view-type get-avatar-image" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10493,7 +10493,7 @@ export def "rest-3-universal-avatar-view-type get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/universal_avatar/view/type/($type)" $qp)
+  let full_url = (build-url $base ({type: $type} | format pattern "/rest/api/3/universal_avatar/view/type/{type}") $qp)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10503,7 +10503,7 @@ export def "rest-3-universal-avatar-view-type get" [
 #
 # GET /rest/api/3/universal_avatar/view/type/{type}/avatar/{id}
 # operationId: getAvatarImageByID
-export def "rest-3-universal-avatar-view-type-avatar get" [
+export def "rest-3-universal-avatar-view-type-avatar get-avatar-image" [
   type: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10521,7 +10521,7 @@ export def "rest-3-universal-avatar-view-type-avatar get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/universal_avatar/view/type/($type)/avatar/($id)" $qp)
+  let full_url = (build-url $base ({type: $type, id: $id} | format pattern "/rest/api/3/universal_avatar/view/type/{type}/avatar/{id}") $qp)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10531,9 +10531,9 @@ export def "rest-3-universal-avatar-view-type-avatar get" [
 #
 # GET /rest/api/3/universal_avatar/view/type/{type}/owner/{entityId}
 # operationId: getAvatarImageByOwner
-export def "rest-3-universal-avatar-view-type-owner get" [
+export def "rest-3-universal-avatar-view-type-owner get-avatar-image" [
   type: string
-  entityId: string
+  entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10549,7 +10549,7 @@ export def "rest-3-universal-avatar-view-type-owner get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/universal_avatar/view/type/($type)/owner/($entityId)" $qp)
+  let full_url = (build-url $base ({type: $type, entity_id: $entity_id} | format pattern "/rest/api/3/universal_avatar/view/type/{type}/owner/{entity_id}") $qp)
   let accept_val = ($accept | default "*/*")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -10559,7 +10559,7 @@ export def "rest-3-universal-avatar-view-type-owner get" [
 #
 # DELETE /rest/api/3/user
 # operationId: removeUser
-export def "rest-3-user removeUser" [
+export def "rest-3-user delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10568,13 +10568,13 @@ export def "rest-3-user removeUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --key: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10594,14 +10594,14 @@ export def "rest-3-user get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. Required. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. Required. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide) for details.
   --key: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide) for details.
   --expand: string # Use [expand](#expansion) to include additional information about users in the response. This parameter accepts a comma-separated list. Expand options include:   *  `groups` includes all groups and nested groups to which the user belongs.  *  `applicationRoles` includes details of all the applications to which the user has access.
 ]: nothing -> record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list<record>, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list<record>, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10612,7 +10612,7 @@ export def "rest-3-user get" [
 #
 # POST /rest/api/3/user
 # operationId: createUser
-export def "rest-3-user createUser" [
+export def "rest-3-user create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10621,9 +10621,9 @@ export def "rest-3-user createUser" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --applicationKeys: list # Deprecated, do not use.
-  --displayName: string # This property is no longer available. If the user has an Atlassian account, their display name is not changed. If the user does not have an Atlassian account, they are sent an email asking them set up an account.
-  emailAddress: string # The email address for the user.
+  --application-keys: list # Deprecated, do not use.
+  --display-name: string # This property is no longer available. If the user has an Atlassian account, their display name is not changed. If the user does not have an Atlassian account, they are sent an email asking them set up an account.
+  email_address: string # The email address for the user.
   --key: string # This property is no longer available. See the [migration guide](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --name: string # This property is no longer available. See the [migration guide](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --password: string # This property is no longer available. If the user has an Atlassian account, their password is not changed. If the user does not have an Atlassian account, they are sent an email asking them set up an account.
@@ -10632,7 +10632,7 @@ export def "rest-3-user createUser" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/user")
-  let body = {applicationKeys: $applicationKeys, displayName: $displayName, emailAddress: $emailAddress, key: $key, name: $name, password: $password} | compact
+  let body = {"applicationKeys": $application_keys, "displayName": $display_name, "emailAddress": $email_address, "key": $key, "name": $name, "password": $password} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10654,14 +10654,14 @@ export def "rest-3-user-assignable-multi-project-search findBulkAssignableUsers"
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
-  --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
-  --projectKeys: string # A list of project keys (case sensitive). This parameter accepts a comma-separated list.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --account-id: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
+  --project-keys: string # A list of project keys (case sensitive). This parameter accepts a comma-separated list.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "projectKeys" $projectKeys "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "projectKeys" $project_keys "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/assignable/multiProjectSearch" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10682,19 +10682,19 @@ export def "rest-3-user-assignable-search findAssignableUsers" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query string that is matched against user attributes, such as `displayName`, and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `username` or `accountId` is specified. (e.g. query)
-  --sessionId: string # The sessionId of this request. SessionId is the same until the assignee is set.
+  --session-id: string # The sessionId of this request. SessionId is the same until the assignee is set.
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
-  --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
+  --account-id: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
   --project: string # The project ID or project key (case sensitive). Required, unless `issueKey` is specified.
-  --issueKey: string # The key of the issue. Required, unless `project` is specified.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
-  --maxResults: int # The maximum number of items to return. This operation may return less than the maximum number of items even if more are available. The operation fetches users up to the maximum and then, from the fetched users, returns only the users that can be assigned to the issue. (format: int32, default: 50)
-  --actionDescriptorId: int # The ID of the transition. (format: int32)
+  --issue-key: string # The key of the issue. Required, unless `project` is specified.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
+  --max-results: int # The maximum number of items to return. This operation may return less than the maximum number of items even if more are available. The operation fetches users up to the maximum and then, from the fetched users, returns only the users that can be assigned to the issue. (format: int32, default: 50)
+  --action-descriptor-id: int # The ID of the transition. (format: int32)
   --recommend: oneof<nothing, bool> # default: false
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sessionId" $sessionId "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "actionDescriptorId" $actionDescriptorId "scalar") (serialize-qp "recommend" $recommend "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sessionId" $session_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "issueKey" $issue_key "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "actionDescriptorId" $action_descriptor_id "scalar") (serialize-qp "recommend" $recommend "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/assignable/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10714,15 +10714,15 @@ export def "rest-3-user-bulk bulkGetUsers" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 10)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 10)
   --username: list # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --key: list # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
-  --accountId: list # The account ID of a user. To specify multiple users, pass multiple `accountId` parameters. For example, `accountId=5b10a2844c20165700ede21g&accountId=5b10ac8d82e05b22cc7d4ef5`. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --account-id: list # The account ID of a user. To specify multiple users, pass multiple `accountId` parameters. For example, `accountId=5b10a2844c20165700ede21g&accountId=5b10ac8d82e05b22cc7d4ef5`. (e.g. 5b10ac8d82e05b22cc7d4ef5)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "username" $username "multi") (serialize-qp "key" $key "multi") (serialize-qp "accountId" $accountId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "username" $username "multi") (serialize-qp "key" $key "multi") (serialize-qp "accountId" $account_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10742,14 +10742,14 @@ export def "rest-3-user-bulk-migration bulkGetUsersMigration" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 10)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 10)
   --username: list # Username of a user. To specify multiple users, pass multiple copies of this parameter. For example, `username=fred&username=barney`. Required if `key` isn't provided. Cannot be provided if `key` is present.
   --key: list # Key of a user. To specify multiple users, pass multiple copies of this parameter. For example, `key=fred&key=barney`. Required if `username` isn't provided. Cannot be provided if `username` is present.
 ]: nothing -> table<accountId: string, key: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "username" $username "multi") (serialize-qp "key" $key "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "username" $username "multi") (serialize-qp "key" $key "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/bulk/migration" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10760,7 +10760,7 @@ export def "rest-3-user-bulk-migration bulkGetUsersMigration" [
 #
 # DELETE /rest/api/3/user/columns
 # operationId: resetUserColumns
-export def "rest-3-user-columns resetUserColumns" [
+export def "rest-3-user-columns reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10769,12 +10769,12 @@ export def "rest-3-user-columns resetUserColumns" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/columns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10785,7 +10785,7 @@ export def "rest-3-user-columns resetUserColumns" [
 #
 # GET /rest/api/3/user/columns
 # operationId: getUserDefaultColumns
-export def "rest-3-user-columns get" [
+export def "rest-3-user-columns get-user-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10794,12 +10794,12 @@ export def "rest-3-user-columns get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --username: string # This parameter is no longer available See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> table<label: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/columns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10819,13 +10819,13 @@ export def "rest-3-user-columns setUserColumns" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/columns" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -10846,11 +10846,11 @@ export def "rest-3-user-email get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, `5b10ac8d82e05b22cc7d4ef5`.
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, `5b10ac8d82e05b22cc7d4ef5`.
 ]: nothing -> record<accountId: string, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/email" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10870,11 +10870,11 @@ export def "rest-3-user-email-bulk get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: list # The account IDs of the users for which emails are required. An `accountId` is an identifier that uniquely identifies the user across all Atlassian products. For example, `5b10ac8d82e05b22cc7d4ef5`. Note, this should be treated as an opaque identifier (that is, do not assume any structure in the value).
+  --account-id: list # The account IDs of the users for which emails are required. An `accountId` is an identifier that uniquely identifies the user across all Atlassian products. For example, `5b10ac8d82e05b22cc7d4ef5`. Note, this should be treated as an opaque identifier (that is, do not assume any structure in the value).
 ]: nothing -> record<accountId: string, email: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/email/bulk" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10894,13 +10894,13 @@ export def "rest-3-user-groups get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --key: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> table<groupId: string, name: string, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10922,16 +10922,16 @@ export def "rest-3-user-permission-search findUsersWithAllPermissions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
-  --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
+  --account-id: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
   --permissions: string # A comma separated list of permissions. Permissions can be specified as any:   *  permission returned by [Get all permissions](#api-rest-api-3-permissions-get).  *  custom project permission added by Connect apps.  *  (deprecated) one of the following:           *  ASSIGNABLE\_USER      *  ASSIGN\_ISSUE      *  ATTACHMENT\_DELETE\_ALL      *  ATTACHMENT\_DELETE\_OWN      *  BROWSE      *  CLOSE\_ISSUE      *  COMMENT\_DELETE\_ALL      *  COMMENT\_DELETE\_OWN      *  COMMENT\_EDIT\_ALL      *  COMMENT\_EDIT\_OWN      *  COMMENT\_ISSUE      *  CREATE\_ATTACHMENT      *  CREATE\_ISSUE      *  DELETE\_ISSUE      *  EDIT\_ISSUE      *  LINK\_ISSUE      *  MANAGE\_WATCHER\_LIST      *  MODIFY\_REPORTER      *  MOVE\_ISSUE      *  PROJECT\_ADMIN      *  RESOLVE\_ISSUE      *  SCHEDULE\_ISSUE      *  SET\_ISSUE\_SECURITY      *  TRANSITION\_ISSUE      *  VIEW\_VERSION\_CONTROL      *  VIEW\_VOTERS\_AND\_WATCHERS      *  VIEW\_WORKFLOW\_READONLY      *  WORKLOG\_DELETE\_ALL      *  WORKLOG\_DELETE\_OWN      *  WORKLOG\_EDIT\_ALL      *  WORKLOG\_EDIT\_OWN      *  WORK\_ISSUE
-  --issueKey: string # The issue key for the issue.
-  --projectKey: string # The project key for the project (case sensitive).
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --issue-key: string # The issue key for the issue.
+  --project-key: string # The project key for the project (case sensitive).
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "permissions" $permissions "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "projectKey" $projectKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "permissions" $permissions "scalar") (serialize-qp "issueKey" $issue_key "scalar") (serialize-qp "projectKey" $project_key "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/permission/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10952,16 +10952,16 @@ export def "rest-3-user-picker findUsersForPicker" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query string that is matched against user attributes, such as `displayName`, and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*.
-  --maxResults: int # The maximum number of items to return. The total number of matched users is returned in `total`. (format: int32, default: 50)
-  --showAvatar: oneof<nothing, bool> # Include the URI to the user's avatar. (default: false)
+  --max-results: int # The maximum number of items to return. The total number of matched users is returned in `total`. (format: int32, default: 50)
+  --show-avatar: oneof<nothing, bool> # Include the URI to the user's avatar. (default: false)
   --exclude: list # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
-  --excludeAccountIds: list # A list of account IDs to exclude from the search results. This parameter accepts a comma-separated list. Multiple account IDs can also be provided using an ampersand-separated list. For example, `excludeAccountIds=5b10a2844c20165700ede21g,5b10a0effa615349cb016cd8&excludeAccountIds=5b10ac8d82e05b22cc7d4ef5`. Cannot be provided with `exclude`.
-  --avatarSize: string
-  --excludeConnectUsers: oneof<nothing, bool> # default: false
+  --exclude-account-ids: list # A list of account IDs to exclude from the search results. This parameter accepts a comma-separated list. Multiple account IDs can also be provided using an ampersand-separated list. For example, `excludeAccountIds=5b10a2844c20165700ede21g,5b10a0effa615349cb016cd8&excludeAccountIds=5b10ac8d82e05b22cc7d4ef5`. Cannot be provided with `exclude`.
+  --avatar-size: string
+  --exclude-connect-users: oneof<nothing, bool> # default: false
 ]: nothing -> record<header: string, total: int, users: table<accountId: string, avatarUrl: string, displayName: string, html: string, key: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "showAvatar" $showAvatar "scalar") (serialize-qp "exclude" $exclude "multi") (serialize-qp "excludeAccountIds" $excludeAccountIds "multi") (serialize-qp "avatarSize" $avatarSize "scalar") (serialize-qp "excludeConnectUsers" $excludeConnectUsers "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "showAvatar" $show_avatar "scalar") (serialize-qp "exclude" $exclude "multi") (serialize-qp "excludeAccountIds" $exclude_account_ids "multi") (serialize-qp "avatarSize" $avatar_size "scalar") (serialize-qp "excludeConnectUsers" $exclude_connect_users "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/picker" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10972,7 +10972,7 @@ export def "rest-3-user-picker findUsersForPicker" [
 #
 # GET /rest/api/3/user/properties
 # operationId: getUserPropertyKeys
-export def "rest-3-user-properties list" [
+export def "rest-3-user-properties get-user-property-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10981,13 +10981,13 @@ export def "rest-3-user-properties list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
-  --userKey: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --user-key: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --username: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "userKey" $userKey "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/properties" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -10998,8 +10998,8 @@ export def "rest-3-user-properties list" [
 #
 # DELETE /rest/api/3/user/properties/{propertyKey}
 # operationId: deleteUserProperty
-export def "rest-3-user-properties delete" [
-  propertyKey: string
+export def "rest-3-user-properties delete-user-property" [
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11008,14 +11008,14 @@ export def "rest-3-user-properties delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
-  --userKey: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --user-key: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --username: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "userKey" $userKey "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/user/properties/($propertyKey)" $qp)
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({property_key: $property_key} | format pattern "/rest/api/3/user/properties/{property_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11025,8 +11025,8 @@ export def "rest-3-user-properties delete" [
 #
 # GET /rest/api/3/user/properties/{propertyKey}
 # operationId: getUserProperty
-export def "rest-3-user-properties get" [
-  propertyKey: string
+export def "rest-3-user-properties get-user-property" [
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11035,14 +11035,14 @@ export def "rest-3-user-properties get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
-  --userKey: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --user-key: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --username: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "userKey" $userKey "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/user/properties/($propertyKey)" $qp)
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({property_key: $property_key} | format pattern "/rest/api/3/user/properties/{property_key}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11053,7 +11053,7 @@ export def "rest-3-user-properties get" [
 # PUT /rest/api/3/user/properties/{propertyKey}
 # operationId: setUserProperty
 export def "rest-3-user-properties setUserProperty" [
-  propertyKey: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11062,16 +11062,16 @@ export def "rest-3-user-properties setUserProperty" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accountId: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
-  --userKey: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
+  --account-id: string # The account ID of the user, which uniquely identifies the user across all Atlassian products. For example, *5b10ac8d82e05b22cc7d4ef5*. (e.g. 5b10ac8d82e05b22cc7d4ef5)
+  --user-key: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --username: string # This parameter is no longer available and will be removed from the documentation soon. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "accountId" $accountId "scalar") (serialize-qp "userKey" $userKey "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/user/properties/($propertyKey)" $qp)
+  let qp = [(serialize-qp "accountId" $account_id "scalar") (serialize-qp "userKey" $user_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({property_key: $property_key} | format pattern "/rest/api/3/user/properties/{property_key}") $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11093,14 +11093,14 @@ export def "rest-3-user-search findUsers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query string that is matched against user attributes ( `displayName`, and `emailAddress`) to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` or `property` is specified. (e.g. query)
   --username: string
-  --accountId: string # A query string that is matched exactly against a user `accountId`. Required, unless `query` or `property` is specified.
-  --startAt: int # The index of the first item to return in a page of filtered results (page offset). (format: int32, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --account-id: string # A query string that is matched exactly against a user `accountId`. Required, unless `query` or `property` is specified.
+  --start-at: int # The index of the first item to return in a page of filtered results (page offset). (format: int32, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
   --property: string # A query string used to search properties. Property keys are specified by path, so property keys containing dot (.) or equals (=) characters cannot be used. The query string cannot be specified using a JSON object. Example: To search for the value of `nested` from `{"something":{"nested":1,"other":2}}` use `thepropertykey.something.nested=1`. Required, unless `accountId` or `query` is specified.
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "property" $property "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "property" $property "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11121,12 +11121,12 @@ export def "rest-3-user-search-query findUsersByQuery" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The search query.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<accountId: string, accountType: string, active: bool, applicationRoles: record, avatarUrls: record, displayName: string, emailAddress: string, expand: string, groups: record, key: string, locale: string, name: string, self: string, timeZone: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/search/query" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11147,12 +11147,12 @@ export def "rest-3-user-search-query-key findUserKeysByQuery" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The search query.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<accountId: string, key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/search/query/key" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11174,15 +11174,15 @@ export def "rest-3-user-viewissue-search findUsersWithBrowsePermission" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # A query string that is matched against user attributes, such as `displayName` and `emailAddress`, to find relevant users. The string can match the prefix of the attribute's value. For example, *query=john* matches a user with a `displayName` of *John Smith* and a user with an `emailAddress` of *johnson@example.com*. Required, unless `accountId` is specified. (e.g. query)
   --username: string # This parameter is no longer available. See the [deprecation notice](https://developer.atlassian.com/cloud/jira/platform/deprecation-notice-user-privacy-api-migration-guide/) for details.
-  --accountId: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
-  --issueKey: string # The issue key for the issue. Required, unless `projectKey` is specified.
-  --projectKey: string # The project key for the project (case sensitive). Required, unless `issueKey` is specified.
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --account-id: string # A query string that is matched exactly against user `accountId`. Required, unless `query` is specified.
+  --issue-key: string # The issue key for the issue. Required, unless `projectKey` is specified.
+  --project-key: string # The project key for the project (case sensitive). Required, unless `issueKey` is specified.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int32, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $accountId "scalar") (serialize-qp "issueKey" $issueKey "scalar") (serialize-qp "projectKey" $projectKey "scalar") (serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "issueKey" $issue_key "scalar") (serialize-qp "projectKey" $project_key "scalar") (serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/user/viewissue/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11193,7 +11193,7 @@ export def "rest-3-user-viewissue-search findUsersWithBrowsePermission" [
 #
 # GET /rest/api/3/users
 # operationId: getAllUsersDefault
-export def "rest-3-users get" [
+export def "rest-3-users get-all-users-default" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11202,12 +11202,12 @@ export def "rest-3-users get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return. (format: int32, default: 0)
-  --maxResults: int # The maximum number of items to return. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return. (format: int32, default: 0)
+  --max-results: int # The maximum number of items to return. (format: int32, default: 50)
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11218,7 +11218,7 @@ export def "rest-3-users get" [
 #
 # GET /rest/api/3/users/search
 # operationId: getAllUsers
-export def "rest-3-users-search get" [
+export def "rest-3-users-search get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11227,12 +11227,12 @@ export def "rest-3-users-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return. (format: int32, default: 0)
-  --maxResults: int # The maximum number of items to return. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return. (format: int32, default: 0)
+  --max-results: int # The maximum number of items to return. (format: int32, default: 50)
 ]: nothing -> table<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/users/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11244,7 +11244,7 @@ export def "rest-3-users-search get" [
 # POST /rest/api/3/version
 # operationId: createVersion
 # --operations item shape: {href?: string, iconClass?: string, id?: string, label?: string, styleClass?: string, title?: string, weight?: int}
-export def "rest-3-version createVersion" [
+export def "rest-3-version create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11256,19 +11256,19 @@ export def "rest-3-version createVersion" [
   --archived: oneof<nothing, bool> # Indicates that the version is archived. Optional when creating or updating a version.
   --description: string # The description of the version. Optional when creating or updating a version.
   --expand: string # Use [expand](em>#expansion) to include additional information about version in the response. This parameter accepts a comma-separated list. Expand options include:   *  `operations` Returns the list of operations available for this version.  *  `issuesstatus` Returns the count of issues in this version for each of the status categories *to do*, *in progress*, *done*, and *unmapped*. The *unmapped* property contains a count of issues with a status other than *to do*, *in progress*, and *done*.  Optional for create and update.
-  --moveUnfixedIssuesTo: string # The URL of the self link to the version to which all unfixed issues are moved when a version is released. Not applicable when creating a version. Optional when updating a version. (format: uri)
+  --move-unfixed-issues-to: string # The URL of the self link to the version to which all unfixed issues are moved when a version is released. Not applicable when creating a version. Optional when updating a version. (format: uri)
   --name: string # The unique name of the version. Required when creating a version. Optional when updating a version. The maximum length is 255 characters.
   --project: string # Deprecated. Use `projectId`.
-  --projectId: int # The ID of the project to which this version is attached. Required when creating a version. Not applicable when updating a version. (format: int64)
-  --releaseDate: string # The release date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
+  --project-id: int # The ID of the project to which this version is attached. Required when creating a version. Not applicable when updating a version. (format: int64)
+  --release-date: string # The release date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
   --released: oneof<nothing, bool> # Indicates that the version is released. If the version is released a request to release again is ignored. Not applicable when creating a version. Optional when updating a version.
-  --startDate: string # The start date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
+  --start-date: string # The start date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
 ]: any -> record<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record<done: int, inProgress: int, toDo: int, unmapped: int>, moveUnfixedIssuesTo: string, name: string, operations: table<href: string, iconClass: string, id: string, label: string, styleClass: string, title: string, weight: int>, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/version")
-  let body = {archived: $archived, description: $description, expand: $expand, moveUnfixedIssuesTo: $moveUnfixedIssuesTo, name: $name, project: $project, projectId: $projectId, releaseDate: $releaseDate, released: $released, startDate: $startDate} | compact
+  let body = {"archived": $archived, "description": $description, "expand": $expand, "moveUnfixedIssuesTo": $move_unfixed_issues_to, "name": $name, "project": $project, "projectId": $project_id, "releaseDate": $release_date, "released": $released, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11291,13 +11291,13 @@ export def "rest-3-version delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --moveFixIssuesTo: string # The ID of the version to update `fixVersion` to when the field contains the deleted version. The replacement version must be in the same project as the version being deleted and cannot be the version being deleted.
-  --moveAffectedIssuesTo: string # The ID of the version to update `affectedVersion` to when the field contains the deleted version. The replacement version must be in the same project as the version being deleted and cannot be the version being deleted.
+  --move-fix-issues-to: string # The ID of the version to update `fixVersion` to when the field contains the deleted version. The replacement version must be in the same project as the version being deleted and cannot be the version being deleted.
+  --move-affected-issues-to: string # The ID of the version to update `affectedVersion` to when the field contains the deleted version. The replacement version must be in the same project as the version being deleted and cannot be the version being deleted.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "moveFixIssuesTo" $moveFixIssuesTo "scalar") (serialize-qp "moveAffectedIssuesTo" $moveAffectedIssuesTo "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/version/($id)" $qp)
+  let qp = [(serialize-qp "moveFixIssuesTo" $move_fix_issues_to "scalar") (serialize-qp "moveAffectedIssuesTo" $move_affected_issues_to "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/version/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11322,7 +11322,7 @@ export def "rest-3-version get" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/version/($id)" $qp)
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/version/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11333,7 +11333,7 @@ export def "rest-3-version get" [
 # PUT /rest/api/3/version/{id}
 # operationId: updateVersion
 # --operations item shape: {href?: string, iconClass?: string, id?: string, label?: string, styleClass?: string, title?: string, weight?: int}
-export def "rest-3-version updateVersion" [
+export def "rest-3-version update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11346,19 +11346,19 @@ export def "rest-3-version updateVersion" [
   --archived: oneof<nothing, bool> # Indicates that the version is archived. Optional when creating or updating a version.
   --description: string # The description of the version. Optional when creating or updating a version.
   --expand: string # Use [expand](em>#expansion) to include additional information about version in the response. This parameter accepts a comma-separated list. Expand options include:   *  `operations` Returns the list of operations available for this version.  *  `issuesstatus` Returns the count of issues in this version for each of the status categories *to do*, *in progress*, *done*, and *unmapped*. The *unmapped* property contains a count of issues with a status other than *to do*, *in progress*, and *done*.  Optional for create and update.
-  --moveUnfixedIssuesTo: string # The URL of the self link to the version to which all unfixed issues are moved when a version is released. Not applicable when creating a version. Optional when updating a version. (format: uri)
+  --move-unfixed-issues-to: string # The URL of the self link to the version to which all unfixed issues are moved when a version is released. Not applicable when creating a version. Optional when updating a version. (format: uri)
   --name: string # The unique name of the version. Required when creating a version. Optional when updating a version. The maximum length is 255 characters.
   --project: string # Deprecated. Use `projectId`.
-  --projectId: int # The ID of the project to which this version is attached. Required when creating a version. Not applicable when updating a version. (format: int64)
-  --releaseDate: string # The release date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
+  --project-id: int # The ID of the project to which this version is attached. Required when creating a version. Not applicable when updating a version. (format: int64)
+  --release-date: string # The release date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
   --released: oneof<nothing, bool> # Indicates that the version is released. If the version is released a request to release again is ignored. Not applicable when creating a version. Optional when updating a version.
-  --startDate: string # The start date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
+  --start-date: string # The start date of the version. Expressed in ISO 8601 format (yyyy-mm-dd). Optional when creating or updating a version. (format: date)
 ]: any -> record<archived: bool, description: string, expand: string, id: string, issuesStatusForFixVersion: record<done: int, inProgress: int, toDo: int, unmapped: int>, moveUnfixedIssuesTo: string, name: string, operations: table<href: string, iconClass: string, id: string, label: string, styleClass: string, title: string, weight: int>, overdue: bool, project: string, projectId: int, releaseDate: string, released: bool, self: string, startDate: string, userReleaseDate: string, userStartDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/version/($id)")
-  let body = {archived: $archived, description: $description, expand: $expand, moveUnfixedIssuesTo: $moveUnfixedIssuesTo, name: $name, project: $project, projectId: $projectId, releaseDate: $releaseDate, released: $released, startDate: $startDate} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/version/{id}"))
+  let body = {"archived": $archived, "description": $description, "expand": $expand, "moveUnfixedIssuesTo": $move_unfixed_issues_to, "name": $name, "project": $project, "projectId": $project_id, "releaseDate": $release_date, "released": $released, "startDate": $start_date} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11371,7 +11371,7 @@ export def "rest-3-version updateVersion" [
 # operationId: mergeVersions
 export def "rest-3-version-mergeto mergeVersions" [
   id: string
-  moveIssuesTo: string
+  move_issues_to: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11383,7 +11383,7 @@ export def "rest-3-version-mergeto mergeVersions" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/version/($id)/mergeto/($moveIssuesTo)")
+  let full_url = (build-url $base ({id: $id, move_issues_to: $move_issues_to} | format pattern "/rest/api/3/version/{id}/mergeto/{move_issues_to}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11393,7 +11393,7 @@ export def "rest-3-version-mergeto mergeVersions" [
 #
 # POST /rest/api/3/version/{id}/move
 # operationId: moveVersion
-export def "rest-3-version-move moveVersion" [
+export def "rest-3-version-move move" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11409,8 +11409,8 @@ export def "rest-3-version-move moveVersion" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/version/($id)/move")
-  let body = {after: $after, position: $position} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/version/{id}/move"))
+  let body = {"after": $after, "position": $position} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11434,7 +11434,7 @@ export def "rest-3-version-related-issue-counts get" [
 ]: nothing -> record<customFieldUsage: table<customFieldId: int, fieldName: string, issueCountWithVersionInCustomField: int>, issueCountWithCustomFieldsShowingVersion: int, issuesAffectedCount: int, issuesFixedCount: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/version/($id)/relatedIssueCounts")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/version/{id}/relatedIssueCounts"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11445,7 +11445,7 @@ export def "rest-3-version-related-issue-counts get" [
 # POST /rest/api/3/version/{id}/removeAndSwap
 # operationId: deleteAndReplaceVersion
 # --customFieldReplacementList item shape: {customFieldId?: int, moveTo?: int}
-export def "rest-3-version-remove-and-swap post" [
+export def "rest-3-version-remove-and-swap delete-and-replace" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11455,15 +11455,15 @@ export def "rest-3-version-remove-and-swap post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --customFieldReplacementList: list # An array of custom field IDs (`customFieldId`) and version IDs (`moveTo`) to update when the fields contain the deleted version. — item shape: {customFieldId?: int, moveTo?: int}
-  --moveAffectedIssuesTo: int # The ID of the version to update `affectedVersion` to when the field contains the deleted version. (format: int64)
-  --moveFixIssuesTo: int # The ID of the version to update `fixVersion` to when the field contains the deleted version. (format: int64)
+  --custom-field-replacement-list: list # An array of custom field IDs (`customFieldId`) and version IDs (`moveTo`) to update when the fields contain the deleted version. — item shape: {customFieldId?: int, moveTo?: int}
+  --move-affected-issues-to: int # The ID of the version to update `affectedVersion` to when the field contains the deleted version. (format: int64)
+  --move-fix-issues-to: int # The ID of the version to update `fixVersion` to when the field contains the deleted version. (format: int64)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/version/($id)/removeAndSwap")
-  let body = {customFieldReplacementList: $customFieldReplacementList, moveAffectedIssuesTo: $moveAffectedIssuesTo, moveFixIssuesTo: $moveFixIssuesTo} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/version/{id}/removeAndSwap"))
+  let body = {"customFieldReplacementList": $custom_field_replacement_list, "moveAffectedIssuesTo": $move_affected_issues_to, "moveFixIssuesTo": $move_fix_issues_to} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11487,7 +11487,7 @@ export def "rest-3-version-unresolved-issue-count get" [
 ]: nothing -> record<issuesCount: int, issuesUnresolvedCount: int, self: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/version/($id)/unresolvedIssueCount")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/version/{id}/unresolvedIssueCount"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11506,13 +11506,13 @@ export def "rest-3-webhook delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  webhookIds: list # A list of webhook IDs.
+  webhook_ids: list # A list of webhook IDs.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/webhook")
-  let body = {webhookIds: $webhookIds} | compact
+  let body = {"webhookIds": $webhook_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11523,7 +11523,7 @@ export def "rest-3-webhook delete" [
 #
 # GET /rest/api/3/webhook
 # operationId: getDynamicWebhooksForApp
-export def "rest-3-webhook get" [
+export def "rest-3-webhook get-dynamic-webhooks-for-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11532,12 +11532,12 @@ export def "rest-3-webhook get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 100)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 100)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<events: list, expirationDate: int, fieldIdsFilter: list, id: int, issuePropertyKeysFilter: list, jqlFilter: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/webhook" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11549,7 +11549,7 @@ export def "rest-3-webhook get" [
 # POST /rest/api/3/webhook
 # operationId: registerDynamicWebhooks
 # --webhooks item shape: {events: list, fieldIdsFilter?: list, issuePropertyKeysFilter?: list, jqlFilter: string}
-export def "rest-3-webhook registerDynamicWebhooks" [
+export def "rest-3-webhook create-dynamic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11565,7 +11565,7 @@ export def "rest-3-webhook registerDynamicWebhooks" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/webhook")
-  let body = {url: $body_url, webhooks: $webhooks} | compact
+  let body = {"url": $body_url, "webhooks": $webhooks} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11585,12 +11585,12 @@ export def "rest-3-webhook-failed get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --maxResults: int # The maximum number of webhooks to return per page. If obeying the maxResults directive would result in records with the same failure time being split across pages, the directive is ignored and all records with the same failure time included on the page. (format: int32)
+  --max-results: int # The maximum number of webhooks to return per page. If obeying the maxResults directive would result in records with the same failure time being split across pages, the directive is ignored and all records with the same failure time included on the page. (format: int32)
   --after: int # The time after which any webhook failure must have occurred for the record to be returned, expressed as milliseconds since the UNIX epoch. (format: int64)
 ]: nothing -> record<maxResults: int, next: string, values: table<body: string, failureTime: int, id: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "after" $after "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/webhook/failed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11601,7 +11601,7 @@ export def "rest-3-webhook-failed get" [
 #
 # PUT /rest/api/3/webhook/refresh
 # operationId: refreshWebhooks
-export def "rest-3-webhook-refresh refreshWebhooks" [
+export def "rest-3-webhook-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11610,13 +11610,13 @@ export def "rest-3-webhook-refresh refreshWebhooks" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  webhookIds: list # A list of webhook IDs.
+  webhook_ids: list # A list of webhook IDs.
 ]: any -> record<expirationDate: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/webhook/refresh")
-  let body = {webhookIds: $webhookIds} | compact
+  let body = {"webhookIds": $webhook_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11629,7 +11629,7 @@ export def "rest-3-webhook-refresh refreshWebhooks" [
 # DEPRECATED
 # operationId: getAllWorkflows
 @deprecated
-export def "rest-3-workflow get" [
+export def "rest-3-workflow get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11638,11 +11638,11 @@ export def "rest-3-workflow get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # The name of the workflow to be returned. Only one workflow can be specified.
+  --workflow-name: string # The name of the workflow to be returned. Only one workflow can be specified.
 ]: nothing -> table<default: bool, description: string, lastModifiedDate: string, lastModifiedUser: string, lastModifiedUserAccountId: string, name: string, scope: record<project: record, type: string>, steps: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/workflow" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11655,7 +11655,7 @@ export def "rest-3-workflow get" [
 # operationId: createWorkflow
 # --statuses item shape: {id: string, properties?: record}
 # --transitions item shape: {description?: string, from?: list, name: string, properties?: record, rules?: any, screen?: any, to: string, type: "global"|"initial"|"directed"}
-export def "rest-3-workflow createWorkflow" [
+export def "rest-3-workflow create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11673,7 +11673,7 @@ export def "rest-3-workflow createWorkflow" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/workflow")
-  let body = {description: $description, name: $name, statuses: $statuses, transitions: $transitions} | compact
+  let body = {"description": $description, "name": $name, "statuses": $statuses, "transitions": $transitions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11684,7 +11684,7 @@ export def "rest-3-workflow createWorkflow" [
 #
 # GET /rest/api/3/workflow/rule/config
 # operationId: getWorkflowTransitionRuleConfigurations
-export def "rest-3-workflow-rule-config get" [
+export def "rest-3-workflow-rule-config get-workflow-transition-rule-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11693,18 +11693,18 @@ export def "rest-3-workflow-rule-config get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 10)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 10)
   --types: list # The types of the transition rules to return.
   --keys: list # The transition rule class keys, as defined in the Connect app descriptor, of the transition rules to return.
-  --workflowNames: list # EXPERIMENTAL: The list of workflow names to filter by.
-  --withTags: list # EXPERIMENTAL: The list of `tags` to filter by.
+  --workflow-names: list # EXPERIMENTAL: The list of workflow names to filter by.
+  --with-tags: list # EXPERIMENTAL: The list of `tags` to filter by.
   --draft: oneof<nothing, bool> # EXPERIMENTAL: Whether draft or published workflows are returned. If not provided, both workflow types are returned.
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts `transition`, which, for each rule, returns information about the transition the rule is assigned to.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<conditions: list, postFunctions: list, validators: list, workflowId: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "types" $types "multi") (serialize-qp "keys" $keys "multi") (serialize-qp "workflowNames" $workflowNames "multi") (serialize-qp "withTags" $withTags "multi") (serialize-qp "draft" $draft "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "types" $types "multi") (serialize-qp "keys" $keys "multi") (serialize-qp "workflowNames" $workflow_names "multi") (serialize-qp "withTags" $with_tags "multi") (serialize-qp "draft" $draft "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/workflow/rule/config" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11716,7 +11716,7 @@ export def "rest-3-workflow-rule-config get" [
 # PUT /rest/api/3/workflow/rule/config
 # operationId: updateWorkflowTransitionRuleConfigurations
 # --workflows item shape: {conditions?: list, postFunctions?: list, validators?: list, workflowId: record}
-export def "rest-3-workflow-rule-config updateWorkflowTransitionRuleConfigurations" [
+export def "rest-3-workflow-rule-config update-workflow-transition-rule-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11731,7 +11731,7 @@ export def "rest-3-workflow-rule-config updateWorkflowTransitionRuleConfiguratio
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/workflow/rule/config")
-  let body = {workflows: $workflows} | compact
+  let body = {"workflows": $workflows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11743,7 +11743,7 @@ export def "rest-3-workflow-rule-config updateWorkflowTransitionRuleConfiguratio
 # PUT /rest/api/3/workflow/rule/config/delete
 # operationId: deleteWorkflowTransitionRuleConfigurations
 # --workflows item shape: {workflowId: record, workflowRuleIds: list}
-export def "rest-3-workflow-rule-config-delete put" [
+export def "rest-3-workflow-rule-config-delete delete-workflow-transition-rule-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11758,7 +11758,7 @@ export def "rest-3-workflow-rule-config-delete put" [
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/workflow/rule/config/delete")
-  let body = {workflows: $workflows} | compact
+  let body = {"workflows": $workflows} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11769,7 +11769,7 @@ export def "rest-3-workflow-rule-config-delete put" [
 #
 # GET /rest/api/3/workflow/search
 # operationId: getWorkflowsPaginated
-export def "rest-3-workflow-search get" [
+export def "rest-3-workflow-search get-workflows-paginated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11778,17 +11778,17 @@ export def "rest-3-workflow-search get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
-  --workflowName: list # The name of a workflow to return. To include multiple workflows, provide an ampersand-separated list. For example, `workflowName=name1&workflowName=name2`.
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --workflow-name: list # The name of a workflow to return. To include multiple workflows, provide an ampersand-separated list. For example, `workflowName=name1&workflowName=name2`.
   --expand: string # Use [expand](#expansion) to include additional information in the response. This parameter accepts a comma-separated list. Expand options include:   *  `transitions` For each workflow, returns information about the transitions inside the workflow.  *  `transitions.rules` For each workflow transition, returns information about its rules. Transitions are included automatically if this expand is requested.  *  `transitions.properties` For each workflow transition, returns information about its properties. Transitions are included automatically if this expand is requested.  *  `statuses` For each workflow, returns information about the statuses inside the workflow.  *  `statuses.properties` For each workflow status, returns information about its properties. Statuses are included automatically if this expand is requested.  *  `default` For each workflow, returns information about whether this is the default workflow.  *  `schemes` For each workflow, returns information about the workflow schemes the workflow is assigned to.  *  `projects` For each workflow, returns information about the projects the workflow is assigned to, through workflow schemes.  *  `hasDraftWorkflow` For each workflow, returns information about whether the workflow has a draft version.  *  `operations` For each workflow, returns information about the actions that can be undertaken on the workflow.
-  --queryString: string # String used to perform a case-insensitive partial match with workflow name.
-  --orderBy: string@orderBy-completer-8 # [Order](#ordering) the results by a field:   *  `name` Sorts by workflow name.  *  `created` Sorts by create time.  *  `updated` Sorts by update time.
-  --isActive: oneof<nothing, bool> # Filters active and inactive workflows.
+  --query-string: string # String used to perform a case-insensitive partial match with workflow name.
+  --order-by: string@order-by-completer-8 # [Order](#ordering) the results by a field:   *  `name` Sorts by workflow name.  *  `created` Sorts by create time.  *  `updated` Sorts by update time.
+  --is-active: oneof<nothing, bool> # Filters active and inactive workflows.
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<created: string, description: string, hasDraftWorkflow: bool, id: record, isDefault: bool, operations: record, projects: list, schemes: list, statuses: list, transitions: list, updated: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar") (serialize-qp "workflowName" $workflowName "multi") (serialize-qp "expand" $expand "scalar") (serialize-qp "queryString" $queryString "scalar") (serialize-qp "orderBy" $orderBy "scalar") (serialize-qp "isActive" $isActive "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "workflowName" $workflow_name "multi") (serialize-qp "expand" $expand "scalar") (serialize-qp "queryString" $query_string "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "isActive" $is_active "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/workflow/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11799,8 +11799,8 @@ export def "rest-3-workflow-search get" [
 #
 # DELETE /rest/api/3/workflow/transitions/{transitionId}/properties
 # operationId: deleteWorkflowTransitionProperty
-export def "rest-3-workflow-transitions-properties delete" [
-  transitionId: int
+export def "rest-3-workflow-transitions-properties delete-workflow-transition-property" [
+  transition_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11810,13 +11810,13 @@ export def "rest-3-workflow-transitions-properties delete" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The name of the transition property to delete, also known as the name of the property.
-  --workflowName: string # The name of the workflow that the transition belongs to.
-  --workflowMode: string@workflowMode-completer # The workflow status. Set to `live` for inactive workflows or `draft` for draft workflows. Active workflows cannot be edited.
+  --workflow-name: string # The name of the workflow that the transition belongs to.
+  --workflow-mode: string@workflow-mode-completer # The workflow status. Set to `live` for inactive workflows or `draft` for draft workflows. Active workflows cannot be edited.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "workflowMode" $workflowMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflow/transitions/($transitionId)/properties" $qp)
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({transition_id: $transition_id} | format pattern "/rest/api/3/workflow/transitions/{transition_id}/properties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11827,7 +11827,7 @@ export def "rest-3-workflow-transitions-properties delete" [
 # GET /rest/api/3/workflow/transitions/{transitionId}/properties
 # operationId: getWorkflowTransitionProperties
 export def "rest-3-workflow-transitions-properties get" [
-  transitionId: int
+  transition_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11836,15 +11836,15 @@ export def "rest-3-workflow-transitions-properties get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --includeReservedKeys: oneof<nothing, bool> # Some properties with keys that have the *jira.* prefix are reserved, which means they are not editable. To include these properties in the results, set this parameter to *true*. (default: false)
+  --include-reserved-keys: oneof<nothing, bool> # Some properties with keys that have the *jira.* prefix are reserved, which means they are not editable. To include these properties in the results, set this parameter to *true*. (default: false)
   --key: string # The key of the property being returned, also known as the name of the property. If this parameter is not specified, all properties on the transition are returned.
-  --workflowName: string # The name of the workflow that the transition belongs to.
-  --workflowMode: string@workflowMode-completer # The workflow status. Set to *live* for active and inactive workflows, or *draft* for draft workflows. (default: live)
+  --workflow-name: string # The name of the workflow that the transition belongs to.
+  --workflow-mode: string@workflow-mode-completer # The workflow status. Set to *live* for active and inactive workflows, or *draft* for draft workflows. (default: live)
 ]: nothing -> record<id: string, key: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includeReservedKeys" $includeReservedKeys "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "workflowMode" $workflowMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflow/transitions/($transitionId)/properties" $qp)
+  let qp = [(serialize-qp "includeReservedKeys" $include_reserved_keys "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({transition_id: $transition_id} | format pattern "/rest/api/3/workflow/transitions/{transition_id}/properties") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11854,8 +11854,8 @@ export def "rest-3-workflow-transitions-properties get" [
 #
 # POST /rest/api/3/workflow/transitions/{transitionId}/properties
 # operationId: createWorkflowTransitionProperty
-export def "rest-3-workflow-transitions-properties createWorkflowTransitionProperty" [
-  transitionId: int
+export def "rest-3-workflow-transitions-properties create-workflow-transition-property" [
+  transition_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11865,16 +11865,16 @@ export def "rest-3-workflow-transitions-properties createWorkflowTransitionPrope
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The key of the property being added, also known as the name of the property. Set this to the same value as the `key` defined in the request body.
-  --workflowName: string # The name of the workflow that the transition belongs to.
-  --workflowMode: string@workflowMode-completer # The workflow status. Set to *live* for inactive workflows or *draft* for draft workflows. Active workflows cannot be edited. (default: live)
+  --workflow-name: string # The name of the workflow that the transition belongs to.
+  --workflow-mode: string@workflow-mode-completer # The workflow status. Set to *live* for inactive workflows or *draft* for draft workflows. Active workflows cannot be edited. (default: live)
   value: string # The value of the transition property.
 ]: any -> record<id: string, key: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "workflowMode" $workflowMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflow/transitions/($transitionId)/properties" $qp)
-  let body = {value: $value} | compact
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({transition_id: $transition_id} | format pattern "/rest/api/3/workflow/transitions/{transition_id}/properties") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11885,8 +11885,8 @@ export def "rest-3-workflow-transitions-properties createWorkflowTransitionPrope
 #
 # PUT /rest/api/3/workflow/transitions/{transitionId}/properties
 # operationId: updateWorkflowTransitionProperty
-export def "rest-3-workflow-transitions-properties updateWorkflowTransitionProperty" [
-  transitionId: int
+export def "rest-3-workflow-transitions-properties update-workflow-transition-property" [
+  transition_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11896,16 +11896,16 @@ export def "rest-3-workflow-transitions-properties updateWorkflowTransitionPrope
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # The key of the property being updated, also known as the name of the property. Set this to the same value as the `key` defined in the request body.
-  --workflowName: string # The name of the workflow that the transition belongs to.
-  --workflowMode: string@workflowMode-completer # The workflow status. Set to `live` for inactive workflows or `draft` for draft workflows. Active workflows cannot be edited.
+  --workflow-name: string # The name of the workflow that the transition belongs to.
+  --workflow-mode: string@workflow-mode-completer # The workflow status. Set to `live` for inactive workflows or `draft` for draft workflows. Active workflows cannot be edited.
   value: string # The value of the transition property.
 ]: any -> record<id: string, key: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "workflowMode" $workflowMode "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflow/transitions/($transitionId)/properties" $qp)
-  let body = {value: $value} | compact
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "workflowMode" $workflow_mode "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({transition_id: $transition_id} | format pattern "/rest/api/3/workflow/transitions/{transition_id}/properties") $qp)
+  let body = {"value": $value} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11916,8 +11916,8 @@ export def "rest-3-workflow-transitions-properties updateWorkflowTransitionPrope
 #
 # DELETE /rest/api/3/workflow/{entityId}
 # operationId: deleteInactiveWorkflow
-export def "rest-3-workflow delete" [
-  entityId: string
+export def "rest-3-workflow delete-inactive" [
+  entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11929,7 +11929,7 @@ export def "rest-3-workflow delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflow/($entityId)")
+  let full_url = (build-url $base ({entity_id: $entity_id} | format pattern "/rest/api/3/workflow/{entity_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -11939,7 +11939,7 @@ export def "rest-3-workflow delete" [
 #
 # GET /rest/api/3/workflowscheme
 # operationId: getAllWorkflowSchemes
-export def "rest-3-workflowscheme list" [
+export def "rest-3-workflowscheme get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11948,12 +11948,12 @@ export def "rest-3-workflowscheme list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startAt: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
-  --maxResults: int # The maximum number of items to return per page. (format: int32, default: 50)
+  --start-at: int # The index of the first item to return in a page of results (page offset). (format: int64, default: 0)
+  --max-results: int # The maximum number of items to return per page. (format: int32, default: 50)
 ]: nothing -> record<isLast: bool, maxResults: int, nextPage: string, self: string, startAt: int, total: int, values: table<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "startAt" $startAt "scalar") (serialize-qp "maxResults" $maxResults "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "startAt" $start_at "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/workflowscheme" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11964,7 +11964,7 @@ export def "rest-3-workflowscheme list" [
 #
 # POST /rest/api/3/workflowscheme
 # operationId: createWorkflowScheme
-export def "rest-3-workflowscheme createWorkflowScheme" [
+export def "rest-3-workflowscheme create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11973,17 +11973,17 @@ export def "rest-3-workflowscheme createWorkflowScheme" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultWorkflow: string # The name of the default workflow for the workflow scheme. The default workflow has *All Unassigned Issue Types* assigned to it in Jira. If `defaultWorkflow` is not specified when creating a workflow scheme, it is set to *Jira Workflow (jira)*.
+  --default-workflow: string # The name of the default workflow for the workflow scheme. The default workflow has *All Unassigned Issue Types* assigned to it in Jira. If `defaultWorkflow` is not specified when creating a workflow scheme, it is set to *Jira Workflow (jira)*.
   --description: string # The description of the workflow scheme.
-  --issueTypeMappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
+  --issue-type-mappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
   --name: string # The name of the workflow scheme. The name must be unique. The maximum length is 255 characters. Required when creating a workflow scheme.
-  --updateDraftIfNeeded: oneof<nothing, bool> # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
+  --update-draft-if-needed: oneof<nothing, bool> # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/workflowscheme")
-  let body = {defaultWorkflow: $defaultWorkflow, description: $description, issueTypeMappings: $issueTypeMappings, name: $name, updateDraftIfNeeded: $updateDraftIfNeeded} | compact
+  let body = {"defaultWorkflow": $default_workflow, "description": $description, "issueTypeMappings": $issue_type_mappings, "name": $name, "updateDraftIfNeeded": $update_draft_if_needed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -11994,7 +11994,7 @@ export def "rest-3-workflowscheme createWorkflowScheme" [
 #
 # GET /rest/api/3/workflowscheme/project
 # operationId: getWorkflowSchemeProjectAssociations
-export def "rest-3-workflowscheme-project get" [
+export def "rest-3-workflowscheme-project get-workflow-scheme-project-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12003,11 +12003,11 @@ export def "rest-3-workflowscheme-project get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --projectId: list # The ID of a project to return the workflow schemes for. To include multiple projects, provide an ampersand-Jim: oneseparated list. For example, `projectId=10000&projectId=10001`.
+  --project-id: list # The ID of a project to return the workflow schemes for. To include multiple projects, provide an ampersand-Jim: oneseparated list. For example, `projectId=10000&projectId=10001`.
 ]: nothing -> record<values: table<projectIds: list, workflowScheme: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "projectId" $projectId "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "projectId" $project_id "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/workflowscheme/project" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12027,14 +12027,14 @@ export def "rest-3-workflowscheme-project assignSchemeToProject" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  projectId: string # The ID of the project.
-  --workflowSchemeId: string # The ID of the workflow scheme. If the workflow scheme ID is `null`, the operation assigns the default workflow scheme.
+  project_id: string # The ID of the project.
+  --workflow-scheme-id: string # The ID of the workflow scheme. If the workflow scheme ID is `null`, the operation assigns the default workflow scheme.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/api/3/workflowscheme/project")
-  let body = {projectId: $projectId, workflowSchemeId: $workflowSchemeId} | compact
+  let body = {"projectId": $project_id, "workflowSchemeId": $workflow_scheme_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12058,7 +12058,7 @@ export def "rest-3-workflowscheme delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12078,12 +12078,12 @@ export def "rest-3-workflowscheme get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnDraftIfExists: oneof<nothing, bool> # Returns the workflow scheme's draft rather than scheme itself, if set to true. If the workflow scheme does not have a draft, then the workflow scheme is returned. (default: false)
+  --return-draft-if-exists: oneof<nothing, bool> # Returns the workflow scheme's draft rather than scheme itself, if set to true. If the workflow scheme does not have a draft, then the workflow scheme is returned. (default: false)
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnDraftIfExists" $returnDraftIfExists "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)" $qp)
+  let qp = [(serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12093,7 +12093,7 @@ export def "rest-3-workflowscheme get" [
 #
 # PUT /rest/api/3/workflowscheme/{id}
 # operationId: updateWorkflowScheme
-export def "rest-3-workflowscheme updateWorkflowScheme" [
+export def "rest-3-workflowscheme update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12103,17 +12103,17 @@ export def "rest-3-workflowscheme updateWorkflowScheme" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultWorkflow: string # The name of the default workflow for the workflow scheme. The default workflow has *All Unassigned Issue Types* assigned to it in Jira. If `defaultWorkflow` is not specified when creating a workflow scheme, it is set to *Jira Workflow (jira)*.
+  --default-workflow: string # The name of the default workflow for the workflow scheme. The default workflow has *All Unassigned Issue Types* assigned to it in Jira. If `defaultWorkflow` is not specified when creating a workflow scheme, it is set to *Jira Workflow (jira)*.
   --description: string # The description of the workflow scheme.
-  --issueTypeMappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
+  --issue-type-mappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
   --name: string # The name of the workflow scheme. The name must be unique. The maximum length is 255 characters. Required when creating a workflow scheme.
-  --updateDraftIfNeeded: oneof<nothing, bool> # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
+  --update-draft-if-needed: oneof<nothing, bool> # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)")
-  let body = {defaultWorkflow: $defaultWorkflow, description: $description, issueTypeMappings: $issueTypeMappings, name: $name, updateDraftIfNeeded: $updateDraftIfNeeded} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}"))
+  let body = {"defaultWorkflow": $default_workflow, "description": $description, "issueTypeMappings": $issue_type_mappings, "name": $name, "updateDraftIfNeeded": $update_draft_if_needed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12124,7 +12124,7 @@ export def "rest-3-workflowscheme updateWorkflowScheme" [
 #
 # POST /rest/api/3/workflowscheme/{id}/createdraft
 # operationId: createWorkflowSchemeDraftFromParent
-export def "rest-3-workflowscheme-createdraft createWorkflowSchemeDraftFromParent" [
+export def "rest-3-workflowscheme-createdraft create-workflow-scheme-draft-from-parent" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12137,7 +12137,7 @@ export def "rest-3-workflowscheme-createdraft createWorkflowSchemeDraftFromParen
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/createdraft")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/createdraft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12147,7 +12147,7 @@ export def "rest-3-workflowscheme-createdraft createWorkflowSchemeDraftFromParen
 #
 # DELETE /rest/api/3/workflowscheme/{id}/default
 # operationId: deleteDefaultWorkflow
-export def "rest-3-workflowscheme-default delete" [
+export def "rest-3-workflowscheme-default delete-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12157,12 +12157,12 @@ export def "rest-3-workflowscheme-default delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and delete the mapping from the draft, when the workflow scheme cannot be edited. Defaults to `false`.
+  --update-draft-if-needed: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and delete the mapping from the draft, when the workflow scheme cannot be edited. Defaults to `false`.
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateDraftIfNeeded" $updateDraftIfNeeded "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/default" $qp)
+  let qp = [(serialize-qp "updateDraftIfNeeded" $update_draft_if_needed "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12172,7 +12172,7 @@ export def "rest-3-workflowscheme-default delete" [
 #
 # GET /rest/api/3/workflowscheme/{id}/default
 # operationId: getDefaultWorkflow
-export def "rest-3-workflowscheme-default get" [
+export def "rest-3-workflowscheme-default get-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12182,12 +12182,12 @@ export def "rest-3-workflowscheme-default get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnDraftIfExists: oneof<nothing, bool> # Set to `true` to return the default workflow for the workflow scheme's draft rather than scheme itself. If the workflow scheme does not have a draft, then the default workflow for the workflow scheme is returned. (default: false)
+  --return-draft-if-exists: oneof<nothing, bool> # Set to `true` to return the default workflow for the workflow scheme's draft rather than scheme itself. If the workflow scheme does not have a draft, then the default workflow for the workflow scheme is returned. (default: false)
 ]: nothing -> record<updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnDraftIfExists" $returnDraftIfExists "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/default" $qp)
+  let qp = [(serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/default") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12197,7 +12197,7 @@ export def "rest-3-workflowscheme-default get" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/default
 # operationId: updateDefaultWorkflow
-export def "rest-3-workflowscheme-default updateDefaultWorkflow" [
+export def "rest-3-workflowscheme-default update-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12207,14 +12207,14 @@ export def "rest-3-workflowscheme-default updateDefaultWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateDraftIfNeeded: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new default workflow. Defaults to `false`.
+  --update-draft-if-needed: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new default workflow. Defaults to `false`.
   workflow: string # The name of the workflow to set as the default workflow.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/default")
-  let body = {updateDraftIfNeeded: $updateDraftIfNeeded, workflow: $workflow} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/default"))
+  let body = {"updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12238,7 +12238,7 @@ export def "rest-3-workflowscheme-draft delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/draft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12261,7 +12261,7 @@ export def "rest-3-workflowscheme-draft get" [
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/draft"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12271,7 +12271,7 @@ export def "rest-3-workflowscheme-draft get" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/draft
 # operationId: updateWorkflowSchemeDraft
-export def "rest-3-workflowscheme-draft updateWorkflowSchemeDraft" [
+export def "rest-3-workflowscheme-draft update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12281,17 +12281,17 @@ export def "rest-3-workflowscheme-draft updateWorkflowSchemeDraft" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --defaultWorkflow: string # The name of the default workflow for the workflow scheme. The default workflow has *All Unassigned Issue Types* assigned to it in Jira. If `defaultWorkflow` is not specified when creating a workflow scheme, it is set to *Jira Workflow (jira)*.
+  --default-workflow: string # The name of the default workflow for the workflow scheme. The default workflow has *All Unassigned Issue Types* assigned to it in Jira. If `defaultWorkflow` is not specified when creating a workflow scheme, it is set to *Jira Workflow (jira)*.
   --description: string # The description of the workflow scheme.
-  --issueTypeMappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
+  --issue-type-mappings: record # The issue type to workflow mappings, where each mapping is an issue type ID and workflow name pair. Note that an issue type can only be mapped to one workflow in a workflow scheme.
   --name: string # The name of the workflow scheme. The name must be unique. The maximum length is 255 characters. Required when creating a workflow scheme.
-  --updateDraftIfNeeded: oneof<nothing, bool> # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
+  --update-draft-if-needed: oneof<nothing, bool> # Whether to create or update a draft workflow scheme when updating an active workflow scheme. An active workflow scheme is a workflow scheme that is used by at least one project. The following examples show how this property works:   *  Update an active workflow scheme with `updateDraftIfNeeded` set to `true`: If a draft workflow scheme exists, it is updated. Otherwise, a draft workflow scheme is created.  *  Update an active workflow scheme with `updateDraftIfNeeded` set to `false`: An error is returned, as active workflow schemes cannot be updated.  *  Update an inactive workflow scheme with `updateDraftIfNeeded` set to `true`: The workflow scheme is updated, as inactive workflow schemes do not require drafts to update.  Defaults to `false`.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft")
-  let body = {defaultWorkflow: $defaultWorkflow, description: $description, issueTypeMappings: $issueTypeMappings, name: $name, updateDraftIfNeeded: $updateDraftIfNeeded} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/draft"))
+  let body = {"defaultWorkflow": $default_workflow, "description": $description, "issueTypeMappings": $issue_type_mappings, "name": $name, "updateDraftIfNeeded": $update_draft_if_needed} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12302,7 +12302,7 @@ export def "rest-3-workflowscheme-draft updateWorkflowSchemeDraft" [
 #
 # DELETE /rest/api/3/workflowscheme/{id}/draft/default
 # operationId: deleteDraftDefaultWorkflow
-export def "rest-3-workflowscheme-draft-default delete" [
+export def "rest-3-workflowscheme-draft-default delete-draft-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12315,7 +12315,7 @@ export def "rest-3-workflowscheme-draft-default delete" [
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/default")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/draft/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12325,7 +12325,7 @@ export def "rest-3-workflowscheme-draft-default delete" [
 #
 # GET /rest/api/3/workflowscheme/{id}/draft/default
 # operationId: getDraftDefaultWorkflow
-export def "rest-3-workflowscheme-draft-default get" [
+export def "rest-3-workflowscheme-draft-default get-draft-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12338,7 +12338,7 @@ export def "rest-3-workflowscheme-draft-default get" [
 ]: nothing -> record<updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/default")
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/draft/default"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12348,7 +12348,7 @@ export def "rest-3-workflowscheme-draft-default get" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/draft/default
 # operationId: updateDraftDefaultWorkflow
-export def "rest-3-workflowscheme-draft-default updateDraftDefaultWorkflow" [
+export def "rest-3-workflowscheme-draft-default update-draft-default-workflow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12358,14 +12358,14 @@ export def "rest-3-workflowscheme-draft-default updateDraftDefaultWorkflow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateDraftIfNeeded: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new default workflow. Defaults to `false`.
+  --update-draft-if-needed: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new default workflow. Defaults to `false`.
   workflow: string # The name of the workflow to set as the default workflow.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/default")
-  let body = {updateDraftIfNeeded: $updateDraftIfNeeded, workflow: $workflow} | compact
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/draft/default"))
+  let body = {"updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12378,7 +12378,7 @@ export def "rest-3-workflowscheme-draft-default updateDraftDefaultWorkflow" [
 # operationId: deleteWorkflowSchemeDraftIssueType
 export def "rest-3-workflowscheme-draft-issuetype delete" [
   id: int
-  issueType: string
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12390,7 +12390,7 @@ export def "rest-3-workflowscheme-draft-issuetype delete" [
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/issuetype/($issueType)")
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/rest/api/3/workflowscheme/{id}/draft/issuetype/{issue_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12402,7 +12402,7 @@ export def "rest-3-workflowscheme-draft-issuetype delete" [
 # operationId: getWorkflowSchemeDraftIssueType
 export def "rest-3-workflowscheme-draft-issuetype get" [
   id: int
-  issueType: string
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12414,7 +12414,7 @@ export def "rest-3-workflowscheme-draft-issuetype get" [
 ]: nothing -> record<issueType: string, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/issuetype/($issueType)")
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/rest/api/3/workflowscheme/{id}/draft/issuetype/{issue_type}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12426,7 +12426,7 @@ export def "rest-3-workflowscheme-draft-issuetype get" [
 # operationId: setWorkflowSchemeDraftIssueType
 export def "rest-3-workflowscheme-draft-issuetype setWorkflowSchemeDraftIssueType" [
   id: int
-  issueType: string
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12435,15 +12435,15 @@ export def "rest-3-workflowscheme-draft-issuetype setWorkflowSchemeDraftIssueTyp
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-issueType: string # The ID of the issue type. Not required if updating the issue type-workflow mapping.
-  --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. Only applicable when updating the workflow-issue types mapping.
+  --body-issue-type: string # The ID of the issue type. Not required if updating the issue type-workflow mapping.
+  --update-draft-if-needed: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. Only applicable when updating the workflow-issue types mapping.
   --workflow: string # The name of the workflow.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/issuetype/($issueType)")
-  let body = {issueType: $body_issueType, updateDraftIfNeeded: $updateDraftIfNeeded, workflow: $workflow} | compact
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/rest/api/3/workflowscheme/{id}/draft/issuetype/{issue_type}"))
+  let body = {"issueType": $body_issue_type, "updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12455,7 +12455,7 @@ export def "rest-3-workflowscheme-draft-issuetype setWorkflowSchemeDraftIssueTyp
 # POST /rest/api/3/workflowscheme/{id}/draft/publish
 # operationId: publishDraftWorkflowScheme
 # --statusMappings item shape: {issueTypeId: string, newStatusId: string, statusId: string}
-export def "rest-3-workflowscheme-draft-publish publishDraftWorkflowScheme" [
+export def "rest-3-workflowscheme-draft-publish publish" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12465,15 +12465,15 @@ export def "rest-3-workflowscheme-draft-publish publishDraftWorkflowScheme" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --validateOnly: oneof<nothing, bool> # Whether the request only performs a validation. (default: false)
-  --statusMappings: list # Mappings of statuses to new statuses for issue types. — item shape: {issueTypeId: string, newStatusId: string, statusId: string}
+  --validate-only: oneof<nothing, bool> # Whether the request only performs a validation. (default: false)
+  --status-mappings: list # Mappings of statuses to new statuses for issue types. — item shape: {issueTypeId: string, newStatusId: string, statusId: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "validateOnly" $validateOnly "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/publish" $qp)
-  let body = {statusMappings: $statusMappings} | compact
+  let qp = [(serialize-qp "validateOnly" $validate_only "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/draft/publish") $qp)
+  let body = {"statusMappings": $status_mappings} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12484,7 +12484,7 @@ export def "rest-3-workflowscheme-draft-publish publishDraftWorkflowScheme" [
 #
 # DELETE /rest/api/3/workflowscheme/{id}/draft/workflow
 # operationId: deleteDraftWorkflowMapping
-export def "rest-3-workflowscheme-draft-workflow delete" [
+export def "rest-3-workflowscheme-draft-workflow delete-draft-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12494,12 +12494,12 @@ export def "rest-3-workflowscheme-draft-workflow delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # The name of the workflow.
+  --workflow-name: string # The name of the workflow.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/workflow" $qp)
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/draft/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12519,12 +12519,12 @@ export def "rest-3-workflowscheme-draft-workflow get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # The name of a workflow in the scheme. Limits the results to the workflow-issue type mapping for the specified workflow.
+  --workflow-name: string # The name of a workflow in the scheme. Limits the results to the workflow-issue type mapping for the specified workflow.
 ]: nothing -> record<defaultMapping: bool, issueTypes: list<string>, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/workflow" $qp)
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/draft/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12534,7 +12534,7 @@ export def "rest-3-workflowscheme-draft-workflow get" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/draft/workflow
 # operationId: updateDraftWorkflowMapping
-export def "rest-3-workflowscheme-draft-workflow updateDraftWorkflowMapping" [
+export def "rest-3-workflowscheme-draft-workflow update-draft-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12544,18 +12544,18 @@ export def "rest-3-workflowscheme-draft-workflow updateDraftWorkflowMapping" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # The name of the workflow.
-  --defaultMapping: oneof<nothing, bool> # Whether the workflow is the default workflow for the workflow scheme.
-  --issueTypes: list # The list of issue type IDs.
-  --updateDraftIfNeeded: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new workflow-issue types mapping. Defaults to `false`.
+  --workflow-name: string # The name of the workflow.
+  --default-mapping: oneof<nothing, bool> # Whether the workflow is the default workflow for the workflow scheme.
+  --issue-types: list # The list of issue type IDs.
+  --update-draft-if-needed: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new workflow-issue types mapping. Defaults to `false`.
   --workflow: string # The name of the workflow. Optional if updating the workflow-issue types mapping.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/draft/workflow" $qp)
-  let body = {defaultMapping: $defaultMapping, issueTypes: $issueTypes, updateDraftIfNeeded: $updateDraftIfNeeded, workflow: $workflow} | compact
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/draft/workflow") $qp)
+  let body = {"defaultMapping": $default_mapping, "issueTypes": $issue_types, "updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12568,7 +12568,7 @@ export def "rest-3-workflowscheme-draft-workflow updateDraftWorkflowMapping" [
 # operationId: deleteWorkflowSchemeIssueType
 export def "rest-3-workflowscheme-issuetype delete" [
   id: int
-  issueType: string
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12577,12 +12577,12 @@ export def "rest-3-workflowscheme-issuetype delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`.
+  --update-draft-if-needed: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`.
 ]: nothing -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "updateDraftIfNeeded" $updateDraftIfNeeded "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/issuetype/($issueType)" $qp)
+  let qp = [(serialize-qp "updateDraftIfNeeded" $update_draft_if_needed "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/rest/api/3/workflowscheme/{id}/issuetype/{issue_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12594,7 +12594,7 @@ export def "rest-3-workflowscheme-issuetype delete" [
 # operationId: getWorkflowSchemeIssueType
 export def "rest-3-workflowscheme-issuetype get" [
   id: int
-  issueType: string
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12603,12 +12603,12 @@ export def "rest-3-workflowscheme-issuetype get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnDraftIfExists: oneof<nothing, bool> # Returns the mapping from the workflow scheme's draft rather than the workflow scheme, if set to true. If no draft exists, the mapping from the workflow scheme is returned. (default: false)
+  --return-draft-if-exists: oneof<nothing, bool> # Returns the mapping from the workflow scheme's draft rather than the workflow scheme, if set to true. If no draft exists, the mapping from the workflow scheme is returned. (default: false)
 ]: nothing -> record<issueType: string, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnDraftIfExists" $returnDraftIfExists "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/issuetype/($issueType)" $qp)
+  let qp = [(serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/rest/api/3/workflowscheme/{id}/issuetype/{issue_type}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12620,7 +12620,7 @@ export def "rest-3-workflowscheme-issuetype get" [
 # operationId: setWorkflowSchemeIssueType
 export def "rest-3-workflowscheme-issuetype setWorkflowSchemeIssueType" [
   id: int
-  issueType: string
+  issue_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12629,15 +12629,15 @@ export def "rest-3-workflowscheme-issuetype setWorkflowSchemeIssueType" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body-issueType: string # The ID of the issue type. Not required if updating the issue type-workflow mapping.
-  --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. Only applicable when updating the workflow-issue types mapping.
+  --body-issue-type: string # The ID of the issue type. Not required if updating the issue type-workflow mapping.
+  --update-draft-if-needed: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and update the mapping in the draft, when the workflow scheme cannot be edited. Defaults to `false`. Only applicable when updating the workflow-issue types mapping.
   --workflow: string # The name of the workflow.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/issuetype/($issueType)")
-  let body = {issueType: $body_issueType, updateDraftIfNeeded: $updateDraftIfNeeded, workflow: $workflow} | compact
+  let full_url = (build-url $base ({id: $id, issue_type: $issue_type} | format pattern "/rest/api/3/workflowscheme/{id}/issuetype/{issue_type}"))
+  let body = {"issueType": $body_issue_type, "updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12648,7 +12648,7 @@ export def "rest-3-workflowscheme-issuetype setWorkflowSchemeIssueType" [
 #
 # DELETE /rest/api/3/workflowscheme/{id}/workflow
 # operationId: deleteWorkflowMapping
-export def "rest-3-workflowscheme-workflow delete" [
+export def "rest-3-workflowscheme-workflow delete-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12658,13 +12658,13 @@ export def "rest-3-workflowscheme-workflow delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # The name of the workflow.
-  --updateDraftIfNeeded: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and delete the mapping from the draft, when the workflow scheme cannot be edited. Defaults to `false`.
+  --workflow-name: string # The name of the workflow.
+  --update-draft-if-needed: oneof<nothing, bool> # Set to true to create or update the draft of a workflow scheme and delete the mapping from the draft, when the workflow scheme cannot be edited. Defaults to `false`.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "updateDraftIfNeeded" $updateDraftIfNeeded "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/workflow" $qp)
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "updateDraftIfNeeded" $update_draft_if_needed "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12684,13 +12684,13 @@ export def "rest-3-workflowscheme-workflow get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # The name of a workflow in the scheme. Limits the results to the workflow-issue type mapping for the specified workflow.
-  --returnDraftIfExists: oneof<nothing, bool> # Returns the mapping from the workflow scheme's draft rather than the workflow scheme, if set to true. If no draft exists, the mapping from the workflow scheme is returned. (default: false)
+  --workflow-name: string # The name of a workflow in the scheme. Limits the results to the workflow-issue type mapping for the specified workflow.
+  --return-draft-if-exists: oneof<nothing, bool> # Returns the mapping from the workflow scheme's draft rather than the workflow scheme, if set to true. If no draft exists, the mapping from the workflow scheme is returned. (default: false)
 ]: nothing -> record<defaultMapping: bool, issueTypes: list<string>, updateDraftIfNeeded: bool, workflow: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar") (serialize-qp "returnDraftIfExists" $returnDraftIfExists "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/workflow" $qp)
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar") (serialize-qp "returnDraftIfExists" $return_draft_if_exists "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/workflow") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12700,7 +12700,7 @@ export def "rest-3-workflowscheme-workflow get" [
 #
 # PUT /rest/api/3/workflowscheme/{id}/workflow
 # operationId: updateWorkflowMapping
-export def "rest-3-workflowscheme-workflow updateWorkflowMapping" [
+export def "rest-3-workflowscheme-workflow update-workflow-mapping" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12710,18 +12710,18 @@ export def "rest-3-workflowscheme-workflow updateWorkflowMapping" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --workflowName: string # The name of the workflow.
-  --defaultMapping: oneof<nothing, bool> # Whether the workflow is the default workflow for the workflow scheme.
-  --issueTypes: list # The list of issue type IDs.
-  --updateDraftIfNeeded: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new workflow-issue types mapping. Defaults to `false`.
+  --workflow-name: string # The name of the workflow.
+  --default-mapping: oneof<nothing, bool> # Whether the workflow is the default workflow for the workflow scheme.
+  --issue-types: list # The list of issue type IDs.
+  --update-draft-if-needed: oneof<nothing, bool> # Whether a draft workflow scheme is created or updated when updating an active workflow scheme. The draft is updated with the new workflow-issue types mapping. Defaults to `false`.
   --workflow: string # The name of the workflow. Optional if updating the workflow-issue types mapping.
 ]: any -> record<defaultWorkflow: string, description: string, draft: bool, id: int, issueTypeMappings: record, issueTypes: record, lastModified: string, lastModifiedUser: record<accountId: string, accountType: string, active: bool, applicationRoles: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, avatarUrls: record<16x16: string, 24x24: string, 32x32: string, 48x48: string>, displayName: string, emailAddress: string, expand: string, groups: record<callback: record, items: list, max_results: int, pagingCallback: record, size: int>, key: string, locale: string, name: string, self: string, timeZone: string>, name: string, originalDefaultWorkflow: string, originalIssueTypeMappings: record, self: string, updateDraftIfNeeded: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "workflowName" $workflowName "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/rest/api/3/workflowscheme/($id)/workflow" $qp)
-  let body = {defaultMapping: $defaultMapping, issueTypes: $issueTypes, updateDraftIfNeeded: $updateDraftIfNeeded, workflow: $workflow} | compact
+  let qp = [(serialize-qp "workflowName" $workflow_name "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({id: $id} | format pattern "/rest/api/3/workflowscheme/{id}/workflow") $qp)
+  let body = {"defaultMapping": $default_mapping, "issueTypes": $issue_types, "updateDraftIfNeeded": $update_draft_if_needed, "workflow": $workflow} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12732,7 +12732,7 @@ export def "rest-3-workflowscheme-workflow updateWorkflowMapping" [
 #
 # GET /rest/api/3/worklog/deleted
 # operationId: getIdsOfWorklogsDeletedSince
-export def "rest-3-worklog-deleted get" [
+export def "rest-3-worklog-deleted get-of-worklogs-deleted-since" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12756,7 +12756,7 @@ export def "rest-3-worklog-deleted get" [
 #
 # POST /rest/api/3/worklog/list
 # operationId: getWorklogsForIds
-export def "rest-3-worklog-list post" [
+export def "rest-3-worklog-list get-worklogs-for" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12773,7 +12773,7 @@ export def "rest-3-worklog-list post" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/api/3/worklog/list" $qp)
-  let body = {ids: $ids} | compact
+  let body = {"ids": $ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12784,7 +12784,7 @@ export def "rest-3-worklog-list post" [
 #
 # GET /rest/api/3/worklog/updated
 # operationId: getIdsOfWorklogsModifiedSince
-export def "rest-3-worklog-updated get" [
+export def "rest-3-worklog-updated get-of-worklogs-modified-since" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12810,7 +12810,7 @@ export def "rest-3-worklog-updated get" [
 # GET /rest/atlassian-connect/1/addons/{addonKey}/properties
 # operationId: AddonPropertiesResource.getAddonProperties_get
 export def "rest-atlassian-connect-1-addons-properties list" [
-  addonKey: string
+  addon_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12822,7 +12822,7 @@ export def "rest-atlassian-connect-1-addons-properties list" [
 ]: nothing -> record<keys: table<key: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/atlassian-connect/1/addons/($addonKey)/properties")
+  let full_url = (build-url $base ({addon_key: $addon_key} | format pattern "/rest/atlassian-connect/1/addons/{addon_key}/properties"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12833,8 +12833,8 @@ export def "rest-atlassian-connect-1-addons-properties list" [
 # DELETE /rest/atlassian-connect/1/addons/{addonKey}/properties/{propertyKey}
 # operationId: AddonPropertiesResource.deleteAddonProperty_delete
 export def "rest-atlassian-connect-1-addons-properties delete" [
-  addonKey: string
-  propertyKey: string
+  addon_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12846,7 +12846,7 @@ export def "rest-atlassian-connect-1-addons-properties delete" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/atlassian-connect/1/addons/($addonKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({addon_key: $addon_key, property_key: $property_key} | format pattern "/rest/atlassian-connect/1/addons/{addon_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12857,8 +12857,8 @@ export def "rest-atlassian-connect-1-addons-properties delete" [
 # GET /rest/atlassian-connect/1/addons/{addonKey}/properties/{propertyKey}
 # operationId: AddonPropertiesResource.getAddonProperty_get
 export def "rest-atlassian-connect-1-addons-properties get" [
-  addonKey: string
-  propertyKey: string
+  addon_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12870,7 +12870,7 @@ export def "rest-atlassian-connect-1-addons-properties get" [
 ]: nothing -> record<key: string, value: any> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/atlassian-connect/1/addons/($addonKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({addon_key: $addon_key, property_key: $property_key} | format pattern "/rest/atlassian-connect/1/addons/{addon_key}/properties/{property_key}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -12881,8 +12881,8 @@ export def "rest-atlassian-connect-1-addons-properties get" [
 # PUT /rest/atlassian-connect/1/addons/{addonKey}/properties/{propertyKey}
 # operationId: AddonPropertiesResource.putAddonProperty_put
 export def "rest-atlassian-connect-1-addons-properties put" [
-  addonKey: string
-  propertyKey: string
+  addon_key: string
+  property_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12896,7 +12896,7 @@ export def "rest-atlassian-connect-1-addons-properties put" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/atlassian-connect/1/addons/($addonKey)/properties/($propertyKey)")
+  let full_url = (build-url $base ({addon_key: $addon_key, property_key: $property_key} | format pattern "/rest/atlassian-connect/1/addons/{addon_key}/properties/{property_key}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12916,11 +12916,11 @@ export def "rest-atlassian-connect-1-app-module-dynamic delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --moduleKey: list # The key of the module to remove. To include multiple module keys, provide multiple copies of this parameter. For example, `moduleKey=dynamic-attachment-entity-property&moduleKey=dynamic-select-field`. Nonexistent keys are ignored.
+  --module-key: list # The key of the module to remove. To include multiple module keys, provide multiple copies of this parameter. For example, `moduleKey=dynamic-attachment-entity-property&moduleKey=dynamic-select-field`. Nonexistent keys are ignored.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "moduleKey" $moduleKey "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "moduleKey" $module_key "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/rest/atlassian-connect/1/app/module/dynamic" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12968,7 +12968,7 @@ export def "rest-atlassian-connect-1-app-module-dynamic post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/atlassian-connect/1/app/module/dynamic")
-  let body = {modules: $modules} | compact
+  let body = {"modules": $modules} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12989,16 +12989,16 @@ export def "rest-atlassian-connect-1-migration-field put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Atlassian-Transfer-Id: string # The ID of the transfer.
-  --updateValueList: list # The list of custom field update details. — item shape: {_type: "StringIssueField"|"NumberIssueField"|"RichTextIssueField"|"SingleSelectIssueField"|"MultiSelectIssueField"|"TextIssueField", fieldID: int, issueID: int, number?: float, optionID?: string, richText?: string, string?: string, text?: string}
+  --atlassian-transfer-id: string # The ID of the transfer.
+  --update-value-list: list # The list of custom field update details. — item shape: {_type: "StringIssueField"|"NumberIssueField"|"RichTextIssueField"|"SingleSelectIssueField"|"MultiSelectIssueField"|"TextIssueField", fieldID: int, issueID: int, number?: float, optionID?: string, richText?: string, string?: string, text?: string}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/atlassian-connect/1/migration/field")
-  let body = {updateValueList: $updateValueList} | compact
+  let body = {"updateValueList": $update_value_list} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Atlassian-Transfer-Id": $Atlassian_Transfer_Id} | compact
+  let extra_headers = {"Atlassian-Transfer-Id": $atlassian_transfer_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13010,7 +13010,7 @@ export def "rest-atlassian-connect-1-migration-field put" [
 # PUT /rest/atlassian-connect/1/migration/properties/{entityType}
 # operationId: MigrationResource.updateEntityPropertiesValue_put
 export def "rest-atlassian-connect-1-migration-properties put" [
-  entityType: string
+  entity_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13019,15 +13019,15 @@ export def "rest-atlassian-connect-1-migration-properties put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Atlassian-Transfer-Id: string # The app migration transfer ID.
+  --atlassian-transfer-id: string # The app migration transfer ID.
   --body: record
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/rest/atlassian-connect/1/migration/properties/($entityType)")
+  let full_url = (build-url $base ({entity_type: $entity_type} | format pattern "/rest/atlassian-connect/1/migration/properties/{entity_type}"))
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Atlassian-Transfer-Id": $Atlassian_Transfer_Id} | compact
+  let extra_headers = {"Atlassian-Transfer-Id": $atlassian_transfer_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -13047,18 +13047,18 @@ export def "rest-atlassian-connect-1-migration-workflow-rule-search post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --Atlassian-Transfer-Id: string # The app migration transfer ID.
+  --atlassian-transfer-id: string # The app migration transfer ID.
   --expand: string # Use expand to include additional information in the response. This parameter accepts `transition` which, for each rule, returns information about the transition the rule is assigned to. (e.g. transition)
-  ruleIds: list # The list of workflow rule IDs.
-  workflowEntityId: string # The workflow ID. (format: uuid, e.g. a498d711-685d-428d-8c3e-bc03bb450ea7)
+  rule_ids: list # The list of workflow rule IDs.
+  workflow_entity_id: string # The workflow ID. (format: uuid, e.g. a498d711-685d-428d-8c3e-bc03bb450ea7)
 ]: any -> record<invalidRules: list<string>, validRules: table<conditions: list, postFunctions: list, validators: list, workflowId: record>, workflowEntityId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rest/atlassian-connect/1/migration/workflow/rule/search")
-  let body = {expand: $expand, ruleIds: $ruleIds, workflowEntityId: $workflowEntityId} | compact
+  let body = {"expand": $expand, "ruleIds": $rule_ids, "workflowEntityId": $workflow_entity_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"Atlassian-Transfer-Id": $Atlassian_Transfer_Id} | compact
+  let extra_headers = {"Atlassian-Transfer-Id": $atlassian_transfer_id} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

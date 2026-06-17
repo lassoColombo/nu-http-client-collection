@@ -133,7 +133,7 @@ export def "chapters get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access_token" $access_token "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/chapters/($chapter_number)" $qp)
+  let full_url = (build-url $base ({chapter_number: $chapter_number} | format pattern "/api/v1/chapters/{chapter_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -158,7 +158,7 @@ export def "chapters-verses list" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access_token" $access_token "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/chapters/($chapter_number)/verses" $qp)
+  let full_url = (build-url $base ({chapter_number: $chapter_number} | format pattern "/api/v1/chapters/{chapter_number}/verses") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -184,7 +184,7 @@ export def "chapters-verses get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "access_token" $access_token "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/api/v1/chapters/($chapter_number)/verses/($verse_number)" $qp)
+  let full_url = (build-url $base ({chapter_number: $chapter_number, verse_number: $verse_number} | format pattern "/api/v1/chapters/{chapter_number}/verses/{verse_number}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -235,7 +235,7 @@ export def "auth-oauth-token post" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/oauth/token")
-  let body = {client_id: $client_id, client_secret: $client_secret, grant_type: $grant_type, scope: $scope} | compact
+  let body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "scope": $scope} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

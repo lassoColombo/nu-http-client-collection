@@ -66,8 +66,8 @@ def base-url-completer [] { ["https://azure.local"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
 # Completers for enum parameters
-def recognitionModel-completer [] { ["recognition_01" "recognition_02"] }
-def detectionModel-completer [] { ["detection_01" "detection_02"] }
+def recognition-model-completer [] { ["recognition_01" "recognition_02"] }
+def detection-model-completer [] { ["detection_01" "detection_02"] }
 def mode-completer [] { ["matchFace" "matchPerson"] }
 def type-completer [] { ["FaceList" "LargeFaceList" "LargePersonGroup" "PersonGroup"] }
 def mode-completer-1 [] { ["CreateNew"] }
@@ -75,7 +75,7 @@ def mode-completer-1 [] { ["CreateNew"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "detect DetectWithUrl" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "detect post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -99,7 +99,7 @@ export def commands []: nothing -> table {
 #
 # POST /detect
 # operationId: Face_DetectWithUrl
-export def "detect DetectWithUrl" [
+export def "detect post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -108,20 +108,20 @@ export def "detect DetectWithUrl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnFaceId: oneof<nothing, bool> # A value indicating whether the operation should return faceIds of detected faces. (default: true)
-  --returnFaceLandmarks: oneof<nothing, bool> # A value indicating whether the operation should return landmarks of the detected faces. (default: false)
-  --returnFaceAttributes: list # Analyze and return the one or more specified face attributes in the comma-separated string like "returnFaceAttributes=age,gender". Supported face attributes include age, gender, headPose, smile, facialHair, glasses and emotion. Note that each face attribute analysis has additional computational and time cost.
-  --recognitionModel: string@recognitionModel-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
-  --returnRecognitionModel: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-  --detectionModel: string@detectionModel-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
+  --return-face-id: oneof<nothing, bool> # A value indicating whether the operation should return faceIds of detected faces. (default: true)
+  --return-face-landmarks: oneof<nothing, bool> # A value indicating whether the operation should return landmarks of the detected faces. (default: false)
+  --return-face-attributes: list # Analyze and return the one or more specified face attributes in the comma-separated string like "returnFaceAttributes=age,gender". Supported face attributes include age, gender, headPose, smile, facialHair, glasses and emotion. Note that each face attribute analysis has additional computational and time cost.
+  --recognition-model: string@recognition-model-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
+  --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
+  --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
   --body-url: string # Publicly reachable URL of an image
 ]: any -> table<faceAttributes: record<accessories: list, age: float, blur: record, emotion: record, exposure: record, facialHair: record, gender: string, glasses: string, hair: record, headPose: record, makeup: record, noise: record, occlusion: record, smile: float>, faceId: string, faceLandmarks: record<eyeLeftBottom: record, eyeLeftInner: record, eyeLeftOuter: record, eyeLeftTop: record, eyeRightBottom: record, eyeRightInner: record, eyeRightOuter: record, eyeRightTop: record, eyebrowLeftInner: record, eyebrowLeftOuter: record, eyebrowRightInner: record, eyebrowRightOuter: record, mouthLeft: record, mouthRight: record, noseLeftAlarOutTip: record, noseLeftAlarTop: record, noseRightAlarOutTip: record, noseRightAlarTop: record, noseRootLeft: record, noseRootRight: record, noseTip: record, pupilLeft: record, pupilRight: record, underLipBottom: record, underLipTop: record, upperLipBottom: record, upperLipTop: record>, faceRectangle: record<height: int, left: int, top: int, width: int>, recognitionModel: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnFaceId" $returnFaceId "scalar") (serialize-qp "returnFaceLandmarks" $returnFaceLandmarks "scalar") (serialize-qp "returnFaceAttributes" $returnFaceAttributes "csv") (serialize-qp "recognitionModel" $recognitionModel "scalar") (serialize-qp "returnRecognitionModel" $returnRecognitionModel "scalar") (serialize-qp "detectionModel" $detectionModel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "returnFaceId" $return_face_id "scalar") (serialize-qp "returnFaceLandmarks" $return_face_landmarks "scalar") (serialize-qp "returnFaceAttributes" $return_face_attributes "csv") (serialize-qp "recognitionModel" $recognition_model "scalar") (serialize-qp "returnRecognitionModel" $return_recognition_model "scalar") (serialize-qp "detectionModel" $detection_model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/detect" $qp)
-  let body = {url: $body_url} | compact
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -132,7 +132,7 @@ export def "detect DetectWithUrl" [
 #
 # GET /facelists
 # operationId: FaceList_List
-export def "facelists List" [
+export def "facelists list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -141,11 +141,11 @@ export def "facelists List" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnRecognitionModel: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
+  --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
 ]: nothing -> table<faceListId: string, persistedFaces: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnRecognitionModel" $returnRecognitionModel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/facelists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -156,8 +156,8 @@ export def "facelists List" [
 #
 # DELETE /facelists/{faceListId}
 # operationId: FaceList_Delete
-export def "facelists Delete" [
-  faceListId: string
+export def "facelists delete" [
+  face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "facelists Delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/facelists/($faceListId)")
+  let full_url = (build-url $base ({face_list_id: $face_list_id} | format pattern "/facelists/{face_list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -179,8 +179,8 @@ export def "facelists Delete" [
 #
 # GET /facelists/{faceListId}
 # operationId: FaceList_Get
-export def "facelists Get" [
-  faceListId: string
+export def "facelists get" [
+  face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,12 +189,12 @@ export def "facelists Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnRecognitionModel: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
+  --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
 ]: nothing -> record<faceListId: string, persistedFaces: table<persistedFaceId: string, userData: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnRecognitionModel" $returnRecognitionModel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/facelists/($faceListId)" $qp)
+  let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({face_list_id: $face_list_id} | format pattern "/facelists/{face_list_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -204,8 +204,8 @@ export def "facelists Get" [
 #
 # PATCH /facelists/{faceListId}
 # operationId: FaceList_Update
-export def "facelists Update" [
-  faceListId: string
+export def "facelists update" [
+  face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,13 +215,13 @@ export def "facelists Update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/facelists/($faceListId)")
-  let body = {name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({face_list_id: $face_list_id} | format pattern "/facelists/{face_list_id}"))
+  let body = {"name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,8 +232,8 @@ export def "facelists Update" [
 #
 # PUT /facelists/{faceListId}
 # operationId: FaceList_Create
-export def "facelists Create" [
-  faceListId: string
+export def "facelists create" [
+  face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,15 +242,15 @@ export def "facelists Create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --recognitionModel: string@recognitionModel-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
+  --recognition-model: string@recognition-model-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/facelists/($faceListId)")
-  let body = {recognitionModel: $recognitionModel, name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({face_list_id: $face_list_id} | format pattern "/facelists/{face_list_id}"))
+  let body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -261,8 +261,8 @@ export def "facelists Create" [
 #
 # POST /facelists/{faceListId}/persistedfaces
 # operationId: FaceList_AddFaceFromUrl
-export def "facelists-persistedfaces AddFaceFromUrl" [
-  faceListId: string
+export def "facelists-persistedfaces create-face-from-url" [
+  face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,17 +271,17 @@ export def "facelists-persistedfaces AddFaceFromUrl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userData: string # User-specified data about the face for any purpose. The maximum length is 1KB.
-  --targetFace: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
-  --detectionModel: string@detectionModel-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
+  --user-data: string # User-specified data about the face for any purpose. The maximum length is 1KB.
+  --target-face: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
+  --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
   --body-url: string # Publicly reachable URL of an image
 ]: any -> record<persistedFaceId: string, userData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userData" $userData "scalar") (serialize-qp "targetFace" $targetFace "csv") (serialize-qp "detectionModel" $detectionModel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/facelists/($faceListId)/persistedfaces" $qp)
-  let body = {url: $body_url} | compact
+  let qp = [(serialize-qp "userData" $user_data "scalar") (serialize-qp "targetFace" $target_face "csv") (serialize-qp "detectionModel" $detection_model "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({face_list_id: $face_list_id} | format pattern "/facelists/{face_list_id}/persistedfaces") $qp)
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -292,9 +292,9 @@ export def "facelists-persistedfaces AddFaceFromUrl" [
 #
 # DELETE /facelists/{faceListId}/persistedfaces/{persistedFaceId}
 # operationId: FaceList_DeleteFace
-export def "facelists-persistedfaces DeleteFace" [
-  faceListId: string
-  persistedFaceId: string
+export def "facelists-persistedfaces delete-face" [
+  face_list_id: string
+  persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "facelists-persistedfaces DeleteFace" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/facelists/($faceListId)/persistedfaces/($persistedFaceId)")
+  let full_url = (build-url $base ({face_list_id: $face_list_id, persisted_face_id: $persisted_face_id} | format pattern "/facelists/{face_list_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -316,7 +316,7 @@ export def "facelists-persistedfaces DeleteFace" [
 #
 # POST /findsimilars
 # operationId: Face_FindSimilar
-export def "findsimilars FindSimilar" [
+export def "findsimilars post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,18 +325,18 @@ export def "findsimilars FindSimilar" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  faceId: string # FaceId of the query face. User needs to call Face - Detect first to get a valid faceId. Note that this faceId is not persisted and will expire 24 hours after the detection call (format: uuid)
-  --faceIds: list # An array of candidate faceIds. All of them are created by Face - Detect and the faceIds will expire 24 hours after the detection call. The number of faceIds is limited to 1000. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
-  --faceListId: string # An existing user-specified unique candidate face list, created in Face List - Create a Face List. Face list contains a set of persistedFaceIds which are persisted and will never expire. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
-  --largeFaceListId: string # An existing user-specified unique candidate large face list, created in LargeFaceList - Create. Large face list contains a set of persistedFaceIds which are persisted and will never expire. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
-  --maxNumOfCandidatesReturned: int # The number of top similar faces returned. The valid range is [1, 1000]. (default: 20)
+  face_id: string # FaceId of the query face. User needs to call Face - Detect first to get a valid faceId. Note that this faceId is not persisted and will expire 24 hours after the detection call (format: uuid)
+  --face-ids: list # An array of candidate faceIds. All of them are created by Face - Detect and the faceIds will expire 24 hours after the detection call. The number of faceIds is limited to 1000. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
+  --face-list-id: string # An existing user-specified unique candidate face list, created in Face List - Create a Face List. Face list contains a set of persistedFaceIds which are persisted and will never expire. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
+  --large-face-list-id: string # An existing user-specified unique candidate large face list, created in LargeFaceList - Create. Large face list contains a set of persistedFaceIds which are persisted and will never expire. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
+  --max-num-of-candidates-returned: int # The number of top similar faces returned. The valid range is [1, 1000]. (default: 20)
   --mode: string@mode-completer # Similar face searching mode. It can be "matchPerson" or "matchFace". (default: matchPerson)
 ]: any -> table<confidence: float, faceId: string, persistedFaceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/findsimilars")
-  let body = {faceId: $faceId, faceIds: $faceIds, faceListId: $faceListId, largeFaceListId: $largeFaceListId, maxNumOfCandidatesReturned: $maxNumOfCandidatesReturned, mode: $mode} | compact
+  let body = {"faceId": $face_id, "faceIds": $face_ids, "faceListId": $face_list_id, "largeFaceListId": $large_face_list_id, "maxNumOfCandidatesReturned": $max_num_of_candidates_returned, "mode": $mode} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -347,7 +347,7 @@ export def "findsimilars FindSimilar" [
 #
 # POST /group
 # operationId: Face_Group
-export def "group Group" [
+export def "group post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,13 +356,13 @@ export def "group Group" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  faceIds: list # Array of candidate faceId created by Face - Detect. The maximum is 1000 faces
+  face_ids: list # Array of candidate faceId created by Face - Detect. The maximum is 1000 faces
 ]: any -> record<groups: list<list<string>>, messyGroup: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/group")
-  let body = {faceIds: $faceIds} | compact
+  let body = {"faceIds": $face_ids} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -373,7 +373,7 @@ export def "group Group" [
 #
 # POST /identify
 # operationId: Face_Identify
-export def "identify Identify" [
+export def "identify post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,17 +382,17 @@ export def "identify Identify" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --confidenceThreshold: float # A number ranging from 0 to 1 indicating a level of confidence associated with a property.
-  faceIds: list # Array of query faces faceIds, created by the Face - Detect. Each of the faces are identified independently. The valid number of faceIds is between [1, 10].
-  --largePersonGroupId: string # LargePersonGroupId of the target large person group, created by LargePersonGroup - Create. Parameter personGroupId and largePersonGroupId should not be provided at the same time.
-  --maxNumOfCandidatesReturned: int # The range of maxNumOfCandidatesReturned is between 1 and 5 (default is 1). (default: 1)
-  --personGroupId: string # PersonGroupId of the target person group, created by PersonGroup - Create. Parameter personGroupId and largePersonGroupId should not be provided at the same time.
+  --confidence-threshold: float # A number ranging from 0 to 1 indicating a level of confidence associated with a property.
+  face_ids: list # Array of query faces faceIds, created by the Face - Detect. Each of the faces are identified independently. The valid number of faceIds is between [1, 10].
+  --large-person-group-id: string # LargePersonGroupId of the target large person group, created by LargePersonGroup - Create. Parameter personGroupId and largePersonGroupId should not be provided at the same time.
+  --max-num-of-candidates-returned: int # The range of maxNumOfCandidatesReturned is between 1 and 5 (default is 1). (default: 1)
+  --person-group-id: string # PersonGroupId of the target person group, created by PersonGroup - Create. Parameter personGroupId and largePersonGroupId should not be provided at the same time.
 ]: any -> table<candidates: list<record>, faceId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identify")
-  let body = {confidenceThreshold: $confidenceThreshold, faceIds: $faceIds, largePersonGroupId: $largePersonGroupId, maxNumOfCandidatesReturned: $maxNumOfCandidatesReturned, personGroupId: $personGroupId} | compact
+  let body = {"confidenceThreshold": $confidence_threshold, "faceIds": $face_ids, "largePersonGroupId": $large_person_group_id, "maxNumOfCandidatesReturned": $max_num_of_candidates_returned, "personGroupId": $person_group_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -403,7 +403,7 @@ export def "identify Identify" [
 #
 # GET /largefacelists
 # operationId: LargeFaceList_List
-export def "largefacelists List" [
+export def "largefacelists list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,11 +412,11 @@ export def "largefacelists List" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnRecognitionModel: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
+  --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
 ]: nothing -> table<largeFaceListId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnRecognitionModel" $returnRecognitionModel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/largefacelists" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -427,8 +427,8 @@ export def "largefacelists List" [
 #
 # DELETE /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Delete
-export def "largefacelists Delete" [
-  largeFaceListId: string
+export def "largefacelists delete" [
+  large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "largefacelists Delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)")
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -450,8 +450,8 @@ export def "largefacelists Delete" [
 #
 # GET /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Get
-export def "largefacelists Get" [
-  largeFaceListId: string
+export def "largefacelists get" [
+  large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,12 +460,12 @@ export def "largefacelists Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnRecognitionModel: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
+  --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
 ]: nothing -> record<largeFaceListId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnRecognitionModel" $returnRecognitionModel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)" $qp)
+  let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -475,8 +475,8 @@ export def "largefacelists Get" [
 #
 # PATCH /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Update
-export def "largefacelists Update" [
-  largeFaceListId: string
+export def "largefacelists update" [
+  large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,13 +486,13 @@ export def "largefacelists Update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)")
-  let body = {name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}"))
+  let body = {"name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -503,8 +503,8 @@ export def "largefacelists Update" [
 #
 # PUT /largefacelists/{largeFaceListId}
 # operationId: LargeFaceList_Create
-export def "largefacelists Create" [
-  largeFaceListId: string
+export def "largefacelists create" [
+  large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,15 +513,15 @@ export def "largefacelists Create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --recognitionModel: string@recognitionModel-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
+  --recognition-model: string@recognition-model-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)")
-  let body = {recognitionModel: $recognitionModel, name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}"))
+  let body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -532,8 +532,8 @@ export def "largefacelists Create" [
 #
 # GET /largefacelists/{largeFaceListId}/persistedfaces
 # operationId: LargeFaceList_ListFaces
-export def "largefacelists-persistedfaces ListFaces" [
-  largeFaceListId: string
+export def "largefacelists-persistedfaces list-faces" [
+  large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -548,7 +548,7 @@ export def "largefacelists-persistedfaces ListFaces" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)/persistedfaces" $qp)
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -558,8 +558,8 @@ export def "largefacelists-persistedfaces ListFaces" [
 #
 # POST /largefacelists/{largeFaceListId}/persistedfaces
 # operationId: LargeFaceList_AddFaceFromUrl
-export def "largefacelists-persistedfaces AddFaceFromUrl" [
-  largeFaceListId: string
+export def "largefacelists-persistedfaces create-face-from-url" [
+  large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,17 +568,17 @@ export def "largefacelists-persistedfaces AddFaceFromUrl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userData: string # User-specified data about the face for any purpose. The maximum length is 1KB.
-  --targetFace: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
-  --detectionModel: string@detectionModel-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
+  --user-data: string # User-specified data about the face for any purpose. The maximum length is 1KB.
+  --target-face: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
+  --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
   --body-url: string # Publicly reachable URL of an image
 ]: any -> record<persistedFaceId: string, userData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userData" $userData "scalar") (serialize-qp "targetFace" $targetFace "csv") (serialize-qp "detectionModel" $detectionModel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)/persistedfaces" $qp)
-  let body = {url: $body_url} | compact
+  let qp = [(serialize-qp "userData" $user_data "scalar") (serialize-qp "targetFace" $target_face "csv") (serialize-qp "detectionModel" $detection_model "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces") $qp)
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -589,9 +589,9 @@ export def "largefacelists-persistedfaces AddFaceFromUrl" [
 #
 # DELETE /largefacelists/{largeFaceListId}/persistedfaces/{persistedFaceId}
 # operationId: LargeFaceList_DeleteFace
-export def "largefacelists-persistedfaces DeleteFace" [
-  largeFaceListId: string
-  persistedFaceId: string
+export def "largefacelists-persistedfaces delete-face" [
+  large_face_list_id: string
+  persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "largefacelists-persistedfaces DeleteFace" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)/persistedfaces/($persistedFaceId)")
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id, persisted_face_id: $persisted_face_id} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -613,9 +613,9 @@ export def "largefacelists-persistedfaces DeleteFace" [
 #
 # GET /largefacelists/{largeFaceListId}/persistedfaces/{persistedFaceId}
 # operationId: LargeFaceList_GetFace
-export def "largefacelists-persistedfaces GetFace" [
-  largeFaceListId: string
-  persistedFaceId: string
+export def "largefacelists-persistedfaces get-face" [
+  large_face_list_id: string
+  persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "largefacelists-persistedfaces GetFace" [
 ]: nothing -> record<persistedFaceId: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)/persistedfaces/($persistedFaceId)")
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id, persisted_face_id: $persisted_face_id} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -637,9 +637,9 @@ export def "largefacelists-persistedfaces GetFace" [
 #
 # PATCH /largefacelists/{largeFaceListId}/persistedfaces/{persistedFaceId}
 # operationId: LargeFaceList_UpdateFace
-export def "largefacelists-persistedfaces UpdateFace" [
-  largeFaceListId: string
-  persistedFaceId: string
+export def "largefacelists-persistedfaces update-face" [
+  large_face_list_id: string
+  persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,13 +648,13 @@ export def "largefacelists-persistedfaces UpdateFace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userData: string # User-provided data attached to the face. The size limit is 1KB.
+  --user-data: string # User-provided data attached to the face. The size limit is 1KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)/persistedfaces/($persistedFaceId)")
-  let body = {userData: $userData} | compact
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id, persisted_face_id: $persisted_face_id} | format pattern "/largefacelists/{large_face_list_id}/persistedfaces/{persisted_face_id}"))
+  let body = {"userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -665,8 +665,8 @@ export def "largefacelists-persistedfaces UpdateFace" [
 #
 # POST /largefacelists/{largeFaceListId}/train
 # operationId: LargeFaceList_Train
-export def "largefacelists-train Train" [
-  largeFaceListId: string
+export def "largefacelists-train post" [
+  large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,7 +678,7 @@ export def "largefacelists-train Train" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)/train")
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}/train"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -688,8 +688,8 @@ export def "largefacelists-train Train" [
 #
 # GET /largefacelists/{largeFaceListId}/training
 # operationId: LargeFaceList_GetTrainingStatus
-export def "largefacelists-training GetTrainingStatus" [
-  largeFaceListId: string
+export def "largefacelists-training get-training-status" [
+  large_face_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,7 +701,7 @@ export def "largefacelists-training GetTrainingStatus" [
 ]: nothing -> record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largefacelists/($largeFaceListId)/training")
+  let full_url = (build-url $base ({large_face_list_id: $large_face_list_id} | format pattern "/largefacelists/{large_face_list_id}/training"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -711,7 +711,7 @@ export def "largefacelists-training GetTrainingStatus" [
 #
 # GET /largepersongroups
 # operationId: LargePersonGroup_List
-export def "largepersongroups List" [
+export def "largepersongroups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,11 +722,11 @@ export def "largepersongroups List" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # List large person groups from the least largePersonGroupId greater than the "start".
   --top: int # The number of large person groups to list. (default: 1000)
-  --returnRecognitionModel: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
+  --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
 ]: nothing -> table<largePersonGroupId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "returnRecognitionModel" $returnRecognitionModel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/largepersongroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -737,8 +737,8 @@ export def "largepersongroups List" [
 #
 # DELETE /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Delete
-export def "largepersongroups Delete" [
-  largePersonGroupId: string
+export def "largepersongroups delete" [
+  large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "largepersongroups Delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)")
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -760,8 +760,8 @@ export def "largepersongroups Delete" [
 #
 # GET /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Get
-export def "largepersongroups Get" [
-  largePersonGroupId: string
+export def "largepersongroups get" [
+  large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,12 +770,12 @@ export def "largepersongroups Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnRecognitionModel: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
+  --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
 ]: nothing -> record<largePersonGroupId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnRecognitionModel" $returnRecognitionModel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)" $qp)
+  let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -785,8 +785,8 @@ export def "largepersongroups Get" [
 #
 # PATCH /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Update
-export def "largepersongroups Update" [
-  largePersonGroupId: string
+export def "largepersongroups update" [
+  large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,13 +796,13 @@ export def "largepersongroups Update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)")
-  let body = {name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}"))
+  let body = {"name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -813,8 +813,8 @@ export def "largepersongroups Update" [
 #
 # PUT /largepersongroups/{largePersonGroupId}
 # operationId: LargePersonGroup_Create
-export def "largepersongroups Create" [
-  largePersonGroupId: string
+export def "largepersongroups create" [
+  large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,15 +823,15 @@ export def "largepersongroups Create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --recognitionModel: string@recognitionModel-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
+  --recognition-model: string@recognition-model-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)")
-  let body = {recognitionModel: $recognitionModel, name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}"))
+  let body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -842,8 +842,8 @@ export def "largepersongroups Create" [
 #
 # GET /largepersongroups/{largePersonGroupId}/persons
 # operationId: LargePersonGroupPerson_List
-export def "largepersongroups-persons List" [
-  largePersonGroupId: string
+export def "largepersongroups-persons list" [
+  large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -858,7 +858,7 @@ export def "largepersongroups-persons List" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/persons" $qp)
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}/persons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -868,8 +868,8 @@ export def "largepersongroups-persons List" [
 #
 # POST /largepersongroups/{largePersonGroupId}/persons
 # operationId: LargePersonGroupPerson_Create
-export def "largepersongroups-persons Create" [
-  largePersonGroupId: string
+export def "largepersongroups-persons create" [
+  large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,13 +879,13 @@ export def "largepersongroups-persons Create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<persistedFaceIds: list<string>, personId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/persons")
-  let body = {name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}/persons"))
+  let body = {"name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -896,9 +896,9 @@ export def "largepersongroups-persons Create" [
 #
 # DELETE /largepersongroups/{largePersonGroupId}/persons/{personId}
 # operationId: LargePersonGroupPerson_Delete
-export def "largepersongroups-persons Delete" [
-  largePersonGroupId: string
-  personId: string
+export def "largepersongroups-persons delete" [
+  large_person_group_id: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -910,7 +910,7 @@ export def "largepersongroups-persons Delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/persons/($personId)")
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -920,9 +920,9 @@ export def "largepersongroups-persons Delete" [
 #
 # GET /largepersongroups/{largePersonGroupId}/persons/{personId}
 # operationId: LargePersonGroupPerson_Get
-export def "largepersongroups-persons Get" [
-  largePersonGroupId: string
-  personId: string
+export def "largepersongroups-persons get" [
+  large_person_group_id: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -934,7 +934,7 @@ export def "largepersongroups-persons Get" [
 ]: nothing -> record<persistedFaceIds: list<string>, personId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/persons/($personId)")
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -944,9 +944,9 @@ export def "largepersongroups-persons Get" [
 #
 # PATCH /largepersongroups/{largePersonGroupId}/persons/{personId}
 # operationId: LargePersonGroupPerson_Update
-export def "largepersongroups-persons Update" [
-  largePersonGroupId: string
-  personId: string
+export def "largepersongroups-persons update" [
+  large_person_group_id: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -956,13 +956,13 @@ export def "largepersongroups-persons Update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/persons/($personId)")
-  let body = {name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}"))
+  let body = {"name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -973,9 +973,9 @@ export def "largepersongroups-persons Update" [
 #
 # POST /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces
 # operationId: LargePersonGroupPerson_AddFaceFromUrl
-export def "largepersongroups-persons-persistedfaces AddFaceFromUrl" [
-  largePersonGroupId: string
-  personId: string
+export def "largepersongroups-persons-persistedfaces create-face-from-url" [
+  large_person_group_id: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -984,17 +984,17 @@ export def "largepersongroups-persons-persistedfaces AddFaceFromUrl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userData: string # User-specified data about the face for any purpose. The maximum length is 1KB.
-  --targetFace: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
-  --detectionModel: string@detectionModel-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
+  --user-data: string # User-specified data about the face for any purpose. The maximum length is 1KB.
+  --target-face: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
+  --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
   --body-url: string # Publicly reachable URL of an image
 ]: any -> record<persistedFaceId: string, userData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userData" $userData "scalar") (serialize-qp "targetFace" $targetFace "csv") (serialize-qp "detectionModel" $detectionModel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/persons/($personId)/persistedfaces" $qp)
-  let body = {url: $body_url} | compact
+  let qp = [(serialize-qp "userData" $user_data "scalar") (serialize-qp "targetFace" $target_face "csv") (serialize-qp "detectionModel" $detection_model "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces") $qp)
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1005,10 +1005,10 @@ export def "largepersongroups-persons-persistedfaces AddFaceFromUrl" [
 #
 # DELETE /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: LargePersonGroupPerson_DeleteFace
-export def "largepersongroups-persons-persistedfaces DeleteFace" [
-  largePersonGroupId: string
-  personId: string
-  persistedFaceId: string
+export def "largepersongroups-persons-persistedfaces delete-face" [
+  large_person_group_id: string
+  person_id: string
+  persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "largepersongroups-persons-persistedfaces DeleteFace" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/persons/($personId)/persistedfaces/($persistedFaceId)")
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1030,10 +1030,10 @@ export def "largepersongroups-persons-persistedfaces DeleteFace" [
 #
 # GET /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: LargePersonGroupPerson_GetFace
-export def "largepersongroups-persons-persistedfaces GetFace" [
-  largePersonGroupId: string
-  personId: string
-  persistedFaceId: string
+export def "largepersongroups-persons-persistedfaces get-face" [
+  large_person_group_id: string
+  person_id: string
+  persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1045,7 +1045,7 @@ export def "largepersongroups-persons-persistedfaces GetFace" [
 ]: nothing -> record<persistedFaceId: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/persons/($personId)/persistedfaces/($persistedFaceId)")
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1055,10 +1055,10 @@ export def "largepersongroups-persons-persistedfaces GetFace" [
 #
 # PATCH /largepersongroups/{largePersonGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: LargePersonGroupPerson_UpdateFace
-export def "largepersongroups-persons-persistedfaces UpdateFace" [
-  largePersonGroupId: string
-  personId: string
-  persistedFaceId: string
+export def "largepersongroups-persons-persistedfaces update-face" [
+  large_person_group_id: string
+  person_id: string
+  persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1067,13 +1067,13 @@ export def "largepersongroups-persons-persistedfaces UpdateFace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userData: string # User-provided data attached to the face. The size limit is 1KB.
+  --user-data: string # User-provided data attached to the face. The size limit is 1KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/persons/($personId)/persistedfaces/($persistedFaceId)")
-  let body = {userData: $userData} | compact
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/largepersongroups/{large_person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
+  let body = {"userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1084,8 +1084,8 @@ export def "largepersongroups-persons-persistedfaces UpdateFace" [
 #
 # POST /largepersongroups/{largePersonGroupId}/train
 # operationId: LargePersonGroup_Train
-export def "largepersongroups-train Train" [
-  largePersonGroupId: string
+export def "largepersongroups-train post" [
+  large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1097,7 +1097,7 @@ export def "largepersongroups-train Train" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/train")
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}/train"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1107,8 +1107,8 @@ export def "largepersongroups-train Train" [
 #
 # GET /largepersongroups/{largePersonGroupId}/training
 # operationId: LargePersonGroup_GetTrainingStatus
-export def "largepersongroups-training GetTrainingStatus" [
-  largePersonGroupId: string
+export def "largepersongroups-training get-training-status" [
+  large_person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1120,7 +1120,7 @@ export def "largepersongroups-training GetTrainingStatus" [
 ]: nothing -> record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/largepersongroups/($largePersonGroupId)/training")
+  let full_url = (build-url $base ({large_person_group_id: $large_person_group_id} | format pattern "/largepersongroups/{large_person_group_id}/training"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1130,8 +1130,8 @@ export def "largepersongroups-training GetTrainingStatus" [
 #
 # GET /operations/{operationId}
 # operationId: Snapshot_GetOperationStatus
-export def "operations GetOperationStatus" [
-  operationId: string
+export def "operations get-operation-status" [
+  operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1143,7 +1143,7 @@ export def "operations GetOperationStatus" [
 ]: nothing -> record<createdTime: string, lastActionTime: string, message: string, resourceLocation: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/operations/($operationId)")
+  let full_url = (build-url $base ({operation_id: $operation_id} | format pattern "/operations/{operation_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1153,7 +1153,7 @@ export def "operations GetOperationStatus" [
 #
 # GET /persongroups
 # operationId: PersonGroup_List
-export def "persongroups List" [
+export def "persongroups list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1164,11 +1164,11 @@ export def "persongroups List" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # List person groups from the least personGroupId greater than the "start".
   --top: int # The number of person groups to list. (default: 1000)
-  --returnRecognitionModel: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
+  --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
 ]: nothing -> table<personGroupId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "returnRecognitionModel" $returnRecognitionModel "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/persongroups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1179,8 +1179,8 @@ export def "persongroups List" [
 #
 # DELETE /persongroups/{personGroupId}
 # operationId: PersonGroup_Delete
-export def "persongroups Delete" [
-  personGroupId: string
+export def "persongroups delete" [
+  person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,7 +1192,7 @@ export def "persongroups Delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)")
+  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1202,8 +1202,8 @@ export def "persongroups Delete" [
 #
 # GET /persongroups/{personGroupId}
 # operationId: PersonGroup_Get
-export def "persongroups Get" [
-  personGroupId: string
+export def "persongroups get" [
+  person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,12 +1212,12 @@ export def "persongroups Get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --returnRecognitionModel: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
+  --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
 ]: nothing -> record<personGroupId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "returnRecognitionModel" $returnRecognitionModel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/persongroups/($personGroupId)" $qp)
+  let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1227,8 +1227,8 @@ export def "persongroups Get" [
 #
 # PATCH /persongroups/{personGroupId}
 # operationId: PersonGroup_Update
-export def "persongroups Update" [
-  personGroupId: string
+export def "persongroups update" [
+  person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,13 +1238,13 @@ export def "persongroups Update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)")
-  let body = {name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}"))
+  let body = {"name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1255,8 +1255,8 @@ export def "persongroups Update" [
 #
 # PUT /persongroups/{personGroupId}
 # operationId: PersonGroup_Create
-export def "persongroups Create" [
-  personGroupId: string
+export def "persongroups create" [
+  person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1265,15 +1265,15 @@ export def "persongroups Create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --recognitionModel: string@recognitionModel-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
+  --recognition-model: string@recognition-model-completer # Name of recognition model. Recognition model is used when the face features are extracted and associated with detected faceIds, (Large)FaceList or (Large)PersonGroup. A recognition model name can be provided when performing Face - Detect or (Large)FaceList - Create or (Large)PersonGroup - Create. The default value is 'recognition_01', if latest model needed, please explicitly specify the model you need. (default: recognition_01)
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)")
-  let body = {recognitionModel: $recognitionModel, name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}"))
+  let body = {"recognitionModel": $recognition_model, "name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1284,8 +1284,8 @@ export def "persongroups Create" [
 #
 # GET /persongroups/{personGroupId}/persons
 # operationId: PersonGroupPerson_List
-export def "persongroups-persons List" [
-  personGroupId: string
+export def "persongroups-persons list" [
+  person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,7 +1300,7 @@ export def "persongroups-persons List" [
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/persons" $qp)
+  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}/persons") $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1310,8 +1310,8 @@ export def "persongroups-persons List" [
 #
 # POST /persongroups/{personGroupId}/persons
 # operationId: PersonGroupPerson_Create
-export def "persongroups-persons Create" [
-  personGroupId: string
+export def "persongroups-persons create" [
+  person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1321,13 +1321,13 @@ export def "persongroups-persons Create" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<persistedFaceIds: list<string>, personId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/persons")
-  let body = {name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}/persons"))
+  let body = {"name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1338,9 +1338,9 @@ export def "persongroups-persons Create" [
 #
 # DELETE /persongroups/{personGroupId}/persons/{personId}
 # operationId: PersonGroupPerson_Delete
-export def "persongroups-persons Delete" [
-  personGroupId: string
-  personId: string
+export def "persongroups-persons delete" [
+  person_group_id: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1352,7 @@ export def "persongroups-persons Delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/persons/($personId)")
+  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1362,9 +1362,9 @@ export def "persongroups-persons Delete" [
 #
 # GET /persongroups/{personGroupId}/persons/{personId}
 # operationId: PersonGroupPerson_Get
-export def "persongroups-persons Get" [
-  personGroupId: string
-  personId: string
+export def "persongroups-persons get" [
+  person_group_id: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,7 +1376,7 @@ export def "persongroups-persons Get" [
 ]: nothing -> record<persistedFaceIds: list<string>, personId: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/persons/($personId)")
+  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1386,9 +1386,9 @@ export def "persongroups-persons Get" [
 #
 # PATCH /persongroups/{personGroupId}/persons/{personId}
 # operationId: PersonGroupPerson_Update
-export def "persongroups-persons Update" [
-  personGroupId: string
-  personId: string
+export def "persongroups-persons update" [
+  person_group_id: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,13 +1398,13 @@ export def "persongroups-persons Update" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
-  --userData: string # User specified data. Length should not exceed 16KB.
+  --user-data: string # User specified data. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/persons/($personId)")
-  let body = {name: $name, userData: $userData} | compact
+  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}"))
+  let body = {"name": $name, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1415,9 +1415,9 @@ export def "persongroups-persons Update" [
 #
 # POST /persongroups/{personGroupId}/persons/{personId}/persistedfaces
 # operationId: PersonGroupPerson_AddFaceFromUrl
-export def "persongroups-persons-persistedfaces AddFaceFromUrl" [
-  personGroupId: string
-  personId: string
+export def "persongroups-persons-persistedfaces create-face-from-url" [
+  person_group_id: string
+  person_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,17 +1426,17 @@ export def "persongroups-persons-persistedfaces AddFaceFromUrl" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userData: string # User-specified data about the face for any purpose. The maximum length is 1KB.
-  --targetFace: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
-  --detectionModel: string@detectionModel-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
+  --user-data: string # User-specified data about the face for any purpose. The maximum length is 1KB.
+  --target-face: list # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
+  --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
   --body-url: string # Publicly reachable URL of an image
 ]: any -> record<persistedFaceId: string, userData: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "userData" $userData "scalar") (serialize-qp "targetFace" $targetFace "csv") (serialize-qp "detectionModel" $detectionModel "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/persons/($personId)/persistedfaces" $qp)
-  let body = {url: $body_url} | compact
+  let qp = [(serialize-qp "userData" $user_data "scalar") (serialize-qp "targetFace" $target_face "csv") (serialize-qp "detectionModel" $detection_model "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces") $qp)
+  let body = {"url": $body_url} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1447,10 +1447,10 @@ export def "persongroups-persons-persistedfaces AddFaceFromUrl" [
 #
 # DELETE /persongroups/{personGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: PersonGroupPerson_DeleteFace
-export def "persongroups-persons-persistedfaces DeleteFace" [
-  personGroupId: string
-  personId: string
-  persistedFaceId: string
+export def "persongroups-persons-persistedfaces delete-face" [
+  person_group_id: string
+  person_id: string
+  persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1462,7 +1462,7 @@ export def "persongroups-persons-persistedfaces DeleteFace" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/persons/($personId)/persistedfaces/($persistedFaceId)")
+  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1472,10 +1472,10 @@ export def "persongroups-persons-persistedfaces DeleteFace" [
 #
 # GET /persongroups/{personGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: PersonGroupPerson_GetFace
-export def "persongroups-persons-persistedfaces GetFace" [
-  personGroupId: string
-  personId: string
-  persistedFaceId: string
+export def "persongroups-persons-persistedfaces get-face" [
+  person_group_id: string
+  person_id: string
+  persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1487,7 +1487,7 @@ export def "persongroups-persons-persistedfaces GetFace" [
 ]: nothing -> record<persistedFaceId: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/persons/($personId)/persistedfaces/($persistedFaceId)")
+  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1497,10 +1497,10 @@ export def "persongroups-persons-persistedfaces GetFace" [
 #
 # PATCH /persongroups/{personGroupId}/persons/{personId}/persistedfaces/{persistedFaceId}
 # operationId: PersonGroupPerson_UpdateFace
-export def "persongroups-persons-persistedfaces UpdateFace" [
-  personGroupId: string
-  personId: string
-  persistedFaceId: string
+export def "persongroups-persons-persistedfaces update-face" [
+  person_group_id: string
+  person_id: string
+  persisted_face_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,13 +1509,13 @@ export def "persongroups-persons-persistedfaces UpdateFace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --userData: string # User-provided data attached to the face. The size limit is 1KB.
+  --user-data: string # User-provided data attached to the face. The size limit is 1KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/persons/($personId)/persistedfaces/($persistedFaceId)")
-  let body = {userData: $userData} | compact
+  let full_url = (build-url $base ({person_group_id: $person_group_id, person_id: $person_id, persisted_face_id: $persisted_face_id} | format pattern "/persongroups/{person_group_id}/persons/{person_id}/persistedfaces/{persisted_face_id}"))
+  let body = {"userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1526,8 +1526,8 @@ export def "persongroups-persons-persistedfaces UpdateFace" [
 #
 # POST /persongroups/{personGroupId}/train
 # operationId: PersonGroup_Train
-export def "persongroups-train Train" [
-  personGroupId: string
+export def "persongroups-train post" [
+  person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1539,7 +1539,7 @@ export def "persongroups-train Train" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/train")
+  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}/train"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1549,8 +1549,8 @@ export def "persongroups-train Train" [
 #
 # GET /persongroups/{personGroupId}/training
 # operationId: PersonGroup_GetTrainingStatus
-export def "persongroups-training GetTrainingStatus" [
-  personGroupId: string
+export def "persongroups-training get-training-status" [
+  person_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1562,7 +1562,7 @@ export def "persongroups-training GetTrainingStatus" [
 ]: nothing -> record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/persongroups/($personGroupId)/training")
+  let full_url = (build-url $base ({person_group_id: $person_group_id} | format pattern "/persongroups/{person_group_id}/training"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1572,7 +1572,7 @@ export def "persongroups-training GetTrainingStatus" [
 #
 # GET /snapshots
 # operationId: Snapshot_List
-export def "snapshots List" [
+export def "snapshots list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1582,11 +1582,11 @@ export def "snapshots List" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # User specified object type as a search filter.
-  --applyScope: list # User specified snapshot apply scopes as a search filter. ApplyScope is an array of the target Azure subscription ids for the snapshot, specified by the user who created the snapshot by Snapshot - Take.
+  --apply-scope: list # User specified snapshot apply scopes as a search filter. ApplyScope is an array of the target Azure subscription ids for the snapshot, specified by the user who created the snapshot by Snapshot - Take.
 ]: nothing -> table<account: string, applyScope: list<string>, createdTime: string, id: string, lastUpdateTime: string, type: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "applyScope" $applyScope "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "applyScope" $apply_scope "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/snapshots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1597,7 +1597,7 @@ export def "snapshots List" [
 #
 # POST /snapshots
 # operationId: Snapshot_Take
-export def "snapshots Take" [
+export def "snapshots post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1606,16 +1606,16 @@ export def "snapshots Take" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  applyScope: list # Array of the target Face subscription ids for the snapshot, specified by the user who created the snapshot when calling Snapshot - Take. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it.
-  objectId: string # User specified source object id to take snapshot from.
+  apply_scope: list # Array of the target Face subscription ids for the snapshot, specified by the user who created the snapshot when calling Snapshot - Take. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it.
+  object_id: string # User specified source object id to take snapshot from.
   type: string@type-completer # User specified type for the source object to take snapshot from. Currently FaceList, PersonGroup, LargeFaceList and LargePersonGroup are supported.
-  --userData: string # User specified data about the snapshot for any purpose. Length should not exceed 16KB.
+  --user-data: string # User specified data about the snapshot for any purpose. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/snapshots")
-  let body = {applyScope: $applyScope, objectId: $objectId, type: $type, userData: $userData} | compact
+  let body = {"applyScope": $apply_scope, "objectId": $object_id, "type": $type, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1626,8 +1626,8 @@ export def "snapshots Take" [
 #
 # DELETE /snapshots/{snapshotId}
 # operationId: Snapshot_Delete
-export def "snapshots Delete" [
-  snapshotId: string
+export def "snapshots delete" [
+  snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1639,7 +1639,7 @@ export def "snapshots Delete" [
 ]: nothing -> record<error: record<code: string, message: string>> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snapshots/($snapshotId)")
+  let full_url = (build-url $base ({snapshot_id: $snapshot_id} | format pattern "/snapshots/{snapshot_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1649,8 +1649,8 @@ export def "snapshots Delete" [
 #
 # GET /snapshots/{snapshotId}
 # operationId: Snapshot_Get
-export def "snapshots Get" [
-  snapshotId: string
+export def "snapshots get" [
+  snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1662,7 +1662,7 @@ export def "snapshots Get" [
 ]: nothing -> record<account: string, applyScope: list<string>, createdTime: string, id: string, lastUpdateTime: string, type: string, userData: string> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snapshots/($snapshotId)")
+  let full_url = (build-url $base ({snapshot_id: $snapshot_id} | format pattern "/snapshots/{snapshot_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -1672,8 +1672,8 @@ export def "snapshots Get" [
 #
 # PATCH /snapshots/{snapshotId}
 # operationId: Snapshot_Update
-export def "snapshots Update" [
-  snapshotId: string
+export def "snapshots update" [
+  snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1682,14 +1682,14 @@ export def "snapshots Update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --applyScope: list # Array of the target Face subscription ids for the snapshot, specified by the user who created the snapshot when calling Snapshot - Take. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it.
-  --userData: string # User specified data about the snapshot for any purpose. Length should not exceed 16KB.
+  --apply-scope: list # Array of the target Face subscription ids for the snapshot, specified by the user who created the snapshot when calling Snapshot - Take. For each snapshot, only subscriptions included in the applyScope of Snapshot - Take can apply it.
+  --user-data: string # User specified data about the snapshot for any purpose. Length should not exceed 16KB.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snapshots/($snapshotId)")
-  let body = {applyScope: $applyScope, userData: $userData} | compact
+  let full_url = (build-url $base ({snapshot_id: $snapshot_id} | format pattern "/snapshots/{snapshot_id}"))
+  let body = {"applyScope": $apply_scope, "userData": $user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1700,8 +1700,8 @@ export def "snapshots Update" [
 #
 # POST /snapshots/{snapshotId}/apply
 # operationId: Snapshot_Apply
-export def "snapshots-apply Apply" [
-  snapshotId: string
+export def "snapshots-apply post" [
+  snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1711,13 +1711,13 @@ export def "snapshots-apply Apply" [
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
   --mode: string@mode-completer-1 # Snapshot applying mode. Currently only CreateNew is supported, which means the apply operation will fail if target subscription already contains an object of same type and using the same objectId. Users can specify the "objectId" in request body to avoid such conflicts. (default: CreateNew)
-  objectId: string # User specified target object id to be created from the snapshot.
+  object_id: string # User specified target object id to be created from the snapshot.
 ]: any -> record<error: record<code: string, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/snapshots/($snapshotId)/apply")
-  let body = {mode: $mode, objectId: $objectId} | compact
+  let full_url = (build-url $base ({snapshot_id: $snapshot_id} | format pattern "/snapshots/{snapshot_id}/apply"))
+  let body = {"mode": $mode, "objectId": $object_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1728,7 +1728,7 @@ export def "snapshots-apply Apply" [
 #
 # POST /verify
 # operationId: Face_VerifyFaceToFace
-export def "verify VerifyFaceToFace" [
+export def "verify verify-face-to-face" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1737,14 +1737,14 @@ export def "verify VerifyFaceToFace" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  faceId1: string # FaceId of the first face, comes from Face - Detect (format: uuid)
-  faceId2: string # FaceId of the second face, comes from Face - Detect (format: uuid)
+  face_id1: string # FaceId of the first face, comes from Face - Detect (format: uuid)
+  face_id2: string # FaceId of the second face, comes from Face - Detect (format: uuid)
 ]: any -> record<confidence: float, isIdentical: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/verify")
-  let body = {faceId1: $faceId1, faceId2: $faceId2} | compact
+  let body = {"faceId1": $face_id1, "faceId2": $face_id2} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

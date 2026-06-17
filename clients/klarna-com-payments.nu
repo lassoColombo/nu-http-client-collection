@@ -72,7 +72,7 @@ def intent-completer [] { ["buy" "buy_and_tokenize" "tokenize"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "payments-authorizations cancelAuthorization" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "payments-authorizations cancel" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -96,8 +96,8 @@ export def commands []: nothing -> table {
 #
 # DELETE /payments/v1/authorizations/{authorizationToken}
 # operationId: cancelAuthorization
-export def "payments-authorizations cancelAuthorization" [
-  authorizationToken: string
+export def "payments-authorizations cancel" [
+  authorization_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -109,7 +109,7 @@ export def "payments-authorizations cancelAuthorization" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/payments/v1/authorizations/($authorizationToken)")
+  let full_url = (build-url $base ({authorization_token: $authorization_token} | format pattern "/payments/v1/authorizations/{authorization_token}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -122,7 +122,7 @@ export def "payments-authorizations cancelAuthorization" [
 # --billing_address shape: {attention?: string, city?: string, country?: string, email?: string, family_name?: string, given_name?: string, organization_name?: string, phone?: string, postal_code?: string, region?: string, street_address?: string, street_address2?: string, title?: string}
 # --customer shape: {date_of_birth?: string, gender?: string, last_four_ssn?: string, national_identification_number?: string, organization_entity_type?: "LIMITED_COMPANY"|"PUBLIC_LIMITED_COMPANY"|"ENTREPRENEURIAL_COMPANY"|"LIMITED_PARTNERSHIP_LIMITED_COMPANY"|"LIMITED_PARTNERSHIP"|"GENERAL_PARTNERSHIP"|"REGISTERED_SOLE_TRADER"|"SOLE_TRADER"|"CIVIL_LAW_PARTNERSHIP"|"PUBLIC_INSTITUTION"|"OTHER", organization_registration_id?: string, title?: string, type?: string, vat_id?: string}
 export def "payments-authorizations-customer-token purchaseToken" [
-  authorizationToken: string
+  authorization_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -142,8 +142,8 @@ export def "payments-authorizations-customer-token purchaseToken" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/payments/v1/authorizations/($authorizationToken)/customer-token")
-  let body = {billing_address: $billing_address, customer: $customer, description: $description, intended_use: $intended_use, locale: $locale, purchase_country: $purchase_country, purchase_currency: $purchase_currency} | compact
+  let full_url = (build-url $base ({authorization_token: $authorization_token} | format pattern "/payments/v1/authorizations/{authorization_token}/customer-token"))
+  let body = {"billing_address": $billing_address, "customer": $customer, "description": $description, "intended_use": $intended_use, "locale": $locale, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -160,8 +160,8 @@ export def "payments-authorizations-customer-token purchaseToken" [
 # --order_lines item shape: {image_url?: string, merchant_data?: string, name: string, product_identifiers?: record, product_url?: string, quantity: int, quantity_unit?: string, reference?: string, subscription?: record, tax_rate?: int, total_amount: int, total_discount_amount?: int, total_tax_amount?: int, type?: string, unit_price: int}
 # --payment_method_categories item shape: {asset_urls?: record, identifier?: string, name?: string}
 # --shipping_address shape: {attention?: string, city?: string, country?: string, email?: string, family_name?: string, given_name?: string, organization_name?: string, phone?: string, postal_code?: string, region?: string, street_address?: string, street_address2?: string, title?: string}
-export def "payments-authorizations-order createOrder" [
-  authorizationToken: string
+export def "payments-authorizations-order create" [
+  authorization_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,8 +189,8 @@ export def "payments-authorizations-order createOrder" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/payments/v1/authorizations/($authorizationToken)/order")
-  let body = {auto_capture: $auto_capture, billing_address: $billing_address, custom_payment_method_ids: $custom_payment_method_ids, customer: $customer, locale: $locale, merchant_data: $merchant_data, merchant_reference1: $merchant_reference1, merchant_reference2: $merchant_reference2, merchant_urls: $merchant_urls, order_amount: $order_amount, order_lines: $order_lines, order_tax_amount: $order_tax_amount, purchase_country: $purchase_country, purchase_currency: $purchase_currency, shipping_address: $shipping_address} | compact
+  let full_url = (build-url $base ({authorization_token: $authorization_token} | format pattern "/payments/v1/authorizations/{authorization_token}/order"))
+  let body = {"auto_capture": $auto_capture, "billing_address": $billing_address, "custom_payment_method_ids": $custom_payment_method_ids, "customer": $customer, "locale": $locale, "merchant_data": $merchant_data, "merchant_reference1": $merchant_reference1, "merchant_reference2": $merchant_reference2, "merchant_urls": $merchant_urls, "order_amount": $order_amount, "order_lines": $order_lines, "order_tax_amount": $order_tax_amount, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency, "shipping_address": $shipping_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -209,7 +209,7 @@ export def "payments-authorizations-order createOrder" [
 # --order_lines item shape: {image_url?: string, merchant_data?: string, name: string, product_identifiers?: record, product_url?: string, quantity: int, quantity_unit?: string, reference?: string, subscription?: record, tax_rate?: int, total_amount: int, total_discount_amount?: int, total_tax_amount?: int, type?: string, unit_price: int}
 # --payment_method_categories item shape: {asset_urls?: record, identifier?: string, name?: string}
 # --shipping_address shape: {attention?: string, city?: string, country?: string, email?: string, family_name?: string, given_name?: string, organization_name?: string, phone?: string, postal_code?: string, region?: string, street_address?: string, street_address2?: string, title?: string}
-export def "payments-sessions createCreditSession" [
+export def "payments-sessions create-credit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "payments-sessions createCreditSession" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payments/v1/sessions")
-  let body = {acquiring_channel: $acquiring_channel, attachment: $attachment, billing_address: $billing_address, custom_payment_method_ids: $custom_payment_method_ids, customer: $customer, design: $design, intent: $intent, locale: $locale, merchant_data: $merchant_data, merchant_reference1: $merchant_reference1, merchant_reference2: $merchant_reference2, merchant_urls: $merchant_urls, options: $options, order_amount: $order_amount, order_lines: $order_lines, order_tax_amount: $order_tax_amount, purchase_country: $purchase_country, purchase_currency: $purchase_currency, shipping_address: $shipping_address} | compact
+  let body = {"acquiring_channel": $acquiring_channel, "attachment": $attachment, "billing_address": $billing_address, "custom_payment_method_ids": $custom_payment_method_ids, "customer": $customer, "design": $design, "intent": $intent, "locale": $locale, "merchant_data": $merchant_data, "merchant_reference1": $merchant_reference1, "merchant_reference2": $merchant_reference2, "merchant_urls": $merchant_urls, "options": $options, "order_amount": $order_amount, "order_lines": $order_lines, "order_tax_amount": $order_tax_amount, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency, "shipping_address": $shipping_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -253,7 +253,7 @@ export def "payments-sessions createCreditSession" [
 #
 # GET /payments/v1/sessions/{session_id}
 # operationId: readCreditSession
-export def "payments-sessions readCreditSession" [
+export def "payments-sessions get-credit" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "payments-sessions readCreditSession" [
 ]: nothing -> record<acquiring_channel: string, attachment: record<body: string, content_type: string>, authorization_token: string, billing_address: record<attention: string, city: string, country: string, email: string, family_name: string, given_name: string, organization_name: string, phone: string, postal_code: string, region: string, street_address: string, street_address2: string, title: string>, client_token: string, custom_payment_method_ids: list<string>, customer: record<date_of_birth: string, gender: string, organization_entity_type: string, organization_registration_id: string, title: string, type: string, vat_id: string>, design: string, expires_at: string, intent: string, locale: string, merchant_data: string, merchant_reference1: string, merchant_reference2: string, merchant_urls: record<authorization: string, confirmation: string, notification: string, push: string>, options: record<color_border: string, color_border_selected: string, color_details: string, color_text: string, radius_border: string>, order_amount: int, order_lines: table<image_url: string, merchant_data: string, name: string, product_identifiers: record, product_url: string, quantity: int, quantity_unit: string, reference: string, subscription: record, tax_rate: int, total_amount: int, total_discount_amount: int, total_tax_amount: int, type: string, unit_price: int>, order_tax_amount: int, payment_method_categories: table<asset_urls: record, identifier: string, name: string>, purchase_country: string, purchase_currency: string, shipping_address: record<attention: string, city: string, country: string, email: string, family_name: string, given_name: string, organization_name: string, phone: string, postal_code: string, region: string, street_address: string, street_address2: string, title: string>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/payments/v1/sessions/($session_id)")
+  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/payments/v1/sessions/{session_id}"))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
@@ -284,7 +284,7 @@ export def "payments-sessions readCreditSession" [
 # --order_lines item shape: {image_url?: string, merchant_data?: string, name: string, product_identifiers?: record, product_url?: string, quantity: int, quantity_unit?: string, reference?: string, subscription?: record, tax_rate?: int, total_amount: int, total_discount_amount?: int, total_tax_amount?: int, type?: string, unit_price: int}
 # --payment_method_categories item shape: {asset_urls?: record, identifier?: string, name?: string}
 # --shipping_address shape: {attention?: string, city?: string, country?: string, email?: string, family_name?: string, given_name?: string, organization_name?: string, phone?: string, postal_code?: string, region?: string, street_address?: string, street_address2?: string, title?: string}
-export def "payments-sessions updateCreditSession" [
+export def "payments-sessions update-credit" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,8 +317,8 @@ export def "payments-sessions updateCreditSession" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/payments/v1/sessions/($session_id)")
-  let body = {acquiring_channel: $acquiring_channel, attachment: $attachment, billing_address: $billing_address, custom_payment_method_ids: $custom_payment_method_ids, customer: $customer, design: $design, intent: $intent, locale: $locale, merchant_data: $merchant_data, merchant_reference1: $merchant_reference1, merchant_reference2: $merchant_reference2, merchant_urls: $merchant_urls, options: $options, order_amount: $order_amount, order_lines: $order_lines, order_tax_amount: $order_tax_amount, purchase_country: $purchase_country, purchase_currency: $purchase_currency, shipping_address: $shipping_address} | compact
+  let full_url = (build-url $base ({session_id: $session_id} | format pattern "/payments/v1/sessions/{session_id}"))
+  let body = {"acquiring_channel": $acquiring_channel, "attachment": $attachment, "billing_address": $billing_address, "custom_payment_method_ids": $custom_payment_method_ids, "customer": $customer, "design": $design, "intent": $intent, "locale": $locale, "merchant_data": $merchant_data, "merchant_reference1": $merchant_reference1, "merchant_reference2": $merchant_reference2, "merchant_urls": $merchant_urls, "options": $options, "order_amount": $order_amount, "order_lines": $order_lines, "order_tax_amount": $order_tax_amount, "purchase_country": $purchase_country, "purchase_currency": $purchase_currency, "shipping_address": $shipping_address} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
